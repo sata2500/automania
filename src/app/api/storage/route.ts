@@ -1,57 +1,77 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
-
-const DATA_DIR = path.join(process.cwd(), '.data');
-const USERS_DIR = path.join(DATA_DIR, 'users');
-
-async function ensureDirs() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.mkdir(USERS_DIR, { recursive: true });
-  } catch {
-    // Ignore if directory exists
-  }
-}
-
-function getFilePath(userId?: string | null, isPreset?: boolean): string {
-  if (isPreset) {
-    return path.join(DATA_DIR, 'custom-preset.json');
-  }
-  if (userId) {
-    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return path.join(USERS_DIR, `${safeUserId}-db.json`);
-  }
-  return path.join(DATA_DIR, 'pod-db.json');
-}
+import sql from '@/lib/db';
 
 export async function GET(request: Request) {
   try {
-    await ensureDirs();
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get('userId') || 'default_guest';
+    
+    // Preset/Demo datası sorgulanıyorsa
     const isPreset = searchParams.get('preset') === 'default';
+    if (isPreset) {
+      // Şimdilik demo datasını boş dönebiliriz ya da sample-data.ts'den import edilebilir
+      // Ancak storage-service zaten client'ta demo veriyi dolduruyor.
+      return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+    }
 
-    const filePath = getFilePath(userId, isPreset);
-    const data = await fs.readFile(filePath, 'utf-8');
-    return NextResponse.json(JSON.parse(data));
-  } catch {
+    const rows = await sql`
+      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id
+      FROM user_workspaces
+      WHERE user_id = ${userId}
+    `;
+
+    if (rows.length === 0) {
+      return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+    }
+
+    const data = rows[0];
+    return NextResponse.json({
+      mockups: data.mockups || [],
+      designs: data.designs || [],
+      folders: data.folders || [],
+      activeFolderId: data.active_folder_id,
+      selectedMockupId: data.selected_mockup_id,
+    });
+  } catch (error: any) {
+    console.error('Storage GET Error:', error);
     return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await ensureDirs();
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const isPreset = searchParams.get('preset') === 'default';
-
-    const filePath = getFilePath(userId, isPreset);
+    const userId = searchParams.get('userId') || 'default_guest';
     const body = await request.json();
-    await fs.writeFile(filePath, JSON.stringify(body), 'utf-8');
+
+    const mockupsJson = JSON.stringify(body.mockups || []);
+    const designsJson = JSON.stringify(body.designs || []);
+    const foldersJson = JSON.stringify(body.folders || []);
+    const activeFolderId = body.activeFolderId || null;
+    const selectedMockupId = body.selectedMockupId || null;
+
+    await sql`
+      INSERT INTO user_workspaces (user_id, mockups, designs, folders, active_folder_id, selected_mockup_id)
+      VALUES (
+        ${userId}, 
+        ${mockupsJson}::jsonb, 
+        ${designsJson}::jsonb, 
+        ${foldersJson}::jsonb, 
+        ${activeFolderId}, 
+        ${selectedMockupId}
+      )
+      ON CONFLICT (user_id) DO UPDATE SET
+        mockups = EXCLUDED.mockups,
+        designs = EXCLUDED.designs,
+        folders = EXCLUDED.folders,
+        active_folder_id = EXCLUDED.active_folder_id,
+        selected_mockup_id = EXCLUDED.selected_mockup_id,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+
     return NextResponse.json({ success: true, timestamp: Date.now() });
   } catch (error: unknown) {
+    console.error('Storage POST Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown storage error';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
@@ -59,15 +79,12 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await ensureDirs();
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const isPreset = searchParams.get('preset') === 'default';
+    const userId = searchParams.get('userId') || 'default_guest';
 
-    const filePath = getFilePath(userId, isPreset);
-    await fs.unlink(filePath);
+    await sql`DELETE FROM user_workspaces WHERE user_id = ${userId}`;
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

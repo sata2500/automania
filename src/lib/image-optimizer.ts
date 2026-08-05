@@ -13,9 +13,11 @@ export interface OptimizedImageResult {
   optimizedSize: number;
 }
 
+import { upload } from '@vercel/blob/client';
+
 /**
- * Uploads a file or Base64 data URL to server binary storage endpoint (/api/upload).
- * Returns the public URL (e.g. /api/uploads/filename.webp).
+ * Uploads a file or Base64 data URL directly to Vercel Blob using client-side upload.
+ * Returns the public CDN URL. Throws error if failed.
  */
 export async function uploadMediaToServer(
   dataUrlOrFile: string | File,
@@ -23,41 +25,35 @@ export async function uploadMediaToServer(
 ): Promise<string> {
   if (
     typeof dataUrlOrFile === 'string' &&
-    (dataUrlOrFile.startsWith('/api/uploads/') || dataUrlOrFile.startsWith('http'))
+    (dataUrlOrFile.startsWith('/api/uploads/') || dataUrlOrFile.startsWith('/sample-uploads/') || dataUrlOrFile.startsWith('http'))
   ) {
     return dataUrlOrFile;
   }
 
   try {
-    let res: Response;
+    let fileToUpload: File;
+
     if (dataUrlOrFile instanceof File) {
-      const formData = new FormData();
-      formData.append('file', dataUrlOrFile);
-      res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      fileToUpload = dataUrlOrFile;
     } else {
-      res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl: dataUrlOrFile, mimeType }),
-      });
+      // Base64 to Blob to File
+      const res = await fetch(dataUrlOrFile);
+      const blob = await res.blob();
+      const ext = (mimeType || blob.type).split('/')[1] || 'webp';
+      fileToUpload = new File([blob], `upload-${Date.now()}.${ext}`, { type: blob.type });
     }
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.url) {
-        return data.url;
-      }
-    }
+    const newBlob = await upload(fileToUpload.name, fileToUpload, {
+      access: 'public',
+      handleUploadUrl: '/api/upload', 
+    });
+    
+    return newBlob.url;
+
   } catch (err) {
-    console.warn('Failed to upload image binary to server API, fallback to local URL:', err);
+    console.error('Failed to upload image via Vercel Blob Client:', err);
+    throw new Error('Dosya yüklenemedi, sınır aşılmış olabilir. Lütfen tekrar deneyin.');
   }
-
-  return typeof dataUrlOrFile === 'string'
-    ? dataUrlOrFile
-    : URL.createObjectURL(dataUrlOrFile);
 }
 
 /**

@@ -158,13 +158,22 @@ export async function saveAppData(payload: AppDataPayload): Promise<void> {
 
     // Sync to Server side API (Disk persistence)
     const query = userId ? `?userId=${userId}` : '';
+    
+    const payloadString = JSON.stringify({
+      ...payload,
+      lastUpdated: Date.now(),
+    });
+
+    // Vercel Serverless Limit is 4.5MB. Prevent sync if JSON is too heavy (e.g., contains raw base64 images from old caches)
+    if (payloadString.length > 3.8 * 1024 * 1024) {
+      console.warn('Sync aborted: Payload exceeds 3.8MB Vercel limit. Please delete large local designs or clear cache.');
+      return;
+    }
+
     fetch(`/api/storage${query}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...payload,
-        lastUpdated: Date.now(),
-      }),
+      body: payloadString,
     }).catch((err) => console.warn('Server sync background warning:', err));
   } catch (err) {
     console.error('Error saving app data:', err);
