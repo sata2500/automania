@@ -425,9 +425,9 @@ function MainContent() {
           </div>
         )}
 
-        {/* PWA Installation Banner */}
+        {/* PWA Installation Banner (Mobile Only) */}
         {!isPwaInstalled && !isPwaInfoDismissed && (
-          <div className="bg-gradient-to-r from-emerald-50 via-white to-teal-50 dark:from-emerald-950/80 dark:via-slate-900/90 dark:to-teal-950/80 border border-emerald-200 dark:border-emerald-500/30 rounded-2xl p-3 sm:px-4 sm:py-3 shadow-md dark:shadow-lg text-slate-700 dark:text-slate-200 font-sans mb-4 flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="md:hidden bg-gradient-to-r from-emerald-50 via-white to-teal-50 dark:from-emerald-950/80 dark:via-slate-900/90 dark:to-teal-950/80 border border-emerald-200 dark:border-emerald-500/30 rounded-2xl p-3 sm:px-4 sm:py-3 shadow-md dark:shadow-lg text-slate-700 dark:text-slate-200 font-sans mb-4 flex items-center justify-between gap-3 animate-fadeIn">
             <div className="flex items-center space-x-3 min-w-0">
               <div className="bg-emerald-100 dark:bg-emerald-500/20 p-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 shrink-0">
                 <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
