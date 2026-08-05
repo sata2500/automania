@@ -1395,3 +1395,17 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
     "targetApparel": "both"
   }
 ];
+
+export function isProtectedUrl(url: string): boolean {
+  if (!url) return false;
+  
+  // Check if it's in sample mockups
+  const inMockups = SAMPLE_MOCKUPS.some(m => m.src === url);
+  if (inMockups) return true;
+  
+  // Check if it's in sample designs
+  const inDesigns = SAMPLE_DESIGNS.some(d => d.src === url);
+  if (inDesigns) return true;
+  
+  return false;
+}

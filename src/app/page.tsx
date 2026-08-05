@@ -75,6 +75,7 @@ function MainContent() {
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBackupProcessing, setIsBackupProcessing] = useState(false);
 
   const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(false);
   const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(false);
@@ -211,17 +212,26 @@ function MainContent() {
   }, [isInitialized, user]);
 
   // Handlers for Backup Export / Import / Sample Load / Clear All
-  const handleExportBackup = () => {
-    exportAppDataFile({
-      mockups,
-      designs,
-      folders,
-      activeFolderId,
-      selectedMockupId,
-    });
+  const handleExportBackup = async () => {
+    setIsBackupProcessing(true);
+    try {
+      await exportAppDataFile({
+        mockups,
+        designs,
+        folders,
+        activeFolderId,
+        selectedMockupId,
+      });
+    } catch (err) {
+      console.error('Yedekleme sırasında hata:', err);
+      alert('Yedekleme işlemi sırasında bir hata oluştu.');
+    } finally {
+      setIsBackupProcessing(false);
+    }
   };
 
   const handleImportBackup = async (file: File) => {
+    setIsBackupProcessing(true);
     try {
       const data = await parseAppDataBackupFile(file);
       setMockups(data.mockups);
@@ -234,7 +244,9 @@ function MainContent() {
       await saveAppData(data);
       alert('Yedek başarıyla yüklendi!');
     } catch (err: any) {
-      alert('Yedek yükleme hatası: ' + (err?.message || 'Geçersiz dosya.'));
+      alert(err.message || 'Yedek yüklenirken bir hata oluştu.');
+    } finally {
+      setIsBackupProcessing(false);
     }
   };
 
@@ -435,6 +447,7 @@ function MainContent() {
       {/* Auth Modal & Profile Management Modal */}
       <AuthModal
         isSaving={isSaving}
+        isBackupProcessing={isBackupProcessing}
         onExportBackup={handleExportBackup}
         onImportBackup={handleImportBackup}
         onLoadSampleData={handleLoadSampleData}

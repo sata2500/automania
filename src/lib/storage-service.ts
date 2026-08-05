@@ -1,4 +1,7 @@
 import { get, set, del } from 'idb-keyval';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import { uploadMediaToServer } from './image-optimizer';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { SAMPLE_MOCKUPS, SAMPLE_DESIGNS, DEFAULT_FOLDERS } from './sample-data';
 
@@ -113,6 +116,22 @@ export async function loadSampleAppData(): Promise<AppDataPayload> {
 }
 
 /**
+ * Calls the internal blob API to securely delete a list of URLs from Vercel Blob.
+ */
+export async function deleteBlobs(urls: string[]): Promise<void> {
+  if (!urls || urls.length === 0) return;
+  try {
+    await fetch('/api/storage/blob', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+  } catch (err) {
+    console.error('Failed to delete blobs:', err);
+  }
+}
+
+/**
  * Clears all user data completely to start from scratch.
  */
 export async function clearAllAppData(): Promise<AppDataPayload> {
@@ -120,6 +139,17 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
   const userId = getCurrentUserId();
 
   try {
+    // Toplayıp sileceğimiz blob'ları bulalım
+    const mockups = await get<MockupItem[]>(keys.MOCKUPS);
+    const designs = await get<DesignItem[]>(keys.DESIGNS);
+    
+    const urlsToDelete: string[] = [];
+    if (mockups) mockups.forEach(m => { if (m.src) urlsToDelete.push(m.src); });
+    if (designs) designs.forEach(d => { if (d.src) urlsToDelete.push(d.src); });
+    
+    // Asenkron olarak silme isteği başlat (best-effort)
+    deleteBlobs(urlsToDelete);
+
     await Promise.all([
       del(keys.MOCKUPS),
       del(keys.DESIGNS),
@@ -205,48 +235,93 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
 }
 
 /**
- * Exports current mockups, designs, and folders as a JSON file for backup.
+ * Exports current mockups, designs, and folders as a ZIP file for backup.
  */
-export function exportAppDataFile(payload: AppDataPayload): void {
-  const jsonString = JSON.stringify(payload, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
+export async function exportAppDataFile(payload: AppDataPayload): Promise<void> {
+  const zip = new JSZip();
+  const imagesFolder = zip.folder("images");
+  if (!imagesFolder) throw new Error("Failed to create zip folder");
 
+  // Deep clone payload so we can mutate image src paths
+  const newPayload = JSON.parse(JSON.stringify(payload));
+
+  const processImage = async (item: MockupItem | DesignItem) => {
+    if (item.src && item.src.startsWith('http')) {
+      try {
+        const response = await fetch(item.src);
+        const blob = await response.blob();
+        
+        const urlObj = new URL(item.src);
+        let filename = urlObj.pathname.split('/').pop() || `${item.id}.png`;
+        
+        imagesFolder.file(filename, blob);
+        item.src = `images/${filename}`;
+      } catch (err) {
+        console.warn(`Failed to fetch image for backup: ${item.src}`, err);
+      }
+    }
+  };
+
+  const tasks: Promise<void>[] = [];
+  if (newPayload.mockups) newPayload.mockups.forEach((m: MockupItem) => tasks.push(processImage(m)));
+  if (newPayload.designs) newPayload.designs.forEach((d: DesignItem) => tasks.push(processImage(d)));
+  
+  await Promise.all(tasks);
+
+  zip.file("backup.json", JSON.stringify(newPayload, null, 2));
+
+  const content = await zip.generateAsync({ type: "blob" });
   const dateStr = new Date().toISOString().slice(0, 10);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `automania-pod-backup-${dateStr}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  saveAs(content, `automania-pod-backup-${dateStr}.zip`);
 }
 
 /**
- * Imports application backup from a JSON file.
+ * Imports application backup from a ZIP file containing backup.json and an images folder.
  */
-export function parseAppDataBackupFile(file: File): Promise<AppDataPayload> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-        if (!parsed || !Array.isArray(parsed.mockups) || !Array.isArray(parsed.designs)) {
-          throw new Error('Geçersiz yedek dosyası biçimi.');
+export async function parseAppDataBackupFile(file: File): Promise<AppDataPayload> {
+  const zip = new JSZip();
+  const loadedZip = await zip.loadAsync(file);
+  
+  const backupJsonFile = loadedZip.file("backup.json");
+  if (!backupJsonFile) {
+    throw new Error('Geçersiz yedek dosyası biçimi. (backup.json bulunamadı)');
+  }
+  
+  const content = await backupJsonFile.async("string");
+  const parsed = JSON.parse(content);
+  if (!parsed || !Array.isArray(parsed.mockups) || !Array.isArray(parsed.designs)) {
+    throw new Error('Geçersiz yedek dosyası biçimi.');
+  }
+
+  // Upload images from zip to Vercel Blob
+  const processImage = async (item: MockupItem | DesignItem) => {
+    if (item.src && item.src.startsWith('images/')) {
+      const imgFile = loadedZip.file(item.src);
+      if (imgFile) {
+        try {
+          const blobData = await imgFile.async("blob");
+          const ext = item.src.split('.').pop() || 'png';
+          const fileToUpload = new File([blobData], `restore-${Date.now()}.${ext}`, { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
+          const newUrl = await uploadMediaToServer(fileToUpload);
+          item.src = newUrl;
+        } catch (err) {
+          console.error(`Failed to restore image ${item.src}:`, err);
         }
-        resolve({
-          mockups: parsed.mockups,
-          designs: parsed.designs,
-          folders: Array.isArray(parsed.folders) ? parsed.folders : [],
-          activeFolderId: parsed.activeFolderId || null,
-          selectedMockupId: parsed.selectedMockupId || (parsed.mockups[0]?.id || null),
-        });
-      } catch (err) {
-        reject(err);
       }
-    };
-    reader.onerror = () => reject(new Error('Dosya okunamadı.'));
-    reader.readAsText(file);
-  });
+    }
+  };
+
+  const tasks: Promise<void>[] = [];
+  if (parsed.mockups) parsed.mockups.forEach((m: MockupItem) => tasks.push(processImage(m)));
+  if (parsed.designs) parsed.designs.forEach((d: DesignItem) => tasks.push(processImage(d)));
+  
+  await Promise.all(tasks);
+
+  return {
+    mockups: parsed.mockups,
+    designs: parsed.designs,
+    folders: Array.isArray(parsed.folders) ? parsed.folders : [],
+    activeFolderId: parsed.activeFolderId || null,
+    selectedMockupId: parsed.selectedMockupId || (parsed.mockups[0]?.id || null),
+  };
 }

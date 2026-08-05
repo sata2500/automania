@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { optimizeMockupImage, uploadMediaToServer } from '@/lib/image-optimizer';
 import { optimizeVideoFile } from '@/lib/video-optimizer';
+import { deleteBlobs } from '@/lib/storage-service';
 
 interface MockupCanvasEditorProps {
   mockups: MockupItem[];
@@ -322,6 +323,14 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       title: 'Seçili Mockup’ları Sil',
       message: `Seçilen ${selectedMockupIds.size} adet mockup silinecektir. Devam etmek istiyor musunuz?`,
       onConfirm: () => {
+        const urlsToDelete = mockups
+          .filter(m => selectedMockupIds.has(m.id) && m.src)
+          .map(m => m.src);
+        
+        if (urlsToDelete.length > 0) {
+          deleteBlobs(urlsToDelete);
+        }
+
         setMockups((prev) => prev.filter((m) => !selectedMockupIds.has(m.id)));
         setSelectedMockupIds(new Set());
         setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
@@ -394,6 +403,14 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       title: `'${folder?.name || 'Klasör'}' Silinsin mi?`,
       message: `Bu klasör ve içindeki tüm mockup yapılandırmaları silinecektir. Devam etmek istiyor musunuz?`,
       onConfirm: () => {
+        const urlsToDelete = mockups
+          .filter((m) => m.folderId === folderId && m.src)
+          .map((m) => m.src);
+          
+        if (urlsToDelete.length > 0) {
+          deleteBlobs(urlsToDelete);
+        }
+
         setFolders((prev) => prev.filter((f) => f.id !== folderId));
         setMockups((prev) => prev.filter((m) => m.folderId !== folderId));
         if (activeFolderId === folderId) setActiveFolderId(null);
@@ -1016,6 +1033,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (m.src) {
+                            deleteBlobs([m.src]);
+                          }
                           setMockups((prev) => prev.filter((item) => item.id !== m.id));
                           toast.info(`'${m.name}' silindi.`);
                         }}

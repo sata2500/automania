@@ -18,6 +18,7 @@ import {
 
 interface AuthModalProps {
   isSaving?: boolean;
+  isBackupProcessing?: boolean;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
   onLoadSampleData?: () => void;
@@ -26,6 +27,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isSaving = false,
+  isBackupProcessing = false,
   onExportBackup,
   onImportBackup,
   onLoadSampleData,
@@ -109,28 +111,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <h4 className="text-xs font-bold text-slate-500 dark:text-slate-300 px-1 mb-2">Veri ve Taslak Yönetimi</h4>
 
               <button
-                onClick={() => onExportBackup?.()}
-                className="w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs text-slate-700 dark:text-slate-200 transition-all font-medium cursor-pointer"
+                onClick={() => {
+                  if (!isBackupProcessing) onExportBackup?.();
+                }}
+                disabled={isBackupProcessing}
+                className={`w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs transition-all font-medium ${isBackupProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer text-slate-700 dark:text-slate-200'}`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <Download className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
-                  <span>Tüm Verilerimi Yedek İndir (.json)</span>
+                  {isBackupProcessing ? (
+                    <RefreshCw className="w-4 h-4 text-indigo-500 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                  )}
+                  <span>Tüm Verilerimi Yedek İndir (.zip)</span>
                 </div>
                 <span className="text-[10px] bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded font-bold">
-                  İndir
+                  {isBackupProcessing ? 'İşleniyor...' : 'İndir'}
                 </span>
               </button>
 
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs text-slate-700 dark:text-slate-200 transition-all font-medium cursor-pointer"
+                onClick={() => {
+                  if (!isBackupProcessing) fileInputRef.current?.click();
+                }}
+                disabled={isBackupProcessing}
+                className={`w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs transition-all font-medium ${isBackupProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer text-slate-700 dark:text-slate-200'}`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <Upload className="w-4 h-4 text-purple-500 dark:text-purple-400" />
-                  <span>Yedekten Veri Yükle</span>
+                  {isBackupProcessing ? (
+                    <RefreshCw className="w-4 h-4 text-purple-500 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                  )}
+                  <span>Yedekten Veri Yükle (.zip)</span>
                 </div>
                 <span className="text-[10px] bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 px-2 py-0.5 rounded font-bold">
-                  Seç
+                  {isBackupProcessing ? 'Yükleniyor...' : 'Seç'}
                 </span>
               </button>
 

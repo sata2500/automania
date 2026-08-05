@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import { optimizeDesignImage, uploadMediaToServer } from '@/lib/image-optimizer';
+import { deleteBlobs } from '@/lib/storage-service';
 
 interface DesignUploaderProps {
   designs: DesignItem[];
@@ -174,6 +175,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesi
 
   const deleteDesign = (id: string) => {
     const target = designs.find((d) => d.id === id);
+    if (target?.src) {
+      deleteBlobs([target.src]);
+    }
     setDesigns((prev) => prev.filter((d) => d.id !== id));
     toast.info(`'${target?.name || 'Tasarım'}' silindi.`);
   };
