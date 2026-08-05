@@ -58,15 +58,15 @@ async function main() {
   const allBlobs: any[] = [];
   
   while (hasMore) {
-    const { blobs, hasMore: more, cursor: nextCursor } = await list({
+    const response = await list({
       token: process.env.BLOB_READ_WRITE_TOKEN,
       limit: 1000,
       cursor
     });
     
-    allBlobs.push(...blobs);
-    hasMore = more;
-    cursor = nextCursor;
+    allBlobs.push(...response.blobs);
+    hasMore = response.hasMore;
+    cursor = response.cursor;
   }
   
   console.log(`Found ${allBlobs.length} blobs in Vercel.`);
