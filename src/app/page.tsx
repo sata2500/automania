@@ -15,6 +15,7 @@ import {
   clearAllAppData,
   exportAppDataFile,
   parseAppDataBackupFile,
+  updateLocalCache,
 } from '@/lib/storage-service';
 import { ThemeProvider } from '@/components/common/ThemeProvider';
 import { UserAuthProvider, useAuth } from '@/components/common/UserAuthContext';
@@ -81,6 +82,11 @@ function MainContent() {
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Real-time sync refs
+  const lastSyncTimestampRef = useRef<number>(0);
+  const syncedFromServerRef = useRef<boolean>(false);
+  const isSyncFetchingRef = useRef<boolean>(false);
+
   // 1. Initial Load from Persistent Storage (IndexedDB + API) and check dismissal flags
   useEffect(() => {
     let isMounted = true;
@@ -115,6 +121,15 @@ function MainContent() {
       clearTimeout(saveTimeoutRef.current);
     }
 
+    // Skip save if this state change came from a remote server sync.
+    // Prevents the echo loop: Device B syncs → state updates → auto-save → DB updated →
+    // Device A detects change → fetches → state updates → auto-save → DB updated → ...
+    if (syncedFromServerRef.current) {
+      syncedFromServerRef.current = false;
+      setIsSaving(false);
+      return;
+    }
+
     setIsSaving(true);
     saveTimeoutRef.current = setTimeout(async () => {
       await saveAppData({
@@ -124,6 +139,8 @@ function MainContent() {
         activeFolderId,
         selectedMockupId,
       });
+      // Mark our own save time so we don't re-fetch our own changes during next poll
+      lastSyncTimestampRef.current = Date.now();
       setIsSaving(false);
     }, 400);
 
@@ -131,6 +148,67 @@ function MainContent() {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
+
+  // 3. Real-time cross-device sync — polls server every 5s for changes made on other devices.
+  //    Only active for logged-in users (guests have no server-side identity).
+  useEffect(() => {
+    if (!isInitialized || !user) return;
+
+    const checkForUpdates = async () => {
+      if (isSyncFetchingRef.current) return; // Prevent overlapping fetches
+
+      try {
+        const res = await fetch(`/api/storage/version?userId=${user.id}`);
+        if (!res.ok) return;
+
+        const { updatedAt } = await res.json();
+        if (!updatedAt) return;
+
+        // Only fetch full data if server timestamp is newer than our last known sync.
+        // 2000ms buffer handles minor clock drift between client and server.
+        if (updatedAt > lastSyncTimestampRef.current + 2000) {
+          isSyncFetchingRef.current = true;
+          console.log(`[Sync] Remote change detected (server: ${updatedAt}, local: ${lastSyncTimestampRef.current}). Fetching...`);
+
+          const dataRes = await fetch(`/api/storage?userId=${user.id}`);
+          if (dataRes.ok) {
+            const serverData = await dataRes.json();
+            if (serverData && Array.isArray(serverData.mockups)) {
+              // Flag that the upcoming state changes are from server sync (not a local edit)
+              syncedFromServerRef.current = true;
+              setMockups(serverData.mockups || []);
+              setDesigns(serverData.designs || []);
+              setFolders(serverData.folders || []);
+              setActiveFolderId(serverData.activeFolderId ?? null);
+              setSelectedMockupId(serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null));
+              lastSyncTimestampRef.current = updatedAt;
+
+              // Keep IndexedDB in sync (without triggering server POST)
+              await updateLocalCache({
+                mockups: serverData.mockups || [],
+                designs: serverData.designs || [],
+                folders: serverData.folders || [],
+                activeFolderId: serverData.activeFolderId ?? null,
+                selectedMockupId: serverData.selectedMockupId ?? null,
+              });
+
+              console.log('[Sync] State updated from remote.');
+            }
+          }
+
+          isSyncFetchingRef.current = false;
+        }
+      } catch (err) {
+        console.warn('[Sync] Version check failed:', err);
+        isSyncFetchingRef.current = false;
+      }
+    };
+
+    // Run immediately on mount to catch stale IndexedDB data, then poll every 5s
+    checkForUpdates();
+    const interval = setInterval(checkForUpdates, 5000);
+    return () => clearInterval(interval);
+  }, [isInitialized, user]);
 
   // Handlers for Backup Export / Import / Sample Load / Clear All
   const handleExportBackup = () => {

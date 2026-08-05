@@ -22,7 +22,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844017057-9wjg",
     "name": "White CC1717",
-    "src": "/sample-uploads/1785901566049-1654fb1b2716.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/1785901566049-1654fb1b2716.webp",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -44,7 +44,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785847347645-3jwz",
     "name": "T-shirt_on_mannequin_different_a…_202608032015",
-    "src": "/sample-uploads/upload-clean-1785903474292-652651.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474292-652651.mp4",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [],
@@ -58,7 +58,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844010580-9f34",
     "name": "1717BohoFlatLayBlack",
-    "src": "/sample-uploads/upload-clean-1785903474346-ecbb8b.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474346-ecbb8b.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -79,7 +79,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844013430-lvwn",
     "name": "1717BohoFlatLayIvory",
-    "src": "/sample-uploads/upload-clean-1785903474362-bd4cfe.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474362-bd4cfe.png",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -101,7 +101,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844016266-dmeo",
     "name": "1717BohoFlatLayPepper",
-    "src": "/sample-uploads/upload-clean-1785903474374-253866.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474374-253866.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -122,7 +122,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844014355-vqo6",
     "name": "1717BohoFlatLayKhaki1",
-    "src": "/sample-uploads/upload-clean-1785903474390-7c20e3.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474390-7c20e3.png",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -143,7 +143,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844015334-uhma",
     "name": "1717BohoFlatLayMoss1",
-    "src": "/sample-uploads/upload-clean-1785903474419-51ac70.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474419-51ac70.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -164,7 +164,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844012673-9odq",
     "name": "1717BohoFlatLayDemin",
-    "src": "/sample-uploads/upload-clean-1785903474447-942b95.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474447-942b95.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -185,7 +185,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844108876-huop",
     "name": "Man Comfort Colors 1717 Mockup (17)_result",
-    "src": "/sample-uploads/upload-clean-1785903474473-b78869.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474473-b78869.png",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -206,7 +206,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844105712-r57v",
     "name": "22_result",
-    "src": "/sample-uploads/upload-clean-1785903474489-d336bb.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474489-d336bb.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -227,7 +227,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844108070-bx4c",
     "name": "Man Comfort Colors 1717 Mockup (15)_result",
-    "src": "/sample-uploads/upload-clean-1785903474515-2d5be2.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474515-2d5be2.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -248,7 +248,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844107218-gviq",
     "name": "Man Comfort Colors 1717 Mockup (7)_result",
-    "src": "/sample-uploads/upload-clean-1785903474533-bcadf6.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474533-bcadf6.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -269,7 +269,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844517673-50qk",
     "name": "Comfort Colors 1717 Size+Color",
-    "src": "/sample-uploads/upload-clean-1785903474551-69443b.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474551-69443b.webp",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -291,7 +291,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844410612-p87t",
     "name": "9.BellaCanvas3001 Black FlatLay Mockups",
-    "src": "/sample-uploads/upload-clean-1785903474554-8a74e5.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474554-8a74e5.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -312,7 +312,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844411430-1q3e",
     "name": "23.BellaCanvas3001 DustyBlue FlatLay Mockups",
-    "src": "/sample-uploads/upload-clean-1785903474567-ac95de.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474567-ac95de.png",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -333,7 +333,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844517415-nj4h",
     "name": "bella canvas 3001 size and color chart_",
-    "src": "/sample-uploads/upload-clean-1785903474584-9f4c7c.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474584-9f4c7c.webp",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -355,7 +355,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844454741-0px4",
     "name": "Black-2",
-    "src": "/sample-uploads/upload-clean-1785903474588-5aa74a.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474588-5aa74a.png",
     "folderId": "folder-1785843819101",
     "apparelType": "dark",
     "printAreas": [
@@ -376,7 +376,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844454893-yvsp",
     "name": "Natural-2",
-    "src": "/sample-uploads/upload-clean-1785903474597-5a46f8.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474597-5a46f8.png",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -397,7 +397,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785844518135-iq1n",
     "name": "Printnest Youth",
-    "src": "/sample-uploads/upload-clean-1785903474602-7f68bc.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474602-7f68bc.webp",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [
@@ -419,7 +419,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785848097565-ozni",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
-    "src": "/sample-uploads/upload-clean-1785903474604-ce6ea7.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474604-ce6ea7.mp4",
     "folderId": "folder-1785843819101",
     "apparelType": "light",
     "printAreas": [],
@@ -433,7 +433,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895264284-rez5",
     "name": "1717BohoFlatLayWhite",
-    "src": "/sample-uploads/upload-clean-1785903474637-b5284d.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474637-b5284d.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -457,7 +457,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895446164-6bdy",
     "name": "T-shirt_on_mannequin_different_a…_202608032016",
-    "src": "/sample-uploads/upload-clean-1785903474649-274f35.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474649-274f35.mp4",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [],
@@ -471,7 +471,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895258752-wzsc",
     "name": "1717BohoFlatLayBlack",
-    "src": "/sample-uploads/upload-clean-1785903474664-9e2ed2.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474664-9e2ed2.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -495,7 +495,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895261244-68je",
     "name": "1717BohoFlatLayIvory",
-    "src": "/sample-uploads/upload-clean-1785903474684-2bc947.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474684-2bc947.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -519,7 +519,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895263487-3zaq",
     "name": "1717BohoFlatLayPepper",
-    "src": "/sample-uploads/upload-clean-1785903474697-7efabe.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474697-7efabe.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -543,7 +543,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895262137-22jt",
     "name": "1717BohoFlatLayKhaki1",
-    "src": "/sample-uploads/upload-clean-1785903474720-cb525d.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474720-cb525d.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -567,7 +567,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895265682-qhqc",
     "name": "1717BohoFlatLayYam",
-    "src": "/sample-uploads/upload-clean-1785903474750-040b82.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474750-040b82.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -591,7 +591,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895259448-81h9",
     "name": "1717BohoFlatLayBlueSpruce",
-    "src": "/sample-uploads/upload-clean-1785903474774-2b525a.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474774-2b525a.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -615,7 +615,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895260482-o5j0",
     "name": "1717BohoFlatLayDemin",
-    "src": "/sample-uploads/upload-clean-1785903474793-03cefe.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474793-03cefe.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -639,7 +639,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895271184-oowj",
     "name": "Çalışma Yüzeyi 11",
-    "src": "/sample-uploads/upload-clean-1785903474822-418ddb.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474822-418ddb.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -663,7 +663,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895276867-xbg9",
     "name": "PepperCC1717_1569",
-    "src": "/sample-uploads/upload-clean-1785903474848-4e38d5.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474848-4e38d5.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -687,7 +687,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895268083-7907",
     "name": "BlackCC1717_1694",
-    "src": "/sample-uploads/upload-clean-1785903474866-572dfb.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474866-572dfb.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -711,7 +711,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895304694-d5qo",
     "name": "Comfort Colors 1717 Size+Color",
-    "src": "/sample-uploads/upload-clean-1785903474880-5ae6cd.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474880-5ae6cd.webp",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -735,7 +735,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785896313119-cg3u",
     "name": "BC3001_FEMININE_VintageWhite",
-    "src": "/sample-uploads/upload-clean-1785903474882-2de9e0.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474882-2de9e0.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -759,7 +759,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785896312156-qma3",
     "name": "BC3001_FEMININE_VintageBlack",
-    "src": "/sample-uploads/upload-clean-1785903474904-9db156.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474904-9db156.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -783,7 +783,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895304477-hupg",
     "name": "bella canvas 3001 size and color chart_",
-    "src": "/sample-uploads/upload-clean-1785903474928-801125.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474928-801125.webp",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -807,7 +807,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785896351479-yd73",
     "name": "White",
-    "src": "/sample-uploads/upload-clean-1785903474935-851aa5.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474935-851aa5.png",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -831,7 +831,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785896351292-mpkj",
     "name": "Black-2",
-    "src": "/sample-uploads/upload-clean-1785903474940-1c9047.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474940-1c9047.png",
     "folderId": "folder-1785843837086",
     "apparelType": "dark",
     "printAreas": [
@@ -855,7 +855,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895305046-27dt",
     "name": "Printnest Youth",
-    "src": "/sample-uploads/upload-clean-1785903474951-df6b6c.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474951-df6b6c.webp",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -879,7 +879,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785895371075-x6y5",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
-    "src": "/sample-uploads/upload-clean-1785903474954-6701a4.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474954-6701a4.mp4",
     "folderId": "folder-1785843837086",
     "apparelType": "light",
     "printAreas": [
@@ -903,7 +903,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897506992-awku",
     "name": "1717BohoFlatLayWhite",
-    "src": "/sample-uploads/upload-clean-1785903474980-d338eb.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474980-d338eb.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -927,7 +927,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785899770810-23li",
     "name": "T-shirt_on_mannequin_different_a…_202608050615",
-    "src": "/sample-uploads/upload-clean-1785903474991-bc1cf9.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474991-bc1cf9.mp4",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [],
@@ -941,7 +941,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897501545-vfs3",
     "name": "1717BohoFlatLayBlack",
-    "src": "/sample-uploads/upload-clean-1785903475002-62d566.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475002-62d566.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -965,7 +965,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897503257-wi2v",
     "name": "1717BohoFlatLayIvory",
-    "src": "/sample-uploads/upload-clean-1785903475021-854f10.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475021-854f10.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -989,7 +989,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897505050-gx0o",
     "name": "1717BohoFlatLayPepper",
-    "src": "/sample-uploads/upload-clean-1785903475045-6cd66b.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475045-6cd66b.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1013,7 +1013,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897504150-aeed",
     "name": "1717BohoFlatLayMoss1",
-    "src": "/sample-uploads/upload-clean-1785903475066-3fe148.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475066-3fe148.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1037,7 +1037,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897502404-ebu5",
     "name": "1717BohoFlatLayDemin",
-    "src": "/sample-uploads/upload-clean-1785903475092-7a1aa2.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475092-7a1aa2.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1061,7 +1061,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897508002-wlrz",
     "name": "1717BohoFlatLayYam",
-    "src": "/sample-uploads/upload-clean-1785903475118-612e2d.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475118-612e2d.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1085,7 +1085,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897513977-1khs",
     "name": "Çalışma Yüzeyi 11",
-    "src": "/sample-uploads/upload-clean-1785903475145-7d572a.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475145-7d572a.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1109,7 +1109,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897520670-ccax",
     "name": "PepperCC1717_1569",
-    "src": "/sample-uploads/upload-clean-1785903475172-acc3a6.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475172-acc3a6.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1133,7 +1133,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897517478-ncpd",
     "name": "Man Comfort Colors 1717 Mockup (17)_result",
-    "src": "/sample-uploads/upload-clean-1785903475196-700cbb.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475196-700cbb.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1157,7 +1157,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897518332-cuaz",
     "name": "Man Comfort Colors 1717 Mockup (21)_result",
-    "src": "/sample-uploads/upload-clean-1785903475213-f60c37.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475213-f60c37.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1181,7 +1181,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897679298-ph3b",
     "name": "Comfort Colors 1717 Size+Color",
-    "src": "/sample-uploads/upload-clean-1785903475237-3b08dc.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475237-3b08dc.webp",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1205,7 +1205,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897652466-djda",
     "name": "BC3001_FEMININE_VintageWhite",
-    "src": "/sample-uploads/upload-clean-1785903475243-71e7d2.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475243-71e7d2.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1229,7 +1229,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897651561-e2w2",
     "name": "BC3001_FEMININE_DarkGreyHeather",
-    "src": "/sample-uploads/upload-clean-1785903475282-1ebe9b.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475282-1ebe9b.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1253,7 +1253,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897679113-4vh7",
     "name": "bella canvas 3001 size and color chart_",
-    "src": "/sample-uploads/upload-clean-1785903475306-f3664a.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475306-f3664a.webp",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1277,7 +1277,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897233765-6l8y",
     "name": "White",
-    "src": "/sample-uploads/upload-clean-1785903475310-4e16cd.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475310-4e16cd.png",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1301,7 +1301,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897233594-8uhl",
     "name": "Dark Grey Heather-2",
-    "src": "/sample-uploads/upload-clean-1785903475314-4e3530.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475314-4e3530.png",
     "folderId": "folder-1785843860082",
     "apparelType": "dark",
     "printAreas": [
@@ -1325,7 +1325,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897679644-xyr1",
     "name": "Printnest Youth",
-    "src": "/sample-uploads/upload-clean-1785903475330-c1246b.webp",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475330-c1246b.webp",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [
@@ -1349,7 +1349,7 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
   {
     "id": "mockup-1785897755663-emyr",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
-    "src": "/sample-uploads/upload-clean-1785903475333-58310f.mp4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475333-58310f.mp4",
     "folderId": "folder-1785843860082",
     "apparelType": "light",
     "printAreas": [],
@@ -1366,7 +1366,7 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
   {
     "id": "design-1785848625527-il5s",
     "name": "Rabbit_in_lavender_and_daisies_202607301727light",
-    "src": "/sample-uploads/upload-clean-1785903475366-694589.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475366-694589.png",
     "targetApparel": "light",
     "isSelected": false,
     "width": 1500,
@@ -1375,7 +1375,7 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
   {
     "id": "design-1785848664295-nwmf",
     "name": "Rabbit_in_lavender_and_daisies_202607301727",
-    "src": "/sample-uploads/upload-clean-1785903475377-42669c.png",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475377-42669c.png",
     "targetApparel": "dark",
     "isSelected": false,
     "width": 1500,

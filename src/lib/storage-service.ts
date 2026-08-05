@@ -181,6 +181,15 @@ export async function saveAppData(payload: AppDataPayload): Promise<void> {
 }
 
 /**
+ * Updates IndexedDB with data received from a remote server sync.
+ * Does NOT trigger a server POST — use this when applying another device's changes
+ * to avoid the echo loop: fetch → state update → auto-save → fetch → ...
+ */
+export async function updateLocalCache(payload: AppDataPayload): Promise<void> {
+  await saveToIndexedDB(payload);
+}
+
+/**
  * Helper to write directly to IndexedDB.
  */
 async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {

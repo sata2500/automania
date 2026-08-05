@@ -1,0 +1,14 @@
+# Sample uploads are now hosted on Vercel Blob CDN - do NOT deploy them as static files
+public/sample-uploads/
+
+# Migration & utility scripts
+migrate-to-blob.mjs
+blob-url-map.json
+fix_db.mjs
+inspect_db.js
+update_sample_clean.js
+update_sample_data.js
+write_sample.js
+
+# Local database
+.data/
