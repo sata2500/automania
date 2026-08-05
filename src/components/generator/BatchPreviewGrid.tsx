@@ -1,0 +1,372 @@
+'use client';
+
+import React, { useState } from 'react';
+import { MockupItem, DesignItem, RenderedMatch, MockupFolder, ExportFormatType } from '@/types/pod';
+import { useToast } from '@/components/common/ToastContext';
+import { ConfirmModal } from '@/components/common/ConfirmModal';
+import {
+  renderMockupWithDesign,
+  generateMatchingPairs,
+} from '@/lib/canvas-renderer';
+import { downloadMatchesAsZip, formatExportFileName } from '@/lib/export-utils';
+import confetti from 'canvas-confetti';
+import {
+  Sparkles,
+  RefreshCw,
+  FileArchive,
+  Layers,
+  Folder,
+  FolderOpen,
+  Zap,
+  Play,
+  CheckCircle2,
+  Video,
+  Trash2,
+} from 'lucide-react';
+
+interface BatchPreviewGridProps {
+  mockups: MockupItem[];
+  designs: DesignItem[];
+  folders: MockupFolder[];
+  activeFolderId: string | null;
+  setActiveFolderId: (id: string | null) => void;
+  renderedMatches: RenderedMatch[];
+  setRenderedMatches: React.Dispatch<React.SetStateAction<RenderedMatch[]>>;
+  hasGenerated: boolean;
+  setHasGenerated: (val: boolean) => void;
+}
+
+export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
+  mockups,
+  designs,
+  folders,
+  activeFolderId,
+  setActiveFolderId,
+  renderedMatches,
+  setRenderedMatches,
+  hasGenerated,
+  setHasGenerated,
+}) => {
+  const toast = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+
+  const exportFormat: ExportFormatType = 'image/webp';
+  const outputResolution = 3000;
+  const outputQuality = 0.95;
+
+  const currentPairs = generateMatchingPairs(mockups, designs, activeFolderId);
+  const allPairsCount = generateMatchingPairs(mockups, designs, null).length;
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    const pairs = generateMatchingPairs(mockups, designs, activeFolderId);
+    if (pairs.length === 0) {
+      toast.warning('Üretilecek mockup veya uyumlu tasarım bulunamadı.');
+      setIsGenerating(false);
+      return;
+    }
+
+    const genToastId = toast.progress('Toplu mockup görselleri üretiliyor...', 5);
+    const results: RenderedMatch[] = [];
+
+    for (let i = 0; i < pairs.length; i++) {
+      const { mockup, design } = pairs[i];
+      const folder = folders.find((f) => f.id === mockup.folderId);
+      const folderName = folder?.name || 'Mockup';
+      const isVideo = mockup.isVideo;
+      const isStaticAsset = isVideo || mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
+
+      const folderMockups = mockups.filter((m) => m.folderId === mockup.folderId);
+      const positionInFolder = folderMockups.findIndex((m) => m.id === mockup.id);
+      const folderOrderIndex = positionInFolder !== -1 ? positionInFolder + 1 : i + 1;
+
+      try {
+        const previewUrl = await renderMockupWithDesign(mockup, design, {
+          outputWidth: outputResolution,
+          outputHeight: outputResolution,
+          quality: outputQuality,
+          outputFormat: exportFormat,
+        });
+
+        const videoExt = isVideo ? (mockup.mimeType?.split('/')[1] || 'mp4') : 'mp4';
+
+        const exportFileName = formatExportFileName(
+          design.name,
+          mockup.name,
+          folderName,
+          folderOrderIndex,
+          exportFormat,
+          isStaticAsset,
+          isVideo,
+          videoExt
+        );
+
+        results.push({
+          id: `match-${i}-${Date.now()}`,
+          mockupId: mockup.id,
+          mockupName: mockup.name,
+          mockupApparel: mockup.apparelType,
+          folderId: mockup.folderId,
+          folderName,
+          folderOrderIndex,
+          designId: design.id,
+          designName: design.name,
+          designTarget: design.targetApparel,
+          previewUrl,
+          exportFileName,
+          format: exportFormat,
+          isVideo,
+          mimeType: mockup.mimeType,
+        });
+
+        const percent = Math.round(((i + 1) / pairs.length) * 100);
+        toast.updateProgressToast(genToastId, percent, `${i + 1}/${pairs.length} varyasyon işlendi`);
+      } catch (err) {
+        console.error('Error rendering pair:', err);
+      }
+    }
+
+    setRenderedMatches(results);
+    setHasGenerated(true);
+    setIsGenerating(false);
+    toast.removeToast(genToastId);
+    toast.success(`${results.length} adet mockup görseli üretildi!`);
+  };
+
+  const handleDownloadZip = async () => {
+    if (renderedMatches.length === 0) return;
+    const zipToastId = toast.progress('ZIP paketi sıkıştırılıyor...', 10);
+    setExportProgress(5);
+    try {
+      const folderName = folders.find((f) => f.id === activeFolderId)?.name || 'Tumu';
+      await downloadMatchesAsZip(
+        renderedMatches,
+        `Etsy_Mockups_${folderName}_${Date.now()}.zip`,
+        (percent) => {
+          setExportProgress(percent);
+          toast.updateProgressToast(zipToastId, percent, `%${percent} ZIP paketi hazırlandı`);
+        }
+      );
+
+      toast.removeToast(zipToastId);
+      toast.success('ZIP dosyası başarıyla indirildi!');
+
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch (err) {
+      console.error('ZIP export error:', err);
+      toast.removeToast(zipToastId);
+      toast.error('ZIP indirilirken bir hata oluştu.');
+    } finally {
+      setTimeout(() => setExportProgress(null), 1000);
+    }
+  };
+
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
+  const handleClearResults = () => {
+    setConfirmClearOpen(true);
+  };
+
+  const handleConfirmClear = () => {
+    setRenderedMatches([]);
+    setHasGenerated(false);
+    setConfirmClearOpen(false);
+    toast.info('Üretim sonuçları temizlendi.');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Header Card */}
+      <div className="bg-white dark:bg-slate-800/60 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-pink-500 dark:text-pink-400" />
+            Toplu Mockup Üretim Stüdyosu
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Görseller sırayla 3000 x 3000 piksel çözünürlükte ve WebP formatında üretilir.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>3000px HD WebP (Otomatik)</span>
+          </div>
+
+          {hasGenerated && (
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || currentPairs.length === 0}
+              className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-lg shadow-purple-600/30 cursor-pointer"
+            >
+              {isGenerating ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 text-amber-300 fill-amber-300" />
+              )}
+              <span>Yeniden Üret</span>
+            </button>
+          )}
+
+          {hasGenerated && (
+            <button
+              onClick={handleDownloadZip}
+              disabled={renderedMatches.length === 0 || exportProgress !== null}
+              className="flex items-center space-x-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+            >
+              <FileArchive className="w-4 h-4" />
+              <span>ZIP İndir ({renderedMatches.length})</span>
+            </button>
+          )}
+
+          {hasGenerated && (
+            <button
+              onClick={handleClearResults}
+              disabled={isGenerating}
+              className="flex items-center space-x-1.5 px-3.5 py-2.5 bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-500/50 rounded-xl text-xs font-bold transition-all shadow shrink-0 cursor-pointer"
+              title="Üretilen verileri ekranı sıfırlamak için temizleyin"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500 dark:text-rose-400" />
+              <span>Verileri Temizle</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Folder Selection Bar */}
+      <div className="bg-slate-50 dark:bg-slate-900/90 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+          Üretim İçin Klasör Seçin:
+        </label>
+        <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-2 overflow-x-auto custom-scrollbar pb-2.5 max-h-[95px]">
+          <button
+            onClick={() => setActiveFolderId(null)}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[210px] min-w-0 ${
+              activeFolderId === null
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
+                : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <FolderOpen className={`w-4 h-4 shrink-0 ${activeFolderId === null ? 'text-amber-300' : 'text-indigo-500 dark:text-indigo-400'}`} />
+            <span className="truncate">Tüm Klasörler</span>
+            <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
+              activeFolderId === null ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+            }`}>
+              {allPairsCount} Varyasyon
+            </span>
+          </button>
+
+          {folders.map((folder) => {
+            const isActive = activeFolderId === folder.id;
+            const folderPairs = generateMatchingPairs(mockups, designs, folder.id);
+            return (
+              <button
+                key={folder.id}
+                onClick={() => setActiveFolderId(folder.id)}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[210px] min-w-0 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
+                    : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+                title={`${folder.name} (${folderPairs.length} Varyasyon)`}
+              >
+                {isActive ? <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" /> : <Folder className="w-4 h-4 text-slate-400 shrink-0" />}
+                <span className="truncate">{folder.name}</span>
+                <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
+                  isActive ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}>
+                  {folderPairs.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {!hasGenerated ? (
+        <div className="bg-slate-100/60 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-3xl p-8 md:p-12 text-center space-y-5 shadow-xl dark:shadow-2xl">
+          <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-indigo-600/30 animate-pulse">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">Toplu Mockup Üretimini Başlatın</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Seçili klasördeki mockup'lar ile aktif PNG tasarımları eşleştirilip yüksek çözünürlüklü Etsy çıktısına dönüştürülür.
+            </p>
+          </div>
+
+          <div className="inline-flex items-center gap-3 bg-slate-100 dark:bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <Layers className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+            <span>Hazır Eşleşme Sayısı: <strong className="text-amber-500 dark:text-amber-400 font-mono text-sm">{currentPairs.length} Varyasyon</strong></span>
+          </div>
+
+          <div>
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || currentPairs.length === 0}
+              className="px-8 py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 disabled:opacity-50 text-white font-extrabold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
+            >
+              {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 text-amber-300 fill-amber-300" />}
+              <span>Toplu Görselleri Üret ({currentPairs.length})</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              Toplu Üretim Tamamlandı ({renderedMatches.length} Varyasyon)
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {renderedMatches.map((match) => (
+              <div
+                key={match.id}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-md dark:shadow-lg group"
+              >
+                <div className="w-full h-48 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 relative flex items-center justify-center mb-3">
+                  {match.isVideo ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300">
+                      <Video className="w-8 h-8 mb-1 opacity-80" />
+                      <span className="text-[10px] font-bold">Video Mockup</span>
+                    </div>
+                  ) : (
+                    <img src={match.previewUrl} alt={match.exportFileName} className="w-full h-full object-contain" />
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate" title={match.exportFileName}>
+                    {match.exportFileName}
+                  </p>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    <span>{match.folderName}</span>
+                    <span className="text-indigo-500 dark:text-indigo-400 font-mono">#{match.folderOrderIndex}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={confirmClearOpen}
+        title="Üretim Verileri Temizlensin mi?"
+        message="Üretilen tüm mockup görselleri ve sonuçlar ekranınızdan temizlenecektir. Devam etmek istiyor musunuz?"
+        onConfirm={handleConfirmClear}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
+    </div>
+  );
+};

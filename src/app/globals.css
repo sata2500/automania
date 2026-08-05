@@ -1,26 +1,189 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   Tailwind v4 — CSS-first Dark Mode (2026 Best Practice)
+   @custom-variant dark: enables dark: prefix utilities
+   whenever the .dark class exists on any ancestor element.
+   ============================================================ */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+/* ============================================================
+   Design Token System — Semantic CSS Variables
+   Light values are the default (:root), dark values override
+   under .dark. All components use Tailwind dark: prefix which
+   references these variables automatically.
+   ============================================================ */
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Surfaces */
+    --color-surface-base: #f8fafc;       /* Page background */
+    --color-surface-elevated: #ffffff;    /* Cards, panels */
+    --color-surface-muted: #f1f5f9;      /* Secondary panels */
+    --color-surface-overlay: #e2e8f0;    /* Hover states, inputs */
+    --color-surface-inset: #f8fafc;      /* Inner bg of inputs */
+
+    /* Text */
+    --color-text-primary: #0f172a;       /* Main content */
+    --color-text-secondary: #475569;     /* Labels, descriptions */
+    --color-text-tertiary: #94a3b8;      /* Placeholders, hints */
+    --color-text-inverted: #f8fafc;      /* Text on dark bg */
+
+    /* Borders */
+    --color-border-default: #e2e8f0;
+    --color-border-muted: #cbd5e1;
+    --color-border-strong: #94a3b8;
+
+    /* Accent (indigo/purple palette — same across themes) */
+    --color-accent-primary: #4f46e5;
+    --color-accent-hover: #4338ca;
+
+    /* Backdrop for modals */
+    --color-backdrop: rgba(15, 23, 42, 0.5);
+
+    /* Scrollbar */
+    --scrollbar-track: #e2e8f0;
+    --scrollbar-thumb: rgba(99, 102, 241, 0.4);
+    --scrollbar-thumb-hover: rgba(99, 102, 241, 0.7);
+  }
+
+  .dark {
+    /* Surfaces */
+    --color-surface-base: #020617;
+    --color-surface-elevated: #0f172a;
+    --color-surface-muted: #1e293b;
+    --color-surface-overlay: #334155;
+    --color-surface-inset: #020617;
+
+    /* Text */
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #94a3b8;
+    --color-text-tertiary: #64748b;
+    --color-text-inverted: #0f172a;
+
+    /* Borders */
+    --color-border-default: #1e293b;
+    --color-border-muted: #334155;
+    --color-border-strong: #475569;
+
+    /* Backdrop */
+    --color-backdrop: rgba(2, 6, 23, 0.85);
+
+    /* Scrollbar */
+    --scrollbar-track: rgba(15, 23, 42, 0.8);
+    --scrollbar-thumb: rgba(99, 102, 241, 0.5);
+    --scrollbar-thumb-hover: rgba(99, 102, 241, 0.8);
+  }
+
+  /* ====================================================
+     Base Styles
+     ==================================================== */
+  * {
+    -webkit-tap-highlight-color: transparent; /* Remove blue tap highlight on mobile */
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-surface-base);
+    color: var(--color-text-primary);
+    font-family: 'Inter', 'Geist', system-ui, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Text selection */
+  ::selection {
+    background-color: #6366f1;
+    color: #ffffff;
+  }
+
+  /* Focus ring — accessible, theme-aware */
+  :focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ============================================================
+   Scrollbar Utilities — Custom Track & Thumb
+   ============================================================ */
+
+/* Hidden scrollbar (mobile/touch) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Visible scrollbar for desktop panels */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Auto-hide scrollbar on mobile */
+@media (max-width: 767px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .custom-scrollbar {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+}
+
+/* ============================================================
+   Micro-animation Utilities
+   ============================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease both;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease both;
+}
+
+/* ============================================================
+   Range Input — Consistent Accent
+   ============================================================ */
+input[type="range"] {
+  accent-color: #f59e0b;
 }
