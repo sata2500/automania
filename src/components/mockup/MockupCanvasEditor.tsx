@@ -228,13 +228,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = () => setOpenFolderMenuId(null);
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
+  const [folderSettingsId, setFolderSettingsId] = useState<string | null>(null);
 
   const activePrintArea = draftAreas[activeAreaIndex] || draftAreas[0];
 
@@ -787,57 +781,13 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpenFolderMenuId(openFolderMenuId === folder.id ? null : folder.id);
+                      setFolderSettingsId(folder.id);
                     }}
                     className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all shrink-0 cursor-pointer"
                     title="Seçenekler"
                   >
                     <MoreVertical className="w-4 h-4" />
                   </button>
-
-                  {openFolderMenuId === folder.id && (
-                    <div className="absolute top-full left-0 mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 flex flex-col p-1 animate-in fade-in zoom-in-95 duration-100">
-                      {folder.isCustom && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingFolderId(folder.id);
-                            setNewFolderName(folder.name);
-                            setShowFolderModal(true);
-                            setOpenFolderMenuId(null);
-                          }}
-                          className="w-full text-left flex items-center space-x-2 px-3 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-lg transition-colors cursor-pointer text-xs font-semibold"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          <span>Yeniden Adlandır</span>
-                        </button>
-                      )}
-                      
-                      <button
-                        onClick={(e) => {
-                          handleDuplicateFolder(folder.id, e);
-                          setOpenFolderMenuId(null);
-                        }}
-                        className="w-full text-left flex items-center space-x-2 px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-colors cursor-pointer text-xs font-semibold"
-                      >
-                        <CopyPlus className="w-3.5 h-3.5" />
-                        <span>Kopyala</span>
-                      </button>
-
-                      {folder.isCustom && (
-                        <button
-                          onClick={(e) => {
-                            handleDeleteFolder(folder.id, e);
-                            setOpenFolderMenuId(null);
-                          }}
-                          className="w-full text-left flex items-center space-x-2 px-3 py-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer text-xs font-semibold"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Sil</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -1227,6 +1177,59 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                 {editingFolderId ? 'Kaydet' : 'Oluştur'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Folder Settings Modal */}
+      {folderSettingsId && (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setFolderSettingsId(null)}>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-[200px] w-full p-1.5 shadow-2xl animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
+            <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Seçenekler</span>
+            </div>
+            
+            {folders.find(f => f.id === folderSettingsId)?.isCustom && (
+              <button
+                onClick={(e) => {
+                  const folder = folders.find(f => f.id === folderSettingsId);
+                  if (folder) {
+                    setEditingFolderId(folder.id);
+                    setNewFolderName(folder.name);
+                    setShowFolderModal(true);
+                  }
+                  setFolderSettingsId(null);
+                }}
+                className="w-full text-left flex items-center space-x-2 px-3 py-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl transition-colors cursor-pointer text-xs font-semibold"
+              >
+                <Pencil className="w-4 h-4" />
+                <span>Yeniden Adlandır</span>
+              </button>
+            )}
+            
+            <button
+              onClick={(e) => {
+                handleDuplicateFolder(folderSettingsId, e);
+                setFolderSettingsId(null);
+              }}
+              className="w-full text-left flex items-center space-x-2 px-3 py-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-colors cursor-pointer text-xs font-semibold"
+            >
+              <CopyPlus className="w-4 h-4" />
+              <span>Klasörü Kopyala</span>
+            </button>
+
+            {folders.find(f => f.id === folderSettingsId)?.isCustom && (
+              <button
+                onClick={(e) => {
+                  handleDeleteFolder(folderSettingsId, e);
+                  setFolderSettingsId(null);
+                }}
+                className="w-full text-left flex items-center space-x-2 px-3 py-2.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl transition-colors cursor-pointer text-xs font-semibold mt-1"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Klasörü Sil</span>
+              </button>
+            )}
           </div>
         </div>
       )}
