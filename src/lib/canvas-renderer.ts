@@ -106,8 +106,7 @@ export function generateMatchingPairs(
     ? mockups.filter((m) => m.folderId === activeFolderId)
     : mockups;
 
-  const hasSelection = designs.some((d) => d.isSelected);
-  const activeDesigns = hasSelection ? designs.filter((d) => d.isSelected) : designs;
+  const activeDesigns = designs.filter((d) => d.isSelected);
 
   const pairs: { mockup: MockupItem; design: DesignItem }[] = [];
 

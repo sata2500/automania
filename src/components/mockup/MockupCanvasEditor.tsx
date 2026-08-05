@@ -190,6 +190,53 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     setDragOverMockupId(null);
   };
 
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
+  const handleDragStartFolder = (id: string, e: React.DragEvent) => {
+    setDraggedFolderId(id);
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOverFolder = (id: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverFolderId !== id) {
+      setDragOverFolderId(id);
+    }
+  };
+
+  const handleDropFolder = (targetId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = draggedFolderId || e.dataTransfer.getData('text/plain');
+    if (!draggedId || draggedId === targetId) {
+      setDraggedFolderId(null);
+      setDragOverFolderId(null);
+      return;
+    }
+
+    setFolders((prev) => {
+      const fromIndex = prev.findIndex((f) => f.id === draggedId);
+      const toIndex = prev.findIndex((f) => f.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+
+    setDraggedFolderId(null);
+    setDragOverFolderId(null);
+    toast.info("Klasör sıralaması güncellendi.");
+  };
+
+  const handleDragEndFolder = () => {
+    setDraggedFolderId(null);
+    setDragOverFolderId(null);
+  };
+
   const handleStartRename = (mockupId: string, currentName: string, e?: any) => {
     e?.stopPropagation();
     setEditingMockupId(mockupId);
@@ -590,7 +637,38 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
         {/* Mode Selector Header */}
         <div className="space-y-1.5 border-b border-slate-300 dark:border-slate-700 pb-3">
-          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">Görsel Modu:</label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">Görsel Modu:</label>
+            <div className="flex items-center space-x-1.5">
+              {selectedMockup && !selectedMockup.isVideo && (
+                <button
+                  onClick={() => setCropModalOpen(true)}
+                  className="flex items-center space-x-1 px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-amber-600 dark:text-amber-300 rounded-lg text-[10px] font-semibold transition-all shadow-sm cursor-pointer"
+                  title="Görseli Kırp"
+                >
+                  <Crop className="w-3 h-3" />
+                  <span className="hidden sm:inline">Kırp</span>
+                </button>
+              )}
+              <button
+                onClick={handleCopyConfig}
+                className="flex items-center space-x-1 px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg text-[10px] font-semibold transition-all shadow-sm cursor-pointer"
+                title="Baskı Ayarlarını Kopyala"
+              >
+                <Copy className="w-3 h-3 text-indigo-600 dark:text-indigo-300" />
+                <span className="hidden sm:inline">Kopyala</span>
+              </button>
+              <button
+                onClick={handlePasteConfig}
+                disabled={!copiedConfig}
+                className="flex items-center space-x-1 px-2 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-900 dark:text-white rounded-lg text-[10px] font-semibold transition-all shadow-sm cursor-pointer"
+                title="Baskı Ayarlarını Yapıştır"
+              >
+                <ClipboardCheck className="w-3 h-3" />
+                <span className="hidden sm:inline">Yapıştır</span>
+              </button>
+            </div>
+          </div>
           <div
             className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-between ${
               isStaticAsset
@@ -764,7 +842,19 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             const count = folderMockups.length;
             const isActive = activeFolderId === folder.id;
             return (
-              <div key={folder.id} className="relative group/folder shrink-0 flex items-center max-w-[220px] min-w-0 snap-start">
+              <div
+                key={folder.id}
+                draggable
+                onDragStart={(e) => handleDragStartFolder(folder.id, e)}
+                onDragOver={(e) => handleDragOverFolder(folder.id, e)}
+                onDrop={(e) => handleDropFolder(folder.id, e)}
+                onDragEnd={handleDragEndFolder}
+                className={`relative group/folder shrink-0 flex items-center max-w-[220px] min-w-0 snap-start transition-all ${
+                  draggedFolderId === folder.id ? 'opacity-40 scale-95' : ''
+                } ${
+                  dragOverFolderId === folder.id ? 'bg-indigo-500/20 ring-2 ring-indigo-400/50 rounded-xl' : ''
+                }`}
+              >
                 <button
                   onClick={() => setActiveFolderId(folder.id)}
                   className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all min-w-0 max-w-[190px] cursor-pointer ${
@@ -803,30 +893,6 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Yeni Klasör</span>
-          </button>
-        </div>
-
-        <div className="flex items-center space-x-2 shrink-0">
-          {selectedMockup && (
-            <button
-              onClick={() => setCropModalOpen(true)}
-              className="flex items-center space-x-1 px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-amber-600 dark:text-amber-300 rounded-xl text-xs font-semibold transition-all shadow cursor-pointer"
-            >
-              <Crop className="w-3.5 h-3.5" />
-              <span>Kırp</span>
-            </button>
-          )}
-          <button onClick={handleCopyConfig} className="flex items-center space-x-1 px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-xl text-xs font-semibold transition-all shadow cursor-pointer">
-            <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-300" />
-            <span>Kopyala</span>
-          </button>
-          <button
-            onClick={handlePasteConfig}
-            disabled={!copiedConfig}
-            className="flex items-center space-x-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-900 dark:text-white rounded-xl text-xs font-semibold transition-all shadow cursor-pointer"
-          >
-            <ClipboardCheck className="w-3.5 h-3.5" />
-            <span>Yapıştır</span>
           </button>
         </div>
       </div>
