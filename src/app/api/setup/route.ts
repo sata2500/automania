@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS user_workspaces (
@@ -14,6 +14,11 @@ export async function GET() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get('action') === 'reset') {
+      await sql`TRUNCATE TABLE user_workspaces`;
+      return NextResponse.json({ success: true, message: 'Veritabanı sıfırlandı. Eski hatalı veriler silindi.' });
+    }
 
     return NextResponse.json({ success: true, message: 'Veritabanı tabloları başarıyla oluşturuldu.' });
   } catch (error: any) {
