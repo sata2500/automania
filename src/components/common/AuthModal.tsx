@@ -52,7 +52,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <input
         type="file"
         ref={fileInputRef}
-        accept=".json"
+        accept=".zip,application/zip"
         onChange={handleFileChange}
         className="hidden"
       />
