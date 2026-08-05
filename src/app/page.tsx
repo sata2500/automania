@@ -436,9 +436,9 @@ function MainContent() {
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-slate-900 dark:text-white">Uygulamayı Cihazınıza Yükleyin</span>
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-400 truncate max-w-md">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400 max-w-md leading-relaxed mt-0.5">
                   Tarayıcı menüsünden "Ana Ekrana Ekle" diyerek daha hızlı, tam ekran ve kotasız bir deneyim yaşayabilirsiniz.
-                </span>
+                </p>
               </div>
             </div>
             <div className="flex items-center shrink-0">
