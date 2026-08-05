@@ -79,6 +79,8 @@ function MainContent() {
 
   const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(false);
   const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(false);
+  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(false);
+  const [isPwaInstalled, setIsPwaInstalled] = useState(true); // Default to true to prevent flash, then check in useEffect
 
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -98,6 +100,13 @@ function MainContent() {
       if (localStorage.getItem('automania_empty_workspace_dismissed') === 'true') {
         setIsEmptyWorkspaceDismissed(true);
       }
+      if (localStorage.getItem('automania_pwa_banner_dismissed') === 'true') {
+        setIsPwaInfoDismissed(true);
+      }
+      
+      // Check if installed as PWA
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+      setIsPwaInstalled(!!isStandalone);
     } catch {}
 
     loadAppData().then((data) => {
@@ -280,6 +289,13 @@ function MainContent() {
     } catch {}
   };
 
+  const handleDismissPwaBanner = () => {
+    setIsPwaInfoDismissed(true);
+    try {
+      localStorage.setItem('automania_pwa_banner_dismissed', 'true');
+    } catch {}
+  };
+
   const handleDismissEmptyWorkspaceBanner = () => {
     setIsEmptyWorkspaceDismissed(true);
     try {
@@ -401,6 +417,34 @@ function MainContent() {
               <button
                 onClick={handleDismissEmptyWorkspaceBanner}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-all cursor-pointer"
+                title="Kapat"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PWA Installation Banner */}
+        {!isPwaInstalled && !isPwaInfoDismissed && (
+          <div className="bg-gradient-to-r from-emerald-50 via-white to-teal-50 dark:from-emerald-950/80 dark:via-slate-900/90 dark:to-teal-950/80 border border-emerald-200 dark:border-emerald-500/30 rounded-2xl p-3 sm:px-4 sm:py-3 shadow-md dark:shadow-lg text-slate-700 dark:text-slate-200 font-sans mb-4 flex items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="bg-emerald-100 dark:bg-emerald-500/20 p-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 shrink-0">
+                <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-slate-900 dark:text-white">Uygulamayı Cihazınıza Yükleyin</span>
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400 truncate max-w-md">
+                  Tarayıcı menüsünden "Ana Ekrana Ekle" diyerek daha hızlı, tam ekran ve kotasız bir deneyim yaşayabilirsiniz.
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center shrink-0">
+              <button
+                onClick={handleDismissPwaBanner}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-sm"
                 title="Kapat"
               >
                 <X className="w-3.5 h-3.5" />
