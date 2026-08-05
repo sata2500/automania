@@ -48,6 +48,18 @@ export const EtsySeoHelper: React.FC = () => {
           </div>
         </div>
 
+        {/* Development Banner */}
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 rounded-xl p-4 mb-6 flex items-start space-x-3">
+          <Sparkles className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold text-amber-800 dark:text-amber-200">Geliştirme Aşamasında</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 leading-relaxed">
+              Bu sayfa şu an prototip (önizleme) aşamasındadır ve tamamen statik şablonlarla çalışmaktadır. 
+              Yakın zamanda gelişmiş algoritmalarla ve gerçek zamanlı Etsy etiket optimizasyonlarıyla donatılmış devasa bir güncelleme alacaktır.
+            </p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
