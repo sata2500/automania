@@ -56,7 +56,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.SELECTED_MOCKUP),
       ]);
 
-    if (hasInit || (savedMockups && Array.isArray(savedMockups))) {
+    if (savedMockups && Array.isArray(savedMockups) && savedMockups.length > 0) {
       return {
         mockups: savedMockups || [],
         designs: savedDesigns || [],
