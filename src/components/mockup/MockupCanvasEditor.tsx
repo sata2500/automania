@@ -226,6 +226,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderModal, setShowFolderModal] = useState(false);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
 
   const activePrintArea = draftAreas[activeAreaIndex] || draftAreas[0];
 
@@ -345,6 +346,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       message: `Bu klasör ve içindeki tüm mockup yapılandırmaları silinecektir. Devam etmek istiyor musunuz?`,
       onConfirm: () => {
         setFolders((prev) => prev.filter((f) => f.id !== folderId));
+        setMockups((prev) => prev.filter((m) => m.folderId !== folderId));
         if (activeFolderId === folderId) setActiveFolderId(null);
         setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
         toast.info(`'${folder?.name || 'Klasör'}' silindi.`);
@@ -774,6 +776,20 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                 </button>
 
                 <div className="flex items-center space-x-0.5 ml-1">
+                  {folder.isCustom && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFolderId(folder.id);
+                        setNewFolderName(folder.name);
+                        setShowFolderModal(true);
+                      }}
+                      className="p-1 hover:bg-emerald-500/20 text-slate-500 dark:text-slate-400 hover:text-emerald-500 rounded-lg transition-all shrink-0 cursor-pointer"
+                      title="Klasörü Yeniden Adlandır"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => handleDuplicateFolder(folder.id, e)}
                     className="p-1 hover:bg-indigo-500/20 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:text-indigo-300 rounded-lg transition-all shrink-0 cursor-pointer"
@@ -797,7 +813,11 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           })}
 
           <button
-            onClick={() => setShowFolderModal(true)}
+            onClick={() => {
+              setEditingFolderId(null);
+              setNewFolderName('');
+              setShowFolderModal(true);
+            }}
             className="flex items-center space-x-1 px-3 py-1.5 bg-slate-700/60 hover:bg-slate-200 dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 rounded-xl text-xs font-medium shrink-0 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -1135,7 +1155,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           <div className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <FolderPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              Yeni Mockup Klasörü Oluştur
+              {editingFolderId ? 'Klasörü Yeniden Adlandır' : 'Yeni Mockup Klasörü Oluştur'}
             </h3>
             <input
               type="text"
@@ -1145,22 +1165,35 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
               className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl p-2.5 text-xs outline-none focus:border-indigo-500"
             />
             <div className="flex justify-end space-x-2">
-              <button onClick={() => setShowFolderModal(false)} className="px-3 py-2 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-xl hover:bg-slate-200 dark:bg-slate-700 cursor-pointer">
+              <button onClick={() => {
+                setShowFolderModal(false);
+                setEditingFolderId(null);
+              }} className="px-3 py-2 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs rounded-xl hover:bg-slate-200 dark:bg-slate-700 cursor-pointer">
                 İptal
               </button>
               <button
                 onClick={() => {
                   if (!newFolderName.trim()) return;
-                  const newFolder: MockupFolder = { id: 'folder-' + Date.now(), name: newFolderName.trim(), isCustom: true };
-                  setFolders((prev) => [...prev, newFolder]);
-                  setActiveFolderId(newFolder.id);
+                  if (editingFolderId) {
+                    setFolders((prev) =>
+                      prev.map((f) =>
+                        f.id === editingFolderId ? { ...f, name: newFolderName.trim() } : f
+                      )
+                    );
+                    toast.success('Klasör adı güncellendi!');
+                  } else {
+                    const newFolder: MockupFolder = { id: 'folder-' + Date.now(), name: newFolderName.trim(), isCustom: true };
+                    setFolders((prev) => [...prev, newFolder]);
+                    setActiveFolderId(newFolder.id);
+                    toast.success(`'${newFolder.name}' klasörü oluşturuldu!`);
+                  }
                   setNewFolderName('');
+                  setEditingFolderId(null);
                   setShowFolderModal(false);
-                  toast.success(`'${newFolder.name}' klasörü oluşturuldu!`);
                 }}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-slate-900 dark:text-white text-xs font-bold rounded-xl shadow cursor-pointer"
               >
-                Oluştur
+                {editingFolderId ? 'Kaydet' : 'Oluştur'}
               </button>
             </div>
           </div>
