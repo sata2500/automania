@@ -45,6 +45,17 @@ export async function GET(request: Request) {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS keyword_pool (
+        id VARCHAR(255) PRIMARY KEY,
+        keyword VARCHAR(255) UNIQUE NOT NULL,
+        usage_count INT DEFAULT 1,
+        etsy_score INT DEFAULT 0,
+        last_evaluated_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_key VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(255)`;
 

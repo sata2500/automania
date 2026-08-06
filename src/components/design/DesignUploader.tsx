@@ -25,7 +25,12 @@ import {
   Pencil,
   GripVertical,
   X,
+  XCircle,
   Check,
+  Hash,
+  FileText,
+  RefreshCw,
+  Clock,
 } from 'lucide-react';
 
 import { optimizeDesignImage, uploadMediaToServer } from '@/lib/image-optimizer';
@@ -58,6 +63,10 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   const [dragActive, setDragActive] = useState(false);
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
+
+  // Analysis State
+  const [analyzingIds, setAnalyzingIds] = useState<string[]>([]);
+  const [analysisModalData, setAnalysisModalData] = useState<DesignItem | null>(null);
 
   // Folder Modal state
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -308,6 +317,52 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     );
     setCropTargetDesign(null);
     toast.success('Tasarım görseli başarıyla kırpıldı!');
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleAnalyzeDesign = async (designId: string) => {
+    const design = designs.find(d => d.id === designId);
+    if (!design) return;
+    
+    setAnalyzingIds(prev => [...prev, designId]);
+    try {
+      const res = await fetch('/api/designs/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ src: design.src, name: design.name })
+      });
+      const data = await res.json();
+      
+      if (data.success && data.analysis) {
+        setDesigns(prev => prev.map(d => d.id === designId ? { ...d, analysis: data.analysis } : d));
+        toast.success(`'${design.name}' analizi başarıyla tamamlandı!`);
+      } else {
+        toast.error(`Analiz hatası: ${data.error}`);
+      }
+    } catch (e: any) {
+      toast.error('Analiz işlemi sırasında sunucu hatası oluştu.');
+    } finally {
+      setAnalyzingIds(prev => prev.filter(id => id !== designId));
+    }
+  };
+
+  const handleBulkAnalyze = async () => {
+    if (selectedDesignIds.length === 0) return;
+    
+    const toAnalyze = selectedDesignIds.filter(id => !analyzingIds.includes(id));
+    if (toAnalyze.length === 0) return;
+    
+    toast.info(`${toAnalyze.length} tasarım kuyruğa alındı, sırayla analiz ediliyor...`);
+    
+    for (const id of toAnalyze) {
+      await handleAnalyzeDesign(id);
+    }
+    toast.success('Toplu analiz işlemi tamamlandı!');
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -574,6 +629,16 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
                 <Trash2 className="w-3.5 h-3.5" />
                 Toplu Sil
               </button>
+
+              <button
+                onClick={handleBulkAnalyze}
+                disabled={selectedDesignIds.length === 0 || analyzingIds.length > 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="Seçili tasarımları sırayla analiz et"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Toplu Analiz
+              </button>
             </div>
           </div>
         </div>
@@ -644,6 +709,20 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
                         </select>
                       )}
                       <button
+                        onClick={(e) => { e.stopPropagation(); if(design.analysis) setAnalysisModalData(design); else handleAnalyzeDesign(design.id); }}
+                        disabled={analyzingIds.includes(design.id)}
+                        className={`p-1 rounded transition-colors ${
+                          design.analysis 
+                            ? 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-900/50' 
+                            : analyzingIds.includes(design.id) 
+                              ? 'text-slate-400 bg-slate-100 dark:bg-slate-800 animate-pulse'
+                              : 'text-slate-400 hover:text-purple-500 dark:hover:text-purple-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                        title={design.analysis ? "Analiz Sonucunu Görüntüle" : analyzingIds.includes(design.id) ? "Analiz Ediliyor..." : "Yapay Zeka ile Analiz Et"}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </button>
+                      <button
                         onClick={() => setCropTargetDesign(design)}
                         className="p-1 text-slate-400 hover:text-amber-500 dark:hover:text-amber-300 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         title="Tasarımı Kırp"
@@ -706,15 +785,83 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         )}
       </div>
 
-      {cropTargetDesign && (
-        <InteractiveCropModal
-          imageSrc={cropTargetDesign.src}
-          imageTitle={cropTargetDesign.name}
-          isOpen={!!cropTargetDesign}
-          onClose={() => setCropTargetDesign(null)}
-          onCropComplete={handleCropComplete}
-        />
-      )}
+        {/* Kırpma Modal */}
+        {cropTargetDesign && (
+          <InteractiveCropModal
+            imageSrc={cropTargetDesign.src}
+            imageTitle={cropTargetDesign.name}
+            isOpen={!!cropTargetDesign}
+            onClose={() => setCropTargetDesign(null)}
+            onCropComplete={handleCropComplete}
+          />
+        )}
+
+        {/* Analysis Modal */}
+        {analysisModalData && analysisModalData.analysis && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden animate-slideUp flex flex-col max-h-[85vh]">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-600 dark:text-purple-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-slate-800 dark:text-white text-base">Tasarım Analiz Sonucu</h3>
+                </div>
+                <button onClick={() => setAnalysisModalData(null)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="p-5 overflow-y-auto space-y-6 flex-1">
+                <div className="flex items-start gap-4">
+                  <div className="w-32 h-32 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img src={analysisModalData.src} alt="Design" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-lg">{analysisModalData.name}</h4>
+                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Analiz Tarihi: {new Date(analysisModalData.analysis.analyzedAt).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2"><FileText className="w-4 h-4 text-purple-500" /> Detaylı Açıklama</h4>
+                  <div className="bg-slate-50 dark:bg-slate-950/50 p-4 rounded-xl text-sm text-slate-700 dark:text-slate-300 leading-relaxed border border-slate-200 dark:border-slate-800">
+                    {analysisModalData.analysis.description}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2"><Hash className="w-4 h-4 text-emerald-500" /> Çıkarılan Anahtar Kelimeler ({analysisModalData.analysis.keywords.length})</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {analysisModalData.analysis.keywords.map(kw => (
+                      <span key={kw} className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded-lg border border-emerald-200 dark:border-emerald-800">
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex justify-end gap-3 shrink-0">
+                <button
+                  onClick={() => {
+                    handleAnalyzeDesign(analysisModalData.id);
+                    setAnalysisModalData(null);
+                  }}
+                  className="px-4 py-2 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 text-sm font-bold rounded-xl transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" /> Yeniden Analiz Et
+                </button>
+                <button
+                  onClick={() => setAnalysisModalData(null)}
+                  className="px-5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors"
+                >
+                  Kapat
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Modern Folder Dialog Modal */}
       {isFolderModalOpen && (

@@ -65,6 +65,13 @@ export interface DesignItem {
   width: number;
   height: number;
   folderId?: string; // Optional for backward compatibility and "Tüm Tasarımlar"
+  
+  /** AI Analysis results for the design */
+  analysis?: {
+    description: string;
+    keywords: string[];
+    analyzedAt: number;
+  };
 }
 
 export interface MockupPreset {
