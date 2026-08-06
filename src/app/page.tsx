@@ -62,8 +62,26 @@ function isInsideScrollableOrInteractive(el: HTMLElement | null): boolean {
 }
 
 function MainContent() {
-  const { user, setIsAuthModalOpen } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabKey>('mockups');
+  const { user, isAdmin, setIsAuthModalOpen } = useAuth();
+  const [activeTabState, setActiveTabState] = useState<TabKey>('mockups');
+
+  useEffect(() => {
+    try {
+      const savedTab = localStorage.getItem('automania_pod_active_tab_v1') as TabKey;
+      if (savedTab && ['mockups', 'designs', 'generator', 'seo', 'admin'].includes(savedTab)) {
+        setActiveTabState(savedTab);
+      }
+    } catch {}
+  }, []);
+
+  const setActiveTab = (tab: TabKey) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('automania_pod_active_tab_v1', tab);
+    } catch {}
+  };
+
+  const activeTab = activeTabState;
   const [folders, setFolders] = useState<MockupFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
 
