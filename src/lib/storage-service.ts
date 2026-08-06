@@ -80,7 +80,14 @@ export async function loadAppData(): Promise<AppDataPayload> {
     const res = await fetch(`/api/storage${query}`);
     if (res.ok) {
       const serverData = await res.json();
-      if (serverData && (serverData.mockups || serverData.designs || serverData.folders)) {
+      if (
+        serverData &&
+        (
+          (Array.isArray(serverData.mockups) && serverData.mockups.length > 0) ||
+          (Array.isArray(serverData.designs) && serverData.designs.length > 0) ||
+          (Array.isArray(serverData.folders) && serverData.folders.length > 0)
+        )
+      ) {
         await saveToIndexedDB(serverData);
         if (serverData.openRouterKey) {
           try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
@@ -94,7 +101,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
           folders: serverData.folders || [],
           activeFolderId: serverData.activeFolderId ?? null,
           selectedMockupId: serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
-          activeDesignFolderId: null, // Since this isn't fetched from server
+          activeDesignFolderId: null,
           openRouterKey: serverData.openRouterKey,
           openRouterModel: serverData.openRouterModel,
         };
@@ -104,15 +111,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
     console.warn('Failed to load saved state from storage:', err);
   }
 
-  // 3. New User / Empty Workspace default state
-  return {
-    mockups: [],
-    designs: [],
-    folders: [],
-    activeFolderId: null,
-    selectedMockupId: null,
-    activeDesignFolderId: null,
-  };
+  // 3. If workspace is empty or uninitialized, automatically load and preserve Sample App Data
+  return await loadSampleAppData();
 }
 
 /**

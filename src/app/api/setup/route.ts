@@ -17,10 +17,8 @@ export async function GET(request: Request) {
       )
     `;
 
-    await sql`
-      ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_key VARCHAR(500);
-      ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(255);
-    `;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_key VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(255)`;
     const { searchParams } = new URL(request.url);
     if (searchParams.get('action') === 'reset') {
       await sql`TRUNCATE TABLE user_workspaces`;
