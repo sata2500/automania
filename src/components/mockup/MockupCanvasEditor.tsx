@@ -58,6 +58,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   setActiveFolderId,
 }) => {
   const toast = useToast();
+  const mockupFolders = folders.filter((f) => f.type !== 'design');
   const selectedMockup = mockups.find((m) => m.id === selectedMockupId) || mockups[0] || null;
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -218,14 +219,18 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     }
 
     setFolders((prev) => {
-      const fromIndex = prev.findIndex((f) => f.id === draggedId);
-      const toIndex = prev.findIndex((f) => f.id === targetId);
+      const mockupItems = prev.filter((f) => f.type !== 'design');
+      const designItems = prev.filter((f) => f.type === 'design');
+
+      const fromIndex = mockupItems.findIndex((f) => f.id === draggedId);
+      const toIndex = mockupItems.findIndex((f) => f.id === targetId);
       if (fromIndex === -1 || toIndex === -1) return prev;
 
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
+      const updatedMockupItems = [...mockupItems];
+      const [moved] = updatedMockupItems.splice(fromIndex, 1);
+      updatedMockupItems.splice(toIndex, 0, moved);
+
+      return [...updatedMockupItems, ...designItems];
     });
 
     setDraggedFolderId(null);
@@ -431,6 +436,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       id: newFolderId,
       name: newFolderName,
       isCustom: true,
+      type: 'mockup',
     };
 
     const sourceMockups = mockups.filter((m) => m.folderId === folderId);
@@ -466,7 +472,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const targetFolder = activeFolderId || folders[0]?.id || 'folder-women';
+    const targetFolder = activeFolderId || mockupFolders[0]?.id || 'folder-women';
 
     const existingInFolder = mockups.filter((m) => m.folderId === targetFolder);
     let currentImageCount = existingInFolder.filter((m) => !m.isVideo).length;
@@ -896,7 +902,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             <span className="shrink-0">({mockups.length})</span>
           </button>
 
-          {folders.map((folder) => {
+          {mockupFolders.map((folder) => {
             const folderMockups = mockups.filter((m) => m.folderId === folder.id);
             const count = folderMockups.length;
             const isActive = activeFolderId === folder.id;
@@ -1291,7 +1297,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                     );
                     toast.success('Klasör adı güncellendi!');
                   } else {
-                    const newFolder: MockupFolder = { id: 'folder-' + Date.now(), name: newFolderName.trim(), isCustom: true };
+                    const newFolder: MockupFolder = { id: 'folder-' + Date.now(), name: newFolderName.trim(), isCustom: true, type: 'mockup' };
                     setFolders((prev) => [...prev, newFolder]);
                     setActiveFolderId(newFolder.id);
                     toast.success(`'${newFolder.name}' klasörü oluşturuldu!`);
