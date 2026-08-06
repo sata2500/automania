@@ -8,13 +8,11 @@ export async function POST(req: Request) {
 
     // We need the admin's API key and model to evaluate
     const settingsRows = await sql`
-      SELECT w.openrouter_key, w.openrouter_model 
-      FROM user_workspaces w
-      LEFT JOIN users u ON w.user_id = u.id
-      WHERE (u.role = 'admin' OR w.user_id = 'user-demo-101')
-        AND w.openrouter_key IS NOT NULL 
-        AND w.openrouter_key != ''
-      ORDER BY w.updated_at DESC
+      SELECT openrouter_key, openrouter_model 
+      FROM user_workspaces 
+      WHERE openrouter_key IS NOT NULL 
+        AND openrouter_key != ''
+      ORDER BY updated_at DESC
       LIMIT 1
     `;
 
