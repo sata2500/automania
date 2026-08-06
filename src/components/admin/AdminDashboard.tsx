@@ -739,6 +739,7 @@ export const AdminDashboard: React.FC = () => {
                         const isFree = parseFloat(model.pricing?.prompt || "1") === 0 && parseFloat(model.pricing?.completion || "1") === 0;
                         const hasVision = model.architecture?.input_modalities?.includes('image');
                         const isTextToImage = model.architecture?.output_modalities?.includes('image');
+                        const hasWebSearch = model.supported_parameters?.includes('tools') || Object.keys(model.pricing || {}).includes('web_search');
 
                         return (
                           <div key={model.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors group">
@@ -763,6 +764,11 @@ export const AdminDashboard: React.FC = () => {
                                 {isTextToImage && (
                                   <span className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded border border-purple-200 dark:border-purple-800 flex items-center gap-1">
                                     <Sparkles className="w-2.5 h-2.5" /> Çıktı: Görsel
+                                  </span>
+                                )}
+                                {hasWebSearch && (
+                                  <span className="px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 rounded border border-sky-200 dark:border-sky-800 flex items-center gap-1">
+                                    <Globe className="w-2.5 h-2.5" /> Web Arama
                                   </span>
                                 )}
                               </div>

@@ -61,8 +61,9 @@ export async function POST(req: Request) {
     const keywordList = targetKeywords.map(k => k.keyword);
 
     // Prepare Prompt for Evaluation
-    const evalPrompt = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
-Score each keyword from 0 to 100. Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown formatting.
+    const evalPrompt = `Use web search (Google/Etsy/Pinterest) to find CURRENT, real-time search volume and competition data for the following keywords in the US market.
+Score each keyword from 0 to 100 based on HIGH search volume and LOW competition. 
+Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown formatting.
 Keywords: ${JSON.stringify(keywordList)}
 Example Output:
 {
@@ -81,6 +82,9 @@ Example Output:
         model: writerModel,
         messages: [
           { role: 'user', content: evalPrompt }
+        ],
+        plugins: [
+          { id: "web", max_results: 5 }
         ]
       })
     });
