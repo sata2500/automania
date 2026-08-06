@@ -111,6 +111,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Connection Test state
   const [testingModel, setTestingModel] = useState<string | null>(null);
+  const [testResponseData, setTestResponseData] = useState<{model: string, content: string, imageUrl?: string} | null>(null);
 
   // Sync / Maintenance state
   const [isSyncingDb, setIsSyncingDb] = useState(false);
@@ -130,6 +131,45 @@ export const AdminDashboard: React.FC = () => {
       console.error('Failed to load OpenRouter storage', e);
     }
   }, []);
+
+  // Yeni Cihaz / Çapraz Cihaz Senkronizasyonu
+  useEffect(() => {
+    const syncApiSettingsFromServer = async () => {
+      if (!user?.id) return;
+      try {
+        const res = await fetch(`/api/storage?userId=${user.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            let updated = false;
+            if (data.openRouterKey && data.openRouterKey !== apiKey) {
+              setApiKey(data.openRouterKey);
+              localStorage.setItem(OPENROUTER_KEY_STORAGE, data.openRouterKey);
+              updated = true;
+            }
+            if (data.modelVision && data.modelVision !== modelVision) {
+              setModelVision(data.modelVision);
+              localStorage.setItem(MODEL_VISION_STORAGE, data.modelVision);
+              updated = true;
+            }
+            if (data.modelReasoning && data.modelReasoning !== modelReasoning) {
+              setModelReasoning(data.modelReasoning);
+              localStorage.setItem(MODEL_REASONING_STORAGE, data.modelReasoning);
+              updated = true;
+            }
+            if (data.modelGeneration && data.modelGeneration !== modelGeneration) {
+              setModelGeneration(data.modelGeneration);
+              localStorage.setItem(MODEL_GENERATION_STORAGE, data.modelGeneration);
+              updated = true;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Buluttan ayarlar çekilirken hata oluştu", e);
+      }
+    };
+    syncApiSettingsFromServer();
+  }, [user?.id]);
 
   const fetchOpenRouterModels = async () => {
     if (!apiKey) return;
@@ -222,6 +262,14 @@ export const AdminDashboard: React.FC = () => {
       const latencyMs = Date.now() - startTime;
 
       if (res.ok) {
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || JSON.stringify(data);
+        
+        // Markdown içinden resim URL'si ayıklama (Text-to-Image modelleri için)
+        const urlMatch = content.match(/!\[.*?\]\((.*?)\)/);
+        const imageUrl = urlMatch ? urlMatch[1] : undefined;
+
+        setTestResponseData({ model: modelId, content, imageUrl });
         toast.success(`Bağlantı Başarılı: ${modelId} (${latencyMs}ms)`);
       } else {
         const errorData = await res.json().catch(() => ({}));
@@ -771,6 +819,52 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Test Sonuç Modalı */}
+      {testResponseData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/60 rounded-lg text-indigo-600 dark:text-indigo-400">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-800 dark:text-white text-sm">Model Test Sonucu</h3>
+              </div>
+              <button onClick={() => setTestResponseData(null)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Test Edilen Model</span>
+                <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700 dark:text-slate-300">{testResponseData.model}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Modelin Yanıtı</span>
+                {testResponseData.imageUrl ? (
+                  <div className="space-y-3">
+                    <img src={testResponseData.imageUrl} alt="Generated" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm" />
+                    <p className="text-xs text-slate-600 dark:text-slate-400 italic">Üretilen görsel başarıyla ayıklandı.</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                    {testResponseData.content}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 flex justify-end">
+              <button
+                onClick={() => setTestResponseData(null)}
+                className="px-5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SUB TAB 3: USER MANAGEMENT */}
       {activeSubTab === 'users' && (
         <UserManagementSection />
@@ -894,20 +988,20 @@ function UserManagementSection() {
 
       {/* Users Table */}
       <div className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden text-xs">
-        <div className="bg-slate-50 dark:bg-slate-950 p-3 font-bold text-slate-500 dark:text-slate-400 grid grid-cols-12 items-center">
-          <div className="col-span-4 sm:col-span-3">Kullanıcı &amp; E-Posta</div>
+        <div className="bg-slate-50 dark:bg-slate-950 p-3 font-bold text-slate-500 dark:text-slate-400 hidden sm:grid grid-cols-12 items-center">
+          <div className="col-span-4 sm:col-span-4">Kullanıcı &amp; E-Posta</div>
           <div className="col-span-3 sm:col-span-3">Rol Seviyesi</div>
           <div className="col-span-2 sm:col-span-2">Durum</div>
-          <div className="col-span-3 sm:col-span-4 text-right">Erişim &amp; İşlemler</div>
+          <div className="col-span-3 sm:col-span-3 text-right">Erişim &amp; İşlemler</div>
         </div>
 
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {userList.map((u) => {
             const isBlocked = u.status === 'blocked';
             return (
-              <div key={u.id} className="p-3 grid grid-cols-12 items-center gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-950/50 transition-colors">
+              <div key={u.id} className="p-3 sm:grid sm:grid-cols-12 flex flex-col items-start sm:items-center gap-3 sm:gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-950/50 transition-colors">
                 {/* User info */}
-                <div className="col-span-4 sm:col-span-3 flex items-center space-x-2.5">
+                <div className="col-span-4 w-full flex items-center space-x-2.5">
                   <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0 overflow-hidden border border-slate-300 dark:border-slate-700">
                     <img
                       src={u.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.email)}`}
@@ -922,7 +1016,8 @@ function UserManagementSection() {
                 </div>
 
                 {/* Role dropdown */}
-                <div className="col-span-3 sm:col-span-3">
+                <div className="col-span-3 w-full sm:w-auto flex justify-between sm:block items-center">
+                  <span className="sm:hidden font-bold text-slate-500">Rol Seviyesi:</span>
                   <select
                     value={u.role}
                     onChange={(e) => {
@@ -941,7 +1036,8 @@ function UserManagementSection() {
                 </div>
 
                 {/* Status Badge */}
-                <div className="col-span-2 sm:col-span-2">
+                <div className="col-span-2 w-full sm:w-auto flex justify-between sm:block items-center">
+                  <span className="sm:hidden font-bold text-slate-500">Erişim Durumu:</span>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                     isBlocked
                       ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
@@ -952,7 +1048,7 @@ function UserManagementSection() {
                 </div>
 
                 {/* Actions */}
-                <div className="col-span-3 sm:col-span-4 flex items-center justify-end space-x-2">
+                <div className="col-span-3 w-full sm:w-auto flex items-center justify-end space-x-2 pt-2 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-slate-800">
                   <button
                     onClick={() => {
                       toggleUserBlock(u.id);
@@ -965,7 +1061,7 @@ function UserManagementSection() {
                     }`}
                   >
                     <Lock className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{isBlocked ? 'Engeli Kaldır' : 'Engelle'}</span>
+                    <span className="sm:hidden md:inline">{isBlocked ? 'Engeli Kaldır' : 'Engelle'}</span>
                   </button>
 
                   <button
