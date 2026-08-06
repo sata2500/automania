@@ -45,8 +45,9 @@ import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import KeywordPoolManagement from './KeywordPoolManagement';
 
-type AdminSubTab = 'overview' | 'ai' | 'users' | 'settings';
+type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
 
 const OPENROUTER_KEY_STORAGE = 'automania_openrouter_api_key';
 const MODEL_VISION_STORAGE = 'automania_model_vision';
@@ -82,7 +83,7 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     try {
       const savedTab = localStorage.getItem('automania_admin_subtab_v1') as AdminSubTab;
-      if (savedTab && ['overview', 'ai', 'users', 'settings'].includes(savedTab)) {
+      if (savedTab && ['overview', 'ai', 'keywords', 'users', 'settings'].includes(savedTab)) {
         setActiveSubTab(savedTab);
       }
     } catch (e) {}
@@ -405,6 +406,18 @@ export const AdminDashboard: React.FC = () => {
           </button>
 
           <button
+            onClick={() => handleSubTabChange('keywords')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeSubTab === 'keywords'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Database className="w-4 h-4 text-pink-400" />
+            <span>3. Kelime Havuzu</span>
+          </button>
+
+          <button
             onClick={() => handleSubTabChange('users')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'users'
@@ -413,7 +426,7 @@ export const AdminDashboard: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4 text-emerald-400" />
-            <span>3. Kullanıcı Yönetimi</span>
+            <span>4. Kullanıcı Yönetimi</span>
           </button>
 
           <button
@@ -425,7 +438,7 @@ export const AdminDashboard: React.FC = () => {
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>4. Uygulama Ayarları &amp; Bakım</span>
+            <span>5. Uygulama Ayarları &amp; Bakım</span>
           </button>
         </div>
       </div>
@@ -870,7 +883,14 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* SUB TAB 3: USER MANAGEMENT */}
+      {/* SUB TAB 3: KEYWORDS */}
+      {activeSubTab === 'keywords' && (
+        <div className="animate-fadeIn">
+          <KeywordPoolManagement />
+        </div>
+      )}
+
+      {/* SUB TAB 4: USER MANAGEMENT */}
       {activeSubTab === 'users' && (
         <UserManagementSection />
       )}

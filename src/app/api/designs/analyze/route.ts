@@ -12,16 +12,14 @@ export async function POST(request: Request) {
     }
 
     // Admin kullanıcısının API anahtarını ve Vision modelini çekiyoruz
-    const demoAdminId = 'user-demo-101';
-    const googleAdminId = 'user-' + Buffer.from('salihtanriseven25@gmail.com').toString('base64').replace(/=/g, '').toLowerCase();
-    
     const rows = await sql`
-      SELECT openrouter_key, openrouter_model 
-      FROM user_workspaces 
-      WHERE user_id IN (${demoAdminId}, ${googleAdminId})
-        AND openrouter_key IS NOT NULL 
-        AND openrouter_key != ''
-      ORDER BY updated_at DESC
+      SELECT w.openrouter_key, w.openrouter_model 
+      FROM user_workspaces w
+      LEFT JOIN users u ON w.user_id = u.id
+      WHERE (u.role = 'admin' OR w.user_id = 'user-demo-101')
+        AND w.openrouter_key IS NOT NULL 
+        AND w.openrouter_key != ''
+      ORDER BY w.updated_at DESC
       LIMIT 1
     `;
 
@@ -31,16 +29,21 @@ export async function POST(request: Request) {
 
     const apiKey = rows[0].openrouter_key;
     
-    // Parse JSON models to get vision
+    // Parse JSON models
     let visionModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
+    let writerModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
     try {
       if (rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
         const parsed = JSON.parse(rows[0].openrouter_model);
-        if (parsed.vision) visionModel = parsed.vision;
+        if (parsed.vision) {
+          visionModel = parsed.vision;
+          writerModel = parsed.vision; // Fallback to vision model by default
+        }
+        if (parsed.reasoning) writerModel = parsed.reasoning;
       }
     } catch(e) {}
 
-    // Prepare OpenRouter Prompt
+    // Prepare OpenRouter Prompt for Vision Analysis
     const prompt = `Analyze this T-shirt/apparel design specifically for the US market (Etsy/Pinterest). 
 Provide a medium-length description covering the niche, style (e.g. vintage, distressed, typography, illustration), target audience, and its relevance/meaning for the US market. 
 Also extract 10-15 highly relevant SEO keywords.
@@ -102,15 +105,79 @@ Return ONLY a valid JSON object in the following format, with no markdown format
     // Process Keywords into the Keyword Pool
     const uniqueKeywords = (Array.from(new Set(keywords.map((k: string) => k.toLowerCase().trim()))) as string[]).filter(k => k.length > 0);
     
+    // Check which ones are new
+    let existingKeywords: string[] = [];
+    if (uniqueKeywords.length > 0) {
+      const existingRows = await sql`
+        SELECT keyword FROM keyword_pool WHERE keyword = ANY(${uniqueKeywords as any})
+      `;
+      existingKeywords = existingRows.map(r => r.keyword);
+    }
+
+    const newKeywords = uniqueKeywords.filter(k => !existingKeywords.includes(k));
+
+    let newScores: Record<string, number> = {};
+
+    if (newKeywords.length > 0) {
+      // Evaluate new keywords using SEO Writer model
+      const evalPrompt = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
+Score each keyword from 0 to 100. Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown.
+Keywords: ${JSON.stringify(newKeywords)}
+Example Output:
+{
+  "vintage shirt": 85,
+  "retro": 70
+}`;
+
+      try {
+        const evalRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'X-Title': 'Automania POD Studio',
+          },
+          body: JSON.stringify({
+            model: writerModel,
+            messages: [
+              {
+                role: 'user',
+                content: evalPrompt
+              }
+            ]
+          })
+        });
+
+        if (evalRes.ok) {
+          const evalData = await evalRes.json();
+          let evalContent = evalData.choices?.[0]?.message?.content || '{}';
+          const evalJsonMatch = evalContent.match(/\{[\s\S]*\}/);
+          if (evalJsonMatch) {
+            newScores = JSON.parse(evalJsonMatch[0]);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to evaluate new keywords:', e);
+      }
+    }
+
     for (const kw of uniqueKeywords) {
       const id = crypto.randomUUID();
-      await sql`
-        INSERT INTO keyword_pool (id, keyword, usage_count, created_at)
-        VALUES (${id}, ${kw}, 1, CURRENT_TIMESTAMP)
-        ON CONFLICT (keyword) DO UPDATE SET
-          usage_count = keyword_pool.usage_count + 1,
-          last_evaluated_at = CURRENT_TIMESTAMP
-      `;
+      const score = newScores[kw] !== undefined ? newScores[kw] : null;
+      
+      if (newKeywords.includes(kw)) {
+        await sql`
+          INSERT INTO keyword_pool (id, keyword, usage_count, etsy_score, last_evaluated_at, created_at)
+          VALUES (${id}, ${kw}, 1, ${score}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (keyword) DO NOTHING
+        `;
+      } else {
+        await sql`
+          UPDATE keyword_pool
+          SET usage_count = usage_count + 1
+          WHERE keyword = ${kw}
+        `;
+      }
     }
 
     return NextResponse.json({
