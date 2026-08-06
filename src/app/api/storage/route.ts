@@ -67,11 +67,12 @@ export async function POST(request: Request) {
     const selectedMockupId = body.selectedMockupId || null;
     const openRouterKey = body.openRouterKey || null;
     
-    const openRouterModel = JSON.stringify({
+    const hasModelUpdate = body.modelVision !== undefined || body.modelReasoning !== undefined || body.modelGeneration !== undefined;
+    const openRouterModel = hasModelUpdate ? JSON.stringify({
       vision: body.modelVision || null,
       reasoning: body.modelReasoning || null,
       generation: body.modelGeneration || null
-    });
+    }) : null;
 
     const lastKnownServerTimestamp = body.lastKnownServerTimestamp || null;
 
