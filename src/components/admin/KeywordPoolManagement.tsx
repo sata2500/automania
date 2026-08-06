@@ -113,6 +113,9 @@ export default function KeywordPoolManagement() {
       if (data.success) {
         if (data.evaluatedCount > 0) {
           toast.success(`${data.evaluatedCount} kelime başarıyla değerlendirildi!`);
+          if (data.warning) {
+            toast.error(data.warning);
+          }
           setSelectedIds(new Set());
           fetchKeywords();
         } else {

@@ -341,6 +341,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       if (data.success && data.analysis) {
         setDesigns(prev => prev.map(d => d.id === designId ? { ...d, analysis: data.analysis } : d));
         toast.success(`'${design.name}' analizi başarıyla tamamlandı!`);
+        if (data.warning) {
+          toast.error(data.warning);
+        }
       } else {
         toast.error(`Analiz hatası: ${data.error}`);
       }

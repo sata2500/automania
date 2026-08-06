@@ -116,6 +116,8 @@ Return ONLY a valid JSON object in the following format, with no markdown format
 
     let newScores: Record<string, number> = {};
 
+    let webSearchFailed = false;
+
     if (newKeywords.length > 0) {
       // Evaluate new keywords using SEO Writer model
       const evalPrompt = `Use web search (Google/Etsy/Pinterest) to find CURRENT, real-time search volume and competition data for the following keywords in the US market.
@@ -153,6 +155,7 @@ Example Output:
         });
 
         if (evalRes.status === 402) {
+          webSearchFailed = true;
           delete payload.plugins;
           payload.messages[0].content = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
 Score each keyword from 0 to 100 based on HIGH search volume and LOW competition. 
@@ -212,7 +215,8 @@ Example Output:
         description,
         keywords: uniqueKeywords,
         analyzedAt: Date.now()
-      }
+      },
+      warning: webSearchFailed ? "Yeterli bakiye olmadığı için kelime puanlamasında web araması devre dışı bırakıldı." : undefined
     });
 
   } catch (error: any) {

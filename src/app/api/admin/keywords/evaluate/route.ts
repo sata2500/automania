@@ -89,7 +89,10 @@ Example Output:
       body: JSON.stringify(payload)
     });
 
+    let webSearchFailed = false;
+
     if (openRouterRes.status === 402) {
+      webSearchFailed = true;
       // Fallback: Remove web plugin if account has insufficient credits
       delete payload.plugins;
       payload.messages[0].content = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
@@ -151,7 +154,8 @@ Example Output:
     return NextResponse.json({
       success: true,
       evaluatedCount,
-      totalRequested: targetKeywords.length
+      totalRequested: targetKeywords.length,
+      warning: webSearchFailed ? "Yeterli bakiye olmadığı için web araması devre dışı bırakıldı." : undefined
     });
 
   } catch (error: any) {
