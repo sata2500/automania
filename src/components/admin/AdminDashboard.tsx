@@ -766,6 +766,7 @@ export const AdminDashboard: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Ayarları Veritabanına Kaydet &amp; Eşitle</span>
               </button>
+            </div>
           </div>
         </div>
       )}
