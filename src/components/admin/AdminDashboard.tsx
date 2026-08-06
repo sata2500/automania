@@ -33,6 +33,12 @@ import {
   Radio,
   FileCode2,
   Check,
+  Search,
+  Image as ImageIcon,
+  FileText,
+  Coins,
+  MessageSquare,
+  XCircle
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -43,14 +49,9 @@ import { ConfirmModal } from '@/components/common/ConfirmModal';
 type AdminSubTab = 'overview' | 'ai' | 'users' | 'settings';
 
 const OPENROUTER_KEY_STORAGE = 'automania_openrouter_api_key';
-const OPENROUTER_MODEL_STORAGE = 'automania_openrouter_model';
-
-const AVAILABLE_MODELS = [
-  { id: 'google/gemini-2.5-flash', name: 'Google Gemini 2.5 Flash', desc: 'Önerilen — Çok Hızlı Görsel Analiz & Etiketleme' },
-  { id: 'google/gemini-2.5-pro', name: 'Google Gemini 2.5 Pro', desc: 'Gelişmiş Mantıksal Analiz & Zengin Detay' },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Anthropic Claude 3.5 Sonnet', desc: 'Premium SEO İçeriği & Özgün Açıklamalar' },
-  { id: 'openai/gpt-4o-mini', name: 'OpenAI GPT-4o Mini', desc: 'Hızlı & Ekonomik Metin İşleme' },
-];
+const MODEL_VISION_STORAGE = 'automania_model_vision';
+const MODEL_REASONING_STORAGE = 'automania_model_reasoning';
+const MODEL_GENERATION_STORAGE = 'automania_model_generation';
 
 export const AdminDashboard: React.FC = () => {
   const toast = useToast();
@@ -97,7 +98,16 @@ export const AdminDashboard: React.FC = () => {
   // API Key & Model state
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('google/gemini-2.5-flash');
+
+  // 3-Tier Model System
+  const [modelVision, setModelVision] = useState('');
+  const [modelReasoning, setModelReasoning] = useState('');
+  const [modelGeneration, setModelGeneration] = useState('');
+
+  // OpenRouter Dynamic Models State
+  const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Connection Test state
   const [isTestingApi, setIsTestingApi] = useState(false);
@@ -110,25 +120,55 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     try {
       const savedKey = localStorage.getItem(OPENROUTER_KEY_STORAGE) || '';
-      const savedModel = localStorage.getItem(OPENROUTER_MODEL_STORAGE) || 'google/gemini-2.5-flash';
+      const v = localStorage.getItem(MODEL_VISION_STORAGE) || '';
+      const r = localStorage.getItem(MODEL_REASONING_STORAGE) || '';
+      const g = localStorage.getItem(MODEL_GENERATION_STORAGE) || '';
       setApiKey(savedKey);
-      setSelectedModel(savedModel);
+      setModelVision(v);
+      setModelReasoning(r);
+      setModelGeneration(g);
     } catch (e) {
       console.error('Failed to load OpenRouter storage', e);
     }
   }, []);
 
+  const fetchOpenRouterModels = async () => {
+    if (!apiKey) return;
+    setIsLoadingModels(true);
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models');
+      const data = await res.json();
+      if (data && data.data) {
+        setOpenRouterModels(data.data);
+      }
+    } catch (e) {
+      toast.error('OpenRouter modelleri çekilirken hata oluştu.');
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'ai' && apiKey) {
+      fetchOpenRouterModels();
+    }
+  }, [activeSubTab, apiKey]);
+
   const handleSaveApiSettings = async () => {
     try {
       const trimmedKey = apiKey.trim();
       localStorage.setItem(OPENROUTER_KEY_STORAGE, trimmedKey);
-      localStorage.setItem(OPENROUTER_MODEL_STORAGE, selectedModel);
+      localStorage.setItem(MODEL_VISION_STORAGE, modelVision);
+      localStorage.setItem(MODEL_REASONING_STORAGE, modelReasoning);
+      localStorage.setItem(MODEL_GENERATION_STORAGE, modelGeneration);
 
       const currentData = await loadAppData();
       await saveAppData({
         ...currentData,
         openRouterKey: trimmedKey,
-        openRouterModel: selectedModel,
+        modelVision,
+        modelReasoning,
+        modelGeneration,
       });
 
       toast.success('OpenRouter API ayarları kaydedildi ve tüm cihazlarınıza eşitlendi! 📱💻');
@@ -158,7 +198,7 @@ export const AdminDashboard: React.FC = () => {
           'X-Title': 'Automania POD Studio',
         },
         body: JSON.stringify({
-          model: selectedModel,
+          model: modelReasoning || 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: 'Ping Test. Respond with: OK' }],
           max_tokens: 10,
         }),
@@ -448,7 +488,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Yapay Zeka Altyapısı</span>
                 <p className="font-bold text-slate-800 dark:text-slate-200">OpenRouter Multi-Model Router</p>
-                <p className="text-[10px] text-slate-500">{apiKey ? `Aktif Model: ${selectedModel}` : 'API Anahtarı bekleniyor'}</p>
+                <p className="text-[10px] text-slate-500">{apiKey ? '3 Farklı Görev Modeli Aktif' : 'API Anahtarı bekleniyor'}</p>
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Uygulama Sürümü</span>
@@ -512,36 +552,171 @@ export const AdminDashboard: React.FC = () => {
               </p>
             </div>
 
-            {/* Model Selector */}
+            {/* 3-Tier Model Assignments */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Vision Model */}
+              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/60 rounded-lg text-indigo-600 dark:text-indigo-400">
+                    <ImageIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Görsel Analiz Modeli</h4>
+                  </div>
+                </div>
+                <div className="text-xs font-medium text-indigo-700 dark:text-indigo-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-indigo-100 dark:border-indigo-800 break-all">
+                  {modelVision || 'Henüz Seçilmedi'}
+                </div>
+              </div>
+
+              {/* Reasoning Model */}
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/60 rounded-lg text-emerald-600 dark:text-emerald-400">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">SEO Metin Yazarı (Reasoning)</h4>
+                  </div>
+                </div>
+                <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-emerald-100 dark:border-emerald-800 break-all">
+                  {modelReasoning || 'Henüz Seçilmedi'}
+                </div>
+              </div>
+
+              {/* Generation Model */}
+              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/50 flex flex-col justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-600 dark:text-purple-400">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Görsel Üretim Modeli</h4>
+                  </div>
+                </div>
+                <div className="text-xs font-medium text-purple-700 dark:text-purple-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-purple-100 dark:border-purple-800 break-all">
+                  {modelGeneration || 'Henüz Seçilmedi'}
+                </div>
+              </div>
+            </div>
+
+            {/* Model Selector & Browser */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-                Varsayılan Yapay Zeka Modeli Seçin:
+                <Search className="w-3.5 h-3.5 text-indigo-500" />
+                OpenRouter Model Kataloğu
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {AVAILABLE_MODELS.map((model) => {
-                  const isSelected = selectedModel === model.id;
-                  return (
-                    <div
-                      key={model.id}
-                      onClick={() => setSelectedModel(model.id)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                        isSelected
-                          ? 'bg-indigo-50/60 dark:bg-indigo-950/60 border-indigo-500 dark:border-indigo-400 shadow-sm ring-1 ring-indigo-400/50'
-                          : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-xs font-bold ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
-                          {model.name}
-                        </span>
-                        {isSelected && <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
-                      </div>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">{model.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
+
+              {!apiKey ? (
+                <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-center text-slate-500 dark:text-slate-400 text-xs flex flex-col items-center justify-center">
+                  <Lock className="w-6 h-6 mb-2 text-slate-400" />
+                  <p>Modelleri görüntülemek ve atama yapmak için lütfen geçerli bir OpenRouter API anahtarı girin.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Model adı ile ara... (Örn: claude, gemini, gpt)"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {isLoadingModels && (
+                      <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 animate-spin" />
+                    )}
+                  </div>
+
+                  <div className="h-[400px] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {openRouterModels
+                      .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((model) => {
+                        const isFree = parseFloat(model.pricing?.prompt || "1") === 0 && parseFloat(model.pricing?.completion || "1") === 0;
+                        const hasVision = model.architecture?.input_modalities?.includes('image');
+                        const isTextToImage = model.architecture?.output_modalities?.includes('image');
+
+                        return (
+                          <div key={model.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors group">
+                            <div className="space-y-2 mb-3">
+                              <div className="flex justify-between items-start gap-2">
+                                <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-tight">{model.name}</h5>
+                                {isFree ? (
+                                  <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-[9px] font-bold rounded shrink-0">Ücretsiz</span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-400 text-[9px] font-bold rounded shrink-0 flex items-center gap-0.5"><Coins className="w-2.5 h-2.5"/>Ücretli</span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1 text-[9px]">
+                                <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                  <MessageSquare className="w-2.5 h-2.5" /> {(model.context_length / 1000).toFixed(0)}K Context
+                                </span>
+                                {hasVision && (
+                                  <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                    <ImageIcon className="w-2.5 h-2.5" /> Girdi: Görsel
+                                  </span>
+                                )}
+                                {isTextToImage && (
+                                  <span className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                                    <Sparkles className="w-2.5 h-2.5" /> Çıktı: Görsel
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                              <button
+                                onClick={() => {
+                                  if (!hasVision) {
+                                    toast.error('Bu model görsel analiz (Vision) desteklemiyor!');
+                                    return;
+                                  }
+                                  setModelVision(model.id);
+                                }}
+                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                  modelVision === model.id
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                Analiz İçin Seç
+                              </button>
+                              
+                              <button
+                                onClick={() => setModelReasoning(model.id)}
+                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                  modelReasoning === model.id
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                SEO İçin Seç
+                              </button>
+                              
+                              <button
+                                onClick={() => setModelGeneration(model.id)}
+                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                  modelGeneration === model.id
+                                    ? 'bg-purple-600 text-white border-purple-600'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                Üretim İçin Seç
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    }
+                    {openRouterModels.length === 0 && !isLoadingModels && (
+                       <div className="col-span-1 md:col-span-2 text-center text-slate-500 text-xs py-10">
+                         Hiç model bulunamadı veya bağlantı hatası oluştu.
+                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Save & Test Buttons */}

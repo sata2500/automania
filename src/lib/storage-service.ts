@@ -39,7 +39,9 @@ export interface AppDataPayload {
   selectedMockupId: string | null;
   activeDesignFolderId?: string | null;
   openRouterKey?: string;
-  openRouterModel?: string;
+  modelVision?: string;
+  modelReasoning?: string;
+  modelGeneration?: string;
   lastUpdated?: number;
 }
 
@@ -86,8 +88,14 @@ export async function loadAppData(): Promise<AppDataPayload> {
         if (serverData.openRouterKey) {
           try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
         }
-        if (serverData.openRouterModel) {
-          try { localStorage.setItem('automania_openrouter_model', serverData.openRouterModel); } catch {}
+        if (serverData.modelVision) {
+          try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
+        }
+        if (serverData.modelReasoning) {
+          try { localStorage.setItem('automania_model_reasoning', serverData.modelReasoning); } catch {}
+        }
+        if (serverData.modelGeneration) {
+          try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
         }
         return {
           mockups: serverData.mockups || [],
@@ -97,7 +105,9 @@ export async function loadAppData(): Promise<AppDataPayload> {
           selectedMockupId: serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
           activeDesignFolderId: null,
           openRouterKey: serverData.openRouterKey,
-          openRouterModel: serverData.openRouterModel,
+          modelVision: serverData.modelVision,
+          modelReasoning: serverData.modelReasoning,
+          modelGeneration: serverData.modelGeneration,
         };
       }
     }
