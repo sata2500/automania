@@ -61,14 +61,17 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   const currentPairs = generateMatchingPairs(mockups, designs, activeFolderId, activeDesignFolderId);
   const allPairsCount = generateMatchingPairs(mockups, designs, null, activeDesignFolderId).length;
 
+  const [aspectOverride, setAspectOverride] = useState<'mockup' | 'original' | 'square'>('mockup');
+
   const handleGenerate = async () => {
-    setIsGenerating(true);
     const pairs = generateMatchingPairs(mockups, designs, activeFolderId, activeDesignFolderId);
     if (pairs.length === 0) {
-      toast.warning('Üretilecek mockup veya uyumlu tasarım bulunamadı.');
-      setIsGenerating(false);
+      toast.warning('Üretim için aktif tasarım veya mockup bulunamadı.');
       return;
     }
+
+    setIsGenerating(true);
+    setExportProgress(0);
 
     const genToastId = toast.progress('Toplu mockup görselleri üretiliyor...', 5);
     const results: RenderedMatch[] = [];
@@ -85,11 +88,14 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
       const folderOrderIndex = positionInFolder !== -1 ? positionInFolder + 1 : i + 1;
 
       try {
+        const exportAspect = aspectOverride === 'mockup' ? (mockup.exportAspect || 'original') : aspectOverride;
+
         const previewUrl = await renderMockupWithDesign(mockup, design, {
           outputWidth: outputResolution,
           outputHeight: outputResolution,
           quality: outputQuality,
           outputFormat: exportFormat,
+          exportAspect,
         });
 
         const videoExt = isVideo ? (mockup.mimeType?.split('/')[1] || 'mp4') : 'mp4';
@@ -197,9 +203,22 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+            <span className="text-[11px] text-slate-400 font-bold uppercase mr-1">En-Boy Oranı:</span>
+            <select
+              value={aspectOverride}
+              onChange={(e) => setAspectOverride(e.target.value as 'mockup' | 'original' | 'square')}
+              className="bg-transparent text-indigo-600 dark:text-indigo-400 font-bold outline-none cursor-pointer"
+            >
+              <option value="mockup">Mockup Ayarı (Otomatik)</option>
+              <option value="original">Orijinal Boyut (Kırpma Yok)</option>
+              <option value="square">Kare Yap (1:1)</option>
+            </select>
+          </div>
+
           <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
             <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-            <span>3000px HD WebP (Otomatik)</span>
+            <span>3000px HD WebP</span>
           </div>
 
           {hasGenerated && (

@@ -832,6 +832,48 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Export Aspect Ratio Selector */}
+            <div className="pt-2 border-t border-slate-700/60 space-y-1">
+              <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">
+                Toplu Üretim Oranı:
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMockups((prev) =>
+                      prev.map((m) => (m.id === selectedMockup.id ? { ...m, exportAspect: 'original' } : m))
+                    );
+                    toast.success('Görsel oranı: Orijinal Boyut (Kırpma yok)');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                    (selectedMockup.exportAspect || 'original') === 'original'
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Orijinal Boyut
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMockups((prev) =>
+                      prev.map((m) => (m.id === selectedMockup.id ? { ...m, exportAspect: 'square' } : m))
+                    );
+                    toast.success('Görsel oranı: Kare Yap (1:1)');
+                  }}
+                  className={`py-1.5 px-2 rounded-lg border text-[10px] font-bold transition-all cursor-pointer ${
+                    selectedMockup.exportAspect === 'square'
+                      ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Kare Yap (1:1)
+                </button>
+              </div>
+            </div>
           </>
         )}
       </div>

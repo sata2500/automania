@@ -47,6 +47,13 @@ export interface MockupItem {
    */
   isVideo?: boolean;
   mimeType?: string;
+
+  /**
+   * Controls whether rendered export preserves original image aspect ratio ('original')
+   * or forces a 1:1 square canvas ('square').
+   * Default: 'original'
+   */
+  exportAspect?: 'original' | 'square';
 }
 
 export interface DesignItem {

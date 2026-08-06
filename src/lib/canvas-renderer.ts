@@ -15,6 +15,7 @@ export interface RenderOptions {
   outputHeight?: number;
   quality?: number;
   outputFormat?: ExportFormatType;
+  exportAspect?: 'original' | 'square';
 }
 
 /**
@@ -42,8 +43,20 @@ export async function renderMockupWithDesign(
   const origW = mockupImg.naturalWidth || mockup.width || 2000;
   const origH = mockupImg.naturalHeight || mockup.height || 2000;
 
-  canvas.width = options.outputWidth || origW;
-  canvas.height = options.outputHeight || origH;
+  // Determine export aspect mode (options override mockup item, default is 'original')
+  const aspectMode = options.exportAspect || mockup.exportAspect || 'original';
+
+  if (aspectMode === 'square') {
+    const squareSize = options.outputWidth || Math.max(origW, origH);
+    canvas.width = squareSize;
+    canvas.height = squareSize;
+  } else {
+    // 'original': preserve natural aspect ratio
+    const targetW = options.outputWidth || origW;
+    const targetH = Math.round(targetW * (origH / origW));
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
 
   // 1. Draw base mockup / chart image
   ctx.drawImage(mockupImg, 0, 0, canvas.width, canvas.height);
