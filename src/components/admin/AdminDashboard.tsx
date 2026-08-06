@@ -654,27 +654,8 @@ function CloudSyncBadge() {
 }
 
 function UserManagementSection() {
-  const { userList, updateUserRole, toggleUserBlock, deleteUser, addUser } = useAuth();
+  const { userList, updateUserRole, toggleUserBlock, deleteUser } = useAuth();
   const toast = useToast();
-
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
-
-  const handleAddUserSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) {
-      toast.warning('Lütfen ad ve e-posta alanlarını doldurun.');
-      return;
-    }
-    addUser(newName.trim(), newEmail.trim(), newRole);
-    toast.success(`${newName} kullanıcısı başarıyla eklendi!`);
-    setNewName('');
-    setNewEmail('');
-    setNewRole('user');
-    setIsAddModalOpen(false);
-  };
 
   return (
     <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-6 shadow-sm animate-fadeIn">
@@ -687,18 +668,14 @@ function UserManagementSection() {
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Kullanıcı Yönetimi &amp; Yetkilendirme</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Kullanıcı rolleri değiştirin, hesapları engelleyin veya sisteme yeni kullanıcı ekleyin.
+              Google hesaplarıyla sisteme giriş yapan tüm kullanıcılar otomatik listelenir. Rol değiştirebilir veya erişimleri engelleyebilirsiniz.
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 shrink-0 cursor-pointer"
-        >
-          <UserCheck className="w-4 h-4" />
-          <span>+ Yeni Kullanıcı Tanımla</span>
-        </button>
+        <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 shrink-0">
+          Toplam Kayıtlı: {userList.length} Kullanıcı
+        </div>
       </div>
 
       {/* Users Table */}
@@ -795,70 +772,6 @@ function UserManagementSection() {
           })}
         </div>
       </div>
-
-      {/* Add User Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-emerald-500" />
-              Yeni Kullanıcı Hesabı Ekle
-            </h3>
-
-            <form onSubmit={handleAddUserSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Ad Soyad:</label>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Örn: Mehmet Demir"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">E-Posta Adresi:</label>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="mehmet@example.com"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Erişim Rolü:</label>
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as 'admin' | 'user')}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
-                >
-                  <option value="user">Standart Kullanıcı</option>
-                  <option value="admin">Yönetici (Admin)</option>
-                </select>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
-                >
-                  İptal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-                >
-                  Kullanıcıyı Kaydet
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -104,6 +104,30 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setUser(userProfile);
     if (userProfile) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
+
+      // Auto-register logged-in user into central user directory if not present
+      setUserList((prevList) => {
+        const exists = prevList.some(
+          (u) => u.email.toLowerCase() === userProfile.email.toLowerCase() || u.id === userProfile.id
+        );
+        if (!exists) {
+          const newUser: ManagedUser = {
+            id: userProfile.id,
+            name: userProfile.name,
+            email: userProfile.email,
+            role: userProfile.role || (userProfile.email === 'salihtanriseven25@gmail.com' ? 'admin' : 'user'),
+            status: 'active',
+            provider: userProfile.provider || 'google',
+            createdAt: new Date().toISOString().split('T')[0],
+          };
+          const updated = [newUser, ...prevList];
+          try {
+            localStorage.setItem(USER_LIST_STORAGE_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        }
+        return prevList;
+      });
     } else {
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
