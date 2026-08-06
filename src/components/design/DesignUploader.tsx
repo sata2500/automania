@@ -141,23 +141,36 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     setIsOptimizing(false);
   };
 
-  const toggleSelectDesign = (id: string) => {
-    setDesigns((prev) => {
-      const target = prev.find((d) => d.id === id);
-      if (!target) return prev;
+  const [selectedDesignIds, setSelectedDesignIds] = useState<string[]>([]);
 
-      if (target.isSelected) {
+  const toggleManagementSelection = (id: string) => {
+    setSelectedDesignIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSetProductionActive = (id: string, target: TargetApparel) => {
+    setDesigns((prev) => {
+      const design = prev.find((d) => d.id === id);
+      if (!design) return prev;
+
+      // If clicking the same target that is already active, deactivate it
+      if (design.isSelected && design.targetApparel === target) {
         return prev.map((d) => (d.id === id ? { ...d, isSelected: false } : d));
       }
 
+      // Check if this slot is already taken by ANOTHER design
       const slotTaken = prev.some(
-        (d) => d.id !== id && d.isSelected && d.targetApparel === target.targetApparel
+        (d) => d.id !== id && d.isSelected && d.targetApparel === target
       );
+      
       if (slotTaken) {
-        warnSlot(target.targetApparel);
+        warnSlot(target);
         return prev;
       }
-      return prev.map((d) => (d.id === id ? { ...d, isSelected: true } : d));
+
+      // Make it active and set target
+      return prev.map((d) => (d.id === id ? { ...d, isSelected: true, targetApparel: target } : d));
     });
   };
 
@@ -182,23 +195,6 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       });
     });
     toast.success('Kategori başına en uygun tasarımlar aktifleştirildi.');
-  };
-
-  const updateDesignTarget = (id: string, target: TargetApparel) => {
-    setDesigns((prev) => {
-      const design = prev.find((d) => d.id === id);
-      if (!design) return prev;
-      if (design.isSelected) {
-        const slotTaken = prev.some(
-          (d) => d.id !== id && d.isSelected && d.targetApparel === target
-        );
-        if (slotTaken) {
-          warnSlot(target);
-          return prev;
-        }
-      }
-      return prev.map((d) => (d.id === id ? { ...d, targetApparel: target } : d));
-    });
   };
 
   const handleCropComplete = async (croppedDataUrl: string) => {
@@ -226,7 +222,32 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       deleteBlobs([target.src]);
     }
     setDesigns((prev) => prev.filter((d) => d.id !== id));
+    setSelectedDesignIds((prev) => prev.filter(x => x !== id));
     toast.info(`'${target?.name || 'Tasarım'}' silindi.`);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedDesignIds.length === 0) return;
+    if (!confirm(`${selectedDesignIds.length} tasarımı silmek istediğinize emin misiniz?`)) return;
+    
+    const targets = designs.filter(d => selectedDesignIds.includes(d.id));
+    const blobsToDelete = targets.map(t => t.src).filter(Boolean);
+    if (blobsToDelete.length > 0) {
+      deleteBlobs(blobsToDelete);
+    }
+    
+    setDesigns((prev) => prev.filter((d) => !selectedDesignIds.includes(d.id)));
+    setSelectedDesignIds([]);
+    toast.info(`${targets.length} tasarım silindi.`);
+  };
+
+  const handleBulkMove = (folderId: string | null) => {
+    if (selectedDesignIds.length === 0) return;
+    setDesigns((prev) => prev.map(d => 
+      selectedDesignIds.includes(d.id) ? { ...d, folderId: folderId || undefined } : d
+    ));
+    setSelectedDesignIds([]);
+    toast.success(`${selectedDesignIds.length} tasarım taşındı.`);
   };
 
   const selectedCount = designs.filter((d) => d.isSelected).length;
@@ -351,21 +372,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
               <ImageIcon className="w-4 h-4 text-purple-500 dark:text-purple-400" />
               Yüklü Tasarım Listesi ({designs.length})
             </h3>
-
-            {designs.length > 0 && (
-              <button
-                onClick={handleSmartEnableAll}
-                className="flex items-center space-x-1 text-xs text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 font-semibold cursor-pointer"
-              >
-                {selectedCount === designs.length && designs.length > 0 ? (
-                  <CheckSquare className="w-4 h-4" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-                <span>Tümünü Seç ({selectedCount}/{designs.length} Üretimine Seçildi)</span>
-              </button>
-            )}
-
+            
+            {/* Active slots summary (Optional) */}
             {activeSlotsCount > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {(Object.entries(takenSlots) as [TargetApparel, string | null][]).map(([slot, takenId]) => {
@@ -385,6 +393,58 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
               </div>
             )}
           </div>
+
+          {/* Bulk Management Toolbar */}
+          <div className="w-full mt-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  const filteredDesigns = designs.filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true);
+                  if (selectedDesignIds.length === filteredDesigns.length && filteredDesigns.length > 0) {
+                    setSelectedDesignIds([]);
+                  } else {
+                    setSelectedDesignIds(filteredDesigns.map(d => d.id));
+                  }
+                }}
+                className="flex items-center space-x-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-bold px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg transition-colors cursor-pointer"
+              >
+                {selectedDesignIds.length > 0 && selectedDesignIds.length === designs.filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true).length ? (
+                  <CheckSquare className="w-4 h-4" />
+                ) : (
+                  <Square className="w-4 h-4" />
+                )}
+                <span>Tümünü Seç</span>
+              </button>
+              
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 border-l border-slate-300 dark:border-slate-700 pl-3">
+                {selectedDesignIds.length} Tasarım Seçildi
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {designFolders.length > 0 && selectedDesignIds.length > 0 && (
+                <select
+                  onChange={(e) => handleBulkMove(e.target.value || null)}
+                  className="text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg px-2 py-1.5 outline-none cursor-pointer max-w-[120px] truncate"
+                >
+                  <option value="">Klasöre Taşı...</option>
+                  <option value="">Tüm Tasarımlar</option>
+                  {designFolders.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              )}
+              
+              <button
+                onClick={handleBulkDelete}
+                disabled={selectedDesignIds.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Toplu Sil
+              </button>
+            </div>
+          </div>
         </div>
 
         {designs.filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true).length === 0 ? (
@@ -398,25 +458,26 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
               .filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true)
               .map((design) => {
               const isSelected = !!design.isSelected;
+              const isChecked = selectedDesignIds.includes(design.id);
+              
               return (
                 <div
                   key={design.id}
-                  onClick={() => toggleSelectDesign(design.id)}
+                  onClick={() => toggleManagementSelection(design.id)}
                   className={`relative p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
-                    isSelected
+                    isChecked
                       ? 'bg-gradient-to-b from-indigo-50 dark:from-indigo-950/80 to-white dark:to-slate-900 border-indigo-400 dark:border-indigo-500 shadow-lg ring-1 ring-indigo-400/50 dark:ring-indigo-500/50'
                       : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-500 opacity-75 hover:opacity-100'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
-                        isSelected ? 'bg-indigo-600 text-white border-indigo-400' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700'
-                      }`}
-                    >
-                      {isSelected ? <CheckCheck className="w-3 h-3" /> : null}
-                      {isSelected ? 'Seçili' : 'Pasif'}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${
+                        isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'
+                      }`}>
+                        {isChecked && <CheckCheck className="w-3.5 h-3.5" />}
+                      </div>
+                    </div>
 
                     <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                       {designFolders.length > 0 && (
@@ -449,32 +510,42 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
                     </div>
                   </div>
 
-                  <div className="w-full h-36 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 p-2 flex items-center justify-center relative mb-3">
+                  <div className={`w-full h-36 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950/80 border p-2 flex items-center justify-center relative mb-3 transition-colors ${
+                    isSelected ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/20' : 'border-slate-200 dark:border-slate-800'
+                  }`}>
                     <img src={design.src} alt={design.name} className="max-w-full max-h-full object-contain drop-shadow-md" />
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 bg-slate-900/80 text-amber-300 px-2 py-0.5 rounded-full text-[9px] font-bold backdrop-blur-sm shadow-sm flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Üretimde
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{design.name}</p>
 
                     <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Hedef Kumaş:</span>
-                      <div className="flex bg-slate-100 dark:bg-slate-950 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800">
-                        {(['dark', 'light', 'both'] as TargetApparel[]).map((target) => (
-                          <button
-                            key={target}
-                            onClick={() => updateDesignTarget(design.id, target)}
-                            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                              design.targetApparel === target
-                                ? target === 'dark' ? 'bg-amber-500 text-slate-950'
-                                  : target === 'light' ? 'bg-indigo-600 text-white'
-                                  : 'bg-purple-600 text-white'
-                                : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                            }`}
-                            title={SLOT_LABELS[target]}
-                          >
-                            {target === 'dark' ? <Sun className="w-3 h-3" /> : target === 'light' ? <Moon className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
-                          </button>
-                        ))}
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Üretim Seçimi:</span>
+                      <div className="flex bg-slate-100 dark:bg-slate-950 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 gap-0.5">
+                        {(['dark', 'light', 'both'] as TargetApparel[]).map((target) => {
+                          const isActiveSlot = isSelected && design.targetApparel === target;
+                          return (
+                            <button
+                              key={target}
+                              onClick={() => handleSetProductionActive(design.id, target)}
+                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                isActiveSlot
+                                  ? target === 'dark' ? 'bg-amber-500 text-slate-950 shadow-sm'
+                                    : target === 'light' ? 'bg-indigo-600 text-white shadow-sm'
+                                    : 'bg-purple-600 text-white shadow-sm'
+                                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                              }`}
+                              title={`${SLOT_LABELS[target]} için üretimi aktif/pasif yap`}
+                            >
+                              {target === 'dark' ? 'Açık' : target === 'light' ? 'Koyu' : 'Tümü'}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
