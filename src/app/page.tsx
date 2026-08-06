@@ -16,6 +16,7 @@ import {
   exportAppDataFile,
   parseAppDataBackupFile,
   updateLocalCache,
+  saveUIStateToIndexedDB,
 } from '@/lib/storage-service';
 import { ThemeProvider } from '@/components/common/ThemeProvider';
 import { UserAuthProvider, useAuth } from '@/components/common/UserAuthContext';
@@ -124,13 +125,10 @@ function MainContent() {
     };
   }, []);
 
-  // 2. Auto-save to Persistent Storage when state changes (debounced 400ms)
+  // 2a. Auto-save DATA to Server (debounced 400ms)
   useEffect(() => {
     if (!isInitialized) return;
 
-    // Skip the very first auto-save trigger that happens when IndexedDB is loaded.
-    // This prevents a newly opened app from immediately pushing its initial state (often empty on fresh install)
-    // to the server and overwriting real data.
     if (isFirstRenderAfterInit.current) {
       isFirstRenderAfterInit.current = false;
       return;
@@ -140,9 +138,6 @@ function MainContent() {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    // Skip save if this state change came from a remote server sync.
-    // Prevents the echo loop: Device B syncs → state updates → auto-save → DB updated →
-    // Device A detects change → fetches → state updates → auto-save → DB updated → ...
     if (syncedFromServerRef.current) {
       syncedFromServerRef.current = false;
       setIsSaving(false);
@@ -162,9 +157,8 @@ function MainContent() {
       if (result.conflict) {
         console.warn('Sync conflict detected! Server has newer data. Forcing sync on next poll...');
         lastSyncTimestampRef.current = 0; // Force the next 5s poll to fetch the server data
-      } else if (result.success) {
-        // Mark our own save time so we don't re-fetch our own changes during next poll
-        lastSyncTimestampRef.current = Date.now();
+      } else if (result.success && result.timestamp) {
+        lastSyncTimestampRef.current = result.timestamp;
       }
       setIsSaving(false);
     }, 400);
@@ -172,7 +166,18 @@ function MainContent() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
+  }, [mockups, designs, folders, isInitialized]); // Removed activeFolderId and selectedMockupId from dependencies
+
+  // 2b. Auto-save UI STATE locally (IndexedDB only)
+  useEffect(() => {
+    if (!isInitialized) return;
+    
+    const uiSaveTimer = setTimeout(() => {
+      saveUIStateToIndexedDB(activeFolderId, selectedMockupId).catch(console.error);
+    }, 200);
+    
+    return () => clearTimeout(uiSaveTimer);
+  }, [activeFolderId, selectedMockupId, isInitialized]);
 
   // 3. Real-time cross-device sync — polls server every 5s for changes made on other devices.
   //    Only active for logged-in users (guests have no server-side identity).
@@ -204,8 +209,9 @@ function MainContent() {
               setMockups(serverData.mockups || []);
               setDesigns(serverData.designs || []);
               setFolders(serverData.folders || []);
-              setActiveFolderId(serverData.activeFolderId ?? null);
-              setSelectedMockupId(serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null));
+              // UI state'lerini (activeFolderId, selectedMockupId) ZORLA DEĞİŞTİRMİYORUZ!
+              // Cihaz kendi yerel arayüz durumunu korumaya devam etmeli.
+              
               lastSyncTimestampRef.current = updatedAt;
 
               // Keep IndexedDB in sync (without triggering server POST)
@@ -213,8 +219,8 @@ function MainContent() {
                 mockups: serverData.mockups || [],
                 designs: serverData.designs || [],
                 folders: serverData.folders || [],
-                activeFolderId: serverData.activeFolderId ?? null,
-                selectedMockupId: serverData.selectedMockupId ?? null,
+                activeFolderId: activeFolderId,     // Kendi UI state'ini veritabanına kaydet (bozulmasın)
+                selectedMockupId: selectedMockupId, // Kendi UI state'ini veritabanına kaydet
               });
 
               console.log('[Sync] State updated from remote.');

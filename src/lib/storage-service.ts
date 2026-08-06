@@ -183,7 +183,7 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
 export async function saveAppData(
   payload: AppDataPayload,
   lastKnownServerTimestamp?: number
-): Promise<{ success: boolean; conflict?: boolean }> {
+): Promise<{ success: boolean; conflict?: boolean; timestamp?: number }> {
   const userId = getCurrentUserId();
   try {
     // Save to IndexedDB (Client side instant persistence)
@@ -192,8 +192,11 @@ export async function saveAppData(
     // Sync to Server side API (Disk persistence)
     const query = userId ? `?userId=${userId}` : '';
     
+    // UI state'lerini (activeFolderId, selectedMockupId) sunucuya gönderme! Sadece yerel cihazda kalsın.
+    const { activeFolderId, selectedMockupId, ...dataPayload } = payload;
+    
     const payloadString = JSON.stringify({
-      ...payload,
+      ...dataPayload,
       lastUpdated: Date.now(),
       lastKnownServerTimestamp,
     });
@@ -215,7 +218,11 @@ export async function saveAppData(
         return { success: false, conflict: true };
       }
       
-      return { success: res.ok };
+      if (res.ok) {
+        const responseData = await res.json();
+        return { success: true, timestamp: responseData.timestamp };
+      }
+      return { success: false };
     } catch (err) {
       console.warn('Server sync background warning:', err);
       return { success: false };
@@ -233,6 +240,18 @@ export async function saveAppData(
  */
 export async function updateLocalCache(payload: AppDataPayload): Promise<void> {
   await saveToIndexedDB(payload);
+}
+
+/**
+ * Saves ONLY the UI state (which folder is open, which mockup is selected) to IndexedDB.
+ * This prevents unnecessary server syncs when the user just clicks around.
+ */
+export async function saveUIStateToIndexedDB(activeFolderId: string | null, selectedMockupId: string | null): Promise<void> {
+  const keys = getStorageKeys();
+  await Promise.all([
+    set(keys.ACTIVE_FOLDER, activeFolderId),
+    set(keys.SELECTED_MOCKUP, selectedMockupId),
+  ]);
 }
 
 /**

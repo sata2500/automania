@@ -92,7 +92,17 @@ export async function POST(request: Request) {
         updated_at = CURRENT_TIMESTAMP
     `;
 
-    return NextResponse.json({ success: true, timestamp: Date.now() });
+    // Fetch the exact Postgres timestamp that was just saved
+    const updatedRows = await sql`
+      SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS server_time
+      FROM user_workspaces
+      WHERE user_id = ${userId}
+    `;
+    const finalTimestamp = updatedRows.length > 0 && updatedRows[0].server_time 
+      ? parseFloat(updatedRows[0].server_time) 
+      : Date.now();
+
+    return NextResponse.json({ success: true, timestamp: finalTimestamp });
   } catch (error: unknown) {
     console.error('Storage POST Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown storage error';
