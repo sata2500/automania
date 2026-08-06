@@ -16,7 +16,7 @@ import {
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './UserAuthContext';
 
-export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo' | 'admin';
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo';
 
 interface HeaderProps {
   activeTab: TabKey;

@@ -6,7 +6,6 @@ import { MockupCanvasEditor } from '@/components/mockup/MockupCanvasEditor';
 import { DesignUploader } from '@/components/design/DesignUploader';
 import { BatchPreviewGrid } from '@/components/generator/BatchPreviewGrid';
 import { EtsySeoHelper } from '@/components/seo/EtsySeoHelper';
-import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
@@ -25,7 +24,7 @@ import { ToastProvider } from '@/components/common/ToastContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { Sparkles, Info, User, X } from 'lucide-react';
 
-const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'admin'];
+const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo'];
 
 /**
  * Checks if a touched DOM element is inside an interactive control or horizontally scrollable container
@@ -68,26 +67,13 @@ function MainContent() {
   useEffect(() => {
     try {
       const savedTab = localStorage.getItem('automania_pod_active_tab_v1') as TabKey;
-      if (savedTab && ['mockups', 'designs', 'generator', 'seo', 'admin'].includes(savedTab)) {
+      if (savedTab && ['mockups', 'designs', 'generator', 'seo'].includes(savedTab)) {
         setActiveTabState(savedTab);
       }
     } catch {}
   }, []);
 
-  // Strict Security Protection: Kick non-admin users off the Admin tab immediately
-  useEffect(() => {
-    if (activeTabState === 'admin' && !isAdmin) {
-      setActiveTabState('mockups');
-      try {
-        localStorage.setItem('automania_pod_active_tab_v1', 'mockups');
-      } catch {}
-    }
-  }, [activeTabState, isAdmin]);
-
   const setActiveTab = (tab: TabKey) => {
-    if (tab === 'admin' && !isAdmin) {
-      return;
-    }
     setActiveTabState(tab);
     try {
       localStorage.setItem('automania_pod_active_tab_v1', tab);
@@ -550,16 +536,7 @@ function MainContent() {
 
         {activeTab === 'seo' && <EtsySeoHelper />}
 
-        {activeTab === 'admin' && (
-          <AdminDashboard
-            mockups={mockups}
-            setMockups={setMockups}
-            designs={designs}
-            setDesigns={setDesigns}
-            folders={folders}
-            setFolders={setFolders}
-          />
-        )}
+
       </main>
 
       {/* Auth Modal & Profile Management Modal */}
@@ -570,7 +547,9 @@ function MainContent() {
         onImportBackup={handleImportBackup}
         onLoadSampleData={handleLoadSampleData}
         onClearAllData={handleClearAllData}
-        onNavigateAdmin={() => setActiveTab('admin')}
+        onNavigateAdmin={() => {
+          window.location.href = '/admin';
+        }}
       />
     </div>
   );

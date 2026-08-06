@@ -40,15 +40,6 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 
-interface AdminDashboardProps {
-  mockups: MockupItem[];
-  setMockups: React.Dispatch<React.SetStateAction<MockupItem[]>>;
-  designs: DesignItem[];
-  setDesigns: React.Dispatch<React.SetStateAction<DesignItem[]>>;
-  folders: MockupFolder[];
-  setFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>>;
-}
-
 type AdminSubTab = 'overview' | 'ai' | 'users' | 'settings';
 
 const OPENROUTER_KEY_STORAGE = 'automania_openrouter_api_key';
@@ -61,20 +52,31 @@ const AVAILABLE_MODELS = [
   { id: 'openai/gpt-4o-mini', name: 'OpenAI GPT-4o Mini', desc: 'Hızlı & Ekonomik Metin İşleme' },
 ];
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  mockups,
-  setMockups,
-  designs,
-  setDesigns,
-  folders,
-  setFolders,
-}) => {
+export const AdminDashboard: React.FC = () => {
   const toast = useToast();
   const { user } = useAuth();
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
   // Active Sub Tab state
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('overview');
+
+  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+
+  useEffect(() => {
+    const fetchGlobalStats = async () => {
+      setIsLoadingStats(true);
+      try {
+        const res = await fetch('/api/admin/stats');
+        const data = await res.json();
+        if (data.success) setGlobalStats(data.stats);
+      } catch (err) {}
+      setIsLoadingStats(false);
+    };
+    if (activeSubTab === 'overview') {
+      fetchGlobalStats();
+    }
+  }, [activeSubTab]);
 
   useEffect(() => {
     try {
@@ -122,13 +124,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       localStorage.setItem(OPENROUTER_KEY_STORAGE, trimmedKey);
       localStorage.setItem(OPENROUTER_MODEL_STORAGE, selectedModel);
 
-      // Save to PostgreSQL DB so key syncs across mobile/desktop devices!
+      const currentData = await loadAppData();
       await saveAppData({
-        mockups,
-        designs,
-        folders,
-        activeFolderId: null,
-        selectedMockupId: null,
+        ...currentData,
         openRouterKey: trimmedKey,
         openRouterModel: selectedModel,
       });
@@ -239,10 +237,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  const imageMockupCount = mockups.filter((m) => !m.isVideo).length;
-  const videoMockupCount = mockups.filter((m) => m.isVideo).length;
-  const mockupFoldersCount = folders.filter((f) => f.type !== 'design').length;
-  const designFoldersCount = folders.filter((f) => f.type === 'design').length;
+
 
   return (
     <div className="space-y-6 animate-fadeIn pb-16">
@@ -344,80 +339,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {activeSubTab === 'overview' && (
         <div className="space-y-6 animate-fadeIn">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Mockups Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            {/* Users Metric */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
               <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Mockup Kitaplığı
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Kayıtlı Kullanıcılar
                 </span>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{mockups.length}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Toplam Görsel</span>
+                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+                    {isLoadingStats ? '...' : globalStats?.users?.total || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Kullanıcı</span>
                 </div>
-                <div className="flex gap-2 text-[10px] text-slate-400 mt-2 font-medium">
-                  <span>🖼️ {imageMockupCount} Fotoğraf</span>
-                  <span>🎥 {videoMockupCount} Video</span>
+                <div className="flex gap-2 text-[10px] font-bold mt-3">
+                  <span className="text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-800">
+                    🟢 {globalStats?.users?.active || 0} Aktif
+                  </span>
+                  <span className="text-rose-500 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md border border-rose-100 dark:border-rose-800">
+                    🔴 {globalStats?.users?.blocked || 0} Engelli
+                  </span>
                 </div>
               </div>
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl shadow-sm border border-indigo-100 dark:border-indigo-800/50">
+                <Users className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Global Mockups Metric */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Global Mockup Arşivi
+                </span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+                    {isLoadingStats ? '...' : globalStats?.assets?.mockups || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Görsel</span>
+                </div>
+                <p className="text-[10px] text-purple-600 dark:text-purple-400 mt-3 font-bold bg-purple-50 dark:bg-purple-950/50 inline-block px-2 py-0.5 rounded-md border border-purple-100 dark:border-purple-800">
+                  Tüm kullanıcıların ortak üretimi
+                </p>
+              </div>
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl shadow-sm border border-purple-100 dark:border-purple-800/50">
                 <Layers className="w-6 h-6" />
               </div>
             </div>
 
-            {/* Designs Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            {/* Global Designs Metric */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
               <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  PNG Tasarımlar
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Global Tasarım Üretimi
                 </span>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{designs.length}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Aktif Tasarım</span>
+                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+                    {isLoadingStats ? '...' : globalStats?.assets?.designs || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Tasarım</span>
                 </div>
-                <p className="text-[10px] text-purple-600 dark:text-purple-400 mt-2 font-semibold">
-                  Toplu üretime hazır koleksiyon
-                </p>
+                <div className="flex gap-2 text-[10px] mt-3 font-bold">
+                  <span className="text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-100 dark:border-amber-800">
+                    📂 {globalStats?.assets?.folders || 0} Global Klasör
+                  </span>
+                </div>
               </div>
-              <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl">
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl shadow-sm border border-amber-100 dark:border-amber-800/50">
                 <Palette className="w-6 h-6" />
               </div>
             </div>
 
-            {/* Folders Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            {/* Database Health Metric */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
               <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Klasör Mimarisi
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Veritabanı Sağlığı
                 </span>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{folders.length}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Klasör</span>
+                  <span className={`text-3xl font-extrabold ${
+                    globalStats?.health?.status === 'excellent' ? 'text-emerald-600 dark:text-emerald-400' :
+                    globalStats?.health?.status === 'good' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                  }`}>
+                    {isLoadingStats ? '...' : (globalStats?.health?.status === 'excellent' ? 'Mükemmel' : globalStats?.health?.status === 'good' ? 'İyi' : 'Yavaş')}
+                  </span>
                 </div>
-                <div className="flex gap-2 text-[10px] text-slate-400 mt-2 font-medium">
-                  <span>📂 {mockupFoldersCount} Mockup</span>
-                  <span>🎨 {designFoldersCount} Tasarım</span>
-                </div>
-              </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl">
-                <FolderTree className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Database & Local Cache */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Veritabanı &amp; Hafıza
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">Senkron</span>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
-                  IndexedDB + PostgreSQL Otomatik Eşitleme
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-3 font-bold bg-slate-50 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                  {isLoadingStats ? 'Ölçülüyor...' : `Gecikme (Ping): ${globalStats?.health?.dbLatencyMs || 0}ms`}
                 </p>
               </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-                <Database className="w-6 h-6" />
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-800/50">
+                <Activity className="w-6 h-6" />
               </div>
             </div>
           </div>
