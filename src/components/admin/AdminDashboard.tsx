@@ -199,45 +199,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleRestoreFactoryData = async () => {
+  const handlePurgeSystemJunkData = async () => {
     if (
       !confirm(
-        '⚠️ TÜM SİSTEMİ FABRİKA AYARLARINA SIFIRLA:\n\n' +
-        'Bu işlem PostgreSQL veritabanındaki tüm eski kayıtları, çöp artıkları ve tüm kullanıcı çalışma alanlarını tamamen temizleyecektir (TRUNCATE).\n\n' +
-        'Sistem fabrika varsayılan demo verisiyle yeniden başlatılacaktır. Devam etmek istiyor musunuz?'
+        '⚠️ SİSTEM ÇÖP VERİLERİNİ TEMİZLE:\n\n' +
+        'Bu işlem PostgreSQL veritabanındaki yetkisiz test kayıtlarını ve eski veritabanı artıklarını temizleyecektir.\n\n' +
+        'Sistemdeki hazır örnek taslak ve mockup kütüphanesi KORUNACAKTIR. Devam etmek istiyor musunuz?'
       )
     ) {
       return;
     }
 
     try {
-      // 1. Purge all orphaned/old workspace entries in PostgreSQL database
+      // Purge orphaned/old test workspace entries in PostgreSQL database
       const res = await fetch('/api/setup?action=reset');
       if (res.ok) {
-        // 2. Load fresh sample demo dataset
-        const defaultData = await loadSampleAppData();
-        setMockups(defaultData.mockups);
-        setDesigns(defaultData.designs);
-        setFolders(defaultData.folders);
-
-        // 3. Save fresh clean state to PostgreSQL DB & IndexedDB
-        await saveAppData({
-          mockups: defaultData.mockups,
-          designs: defaultData.designs,
-          folders: defaultData.folders,
-          activeFolderId: null,
-          selectedMockupId: null,
-          openRouterKey: apiKey.trim(),
-          openRouterModel: selectedModel,
-        });
-
-        toast.success('Tüm PostgreSQL veritabanı artıkları temizlendi! Sistem sıfırlandı.');
+        toast.success('Sistemdeki tüm çöp veriler ve veritabanı artıkları temizlendi! Örnek demo şablon kütüphanesi korundu.');
       } else {
-        toast.error('Veritabanı sıfırlama işlemi başarısız oldu.');
+        toast.error('Veritabanı temizleme işlemi başarısız oldu.');
       }
     } catch (err) {
-      console.error('System reset error:', err);
-      toast.error('Sistem sıfırlama sırasında bir hata oluştu.');
+      console.error('System purge error:', err);
+      toast.error('Sistem temizleme sırasında bir hata oluştu.');
     }
   };
 
@@ -701,21 +684,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
 
-            {/* Factory Reset Card */}
+            {/* System Junk Purge Card */}
             <div className="p-5 bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-900/60 space-y-3">
               <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
-                <RotateCcw className="w-5 h-5" />
-                <h3 className="text-xs font-bold">Tüm Sistemi Temizle &amp; Fabrika Ayarlarına Sıfırla</h3>
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-xs font-bold">Veritabanı Çöp &amp; Artık Verilerini Temizle</h3>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                PostgreSQL veritabanındaki tüm eski kullanıcı kayıtlarını ve çöp artıkları tamamen temizler (TRUNCATE), varsayılan temiz demo veri setini yeniden başlatır.
+                PostgreSQL veritabanındaki tüm yetkisiz test kayıtlarını ve çöp artıkları temizler. Sistemdeki hazır demo şablon kütüphanesi (60 mockup, tasarımlar) olduğu gibi muhafaza edilir.
               </p>
               <button
-                onClick={handleRestoreFactoryData}
+                onClick={handlePurgeSystemJunkData}
                 className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-rose-600/20"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Veritabanı Artıklarını Temizle &amp; Sıfırla</span>
+                <span>Çöp Verileri Temizle (Örnek Şablonlar Korunur)</span>
               </button>
             </div>
           </div>
