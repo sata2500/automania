@@ -76,6 +76,23 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [userList, setUserList] = useState<ManagedUser[]>(DEFAULT_USERS);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  const fetchUsersFromDb = async () => {
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.users) && data.users.length > 0) {
+          setUserList(data.users);
+          try {
+            localStorage.setItem(USER_LIST_STORAGE_KEY, JSON.stringify(data.users));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch central user directory:', err);
+    }
+  };
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -87,47 +104,44 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const savedUsers = localStorage.getItem(USER_LIST_STORAGE_KEY);
       if (savedUsers) {
         setUserList(JSON.parse(savedUsers));
-      } else {
-        localStorage.setItem(USER_LIST_STORAGE_KEY, JSON.stringify(DEFAULT_USERS));
       }
     } catch {}
+
+    fetchUsersFromDb();
   }, []);
 
-  const saveUserList = (newList: ManagedUser[]) => {
-    setUserList(newList);
-    try {
-      localStorage.setItem(USER_LIST_STORAGE_KEY, JSON.stringify(newList));
-    } catch {}
-  };
-
-  const saveUserSession = (userProfile: UserProfile | null) => {
+  const saveUserSession = async (userProfile: UserProfile | null) => {
     setUser(userProfile);
     if (userProfile) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
 
-      // Auto-register logged-in user into central user directory if not present
-      setUserList((prevList) => {
-        const exists = prevList.some(
-          (u) => u.email.toLowerCase() === userProfile.email.toLowerCase() || u.id === userProfile.id
-        );
-        if (!exists) {
-          const newUser: ManagedUser = {
-            id: userProfile.id,
-            name: userProfile.name,
-            email: userProfile.email,
-            role: userProfile.role || (userProfile.email === 'salihtanriseven25@gmail.com' ? 'admin' : 'user'),
-            status: 'active',
-            provider: userProfile.provider || 'google',
-            createdAt: new Date().toISOString().split('T')[0],
-          };
-          const updated = [newUser, ...prevList];
-          try {
-            localStorage.setItem(USER_LIST_STORAGE_KEY, JSON.stringify(updated));
-          } catch {}
-          return updated;
+      // Central PostgreSQL server database registration
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userProfile),
+        });
+
+        if (res.status === 403) {
+          alert('⚠️ Hesabınız yönetici tarafından engellenmiştir.');
+          setUser(null);
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          return;
         }
-        return prevList;
-      });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            setUser(data.user);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing user with server:', err);
+      }
+
+      fetchUsersFromDb();
     } else {
       localStorage.removeItem(AUTH_STORAGE_KEY);
     }
@@ -152,20 +166,20 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         'kullanici@gmail.com'
       );
       if (demoEmail) {
-        if (isUserBlocked(demoEmail)) {
+        const cleanEmail = demoEmail.trim().toLowerCase();
+        if (isUserBlocked(cleanEmail)) {
           alert('⚠️ Bu e-posta adresi yönetici tarafından engellenmiştir. Sisteme giriş yapamazsınız.');
           return;
         }
 
-        const name = demoEmail.split('@')[0];
-        const existing = userList.find((u) => u.email.toLowerCase() === demoEmail.toLowerCase());
-        const role = existing ? existing.role : demoEmail.includes('admin') || demoEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
+        const name = cleanEmail.split('@')[0];
+        const role = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
 
         const userProfile: UserProfile = {
-          id: existing ? existing.id : 'user-' + btoa(demoEmail).replace(/=/g, '').toLowerCase(),
+          id: 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase(),
           name: name.charAt(0).toUpperCase() + name.slice(1),
-          email: demoEmail,
-          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(demoEmail)}`,
+          email: cleanEmail,
+          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanEmail)}`,
           provider: 'google',
           role,
         };
@@ -176,13 +190,11 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const isAdmin = user
-    ? user.role === 'admin' ||
-      user.email === 'salihtanriseven25@gmail.com' ||
-      user.email === 'admin@automania.com' ||
-      user.email === 'kullanici@gmail.com' ||
-      user.provider === 'demo'
-    : false;
+  // STRICT Admin security guard: ONLY salihtanriseven25@gmail.com or verified role === 'admin'
+  const isAdmin = Boolean(
+    user &&
+    (user.role === 'admin' || user.email.toLowerCase() === 'salihtanriseven25@gmail.com')
+  );
 
   const loginWithDemo = (email = 'salihtanriseven25@gmail.com', name = 'Salih TANRISEVEN (Admin)', role: 'admin' | 'user' = 'admin') => {
     if (isUserBlocked(email)) {
@@ -207,48 +219,59 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     window.location.reload();
   };
 
-  const updateUserRole = (userId: string, newRole: 'admin' | 'user') => {
-    const updated = userList.map((u) => (u.id === userId ? { ...u, role: newRole } : u));
-    saveUserList(updated);
-
-    // If current logged in user's role changed, update active session
-    if (user && user.id === userId) {
-      saveUserSession({ ...user, role: newRole });
-    }
+  const updateUserRole = async (userId: string, newRole: 'admin' | 'user') => {
+    setUserList((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
+    try {
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_role', id: userId, role: newRole }),
+      });
+    } catch {}
+    fetchUsersFromDb();
   };
 
-  const toggleUserBlock = (userId: string) => {
-    const updated = userList.map((u) => (u.id === userId ? { ...u, status: (u.status === 'blocked' ? 'active' : 'blocked') as 'active' | 'blocked' } : u));
-    saveUserList(updated);
+  const toggleUserBlock = async (userId: string) => {
+    const target = userList.find((u) => u.id === userId);
+    if (!target) return;
+    const newStatus = target.status === 'blocked' ? 'active' : 'blocked';
 
-    // If current user is blocked, log out immediately
-    const target = updated.find((u) => u.id === userId);
-    if (target && target.status === 'blocked' && user && user.id === userId) {
+    setUserList((prev) => prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u)));
+
+    try {
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle_status', id: userId, status: newStatus }),
+      });
+    } catch {}
+
+    if (newStatus === 'blocked' && user && user.id === userId) {
       alert('⚠️ Hesabınız engellendi. Oturum kapatılıyor.');
       logout();
     }
+    fetchUsersFromDb();
   };
 
-  const deleteUser = (userId: string) => {
-    const updated = userList.filter((u) => u.id !== userId);
-    saveUserList(updated);
+  const deleteUser = async (userId: string) => {
+    setUserList((prev) => prev.filter((u) => u.id !== userId));
+    try {
+      await fetch(`/api/users?id=${userId}`, { method: 'DELETE' });
+    } catch {}
     if (user && user.id === userId) {
       logout();
     }
+    fetchUsersFromDb();
   };
 
   const addUser = (name: string, email: string, role: 'admin' | 'user') => {
-    const newUser: ManagedUser = {
+    saveUserSession({
       id: 'user-' + Date.now(),
       name,
       email,
       role,
-      status: 'active',
       provider: 'google',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    const updated = [newUser, ...userList];
-    saveUserList(updated);
+    });
   };
 
   return (

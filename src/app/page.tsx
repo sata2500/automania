@@ -74,7 +74,20 @@ function MainContent() {
     } catch {}
   }, []);
 
+  // Strict Security Protection: Kick non-admin users off the Admin tab immediately
+  useEffect(() => {
+    if (activeTabState === 'admin' && !isAdmin) {
+      setActiveTabState('mockups');
+      try {
+        localStorage.setItem('automania_pod_active_tab_v1', 'mockups');
+      } catch {}
+    }
+  }, [activeTabState, isAdmin]);
+
   const setActiveTab = (tab: TabKey) => {
+    if (tab === 'admin' && !isAdmin) {
+      return;
+    }
     setActiveTabState(tab);
     try {
       localStorage.setItem('automania_pod_active_tab_v1', tab);

@@ -17,8 +17,28 @@ export async function GET(request: Request) {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        role VARCHAR(50) DEFAULT 'user',
+        status VARCHAR(50) DEFAULT 'active',
+        provider VARCHAR(50) DEFAULT 'google',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_key VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(255)`;
+
+    // Seed default admin user into PostgreSQL users table if not existing
+    await sql`
+      INSERT INTO users (id, name, email, role, status, provider)
+      VALUES ('user-demo-101', 'Salih TANRISEVEN', 'salihtanriseven25@gmail.com', 'admin', 'active', 'google')
+      ON CONFLICT (email) DO NOTHING
+    `;
     const { searchParams } = new URL(request.url);
     if (searchParams.get('action') === 'reset') {
       await sql`TRUNCATE TABLE user_workspaces`;
