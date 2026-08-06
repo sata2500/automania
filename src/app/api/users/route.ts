@@ -45,16 +45,26 @@ export async function POST(request: Request) {
   try {
     await ensureUsersTable();
     const body = await request.json();
-    const { action, id, name, email, role, status, provider } = body;
+    const { action, id, name, email, role, status, provider, callerEmail } = body;
 
-    if (action === 'update_role' && id && role) {
-      await sql`UPDATE users SET role = ${role} WHERE id = ${id}`;
-      return NextResponse.json({ success: true, message: 'Rol güncellendi.' });
-    }
+    // Secure actions (update role, block user)
+    if (action === 'update_role' || action === 'toggle_status') {
+      if (!callerEmail) return NextResponse.json({ success: false, message: 'Yetkisiz erişim' }, { status: 403 });
+      
+      const caller = await sql`SELECT role FROM users WHERE email = ${callerEmail.toLowerCase()}`;
+      if (caller.length === 0 || caller[0].role !== 'admin') {
+        return NextResponse.json({ success: false, message: 'Bu işlem için admin yetkisi gerekiyor.' }, { status: 403 });
+      }
 
-    if (action === 'toggle_status' && id && status) {
-      await sql`UPDATE users SET status = ${status} WHERE id = ${id}`;
-      return NextResponse.json({ success: true, message: 'Erişim durumu güncellendi.' });
+      if (action === 'update_role' && id && role) {
+        await sql`UPDATE users SET role = ${role} WHERE id = ${id}`;
+        return NextResponse.json({ success: true, message: 'Rol güncellendi.' });
+      }
+
+      if (action === 'toggle_status' && id && status) {
+        await sql`UPDATE users SET status = ${status} WHERE id = ${id}`;
+        return NextResponse.json({ success: true, message: 'Erişim durumu güncellendi.' });
+      }
     }
 
     // Default action: Login Upsert
@@ -62,7 +72,8 @@ export async function POST(request: Request) {
       const cleanEmail = email.toLowerCase().trim();
       const userId = id || 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
       const userName = name || cleanEmail.split('@')[0];
-      const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : (role || 'user');
+      // Do not trust requested role from client. Only master admin gets admin by default.
+      const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
       const userProvider = provider || 'google';
 
       // Check existing status
@@ -125,6 +136,14 @@ export async function DELETE(request: Request) {
     await ensureUsersTable();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('id');
+    const callerEmail = searchParams.get('callerEmail');
+
+    if (!callerEmail) return NextResponse.json({ success: false, message: 'Yetkisiz erişim' }, { status: 403 });
+    
+    const caller = await sql`SELECT role FROM users WHERE email = ${callerEmail.toLowerCase()}`;
+    if (caller.length === 0 || caller[0].role !== 'admin') {
+      return NextResponse.json({ success: false, message: 'Bu işlem için admin yetkisi gerekiyor.' }, { status: 403 });
+    }
 
     if (userId) {
       await sql`DELETE FROM users WHERE id = ${userId}`;

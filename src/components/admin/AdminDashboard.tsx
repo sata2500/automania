@@ -74,6 +74,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Active Sub Tab state
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('overview');
 
+  useEffect(() => {
+    try {
+      const savedTab = localStorage.getItem('automania_admin_subtab_v1') as AdminSubTab;
+      if (savedTab && ['overview', 'ai', 'users', 'settings'].includes(savedTab)) {
+        setActiveSubTab(savedTab);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleSubTabChange = (tab: AdminSubTab) => {
+    setActiveSubTab(tab);
+    try {
+      localStorage.setItem('automania_admin_subtab_v1', tab);
+    } catch (e) {}
+  };
+
   // API Key & Model state
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -278,7 +294,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Navigation Tabs Bar Inside Admin Panel */}
         <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto custom-scrollbar">
           <button
-            onClick={() => setActiveSubTab('overview')}
+            onClick={() => handleSubTabChange('overview')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'overview'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -290,7 +306,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('ai')}
+            onClick={() => handleSubTabChange('ai')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'ai'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -302,7 +318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('users')}
+            onClick={() => handleSubTabChange('users')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'users'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -314,7 +330,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveSubTab('settings')}
+            onClick={() => handleSubTabChange('settings')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'settings'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'

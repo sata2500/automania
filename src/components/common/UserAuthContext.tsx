@@ -94,20 +94,48 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setUser(parsed);
-      }
+    const initializeSession = async () => {
+      try {
+        const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setUser(parsed); // Set immediately for fast UI
+          
+          // Background sync to verify status and update last login
+          try {
+            const res = await fetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(parsed),
+            });
+            if (res.status === 403) {
+              alert('⚠️ Hesabınız yönetici tarafından engellenmiştir.');
+              setUser(null);
+              localStorage.removeItem(AUTH_STORAGE_KEY);
+              return;
+            }
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.user) {
+                setUser(data.user);
+                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+              }
+            }
+          } catch (err) {
+            console.error('Session sync error', err);
+          }
+        }
 
-      const savedUsers = localStorage.getItem(USER_LIST_STORAGE_KEY);
-      if (savedUsers) {
-        setUserList(JSON.parse(savedUsers));
-      }
-    } catch {}
+        const savedUsers = localStorage.getItem(USER_LIST_STORAGE_KEY);
+        if (savedUsers) {
+          setUserList(JSON.parse(savedUsers));
+        }
+      } catch {}
 
-    fetchUsersFromDb();
+      fetchUsersFromDb();
+    };
+
+    initializeSession();
   }, []);
 
   const saveUserSession = async (userProfile: UserProfile | null) => {
@@ -225,7 +253,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_role', id: userId, role: newRole }),
+        body: JSON.stringify({ action: 'update_role', id: userId, role: newRole, callerEmail: user?.email }),
       });
     } catch {}
     fetchUsersFromDb();
@@ -242,7 +270,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle_status', id: userId, status: newStatus }),
+        body: JSON.stringify({ action: 'toggle_status', id: userId, status: newStatus, callerEmail: user?.email }),
       });
     } catch {}
 
@@ -256,7 +284,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deleteUser = async (userId: string) => {
     setUserList((prev) => prev.filter((u) => u.id !== userId));
     try {
-      await fetch(`/api/users?id=${userId}`, { method: 'DELETE' });
+      await fetch(`/api/users?id=${userId}&callerEmail=${encodeURIComponent(user?.email || '')}`, { method: 'DELETE' });
     } catch {}
     if (user && user.id === userId) {
       logout();
