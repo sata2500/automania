@@ -177,25 +177,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleForceSyncDb = async () => {
-    setIsSyncingDb(true);
+  const [isTestingDb, setIsTestingDb] = useState(false);
+  const [dbHealthResult, setDbHealthResult] = useState<{ ok: boolean; latencyMs: number } | null>(null);
+
+  const handleTestDatabaseHealth = async () => {
+    setIsTestingDb(true);
+    setDbHealthResult(null);
+    const start = Date.now();
     try {
-      await saveAppData({
-        mockups,
-        designs,
-        folders,
-        activeFolderId: null,
-        selectedMockupId: null,
-        openRouterKey: apiKey.trim(),
-        openRouterModel: selectedModel,
-      });
-      setDbStatus('connected');
-      toast.success('Tüm veriler veritabanı (PostgreSQL) ve yerel hafıza ile eşitlendi!');
-    } catch (err) {
-      setDbStatus('error');
-      toast.error('Veritabanı eşitleme hatası oluştu.');
+      const res = await fetch('/api/setup');
+      const latencyMs = Date.now() - start;
+      if (res.ok) {
+        setDbHealthResult({ ok: true, latencyMs });
+        toast.success(`PostgreSQL Veritabanı Bağlantısı Başarılı & Sağlıklı! (${latencyMs}ms)`);
+      } else {
+        setDbHealthResult({ ok: false, latencyMs });
+        toast.error('Veritabanı sunucusuna erişilemedi.');
+      }
+    } catch (e) {
+      toast.error('Veritabanı bağlantı testi sırasında hata oluştu.');
     } finally {
-      setIsSyncingDb(false);
+      setIsTestingDb(false);
     }
   };
 
@@ -665,23 +667,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Database Sync Card */}
+            {/* Database Health Card */}
             <div className="p-5 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
               <div className="flex items-center space-x-2">
                 <Server className="w-5 h-5 text-indigo-500" />
-                <h3 className="text-xs font-bold text-slate-900 dark:text-white">PostgreSQL Veritabanı Senkronizasyonu</h3>
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white">PostgreSQL Sağlık &amp; Gecikme Testi (Ping)</h3>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Tüm mockup'lar, tasarımlar, klasörler ve API anahtarları PostgreSQL veritabanınız ile manuel olarak eşitleyin.
+                PostgreSQL veritabanı sunucusunun canlılık durumunu, tablo yapılarını ve yanıt gecikme süresini (ping ms) test edin.
               </p>
               <button
-                onClick={handleForceSyncDb}
-                disabled={isSyncingDb}
-                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                onClick={handleTestDatabaseHealth}
+                disabled={isTestingDb}
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20"
               >
-                <RefreshCw className={`w-4 h-4 ${isSyncingDb ? 'animate-spin' : ''}`} />
-                <span>{isSyncingDb ? 'Eşitleniyor...' : 'Veritabanını Zorla Eşitle'}</span>
+                <Activity className={`w-4 h-4 text-emerald-300 ${isTestingDb ? 'animate-spin' : ''}`} />
+                <span>{isTestingDb ? 'Bağlantı Ölçülüyor...' : 'Veritabanı Sağlığını Test Et (Ping)'}</span>
               </button>
+
+              {dbHealthResult && (
+                <div className={`p-2.5 rounded-xl border text-[11px] font-medium flex items-center justify-between ${
+                  dbHealthResult.ok
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-rose-50 dark:bg-rose-950/60 border-rose-300 text-rose-700 dark:text-rose-300'
+                }`}>
+                  <span>{dbHealthResult.ok ? 'PostgreSQL Sunucusu Erişilebilir & Sağlıklı' : 'Bağlantı Hatası'}</span>
+                  <span className="font-mono font-bold">{dbHealthResult.latencyMs}ms</span>
+                </div>
+              )}
             </div>
 
             {/* System Junk Purge Card */}
