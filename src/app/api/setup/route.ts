@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { requireAdmin } from '@/lib/auth-server';
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+
+    // SECURITY FIX: If resetting the database, strictly require admin session
+    if (action === 'reset') {
+      const adminSession = await requireAdmin();
+      if (!adminSession) {
+        return NextResponse.json(
+          { success: false, message: 'Veritabanı sıfırlama işlemi için admin yetkisi gerekiyor.' },
+          { status: 403 }
+        );
+      }
+    }
+
     await sql`
       CREATE TABLE IF NOT EXISTS user_workspaces (
         user_id VARCHAR(255) PRIMARY KEY,
@@ -39,13 +54,13 @@ export async function GET(request: Request) {
       VALUES ('user-demo-101', 'Salih TANRISEVEN', 'salihtanriseven25@gmail.com', 'admin', 'active', 'google')
       ON CONFLICT (email) DO NOTHING
     `;
-    const { searchParams } = new URL(request.url);
-    if (searchParams.get('action') === 'reset') {
+    
+    if (action === 'reset') {
       await sql`TRUNCATE TABLE user_workspaces`;
       return NextResponse.json({ success: true, message: 'Veritabanı sıfırlandı. Eski hatalı veriler silindi.' });
     }
 
-    return NextResponse.json({ success: true, message: 'Veritabanı tabloları başarıyla oluşturuldu.' });
+    return NextResponse.json({ success: true, message: 'Veritabanı tabloları başarıyla oluşturuldu/kontrol edildi.' });
   } catch (error: any) {
     console.error('Setup Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

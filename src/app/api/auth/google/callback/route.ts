@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import sql from '@/lib/db';
+import { setSessionCookie } from '@/lib/auth-server';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -45,13 +47,63 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}/?auth_error=Kullanıcı+bilgisi+alınamadı`);
     }
 
+    const cleanEmail = userData.email.toLowerCase().trim();
+    const userId = 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
+    const userName = userData.name || cleanEmail.split('@')[0];
+    const avatarUrl = userData.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanEmail)}`;
+    
+    // Ensure table exists
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR(255) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          role VARCHAR(50) DEFAULT 'user',
+          status VARCHAR(50) DEFAULT 'active',
+          provider VARCHAR(50) DEFAULT 'google',
+          avatar_url VARCHAR(1000),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+    } catch(e) {}
+
+    let userRole: 'admin' | 'user' = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
+    let userStatus = 'active';
+
+    // Check existing status
+    const existing = await sql`SELECT role, status FROM users WHERE email = ${cleanEmail}`;
+    if (existing.length > 0) {
+      if (existing[0].status === 'blocked') {
+        return NextResponse.redirect(`${origin}/?auth_error=Hesabınız+yönetici+tarafından+engellenmiştir.`);
+      }
+      userRole = existing[0].role as 'admin' | 'user';
+      userStatus = existing[0].status;
+      
+      await sql`
+        UPDATE users
+        SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${avatarUrl}
+        WHERE email = ${cleanEmail}
+      `;
+    } else {
+      await sql`
+        INSERT INTO users (id, name, email, role, status, provider, avatar_url)
+        VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', 'google', ${avatarUrl})
+      `;
+    }
+
     const userProfile = {
-      id: 'user-' + btoa(userData.email).replace(/=/g, '').toLowerCase(),
-      name: userData.name || userData.email.split('@')[0],
-      email: userData.email,
-      avatarUrl: userData.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userData.email)}`,
+      id: userId,
+      name: userName,
+      email: cleanEmail,
+      avatarUrl: avatarUrl,
       provider: 'google',
+      role: userRole,
     };
+
+    // Set secure HTTP-only JWT cookie
+    await setSessionCookie(userProfile as any);
 
     // 3. Return HTML script to save session in localStorage and redirect back to homepage
     const profileJson = JSON.stringify(userProfile);

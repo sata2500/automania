@@ -213,7 +213,10 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsAuthModalOpen(false);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
     saveUserSession(null);
     window.location.reload();
   };
@@ -224,7 +227,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_role', id: userId, role: newRole, callerEmail: user?.email }),
+        body: JSON.stringify({ action: 'update_role', id: userId, role: newRole }),
       });
     } catch {}
     fetchUsersFromDb();
@@ -241,7 +244,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle_status', id: userId, status: newStatus, callerEmail: user?.email }),
+        body: JSON.stringify({ action: 'toggle_status', id: userId, status: newStatus }),
       });
     } catch {}
 
@@ -255,7 +258,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const deleteUser = async (userId: string) => {
     setUserList((prev) => prev.filter((u) => u.id !== userId));
     try {
-      await fetch(`/api/users?id=${userId}&callerEmail=${encodeURIComponent(user?.email || '')}`, { method: 'DELETE' });
+      await fetch(`/api/users?id=${userId}`, { method: 'DELETE' });
     } catch {}
     if (user && user.id === userId) {
       logout();

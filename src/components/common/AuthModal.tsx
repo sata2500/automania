@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from './UserAuthContext';
 import {
   X,
@@ -15,6 +15,7 @@ import {
   Trash2,
   Database,
 } from 'lucide-react';
+import { ConfirmModal } from './ConfirmModal';
 
 interface AuthModalProps {
   isSaving?: boolean;
@@ -37,6 +38,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 }) => {
   const { user, isAdmin, loginWithGoogle, logout, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
   if (!isAuthModalOpen) return null;
 
@@ -168,13 +170,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <button
                 onClick={() => {
-                  if (
-                    confirm(
-                      "Örnek taslak verileri (mockup'lar, tasarımlar ve varsayılan klasörler) çalışma alanınıza yüklenecektir. Onaylıyor musunuz?"
-                    )
-                  ) {
-                    onLoadSampleData?.();
-                  }
+                  setConfirmConfig({
+                    isOpen: true,
+                    title: 'Örnek Taslak Yükle',
+                    message: "Örnek taslak verileri (mockup'lar, tasarımlar ve varsayılan klasörler) çalışma alanınıza yüklenecektir. Onaylıyor musunuz?",
+                    action: () => {
+                      if (onLoadSampleData) onLoadSampleData();
+                    }
+                  });
                 }}
                 className="w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/40 rounded-xl text-xs text-indigo-700 dark:text-indigo-200 transition-all font-medium cursor-pointer"
               >
@@ -189,13 +192,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <button
                 onClick={() => {
-                  if (
-                    confirm(
-                      "TÜM VERİLERİNİZ SİLİNECEKTİR (Mockup'lar, tasarımlar ve klasörler sıfırlanıp tamamen boş bir alan oluşturulacaktır). Emin misiniz?"
-                    )
-                  ) {
-                    onClearAllData?.();
-                  }
+                  setConfirmConfig({
+                    isOpen: true,
+                    title: 'Tüm Verileri Temizle',
+                    message: "TÜM VERİLERİNİZ SİLİNECEKTİR (Mockup'lar, tasarımlar ve klasörler sıfırlanıp tamamen boş bir alan oluşturulacaktır). Emin misiniz?",
+                    action: () => {
+                      if (onClearAllData) onClearAllData();
+                    }
+                  });
                 }}
                 className="w-full flex items-center justify-between p-2.5 bg-white dark:bg-slate-900/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-500/40 rounded-xl text-xs text-rose-600 dark:text-rose-300 transition-all font-medium cursor-pointer"
               >
@@ -265,6 +269,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        onConfirm={() => {
+          if (confirmConfig.action) confirmConfig.action();
+          setConfirmConfig({ ...confirmConfig, isOpen: false });
+        }}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+      />
     </div>
   );
 };

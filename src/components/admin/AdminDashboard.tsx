@@ -38,6 +38,7 @@ import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
+import { ConfirmModal } from '@/components/common/ConfirmModal';
 
 interface AdminDashboardProps {
   mockups: MockupItem[];
@@ -70,6 +71,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const toast = useToast();
   const { user } = useAuth();
+  const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
   // Active Sub Tab state
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('overview');
@@ -218,28 +220,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handlePurgeSystemJunkData = async () => {
-    if (
-      !confirm(
-        '⚠️ SİSTEM ÇÖP VERİLERİNİ TEMİZLE:\n\n' +
-        'Bu işlem PostgreSQL veritabanındaki yetkisiz test kayıtlarını ve eski veritabanı artıklarını temizleyecektir.\n\n' +
-        'Sistemdeki hazır örnek taslak ve mockup kütüphanesi KORUNACAKTIR. Devam etmek istiyor musunuz?'
-      )
-    ) {
-      return;
-    }
-
-    try {
-      // Purge orphaned/old test workspace entries in PostgreSQL database
-      const res = await fetch('/api/setup?action=reset');
-      if (res.ok) {
-        toast.success('Sistemdeki tüm çöp veriler ve veritabanı artıkları temizlendi! Örnek demo şablon kütüphanesi korundu.');
-      } else {
-        toast.error('Veritabanı temizleme işlemi başarısız oldu.');
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Sistem Verilerini Temizle',
+      message: 'Bu işlem PostgreSQL veritabanındaki yetkisiz test kayıtlarını ve eski veritabanı artıklarını temizleyecektir.\n\nSistemdeki hazır örnek taslak ve mockup kütüphanesi KORUNACAKTIR. Devam etmek istiyor musunuz?',
+      action: async () => {
+        try {
+          const res = await fetch('/api/setup?action=reset');
+          if (res.ok) {
+            toast.success('Sistemdeki tüm çöp veriler ve veritabanı artıkları temizlendi! Örnek demo şablon kütüphanesi korundu.');
+          } else {
+            toast.error('Veritabanı temizleme işlemi başarısız oldu.');
+          }
+        } catch (err) {
+          toast.error('Sistem temizleme sırasında bir hata oluştu.');
+        }
       }
-    } catch (err) {
-      console.error('System purge error:', err);
-      toast.error('Sistem temizleme sırasında bir hata oluştu.');
-    }
+    });
   };
 
   const imageMockupCount = mockups.filter((m) => !m.isVideo).length;
@@ -656,6 +653,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        onConfirm={() => {
+          if (confirmConfig.action) confirmConfig.action();
+          setConfirmConfig({ ...confirmConfig, isOpen: false });
+        }}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+      />
     </div>
   );
 };
@@ -672,6 +680,7 @@ function CloudSyncBadge() {
 function UserManagementSection() {
   const { userList, updateUserRole, toggleUserBlock, deleteUser } = useAuth();
   const toast = useToast();
+  const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
   return (
     <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-6 shadow-sm animate-fadeIn">
@@ -772,10 +781,15 @@ function UserManagementSection() {
 
                   <button
                     onClick={() => {
-                      if (confirm(`${u.name} kullanıcısı sistemden tamamen silinsin mi?`)) {
-                        deleteUser(u.id);
-                        toast.info(`${u.name} kullanıcısı silindi.`);
-                      }
+                      setConfirmConfig({
+                        isOpen: true,
+                        title: 'Kullanıcıyı Sil',
+                        message: `${u.name} kullanıcısı sistemden tamamen silinsin mi?`,
+                        action: () => {
+                          deleteUser(u.id);
+                          toast.info(`${u.name} kullanıcısı silindi.`);
+                        }
+                      });
                     }}
                     className="p-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 rounded-xl border border-rose-200 dark:border-rose-800 transition-all cursor-pointer"
                     title="Kullanıcıyı Sil"
@@ -788,6 +802,17 @@ function UserManagementSection() {
           })}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        onConfirm={() => {
+          if (confirmConfig.action) confirmConfig.action();
+          setConfirmConfig({ ...confirmConfig, isOpen: false });
+        }}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+      />
     </div>
   );
 }

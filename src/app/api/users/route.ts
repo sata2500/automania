@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { requireAdmin, setSessionCookie } from '@/lib/auth-server';
 
 // Ensure table exists on first request
 async function ensureUsersTable() {
@@ -18,20 +19,21 @@ async function ensureUsersTable() {
       )
     `;
     await sql`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(1000);
-    `;
-    await sql`
       INSERT INTO users (id, name, email, role, status, provider)
       VALUES ('user-demo-101', 'Salih TANRISEVEN', 'salihtanriseven25@gmail.com', 'admin', 'active', 'google')
       ON CONFLICT (email) DO NOTHING
     `;
-  } catch (err) {
-    console.error('Error ensuring users table:', err);
-  }
+  } catch (err) {}
 }
 
 export async function GET() {
   try {
+    // SECURITY FIX: Only allow admins to list users
+    const adminSession = await requireAdmin();
+    if (!adminSession) {
+      return NextResponse.json({ success: false, users: [], message: 'Yetkisiz erişim.' }, { status: 403 });
+    }
+
     await ensureUsersTable();
     const rows = await sql`
       SELECT id, name, email, role, status, provider, avatar_url as "avatarUrl", created_at as "createdAt"
@@ -40,7 +42,6 @@ export async function GET() {
     `;
     return NextResponse.json({ success: true, users: rows });
   } catch (error: any) {
-    console.error('GET /api/users error:', error);
     return NextResponse.json({ success: false, users: [] }, { status: 500 });
   }
 }
@@ -49,14 +50,13 @@ export async function POST(request: Request) {
   try {
     await ensureUsersTable();
     const body = await request.json();
-    const { action, id, name, email, role, status, provider, callerEmail, avatarUrl } = body;
+    const { action, id, name, email, role, status, provider, avatarUrl } = body;
 
     // Secure actions (update role, block user)
     if (action === 'update_role' || action === 'toggle_status') {
-      if (!callerEmail) return NextResponse.json({ success: false, message: 'Yetkisiz erişim' }, { status: 403 });
-      
-      const caller = await sql`SELECT role FROM users WHERE email = ${callerEmail.toLowerCase()}`;
-      if (caller.length === 0 || caller[0].role !== 'admin') {
+      // SECURITY FIX: Use secure JWT session to verify admin instead of trusting callerEmail from body
+      const adminSession = await requireAdmin();
+      if (!adminSession) {
         return NextResponse.json({ success: false, message: 'Bu işlem için admin yetkisi gerekiyor.' }, { status: 403 });
       }
 
@@ -71,17 +71,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // Default action: Login Upsert
+    // Default action: Login Upsert (used primarily for Demo login and initial session sync)
     if (email) {
       const cleanEmail = email.toLowerCase().trim();
       const userId = id || 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
       const userName = name || cleanEmail.split('@')[0];
-      // Do not trust requested role from client. Only master admin gets admin by default.
       const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
       const userProvider = provider || 'google';
 
       // Check existing status
       const existing = await sql`SELECT role, status, avatar_url FROM users WHERE email = ${cleanEmail}`;
+      
+      let finalRole = userRole;
+      let finalAvatar = avatarUrl;
+      
       if (existing.length > 0) {
         if (existing[0].status === 'blocked') {
           return NextResponse.json(
@@ -89,50 +92,42 @@ export async function POST(request: Request) {
             { status: 403 }
           );
         }
+        finalRole = existing[0].role;
+        finalAvatar = avatarUrl || existing[0].avatar_url;
 
         await sql`
           UPDATE users
-          SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${avatarUrl || existing[0].avatar_url}
+          SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${finalAvatar}
           WHERE email = ${cleanEmail}
         `;
-
-        return NextResponse.json({
-          success: true,
-          user: {
-            id: userId,
-            name: userName,
-            email: cleanEmail,
-            role: existing[0].role,
-            status: existing[0].status,
-            provider: userProvider,
-            avatarUrl: avatarUrl || existing[0].avatar_url,
-          },
-        });
+      } else {
+        await sql`
+          INSERT INTO users (id, name, email, role, status, provider, avatar_url)
+          VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', ${userProvider}, ${finalAvatar || null})
+        `;
       }
 
-      // Insert new user
-      await sql`
-        INSERT INTO users (id, name, email, role, status, provider, avatar_url)
-        VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', ${userProvider}, ${avatarUrl || null})
-      `;
+      const userProfile = {
+        id: userId,
+        name: userName,
+        email: cleanEmail,
+        role: finalRole,
+        status: 'active',
+        provider: userProvider,
+        avatarUrl: finalAvatar || null,
+      };
+
+      // SECURITY FIX: Issue session cookie
+      await setSessionCookie(userProfile as any);
 
       return NextResponse.json({
         success: true,
-        user: {
-          id: userId,
-          name: userName,
-          email: cleanEmail,
-          role: userRole,
-          status: 'active',
-          provider: userProvider,
-          avatarUrl: avatarUrl || null,
-        },
+        user: userProfile,
       });
     }
 
-    return NextResponse.json({ success: false, message: 'Görünmeyen parametre.' }, { status: 400 });
+    return NextResponse.json({ success: false, message: 'Geçersiz parametreler.' }, { status: 400 });
   } catch (error: any) {
-    console.error('POST /api/users error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -142,12 +137,10 @@ export async function DELETE(request: Request) {
     await ensureUsersTable();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('id');
-    const callerEmail = searchParams.get('callerEmail');
 
-    if (!callerEmail) return NextResponse.json({ success: false, message: 'Yetkisiz erişim' }, { status: 403 });
-    
-    const caller = await sql`SELECT role FROM users WHERE email = ${callerEmail.toLowerCase()}`;
-    if (caller.length === 0 || caller[0].role !== 'admin') {
+    // SECURITY FIX: Verify real admin JWT token
+    const adminSession = await requireAdmin();
+    if (!adminSession) {
       return NextResponse.json({ success: false, message: 'Bu işlem için admin yetkisi gerekiyor.' }, { status: 403 });
     }
 
@@ -158,7 +151,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: false, message: 'ID eksik.' }, { status: 400 });
   } catch (error: any) {
-    console.error('DELETE /api/users error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
