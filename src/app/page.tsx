@@ -69,6 +69,7 @@ function MainContent() {
   const [mockups, setMockups] = useState<MockupItem[]>([]);
   const [designs, setDesigns] = useState<DesignItem[]>([]);
   const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
+  const [activeDesignFolderId, setActiveDesignFolderId] = useState<string | null>(null);
 
   // Batch Generation State (Persists in memory across tab switches)
   const [renderedMatches, setRenderedMatches] = useState<RenderedMatch[]>([]);
@@ -118,6 +119,7 @@ function MainContent() {
       setFolders(data.folders);
       setActiveFolderId(data.activeFolderId);
       setSelectedMockupId(data.selectedMockupId);
+      setActiveDesignFolderId(data.activeDesignFolderId ?? null);
       setIsInitialized(true);
     });
     return () => {
@@ -173,11 +175,11 @@ function MainContent() {
     if (!isInitialized) return;
     
     const uiSaveTimer = setTimeout(() => {
-      saveUIStateToIndexedDB(activeFolderId, selectedMockupId).catch(console.error);
+      saveUIStateToIndexedDB(activeFolderId, selectedMockupId, activeDesignFolderId).catch(console.error);
     }, 200);
     
     return () => clearTimeout(uiSaveTimer);
-  }, [activeFolderId, selectedMockupId, isInitialized]);
+  }, [activeFolderId, selectedMockupId, activeDesignFolderId, isInitialized]);
 
   // 3. Real-time cross-device sync — polls server every 5s for changes made on other devices.
   //    Only active for logged-in users (guests have no server-side identity).
@@ -489,7 +491,14 @@ function MainContent() {
         )}
 
         {activeTab === 'designs' && (
-          <DesignUploader designs={designs} setDesigns={setDesigns} />
+          <DesignUploader 
+            designs={designs} 
+            setDesigns={setDesigns}
+            folders={folders}
+            setFolders={setFolders}
+            activeDesignFolderId={activeDesignFolderId}
+            setActiveDesignFolderId={setActiveDesignFolderId}
+          />
         )}
 
         {activeTab === 'generator' && (
@@ -499,6 +508,7 @@ function MainContent() {
             folders={folders}
             activeFolderId={activeFolderId}
             setActiveFolderId={setActiveFolderId}
+            activeDesignFolderId={activeDesignFolderId}
             renderedMatches={renderedMatches}
             setRenderedMatches={setRenderedMatches}
             hasGenerated={hasGenerated}

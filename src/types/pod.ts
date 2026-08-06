@@ -21,6 +21,7 @@ export interface MockupFolder {
   id: string;
   name: string;
   isCustom?: boolean;
+  type?: 'mockup' | 'design'; // if undefined, assume 'mockup'
 }
 
 export interface MockupItem {
@@ -56,6 +57,7 @@ export interface DesignItem {
   isSelected?: boolean;
   width: number;
   height: number;
+  folderId?: string; // Optional for backward compatibility and "Tüm Tasarımlar"
 }
 
 export interface MockupPreset {

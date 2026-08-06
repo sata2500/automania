@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { DesignItem, TargetApparel } from '@/types/pod';
+import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { useToast } from '@/components/common/ToastContext';
 import {
@@ -17,6 +17,11 @@ import {
   Square,
   AlertCircle,
   CheckCheck,
+  Folder,
+  FolderOpen,
+  Plus,
+  FolderTree,
+  MoreVertical,
 } from 'lucide-react';
 
 import { optimizeDesignImage, uploadMediaToServer } from '@/lib/image-optimizer';
@@ -25,6 +30,10 @@ import { deleteBlobs } from '@/lib/storage-service';
 interface DesignUploaderProps {
   designs: DesignItem[];
   setDesigns: React.Dispatch<React.SetStateAction<DesignItem[]>>;
+  folders: MockupFolder[];
+  setFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>>;
+  activeDesignFolderId: string | null;
+  setActiveDesignFolderId: (id: string | null) => void;
 }
 
 const SLOT_LABELS: Record<TargetApparel, string> = {
@@ -33,11 +42,49 @@ const SLOT_LABELS: Record<TargetApparel, string> = {
   both: 'Tüm Giysi',
 };
 
-export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesigns }) => {
+export const DesignUploader: React.FC<DesignUploaderProps> = ({ 
+  designs, 
+  setDesigns,
+  folders,
+  setFolders,
+  activeDesignFolderId,
+  setActiveDesignFolderId
+}) => {
   const toast = useToast();
   const [dragActive, setDragActive] = useState(false);
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
+
+  const designFolders = folders.filter(f => f.type === 'design');
+  
+  const handleAddFolder = () => {
+    const name = prompt('Yeni tasarım klasörünün adını girin:');
+    if (!name || name.trim() === '') return;
+    const newFolder: MockupFolder = {
+      id: 'dfol-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+      name: name.trim(),
+      isCustom: true,
+      type: 'design',
+    };
+    setFolders((prev) => [...prev, newFolder]);
+    setActiveDesignFolderId(newFolder.id);
+    toast.success(`"${name}" tasarım klasörü oluşturuldu.`);
+  };
+
+  const handleDeleteFolder = (id: string, name: string) => {
+    if (!confirm(`"${name}" klasörünü silmek istediğinize emin misiniz? (İçindeki tasarımlar 'Tüm Tasarımlar'a taşınacaktır)`)) return;
+    setFolders((prev) => prev.filter((f) => f.id !== id));
+    setDesigns((prev) => prev.map(d => d.folderId === id ? { ...d, folderId: undefined } : d));
+    if (activeDesignFolderId === id) {
+      setActiveDesignFolderId(null);
+    }
+    toast.info(`"${name}" klasörü silindi.`);
+  };
+
+  const handleMoveToFolder = (designId: string, folderId: string | null) => {
+    setDesigns((prev) => prev.map(d => d.id === designId ? { ...d, folderId: folderId || undefined } : d));
+    toast.success('Tasarım taşındı.');
+  };
 
   const activeForSlot = (slot: TargetApparel, list: DesignItem[]): string | null => {
     const found = list.find((d) => d.isSelected && d.targetApparel === slot);
@@ -76,7 +123,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesi
             width: optimized.width,
             height: optimized.height,
           };
-          return [...prev, newDesign];
+          return [newDesign, ...prev];
         });
         uploadedCount++;
         const percent = Math.round(((i + 1) / fileArray.length) * 100);
@@ -227,6 +274,75 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesi
         </div>
       </div>
 
+      {/* Folder Selection Bar */}
+      <div className="bg-slate-50 dark:bg-slate-900/90 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            Tasarım Klasörleri
+          </label>
+          <button
+            onClick={handleAddFolder}
+            className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
+          >
+            <Plus className="w-3 h-3" /> Yeni Klasör
+          </button>
+        </div>
+        <div className="grid grid-rows-1 grid-flow-col auto-cols-max gap-2 overflow-x-auto custom-scrollbar pb-2.5">
+          <button
+            onClick={() => setActiveDesignFolderId(null)}
+            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[210px] min-w-0 ${
+              activeDesignFolderId === null
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
+                : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <FolderTree className={`w-4 h-4 shrink-0 ${activeDesignFolderId === null ? 'text-amber-300' : 'text-indigo-500 dark:text-indigo-400'}`} />
+            <span className="truncate">Tüm Tasarımlar</span>
+            <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
+              activeDesignFolderId === null ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+            }`}>
+              {designs.length}
+            </span>
+          </button>
+
+          {designFolders.map((folder) => {
+            const isActive = activeDesignFolderId === folder.id;
+            const folderDesignsCount = designs.filter((d) => d.folderId === folder.id).length;
+            return (
+              <div key={folder.id} className="relative group/folder">
+                <button
+                  onClick={() => setActiveDesignFolderId(folder.id)}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[210px] min-w-0 pr-8 ${
+                    isActive
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
+                      : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                  title={`${folder.name} (${folderDesignsCount} Tasarım)`}
+                >
+                  {isActive ? <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" /> : <Folder className="w-4 h-4 text-slate-400 shrink-0" />}
+                  <span className="truncate">{folder.name}</span>
+                  <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
+                    isActive ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                  }`}>
+                    {folderDesignsCount}
+                  </span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFolder(folder.id, folder.name);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover/folder:opacity-100 transition-opacity"
+                  title="Klasörü Sil"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Design List */}
       <div className="bg-white dark:bg-slate-800/60 p-6 rounded-2xl border border-slate-200 dark:border-slate-700/60">
         <div className="flex items-start justify-between mb-4 border-b border-slate-200 dark:border-slate-700/80 pb-3 gap-3 flex-wrap">
@@ -271,14 +387,16 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesi
           </div>
         </div>
 
-        {designs.length === 0 ? (
+        {designs.filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true).length === 0 ? (
           <div className="text-center py-12 text-slate-400 dark:text-slate-500">
             <Palette className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">Henüz tasarım yüklenmedi.</p>
+            <p className="text-sm font-medium">Bu klasörde henüz tasarım yok.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {designs.map((design) => {
+            {designs
+              .filter(d => activeDesignFolderId ? d.folderId === activeDesignFolderId : true)
+              .map((design) => {
               const isSelected = !!design.isSelected;
               return (
                 <div
@@ -301,6 +419,19 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({ designs, setDesi
                     </span>
 
                     <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                      {designFolders.length > 0 && (
+                        <select
+                          value={design.folderId || ''}
+                          onChange={(e) => handleMoveToFolder(design.id, e.target.value || null)}
+                          className="bg-transparent text-[10px] text-slate-400 hover:text-indigo-500 cursor-pointer border-none outline-none max-w-[80px] truncate"
+                          title="Klasöre Taşı"
+                        >
+                          <option value="">Tüm Tasarımlar</option>
+                          {designFolders.map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                          ))}
+                        </select>
+                      )}
                       <button
                         onClick={() => setCropTargetDesign(design)}
                         className="p-1 text-slate-400 hover:text-amber-500 dark:hover:text-amber-300 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

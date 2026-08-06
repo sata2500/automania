@@ -100,13 +100,20 @@ export async function renderMockupWithDesign(
 export function generateMatchingPairs(
   mockups: MockupItem[],
   designs: DesignItem[],
-  activeFolderId: string | null = null
+  activeFolderId: string | null = null,
+  activeDesignFolderId: string | null = null
 ): { mockup: MockupItem; design: DesignItem }[] {
   const filteredMockups = activeFolderId
     ? mockups.filter((m) => m.folderId === activeFolderId)
     : mockups;
 
-  const activeDesigns = designs.filter((d) => d.isSelected);
+  // Sadece seçili olanları al
+  let activeDesigns = designs.filter((d) => d.isSelected);
+  
+  // Eğer özel bir tasarım klasörü seçildiyse, SADECE o klasördeki seçili tasarımları al
+  if (activeDesignFolderId) {
+    activeDesigns = activeDesigns.filter((d) => d.folderId === activeDesignFolderId);
+  }
 
   const pairs: { mockup: MockupItem; design: DesignItem }[] = [];
 

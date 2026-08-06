@@ -26,6 +26,7 @@ function getStorageKeys() {
     FOLDERS: `${prefix}automania_pod_folders_v1`,
     ACTIVE_FOLDER: `${prefix}automania_pod_active_folder_v1`,
     SELECTED_MOCKUP: `${prefix}automania_pod_selected_mockup_v1`,
+    ACTIVE_DESIGN_FOLDER: `${prefix}automania_pod_active_design_folder_v1`,
     HAS_INITIALIZED: `${prefix}automania_pod_has_init_v1`,
   };
 }
@@ -36,6 +37,7 @@ export interface AppDataPayload {
   folders: MockupFolder[];
   activeFolderId: string | null;
   selectedMockupId: string | null;
+  activeDesignFolderId?: string | null;
   lastUpdated?: number;
 }
 
@@ -49,7 +51,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   try {
     // 1. Try loading from IndexedDB (Fastest & handles binary images/videos)
-    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup] =
+    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -57,6 +59,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<MockupFolder[]>(keys.FOLDERS),
         get<string | null>(keys.ACTIVE_FOLDER),
         get<string | null>(keys.SELECTED_MOCKUP),
+        get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
       ]);
 
     if (savedMockups && Array.isArray(savedMockups) && savedMockups.length > 0) {
@@ -66,6 +69,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         folders: savedFolders || [],
         activeFolderId: savedActiveFolder ?? null,
         selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
+        activeDesignFolderId: savedActiveDesignFolder ?? null,
       };
     }
 
@@ -82,6 +86,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
           folders: serverData.folders || [],
           activeFolderId: serverData.activeFolderId ?? null,
           selectedMockupId: serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
+          activeDesignFolderId: null, // Since this isn't fetched from server
         };
       }
     }
@@ -96,6 +101,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
     folders: [],
     activeFolderId: null,
     selectedMockupId: null,
+    activeDesignFolderId: null,
   };
 }
 
@@ -246,11 +252,16 @@ export async function updateLocalCache(payload: AppDataPayload): Promise<void> {
  * Saves ONLY the UI state (which folder is open, which mockup is selected) to IndexedDB.
  * This prevents unnecessary server syncs when the user just clicks around.
  */
-export async function saveUIStateToIndexedDB(activeFolderId: string | null, selectedMockupId: string | null): Promise<void> {
+export async function saveUIStateToIndexedDB(
+  activeFolderId: string | null,
+  selectedMockupId: string | null,
+  activeDesignFolderId: string | null
+): Promise<void> {
   const keys = getStorageKeys();
   await Promise.all([
     set(keys.ACTIVE_FOLDER, activeFolderId),
     set(keys.SELECTED_MOCKUP, selectedMockupId),
+    set(keys.ACTIVE_DESIGN_FOLDER, activeDesignFolderId),
   ]);
 }
 
