@@ -68,8 +68,7 @@ Return ONLY a valid JSON object in the following format, with no markdown format
               { type: 'image_url', image_url: { url: src } }
             ]
           }
-        ],
-        response_format: { type: "json_object" } // Tell capable models to return JSON
+        ]
       })
     });
 
