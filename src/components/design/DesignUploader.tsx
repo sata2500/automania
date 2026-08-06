@@ -149,6 +149,28 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     );
   };
 
+  const handleToggleProductionActive = (id: string) => {
+    setDesigns((prev) => {
+      const design = prev.find((d) => d.id === id);
+      if (!design) return prev;
+
+      if (design.isSelected) {
+        return prev.map((d) => (d.id === id ? { ...d, isSelected: false } : d));
+      }
+
+      const slotTaken = prev.some(
+        (d) => d.id !== id && d.isSelected && d.targetApparel === design.targetApparel
+      );
+
+      if (slotTaken) {
+        warnSlot(design.targetApparel);
+        return prev;
+      }
+
+      return prev.map((d) => (d.id === id ? { ...d, isSelected: true } : d));
+    });
+  };
+
   const handleSetProductionActive = (id: string, target: TargetApparel) => {
     setDesigns((prev) => {
       const design = prev.find((d) => d.id === id);
@@ -471,12 +493,31 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${
-                        isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 group-hover:border-indigo-400'
-                      }`}>
+                    <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+                      {/* Checkbox for Management Selection */}
+                      <button
+                        onClick={() => toggleManagementSelection(design.id)}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors cursor-pointer ${
+                          isChecked ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 hover:border-indigo-400'
+                        }`}
+                        title="Yönetim için seç (Silme/Taşıma)"
+                      >
                         {isChecked && <CheckCheck className="w-3.5 h-3.5" />}
-                      </div>
+                      </button>
+
+                      {/* Production Active / Passive Button */}
+                      <button
+                        onClick={() => handleToggleProductionActive(design.id)}
+                        className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border flex items-center gap-1 transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm shadow-emerald-600/30'
+                            : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700'
+                        }`}
+                        title="Toplu üretim için Aktif/Pasif yap"
+                      >
+                        {isSelected ? <CheckCheck className="w-3 h-3" /> : null}
+                        {isSelected ? 'Aktif' : 'Pasif'}
+                      </button>
                     </div>
 
                     <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
