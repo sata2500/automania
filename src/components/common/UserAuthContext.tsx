@@ -88,7 +88,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loginWithDemo = (email = 'salihtanriseven25@gmail.com', name = 'Salih TANRISEVEN (Admin)', role: 'admin' | 'user' = 'admin') => {
     const userProfile: UserProfile = {
-      id: 'user-admin-101',
+      id: 'user-demo-101',
       name,
       email,
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
