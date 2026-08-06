@@ -11,8 +11,15 @@ export async function GET(request: Request) {
         folders JSONB DEFAULT '[]'::jsonb,
         active_folder_id VARCHAR(255),
         selected_mockup_id VARCHAR(255),
+        openrouter_key VARCHAR(500),
+        openrouter_model VARCHAR(255),
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `;
+
+    await sql`
+      ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_key VARCHAR(500);
+      ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS openrouter_model VARCHAR(255);
     `;
     const { searchParams } = new URL(request.url);
     if (searchParams.get('action') === 'reset') {

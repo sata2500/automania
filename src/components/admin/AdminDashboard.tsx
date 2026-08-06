@@ -80,13 +80,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, []);
 
-  const handleSaveApiSettings = () => {
+  const handleSaveApiSettings = async () => {
     try {
-      localStorage.setItem(OPENROUTER_KEY_STORAGE, apiKey.trim());
+      const trimmedKey = apiKey.trim();
+      localStorage.setItem(OPENROUTER_KEY_STORAGE, trimmedKey);
       localStorage.setItem(OPENROUTER_MODEL_STORAGE, selectedModel);
-      toast.success('OpenRouter API ayarları başarıyla kaydedildi!');
+
+      // Save to PostgreSQL DB so key syncs across mobile/desktop devices!
+      await saveAppData({
+        mockups,
+        designs,
+        folders,
+        activeFolderId: null,
+        selectedMockupId: null,
+        openRouterKey: trimmedKey,
+        openRouterModel: selectedModel,
+      });
+
+      toast.success('OpenRouter API ayarları kaydedildi ve tüm cihazlarınıza eşitlendi! 📱💻');
     } catch (e) {
-      toast.error('Ayarlar kaydedilirken hata oluştu.');
+      toast.error('Ayarlar kaydedilirken bir hata oluştu.');
     }
   };
 
@@ -186,38 +199,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Top Banner & Health Bar */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-indigo-500/30 shadow-2xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-800 dark:from-slate-900 dark:via-indigo-950 dark:to-slate-900 text-white p-6 sm:p-8 rounded-3xl border border-indigo-400/30 dark:border-indigo-500/30 shadow-xl shadow-indigo-600/15 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-white/10 dark:bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center space-x-4">
-            <div className="p-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg ring-4 ring-indigo-500/20">
+            <div className="p-3.5 bg-white/20 dark:bg-gradient-to-br dark:from-indigo-500 dark:to-purple-600 backdrop-blur-md rounded-2xl shadow-lg ring-4 ring-white/20 dark:ring-indigo-500/20">
               <ShieldCheck className="w-8 h-8 text-amber-300" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">Yönetici Kumanda Merkezi</h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/30 border border-indigo-400/40 text-amber-300 text-[10px] font-extrabold rounded-full uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 bg-white/20 dark:bg-indigo-500/30 border border-white/30 dark:border-indigo-400/40 text-amber-300 text-[10px] font-extrabold rounded-full uppercase tracking-wider backdrop-blur-md">
                   Admin Privileged
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              <p className="text-xs text-indigo-100 dark:text-slate-300 mt-1 max-w-xl">
                 Uygulamanızın canlı istatistiklerini izleyin, OpenRouter Yapay Zeka API ayarlarını yönetin ve veritabanı durumunu denetleyin.
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-2xl text-xs font-semibold backdrop-blur-md">
-              <Server className="w-4 h-4 text-emerald-400" />
+            <div className="flex items-center space-x-2 bg-white/15 dark:bg-slate-800/80 border border-white/20 dark:border-slate-700/80 px-3.5 py-2 rounded-2xl text-xs font-semibold backdrop-blur-md">
+              <Server className="w-4 h-4 text-emerald-300 dark:text-emerald-400" />
               <span>PostgreSQL:</span>
-              <span className="text-emerald-400 font-extrabold">Aktif</span>
+              <span className="text-emerald-300 dark:text-emerald-400 font-extrabold">Aktif</span>
             </div>
 
-            <div className="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/80 px-3.5 py-2 rounded-2xl text-xs font-semibold backdrop-blur-md">
-              <Zap className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center space-x-2 bg-white/15 dark:bg-slate-800/80 border border-white/20 dark:border-slate-700/80 px-3.5 py-2 rounded-2xl text-xs font-semibold backdrop-blur-md">
+              <Zap className="w-4 h-4 text-amber-300 dark:text-amber-400" />
               <span>OpenRouter:</span>
-              <span className={`font-extrabold ${apiKey ? 'text-amber-300' : 'text-slate-400'}`}>
+              <span className={`font-extrabold ${apiKey ? 'text-amber-300' : 'text-indigo-200 dark:text-slate-400'}`}>
                 {apiKey ? 'Tanımlı' : 'Yapılandırılmadı'}
               </span>
             </div>

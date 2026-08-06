@@ -539,6 +539,7 @@ function MainContent() {
         onImportBackup={handleImportBackup}
         onLoadSampleData={handleLoadSampleData}
         onClearAllData={handleClearAllData}
+        onNavigateAdmin={() => setActiveTab('admin')}
       />
     </div>
   );

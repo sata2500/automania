@@ -38,6 +38,8 @@ export interface AppDataPayload {
   activeFolderId: string | null;
   selectedMockupId: string | null;
   activeDesignFolderId?: string | null;
+  openRouterKey?: string;
+  openRouterModel?: string;
   lastUpdated?: number;
 }
 
@@ -80,6 +82,12 @@ export async function loadAppData(): Promise<AppDataPayload> {
       const serverData = await res.json();
       if (serverData && (serverData.mockups || serverData.designs || serverData.folders)) {
         await saveToIndexedDB(serverData);
+        if (serverData.openRouterKey) {
+          try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
+        }
+        if (serverData.openRouterModel) {
+          try { localStorage.setItem('automania_openrouter_model', serverData.openRouterModel); } catch {}
+        }
         return {
           mockups: serverData.mockups || [],
           designs: serverData.designs || [],
@@ -87,6 +95,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
           activeFolderId: serverData.activeFolderId ?? null,
           selectedMockupId: serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
           activeDesignFolderId: null, // Since this isn't fetched from server
+          openRouterKey: serverData.openRouterKey,
+          openRouterModel: serverData.openRouterModel,
         };
       }
     }

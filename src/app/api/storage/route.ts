@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     }
 
     const rows = await sql`
-      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id
+      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model
       FROM user_workspaces
       WHERE user_id = ${userId}
     `;
@@ -31,6 +31,8 @@ export async function GET(request: Request) {
       folders: data.folders || [],
       activeFolderId: data.active_folder_id,
       selectedMockupId: data.selected_mockup_id,
+      openRouterKey: data.openrouter_key || null,
+      openRouterModel: data.openrouter_model || null,
     });
   } catch (error: any) {
     console.error('Storage GET Error:', error);
@@ -49,6 +51,8 @@ export async function POST(request: Request) {
     const foldersJson = JSON.stringify(body.folders || []);
     const activeFolderId = body.activeFolderId || null;
     const selectedMockupId = body.selectedMockupId || null;
+    const openRouterKey = body.openRouterKey || null;
+    const openRouterModel = body.openRouterModel || null;
     const lastKnownServerTimestamp = body.lastKnownServerTimestamp || null;
 
     // 1. Optimistic Concurrency Control
@@ -74,14 +78,16 @@ export async function POST(request: Request) {
 
     // 2. Perform Save
     await sql`
-      INSERT INTO user_workspaces (user_id, mockups, designs, folders, active_folder_id, selected_mockup_id)
+      INSERT INTO user_workspaces (user_id, mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model)
       VALUES (
         ${userId}, 
         ${mockupsJson}::jsonb, 
         ${designsJson}::jsonb, 
         ${foldersJson}::jsonb, 
         ${activeFolderId}, 
-        ${selectedMockupId}
+        ${selectedMockupId},
+        ${openRouterKey},
+        ${openRouterModel}
       )
       ON CONFLICT (user_id) DO UPDATE SET
         mockups = EXCLUDED.mockups,
@@ -89,6 +95,8 @@ export async function POST(request: Request) {
         folders = EXCLUDED.folders,
         active_folder_id = EXCLUDED.active_folder_id,
         selected_mockup_id = EXCLUDED.selected_mockup_id,
+        openrouter_key = COALESCE(EXCLUDED.openrouter_key, user_workspaces.openrouter_key),
+        openrouter_model = COALESCE(EXCLUDED.openrouter_model, user_workspaces.openrouter_model),
         updated_at = CURRENT_TIMESTAMP
     `;
 

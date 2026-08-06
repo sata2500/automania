@@ -23,6 +23,7 @@ interface AuthModalProps {
   onImportBackup?: (file: File) => void;
   onLoadSampleData?: () => void;
   onClearAllData?: () => void;
+  onNavigateAdmin?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -32,8 +33,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onImportBackup,
   onLoadSampleData,
   onClearAllData,
+  onNavigateAdmin,
 }) => {
-  const { user, loginWithGoogle, logout, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
+  const { user, isAdmin, loginWithGoogle, logout, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isAuthModalOpen) return null;
@@ -84,6 +86,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </h3>
               <p className="text-xs text-indigo-500 dark:text-indigo-300 font-mono mt-0.5">{user.email}</p>
             </div>
+
+            {/* Admin Direct Navigation Button */}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setIsAuthModalOpen(false);
+                  if (onNavigateAdmin) onNavigateAdmin();
+                }}
+                className="w-full py-3 px-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-amber-300 font-extrabold text-xs rounded-2xl border border-indigo-500/50 shadow-lg flex items-center justify-center gap-2 hover:from-slate-800 hover:to-indigo-900 transition-all cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-300" />
+                <span>Yönetici Kumanda Merkezine Git (Admin)</span>
+              </button>
+            )}
 
             {/* Database Status Badge */}
             <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-700/80 flex items-center justify-between">
