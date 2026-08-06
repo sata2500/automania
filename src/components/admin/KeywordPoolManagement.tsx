@@ -128,26 +128,40 @@ export default function KeywordPoolManagement() {
     }
   };
 
-  const handleExportCSV = () => {
-    if (keywords.length === 0) return;
+  const handleExportCSV = async () => {
+    if (total === 0) return;
     
-    const headers = ['Keyword', 'Usage Count', 'Etsy Score', 'Last Evaluated', 'Created At'];
-    const rows = keywords.map(k => [
-      `"${k.keyword.replace(/"/g, '""')}"`,
-      k.usage_count,
-      k.etsy_score || 0,
-      k.last_evaluated_at ? new Date(k.last_evaluated_at).toISOString() : '',
-      new Date(k.created_at).toISOString()
-    ]);
-    
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `keyword_pool_${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      // Fetch all keywords by setting a very high limit
+      const res = await fetch('/api/admin/keywords?limit=100000');
+      const data = await res.json();
+      
+      if (!data.success) throw new Error();
+      
+      const allKeywords = data.keywords;
+      
+      const headers = ['Keyword', 'Usage Count', 'Etsy Score', 'Last Evaluated', 'Created At'];
+      const rows = allKeywords.map((k: Keyword) => [
+        `"${k.keyword.replace(/"/g, '""')}"`,
+        k.usage_count,
+        k.etsy_score || 0,
+        k.last_evaluated_at ? new Date(k.last_evaluated_at).toISOString() : '',
+        new Date(k.created_at).toISOString()
+      ]);
+      
+      const csvContent = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `keyword_pool_tum_kelimeler_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      toast.success('Tüm kelimeler başarıyla indirildi!');
+    } catch (e) {
+      toast.error('CSV dışa aktarılırken bir hata oluştu.');
+    }
   };
 
   const getScoreColor = (score: number | null) => {
@@ -222,8 +236,8 @@ export default function KeywordPoolManagement() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="p-4 w-12 text-center cursor-pointer" onClick={handleSelectAll}>
