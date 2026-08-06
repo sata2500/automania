@@ -237,56 +237,56 @@ export default function KeywordPoolManagement() {
         </div>
 
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+          <table className="w-full text-left text-xs sm:text-sm text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="p-4 w-12 text-center cursor-pointer" onClick={handleSelectAll}>
-                  {selectedIds.size > 0 && selectedIds.size === keywords.length ? (
-                    <CheckSquare className="w-4 h-4 text-blue-500 mx-auto" />
-                  ) : (
-                    <Square className="w-4 h-4 mx-auto" />
-                  )}
-                </th>
-                <th className="p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('keyword')}>Kelime</th>
-                <th className="p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('usage_count')}>Kullanım</th>
-                <th className="p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('etsy_score')}>Etsy Skoru</th>
-                <th className="p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('last_evaluated_at')}>Son Değerlendirme</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">Yükleniyor...</td>
-                </tr>
-              ) : keywords.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">Kelime bulunamadı.</td>
-                </tr>
-              ) : (
-                keywords.map((kw) => (
-                  <tr key={kw.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="p-4 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
-                      {selectedIds.has(kw.id) ? (
-                        <CheckSquare className="w-4 h-4 text-blue-500 mx-auto" />
-                      ) : (
-                        <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
-                      )}
-                    </td>
-                    <td className="p-4 font-medium text-slate-800 dark:text-slate-200">{kw.keyword}</td>
-                    <td className="p-4">{kw.usage_count}</td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getScoreColor(kw.etsy_score)}`}>
-                        {kw.etsy_score !== null ? kw.etsy_score : '-'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs text-slate-500">
-                      {kw.last_evaluated_at ? new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR') : 'Hiç'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+               <tr>
+                 <th className="px-2 py-3 sm:p-4 w-8 sm:w-12 text-center cursor-pointer" onClick={handleSelectAll}>
+                   {selectedIds.size > 0 && selectedIds.size === keywords.length ? (
+                     <CheckSquare className="w-4 h-4 text-blue-500 mx-auto" />
+                   ) : (
+                     <Square className="w-4 h-4 mx-auto" />
+                   )}
+                 </th>
+                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700 break-words" onClick={() => handleSort('keyword')}>Kelime</th>
+                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('usage_count')}>Kull.</th>
+                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('etsy_score')}>Skor</th>
+                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('last_evaluated_at')}>Tarih</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+               {isLoading ? (
+                 <tr>
+                   <td colSpan={5} className="p-4 sm:p-8 text-center text-slate-500">Yükleniyor...</td>
+                 </tr>
+               ) : keywords.length === 0 ? (
+                 <tr>
+                   <td colSpan={5} className="p-4 sm:p-8 text-center text-slate-500">Kelime bulunamadı.</td>
+                 </tr>
+               ) : (
+                 keywords.map((kw) => (
+                   <tr key={kw.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                     <td className="px-2 py-3 sm:p-4 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
+                       {selectedIds.has(kw.id) ? (
+                         <CheckSquare className="w-4 h-4 text-blue-500 mx-auto" />
+                       ) : (
+                         <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
+                       )}
+                     </td>
+                     <td className="px-2 py-3 sm:p-4 font-medium text-slate-800 dark:text-slate-200 break-words">{kw.keyword}</td>
+                     <td className="px-2 py-3 sm:p-4 text-center sm:text-left">{kw.usage_count}</td>
+                     <td className="px-2 py-3 sm:p-4">
+                       <span className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold border ${getScoreColor(kw.etsy_score)}`}>
+                         {kw.etsy_score !== null ? kw.etsy_score : '-'}
+                       </span>
+                     </td>
+                     <td className="px-2 py-3 sm:p-4 text-[10px] sm:text-xs text-slate-500 whitespace-nowrap">
+                       {kw.last_evaluated_at ? new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR') : 'Hiç'}
+                     </td>
+                   </tr>
+                 ))
+               )}
+             </tbody>
+           </table>
         </div>
 
         {/* Pagination */}
