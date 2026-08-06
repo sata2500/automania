@@ -31,7 +31,6 @@ const TABS = [
   { key: 'designs', label: '2. Tasarımlar', shortLabel: 'Tasarımlar', icon: Palette },
   { key: 'generator', label: '3. Toplu Üretim', shortLabel: 'Toplu Üretim', icon: Sparkles },
   { key: 'seo', label: '4. Etsy SEO', shortLabel: 'SEO', icon: Tag },
-  { key: 'admin', label: '5. Admin Paneli', shortLabel: 'Admin', icon: ShieldCheck, requiresAdmin: true },
 ] as const;
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { theme, setTheme } = useTheme();
   const { user, isAdmin, setIsAuthModalOpen } = useAuth();
 
-  const visibleTabs = TABS.filter(tab => !('requiresAdmin' in tab && tab.requiresAdmin) || isAdmin);
+  const visibleTabs = TABS;
 
   const getBadge = (key: string) => {
     if (key === 'mockups') return mockupCount;
@@ -96,8 +95,6 @@ export const Header: React.FC<HeaderProps> = ({
                       isActive
                         ? key === 'generator'
                           ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                          : key === 'admin'
-                          ? 'bg-gradient-to-r from-slate-900 to-indigo-900 border border-indigo-500 text-amber-300 shadow-md'
                           : 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
                     }`}
@@ -108,8 +105,6 @@ export const Header: React.FC<HeaderProps> = ({
                           ? 'text-amber-300 animate-pulse'
                           : key === 'seo'
                           ? 'text-emerald-400'
-                          : key === 'admin'
-                          ? 'text-amber-300'
                           : ''
                       }`}
                     />

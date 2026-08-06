@@ -94,9 +94,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   setIsAuthModalOpen(false);
                   if (onNavigateAdmin) onNavigateAdmin();
                 }}
-                className="w-full py-3 px-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-amber-300 font-extrabold text-xs rounded-2xl border border-indigo-500/50 shadow-lg flex items-center justify-center gap-2 hover:from-slate-800 hover:to-indigo-900 transition-all cursor-pointer"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-xs rounded-2xl shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2.5 border border-indigo-400/30 transition-all cursor-pointer group active:scale-98"
               >
-                <ShieldCheck className="w-4 h-4 text-amber-300" />
+                <ShieldCheck className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
                 <span>Yönetici Kumanda Merkezine Git (Admin)</span>
               </button>
             )}
