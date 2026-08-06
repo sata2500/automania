@@ -180,7 +180,10 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
 /**
  * Saves current application state to IndexedDB and syncs asynchronously with Server API.
  */
-export async function saveAppData(payload: AppDataPayload): Promise<void> {
+export async function saveAppData(
+  payload: AppDataPayload,
+  lastKnownServerTimestamp?: number
+): Promise<{ success: boolean; conflict?: boolean }> {
   const userId = getCurrentUserId();
   try {
     // Save to IndexedDB (Client side instant persistence)
@@ -192,21 +195,34 @@ export async function saveAppData(payload: AppDataPayload): Promise<void> {
     const payloadString = JSON.stringify({
       ...payload,
       lastUpdated: Date.now(),
+      lastKnownServerTimestamp,
     });
 
     // Vercel Serverless Limit is 4.5MB. Prevent sync if JSON is too heavy (e.g., contains raw base64 images from old caches)
     if (payloadString.length > 3.8 * 1024 * 1024) {
       console.warn('Sync aborted: Payload exceeds 3.8MB Vercel limit. Please delete large local designs or clear cache.');
-      return;
+      return { success: false };
     }
 
-    fetch(`/api/storage${query}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payloadString,
-    }).catch((err) => console.warn('Server sync background warning:', err));
+    try {
+      const res = await fetch(`/api/storage${query}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payloadString,
+      });
+      
+      if (res.status === 409) {
+        return { success: false, conflict: true };
+      }
+      
+      return { success: res.ok };
+    } catch (err) {
+      console.warn('Server sync background warning:', err);
+      return { success: false };
+    }
   } catch (err) {
     console.error('Error saving app data:', err);
+    return { success: false };
   }
 }
 

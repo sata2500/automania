@@ -49,7 +49,30 @@ export async function POST(request: Request) {
     const foldersJson = JSON.stringify(body.folders || []);
     const activeFolderId = body.activeFolderId || null;
     const selectedMockupId = body.selectedMockupId || null;
+    const lastKnownServerTimestamp = body.lastKnownServerTimestamp || null;
 
+    // 1. Optimistic Concurrency Control
+    if (lastKnownServerTimestamp) {
+      const checkRows = await sql`
+        SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS server_time
+        FROM user_workspaces
+        WHERE user_id = ${userId}
+      `;
+      if (checkRows.length > 0 && checkRows[0].server_time) {
+        const serverTime = parseFloat(checkRows[0].server_time);
+        // If server data is newer than what client knew when it tried to save (with a 2s clock drift buffer)
+        if (serverTime > lastKnownServerTimestamp + 2000) {
+          return NextResponse.json({ 
+            success: false, 
+            error: 'Conflict: Server has newer data.', 
+            conflict: true, 
+            serverTime 
+          }, { status: 409 });
+        }
+      }
+    }
+
+    // 2. Perform Save
     await sql`
       INSERT INTO user_workspaces (user_id, mockups, designs, folders, active_folder_id, selected_mockup_id)
       VALUES (

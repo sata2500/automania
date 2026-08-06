@@ -89,6 +89,7 @@ function MainContent() {
   const lastSyncTimestampRef = useRef<number>(0);
   const syncedFromServerRef = useRef<boolean>(false);
   const isSyncFetchingRef = useRef<boolean>(false);
+  const isFirstRenderAfterInit = useRef<boolean>(true);
 
   // 1. Initial Load from Persistent Storage (IndexedDB + API) and check dismissal flags
   useEffect(() => {
@@ -127,6 +128,14 @@ function MainContent() {
   useEffect(() => {
     if (!isInitialized) return;
 
+    // Skip the very first auto-save trigger that happens when IndexedDB is loaded.
+    // This prevents a newly opened app from immediately pushing its initial state (often empty on fresh install)
+    // to the server and overwriting real data.
+    if (isFirstRenderAfterInit.current) {
+      isFirstRenderAfterInit.current = false;
+      return;
+    }
+
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -142,15 +151,21 @@ function MainContent() {
 
     setIsSaving(true);
     saveTimeoutRef.current = setTimeout(async () => {
-      await saveAppData({
+      const result = await saveAppData({
         mockups,
         designs,
         folders,
         activeFolderId,
         selectedMockupId,
-      });
-      // Mark our own save time so we don't re-fetch our own changes during next poll
-      lastSyncTimestampRef.current = Date.now();
+      }, lastSyncTimestampRef.current);
+
+      if (result.conflict) {
+        console.warn('Sync conflict detected! Server has newer data. Forcing sync on next poll...');
+        lastSyncTimestampRef.current = 0; // Force the next 5s poll to fetch the server data
+      } else if (result.success) {
+        // Mark our own save time so we don't re-fetch our own changes during next poll
+        lastSyncTimestampRef.current = Date.now();
+      }
       setIsSaving(false);
     }, 400);
 
