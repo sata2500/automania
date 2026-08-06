@@ -80,6 +80,16 @@ export async function POST(request: Request) {
       const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
       const userProvider = provider || 'google';
 
+      // Check existing status
+      const existing = await sql`SELECT role, status, avatar_url FROM users WHERE email = ${cleanEmail}`;
+      if (existing.length > 0) {
+        if (existing[0].status === 'blocked') {
+          return NextResponse.json(
+            { success: false, blocked: true, message: 'Bu hesap yönetici tarafından engellenmiştir.' },
+            { status: 403 }
+          );
+        }
+
         await sql`
           UPDATE users
           SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${avatarUrl || existing[0].avatar_url}
