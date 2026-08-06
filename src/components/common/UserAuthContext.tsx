@@ -18,38 +18,9 @@ export interface ManagedUser {
   role: 'admin' | 'user';
   status: 'active' | 'blocked';
   provider: 'google' | 'demo';
+  avatarUrl?: string;
   createdAt: string;
 }
-
-const DEFAULT_USERS: ManagedUser[] = [
-  {
-    id: 'user-demo-101',
-    name: 'Salih TANRISEVEN',
-    email: 'salihtanriseven25@gmail.com',
-    role: 'admin',
-    status: 'active',
-    provider: 'google',
-    createdAt: '2026-01-01',
-  },
-  {
-    id: 'user-demo-102',
-    name: 'Demo Tasarımcı',
-    email: 'kullanici@gmail.com',
-    role: 'user',
-    status: 'active',
-    provider: 'demo',
-    createdAt: '2026-02-15',
-  },
-  {
-    id: 'user-demo-103',
-    name: 'Ahmet Yılmaz',
-    email: 'ahmet@automania.com',
-    role: 'user',
-    status: 'active',
-    provider: 'google',
-    createdAt: '2026-03-10',
-  },
-];
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -73,7 +44,7 @@ const USER_LIST_STORAGE_KEY = 'automania_pod_user_list_v1';
 
 export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [userList, setUserList] = useState<ManagedUser[]>(DEFAULT_USERS);
+  const [userList, setUserList] = useState<ManagedUser[]>([]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const fetchUsersFromDb = async () => {

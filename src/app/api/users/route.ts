@@ -12,9 +12,13 @@ async function ensureUsersTable() {
         role VARCHAR(50) DEFAULT 'user',
         status VARCHAR(50) DEFAULT 'active',
         provider VARCHAR(50) DEFAULT 'google',
+        avatar_url VARCHAR(1000),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `;
+    await sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(1000);
     `;
     await sql`
       INSERT INTO users (id, name, email, role, status, provider)
@@ -30,7 +34,7 @@ export async function GET() {
   try {
     await ensureUsersTable();
     const rows = await sql`
-      SELECT id, name, email, role, status, provider, created_at as "createdAt"
+      SELECT id, name, email, role, status, provider, avatar_url as "avatarUrl", created_at as "createdAt"
       FROM users
       ORDER BY created_at DESC
     `;
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
   try {
     await ensureUsersTable();
     const body = await request.json();
-    const { action, id, name, email, role, status, provider, callerEmail } = body;
+    const { action, id, name, email, role, status, provider, callerEmail, avatarUrl } = body;
 
     // Secure actions (update role, block user)
     if (action === 'update_role' || action === 'toggle_status') {
@@ -76,19 +80,9 @@ export async function POST(request: Request) {
       const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
       const userProvider = provider || 'google';
 
-      // Check existing status
-      const existing = await sql`SELECT role, status FROM users WHERE email = ${cleanEmail}`;
-      if (existing.length > 0) {
-        if (existing[0].status === 'blocked') {
-          return NextResponse.json(
-            { success: false, blocked: true, message: 'Bu hesap yönetici tarafından engellenmiştir.' },
-            { status: 403 }
-          );
-        }
-
         await sql`
           UPDATE users
-          SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}
+          SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${avatarUrl || existing[0].avatar_url}
           WHERE email = ${cleanEmail}
         `;
 
@@ -101,14 +95,15 @@ export async function POST(request: Request) {
             role: existing[0].role,
             status: existing[0].status,
             provider: userProvider,
+            avatarUrl: avatarUrl || existing[0].avatar_url,
           },
         });
       }
 
       // Insert new user
       await sql`
-        INSERT INTO users (id, name, email, role, status, provider)
-        VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', ${userProvider})
+        INSERT INTO users (id, name, email, role, status, provider, avatar_url)
+        VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', ${userProvider}, ${avatarUrl || null})
       `;
 
       return NextResponse.json({
@@ -120,6 +115,7 @@ export async function POST(request: Request) {
           role: userRole,
           status: 'active',
           provider: userProvider,
+          avatarUrl: avatarUrl || null,
         },
       });
     }

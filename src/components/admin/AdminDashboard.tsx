@@ -712,7 +712,7 @@ function UserManagementSection() {
                 <div className="col-span-4 sm:col-span-3 flex items-center space-x-2.5">
                   <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0 overflow-hidden border border-slate-300 dark:border-slate-700">
                     <img
-                      src={`https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.email)}`}
+                      src={u.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.email)}`}
                       alt={u.name}
                       className="w-full h-full object-cover"
                     />
