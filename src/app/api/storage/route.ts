@@ -25,6 +25,18 @@ export async function GET(request: Request) {
     }
 
     const data = rows[0];
+    
+    let parsedModels: any = {};
+    try {
+      if (data.openrouter_model) {
+        if (data.openrouter_model.startsWith('{')) {
+          parsedModels = JSON.parse(data.openrouter_model);
+        } else {
+          parsedModels.reasoning = data.openrouter_model;
+        }
+      }
+    } catch(e) {}
+
     return NextResponse.json({
       mockups: data.mockups || [],
       designs: data.designs || [],
@@ -32,7 +44,9 @@ export async function GET(request: Request) {
       activeFolderId: data.active_folder_id,
       selectedMockupId: data.selected_mockup_id,
       openRouterKey: data.openrouter_key || null,
-      openRouterModel: data.openrouter_model || null,
+      modelVision: parsedModels.vision || null,
+      modelReasoning: parsedModels.reasoning || null,
+      modelGeneration: parsedModels.generation || null,
     });
   } catch (error: any) {
     console.error('Storage GET Error:', error);
@@ -52,7 +66,13 @@ export async function POST(request: Request) {
     const activeFolderId = body.activeFolderId || null;
     const selectedMockupId = body.selectedMockupId || null;
     const openRouterKey = body.openRouterKey || null;
-    const openRouterModel = body.openRouterModel || null;
+    
+    const openRouterModel = JSON.stringify({
+      vision: body.modelVision || null,
+      reasoning: body.modelReasoning || null,
+      generation: body.modelGeneration || null
+    });
+
     const lastKnownServerTimestamp = body.lastKnownServerTimestamp || null;
 
     // 1. Optimistic Concurrency Control

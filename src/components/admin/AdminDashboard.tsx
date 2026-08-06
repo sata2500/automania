@@ -270,7 +270,12 @@ export const AdminDashboard: React.FC = () => {
         const imageUrl = urlMatch ? urlMatch[1] : undefined;
 
         setTestResponseData({ model: modelId, content, imageUrl });
-        toast.success(`Bağlantı Başarılı: ${modelId} (${latencyMs}ms)`);
+        
+        if (role === 'generation' && !imageUrl) {
+          toast.error(`Üretim Başarısız: Model sadece metin döndürdü, görsel üretemedi! (${latencyMs}ms)`);
+        } else {
+          toast.success(`Bağlantı Başarılı: ${modelId} (${latencyMs}ms)`);
+        }
       } else {
         const errorData = await res.json().catch(() => ({}));
         const errMsg = errorData.error?.message || `HTTP ${res.status}`;
