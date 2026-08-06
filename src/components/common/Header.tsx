@@ -11,13 +11,16 @@ import {
   Moon,
   Monitor,
   User,
+  ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './UserAuthContext';
 
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo' | 'admin';
+
 interface HeaderProps {
-  activeTab: 'mockups' | 'designs' | 'generator' | 'seo';
-  setActiveTab: (tab: 'mockups' | 'designs' | 'generator' | 'seo') => void;
+  activeTab: TabKey;
+  setActiveTab: (tab: TabKey) => void;
   mockupCount: number;
   designCount: number;
   matchCount: number;
@@ -28,6 +31,7 @@ const TABS = [
   { key: 'designs', label: '2. Tasarımlar', shortLabel: 'Tasarımlar', icon: Palette },
   { key: 'generator', label: '3. Toplu Üretim', shortLabel: 'Toplu Üretim', icon: Sparkles },
   { key: 'seo', label: '4. Etsy SEO', shortLabel: 'SEO', icon: Tag },
+  { key: 'admin', label: '5. Admin Paneli', shortLabel: 'Admin', icon: ShieldCheck, requiresAdmin: true },
 ] as const;
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,7 +42,9 @@ export const Header: React.FC<HeaderProps> = ({
   matchCount,
 }) => {
   const { theme, setTheme } = useTheme();
-  const { user, setIsAuthModalOpen } = useAuth();
+  const { user, isAdmin, setIsAuthModalOpen } = useAuth();
+
+  const visibleTabs = TABS.filter(tab => !('requiresAdmin' in tab && tab.requiresAdmin) || isAdmin);
 
   const getBadge = (key: string) => {
     if (key === 'mockups') return mockupCount;
@@ -79,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Top Navigation Tabs */}
             <nav className="hidden md:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.map(({ key, label, icon: Icon }) => {
+              {visibleTabs.map(({ key, label, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
                 return (
@@ -90,6 +96,8 @@ export const Header: React.FC<HeaderProps> = ({
                       isActive
                         ? key === 'generator'
                           ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                          : key === 'admin'
+                          ? 'bg-gradient-to-r from-slate-900 to-indigo-900 border border-indigo-500 text-amber-300 shadow-md'
                           : 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
                     }`}
@@ -100,6 +108,8 @@ export const Header: React.FC<HeaderProps> = ({
                           ? 'text-amber-300 animate-pulse'
                           : key === 'seo'
                           ? 'text-emerald-400'
+                          : key === 'admin'
+                          ? 'text-amber-300'
                           : ''
                       }`}
                     />
@@ -141,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => setIsAuthModalOpen(true)}
                 className="relative rounded-full hover:ring-2 hover:ring-indigo-400/80 transition-all cursor-pointer p-0.5 shrink-0"
-                title={user ? user.name : 'Giriş Yap / Profil'}
+                title={user ? `${user.name} (${isAdmin ? 'Admin' : 'Kullanıcı'})` : 'Giriş Yap / Profil'}
               >
                 {user ? (
                   <img
@@ -162,7 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Floating Bottom Navigation Bar for Mobile */}
       <nav className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation">
-        {TABS.map(({ key, shortLabel, icon: Icon }) => {
+        {visibleTabs.map(({ key, shortLabel, icon: Icon }) => {
           const badge = getBadge(key);
           const isActive = activeTab === key;
           return (

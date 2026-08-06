@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Header } from '@/components/common/Header';
+import { Header, TabKey } from '@/components/common/Header';
 import { MockupCanvasEditor } from '@/components/mockup/MockupCanvasEditor';
 import { DesignUploader } from '@/components/design/DesignUploader';
 import { BatchPreviewGrid } from '@/components/generator/BatchPreviewGrid';
 import { EtsySeoHelper } from '@/components/seo/EtsySeoHelper';
+import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
@@ -24,7 +25,7 @@ import { ToastProvider } from '@/components/common/ToastContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { Sparkles, Info, User, X } from 'lucide-react';
 
-const TAB_ORDER = ['mockups', 'designs', 'generator', 'seo'] as const;
+const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'admin'];
 
 /**
  * Checks if a touched DOM element is inside an interactive control or horizontally scrollable container
@@ -62,7 +63,7 @@ function isInsideScrollableOrInteractive(el: HTMLElement | null): boolean {
 
 function MainContent() {
   const { user, setIsAuthModalOpen } = useAuth();
-  const [activeTab, setActiveTab] = useState<'mockups' | 'designs' | 'generator' | 'seo'>('mockups');
+  const [activeTab, setActiveTab] = useState<TabKey>('mockups');
   const [folders, setFolders] = useState<MockupFolder[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
 
@@ -517,6 +518,17 @@ function MainContent() {
         )}
 
         {activeTab === 'seo' && <EtsySeoHelper />}
+
+        {activeTab === 'admin' && (
+          <AdminDashboard
+            mockups={mockups}
+            setMockups={setMockups}
+            designs={designs}
+            setDesigns={setDesigns}
+            folders={folders}
+            setFolders={setFolders}
+          />
+        )}
       </main>
 
       {/* Auth Modal & Profile Management Modal */}

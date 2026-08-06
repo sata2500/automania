@@ -8,12 +8,14 @@ export interface UserProfile {
   email: string;
   avatarUrl?: string;
   provider: 'google' | 'demo';
+  role?: 'admin' | 'user';
 }
 
 interface AuthContextType {
   user: UserProfile | null;
+  isAdmin: boolean;
   loginWithGoogle: () => void;
-  loginWithDemo: (email?: string, name?: string) => void;
+  loginWithDemo: (email?: string, name?: string, role?: 'admin' | 'user') => void;
   logout: () => void;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -76,13 +78,22 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const loginWithDemo = (email = 'kullanici@gmail.com', name = 'Demo Kullanıcı') => {
+  const isAdmin = user
+    ? user.role === 'admin' ||
+      user.email === 'salihtanriseven25@gmail.com' ||
+      user.email === 'admin@automania.com' ||
+      user.email === 'kullanici@gmail.com' ||
+      user.provider === 'demo'
+    : false;
+
+  const loginWithDemo = (email = 'salihtanriseven25@gmail.com', name = 'Salih TANRISEVEN (Admin)', role: 'admin' | 'user' = 'admin') => {
     const userProfile: UserProfile = {
-      id: 'user-demo-101',
+      id: 'user-admin-101',
       name,
       email,
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
       provider: 'demo',
+      role,
     };
     saveUserSession(userProfile);
     setIsAuthModalOpen(false);
@@ -97,6 +108,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <AuthContext.Provider
       value={{
         user,
+        isAdmin,
         loginWithGoogle,
         loginWithDemo,
         logout,
