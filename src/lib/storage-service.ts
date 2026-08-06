@@ -64,7 +64,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
       ]);
 
-    if (savedMockups && Array.isArray(savedMockups) && savedMockups.length > 0) {
+    // If local IndexedDB has been initialized for this user, respect its state completely (even if empty)
+    if (hasInit) {
       return {
         mockups: savedMockups || [],
         designs: savedDesigns || [],
@@ -75,19 +76,12 @@ export async function loadAppData(): Promise<AppDataPayload> {
       };
     }
 
-    // 2. Fallback to Server API storage (.data/pod-db.json or .data/users/{userId}-db.json)
+    // 2. Fallback to Server API storage if local IndexedDB isn't initialized yet
     const query = userId ? `?userId=${userId}` : '';
     const res = await fetch(`/api/storage${query}`);
     if (res.ok) {
       const serverData = await res.json();
-      if (
-        serverData &&
-        (
-          (Array.isArray(serverData.mockups) && serverData.mockups.length > 0) ||
-          (Array.isArray(serverData.designs) && serverData.designs.length > 0) ||
-          (Array.isArray(serverData.folders) && serverData.folders.length > 0)
-        )
-      ) {
+      if (serverData && (serverData.mockups || serverData.designs || serverData.folders)) {
         await saveToIndexedDB(serverData);
         if (serverData.openRouterKey) {
           try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
@@ -111,8 +105,15 @@ export async function loadAppData(): Promise<AppDataPayload> {
     console.warn('Failed to load saved state from storage:', err);
   }
 
-  // 3. If workspace is empty or uninitialized, automatically load and preserve Sample App Data
-  return await loadSampleAppData();
+  // 3. Default empty workspace for new users
+  return {
+    mockups: [],
+    designs: [],
+    folders: [],
+    activeFolderId: null,
+    selectedMockupId: null,
+    activeDesignFolderId: null,
+  };
 }
 
 /**
