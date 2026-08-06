@@ -129,26 +129,50 @@ Example Output:
 }`;
 
       try {
-        const evalRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        let payload: any = {
+          model: writerModel,
+          messages: [
+            {
+              role: 'user',
+              content: evalPrompt
+            }
+          ],
+          plugins: [
+            { id: "web", max_results: 5 }
+          ]
+        };
+
+        let evalRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'X-Title': 'Automania POD Studio',
           },
-          body: JSON.stringify({
-            model: writerModel,
-            messages: [
-              {
-                role: 'user',
-                content: evalPrompt
-              }
-            ],
-            plugins: [
-              { id: "web", max_results: 5 }
-            ]
-          })
+          body: JSON.stringify(payload)
         });
+
+        if (evalRes.status === 402) {
+          delete payload.plugins;
+          payload.messages[0].content = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
+Score each keyword from 0 to 100 based on HIGH search volume and LOW competition. 
+Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown.
+Keywords: ${JSON.stringify(newKeywords)}
+Example Output:
+{
+  "vintage shirt": 85,
+  "retro": 70
+}`;
+          evalRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'X-Title': 'Automania POD Studio',
+            },
+            body: JSON.stringify(payload)
+          });
+        }
 
         if (evalRes.ok) {
           const evalData = await evalRes.json();
