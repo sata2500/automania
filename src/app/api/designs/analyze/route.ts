@@ -14,27 +14,29 @@ export async function POST(request: Request) {
 
     // Admin kullanıcısının API anahtarını, Vision modelini ve Scraping ayarlarını çekiyoruz
     const rows = await sql`
-      SELECT openrouter_key, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
+      SELECT openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
       FROM user_workspaces 
-      WHERE openrouter_key IS NOT NULL 
-        AND openrouter_key != ''
       ORDER BY updated_at DESC
       LIMIT 1
     `;
 
-    if (rows.length === 0 || !rows[0].openrouter_key) {
+    // Get API Key from app_settings or env
+    const settingsRows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'openrouter_api_key' LIMIT 1`;
+    const dbApiKey = settingsRows.length > 0 ? settingsRows[0].setting_value : null;
+    const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
     }
 
-    const apiKey = rows[0].openrouter_key;
-    const scrapingApiKey = rows[0].scraping_api_key;
-    const scrapingProvider = rows[0].scraping_provider || 'scraperapi';
-    const workerUrl = rows[0].cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
+    const scrapingApiKey = rows.length > 0 ? rows[0].scraping_api_key : null;
+    const scrapingProvider = rows.length > 0 && rows[0].scraping_provider ? rows[0].scraping_provider : 'scraperapi';
+    const workerUrl = (rows.length > 0 ? rows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
     
     // Parse JSON models
     let visionModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
     try {
-      if (rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
+      if (rows.length > 0 && rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
         const parsed = JSON.parse(rows[0].openrouter_model);
         if (parsed.vision) {
           visionModel = parsed.vision;

@@ -12,23 +12,25 @@ export async function POST(req: Request) {
 
     // Query Workspace settings for SEO Copywriter AI Model
     const rows = await sql`
-      SELECT openrouter_key, openrouter_model 
+      SELECT openrouter_model 
       FROM user_workspaces 
-      WHERE openrouter_key IS NOT NULL AND openrouter_key != ''
       ORDER BY updated_at DESC
       LIMIT 1
     `;
 
-    if (rows.length === 0 || !rows[0].openrouter_key) {
+    // Get API Key from app_settings or env
+    const settingsRows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'openrouter_api_key' LIMIT 1`;
+    const dbApiKey = settingsRows.length > 0 ? settingsRows[0].setting_value : null;
+    const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
     }
-
-    const apiKey = rows[0].openrouter_key;
     
     // Parse SEO Copywriter Model
     let seoModel = 'google/gemma-4-26b-a4b-it:free';
     try {
-      if (rows[0].openrouter_model) {
+      if (rows.length > 0 && rows[0].openrouter_model) {
         const raw = rows[0].openrouter_model.trim();
         if (raw.startsWith('{')) {
           const parsed = JSON.parse(raw);
