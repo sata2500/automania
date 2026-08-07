@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from './UserAuthContext';
 import {
   X,
@@ -39,6 +39,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const { user, isAdmin, loginWithGoogle, logout, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
+  // Escape key handler — must be before the early return to comply with Rules of Hooks
+  useEffect(() => {
+    if (!isAuthModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsAuthModalOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isAuthModalOpen, setIsAuthModalOpen]);
 
   if (!isAuthModalOpen) return null;
 
@@ -51,7 +60,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-slate-950/80 backdrop-blur-md animate-fadeIn"
+      onClick={(e) => { if (e.target === e.currentTarget) setIsAuthModalOpen(false); }}
+    >
       {/* Hidden File Input for Backup Import */}
       <input
         type="file"
@@ -61,10 +73,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         className="hidden"
       />
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 w-full max-w-md rounded-3xl shadow-2xl p-6 relative overflow-hidden text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 w-full max-w-md rounded-3xl shadow-2xl p-6 relative overflow-hidden text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar"
+      >
         {/* Close Button */}
         <button
           onClick={() => setIsAuthModalOpen(false)}
+          aria-label="Kapat"
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-all cursor-pointer"
         >
           <X className="w-4 h-4" />
@@ -82,7 +100,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-950 object-cover"
                 />
               </div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center justify-center gap-1.5">
+              <h3 id="auth-modal-title" className="text-lg font-bold text-slate-900 dark:text-white flex items-center justify-center gap-1.5">
                 <span>{user.name}</span>
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
               </h3>
@@ -229,7 +247,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-600/20 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3">
                 <User className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Google İle Oturum Açın</h3>
+              <h3 id="auth-modal-title" className="text-xl font-bold text-slate-900 dark:text-white">Google İle Oturum Açın</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Giriş yaparak kendi özel çalışma alanınızı oluşturabilir, taslaklarınızı kaydedebilir ve verilerinize her cihazdan erişebilirsiniz.
               </p>

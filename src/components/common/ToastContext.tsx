@@ -12,6 +12,7 @@ export interface ToastItem {
   message: string;
   progress?: number; // 0 to 100
   duration?: number; // ms, default 3500ms
+  _timerId?: number; // internal: auto-dismiss timer handle
 }
 
 interface ToastContextType {
@@ -40,21 +41,31 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => {
+      const toast = prev.find((t) => t.id === id);
+      // Clear any pending auto-dismiss timer to avoid redundant state updates
+      if (toast?._timerId) clearTimeout(toast._timerId);
+      return prev.filter((t) => t.id !== id);
+    });
   }, []);
 
   const addToast = useCallback(
     (toast: Omit<ToastItem, 'id'>): string => {
-      const id = Math.random().toString(36).substring(2, 9);
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).substring(2, 9);
+
       const newToast: ToastItem = { ...toast, id };
 
       setToasts((prev) => [...prev.slice(-4), newToast]); // Keep max 5 toasts visible
 
       const duration = toast.duration ?? (toast.type === 'progress' ? 0 : 4000);
       if (duration > 0) {
-        setTimeout(() => {
+        const timerId = setTimeout(() => {
           removeToast(id);
         }, duration);
+        // Store timerId on the toast so manual dismiss can cancel it
+        newToast._timerId = timerId as unknown as number;
       }
 
       return id;
@@ -122,8 +133,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {/* Toast Notification Layer Fixed at Bottom Right */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-3 sm:px-0">
+      {/* Toast Notification Layer — aria-live for screen reader announcements */}
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-3 sm:px-0"
+      >
         {toasts.map((toast) => (
           <ToastCard key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
         ))}
@@ -165,10 +180,14 @@ function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }
     }
   };
 
+  // Only error/warning toasts use role="alert" (interrupts screen reader immediately).
+  // Informational toasts use role="status" (politely announced).
+  const ariaRole = (toast.type === 'error' || toast.type === 'warning') ? 'alert' : 'status';
+
   return (
     <div
       className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-in fade-in slide-in-from-bottom-3 ${getCardStyle()}`}
-      role="alert"
+      role={ariaRole}
     >
       {getIcon()}
       <div className="flex-1 min-w-0 pr-1">

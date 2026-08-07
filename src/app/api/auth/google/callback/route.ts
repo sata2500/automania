@@ -69,27 +69,30 @@ export async function GET(request: Request) {
       `;
     } catch(e) {}
 
-    let userRole: 'admin' | 'user' = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
+    // Role is always driven by the database — no hardcoded email checks.
+    let userRole: 'admin' | 'user' = 'user';
     let userStatus = 'active';
 
-    // Check existing status
+    // Check existing record to preserve role and status
     const existing = await sql`SELECT role, status FROM users WHERE email = ${cleanEmail}`;
     if (existing.length > 0) {
       if (existing[0].status === 'blocked') {
         return NextResponse.redirect(`${origin}/?auth_error=Hesabınız+yönetici+tarafından+engellenmiştir.`);
       }
+      // Preserve existing role from DB (may have been promoted to admin)
       userRole = existing[0].role as 'admin' | 'user';
       userStatus = existing[0].status;
-      
+
       await sql`
         UPDATE users
         SET last_login_at = CURRENT_TIMESTAMP, name = ${userName}, avatar_url = ${avatarUrl}
         WHERE email = ${cleanEmail}
       `;
     } else {
+      // New user — always starts as 'user', admins promote via dashboard
       await sql`
         INSERT INTO users (id, name, email, role, status, provider, avatar_url)
-        VALUES (${userId}, ${userName}, ${cleanEmail}, ${userRole}, 'active', 'google', ${avatarUrl})
+        VALUES (${userId}, ${userName}, ${cleanEmail}, 'user', 'active', 'google', ${avatarUrl})
       `;
     }
 
@@ -103,7 +106,7 @@ export async function GET(request: Request) {
     };
 
     // Set secure HTTP-only JWT cookie
-    await setSessionCookie(userProfile as any);
+    await setSessionCookie(userProfile);
 
     // 3. Return HTML script to save session in localStorage and redirect back to homepage
     const profileJson = JSON.stringify(userProfile);

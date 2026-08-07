@@ -19,8 +19,7 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Note: userScalable and maximumScale intentionally omitted — WCAG 1.4.4 compliance
 };
 
 export const metadata: Metadata = {

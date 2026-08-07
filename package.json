@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit",
+    "seed-admin": "node scripts/seed-admin.mjs",
+    "db:migrate": "node create_table.mjs",
+    "db:query": "node query_db.mjs",
+    "clean-blobs": "tsx scripts/clean-blobs.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { getSession } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || 'default_guest';
+    // Prefer authenticated session; fallback to query param for backwards-compat
+    const session = await getSession();
+    const userId = session?.id || searchParams.get('userId') || 'default_guest';
 
     const rows = await sql`
       SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms

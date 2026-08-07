@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Header, TabKey } from '@/components/common/Header';
 import { MockupCanvasEditor } from '@/components/mockup/MockupCanvasEditor';
 import { DesignUploader } from '@/components/design/DesignUploader';
@@ -22,6 +22,7 @@ import { ThemeProvider } from '@/components/common/ThemeProvider';
 import { UserAuthProvider, useAuth } from '@/components/common/UserAuthContext';
 import { ToastProvider } from '@/components/common/ToastContext';
 import { AuthModal } from '@/components/common/AuthModal';
+import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 
 const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo'];
@@ -66,7 +67,7 @@ function MainContent() {
 
   useEffect(() => {
     try {
-      const savedTab = localStorage.getItem('automania_pod_active_tab_v1') as TabKey;
+      const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) as TabKey;
       if (savedTab && ['mockups', 'designs', 'generator', 'seo'].includes(savedTab)) {
         setActiveTabState(savedTab);
       }
@@ -76,7 +77,7 @@ function MainContent() {
   const setActiveTab = (tab: TabKey) => {
     setActiveTabState(tab);
     try {
-      localStorage.setItem('automania_pod_active_tab_v1', tab);
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, tab);
     } catch {}
   };
 
@@ -115,13 +116,13 @@ function MainContent() {
   useEffect(() => {
     let isMounted = true;
     try {
-      if (localStorage.getItem('automania_guest_banner_dismissed') === 'true') {
+      if (localStorage.getItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED) === 'true') {
         setIsGuestInfoDismissed(true);
       }
-      if (localStorage.getItem('automania_empty_workspace_dismissed') === 'true') {
+      if (localStorage.getItem(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED) === 'true') {
         setIsEmptyWorkspaceDismissed(true);
       }
-      if (localStorage.getItem('automania_pwa_banner_dismissed') === 'true') {
+      if (localStorage.getItem(STORAGE_KEYS.PWA_BANNER_DISMISSED) === 'true') {
         setIsPwaInfoDismissed(true);
       }
       
@@ -200,65 +201,72 @@ function MainContent() {
   }, [activeFolderId, selectedMockupId, activeDesignFolderId, isInitialized]);
 
   // 3. Real-time cross-device sync — polls server every 5s for changes made on other devices.
-  //    Only active for logged-in users (guests have no server-side identity).
+  //    Polling is paused when the tab is hidden (Page Visibility API) to save resources.
   useEffect(() => {
     if (!isInitialized || !user) return;
 
-    const checkForUpdates = async () => {
-      if (isSyncFetchingRef.current) return; // Prevent overlapping fetches
+    async function doCheckForUpdates() {
+      if (isSyncFetchingRef.current) return;
+      if (document.visibilityState === 'hidden') return; // Skip while tab is backgrounded
 
       try {
-        const res = await fetch(`/api/storage/version?userId=${user.id}`);
+        const res = await fetch(`/api/storage/version?userId=${user!.id}`);
         if (!res.ok) return;
 
         const { updatedAt } = await res.json();
         if (!updatedAt) return;
 
-        // Only fetch full data if server timestamp is newer than our last known sync.
-        // 2000ms buffer handles minor clock drift between client and server.
-        if (updatedAt > lastSyncTimestampRef.current + 2000) {
+        if (updatedAt > lastSyncTimestampRef.current + TIMING.SYNC_CLOCK_DRIFT_MS) {
           isSyncFetchingRef.current = true;
-          console.log(`[Sync] Remote change detected (server: ${updatedAt}, local: ${lastSyncTimestampRef.current}). Fetching...`);
+          console.log(`[Sync] Remote change detected. Fetching...`);
 
-          const dataRes = await fetch(`/api/storage?userId=${user.id}`);
+          const dataRes = await fetch(`/api/storage?userId=${user!.id}`);
           if (dataRes.ok) {
             const serverData = await dataRes.json();
             if (serverData && Array.isArray(serverData.mockups)) {
-              // Flag that the upcoming state changes are from server sync (not a local edit)
               syncedFromServerRef.current = true;
               setMockups(serverData.mockups || []);
               setDesigns(serverData.designs || []);
               setFolders(serverData.folders || []);
-              // UI state'lerini (activeFolderId, selectedMockupId) ZORLA DEĞİŞTİRMİYORUZ!
-              // Cihaz kendi yerel arayüz durumunu korumaya devam etmeli.
-              
               lastSyncTimestampRef.current = updatedAt;
 
-              // Keep IndexedDB in sync (without triggering server POST)
               await updateLocalCache({
                 mockups: serverData.mockups || [],
                 designs: serverData.designs || [],
                 folders: serverData.folders || [],
-                activeFolderId: activeFolderId,     // Kendi UI state'ini veritabanına kaydet (bozulmasın)
-                selectedMockupId: selectedMockupId, // Kendi UI state'ini veritabanına kaydet
+                activeFolderId: activeFolderId,
+                selectedMockupId: selectedMockupId,
               });
 
               console.log('[Sync] State updated from remote.');
             }
           }
-
           isSyncFetchingRef.current = false;
         }
       } catch (err) {
         console.warn('[Sync] Version check failed:', err);
         isSyncFetchingRef.current = false;
       }
-    };
+    }
 
-    // Run immediately on mount to catch stale IndexedDB data, then poll every 5s
-    checkForUpdates();
-    const interval = setInterval(checkForUpdates, 5000);
-    return () => clearInterval(interval);
+    // Immediate check on mount
+    doCheckForUpdates();
+
+    // Poll interval
+    const interval = setInterval(doCheckForUpdates, TIMING.SYNC_POLL_INTERVAL_MS);
+
+    // Page Visibility: resume polling + immediate sync when user returns to tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        doCheckForUpdates();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isInitialized, user]);
 
   // Handlers for Backup Export / Import / Sample Load / Clear All
@@ -325,23 +333,17 @@ function MainContent() {
 
   const handleDismissGuestBanner = () => {
     setIsGuestInfoDismissed(true);
-    try {
-      localStorage.setItem('automania_guest_banner_dismissed', 'true');
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED, 'true'); } catch {}
   };
 
   const handleDismissPwaBanner = () => {
     setIsPwaInfoDismissed(true);
-    try {
-      localStorage.setItem('automania_pwa_banner_dismissed', 'true');
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEYS.PWA_BANNER_DISMISSED, 'true'); } catch {}
   };
 
   const handleDismissEmptyWorkspaceBanner = () => {
     setIsEmptyWorkspaceDismissed(true);
-    try {
-      localStorage.setItem('automania_empty_workspace_dismissed', 'true');
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED, 'true'); } catch {}
   };
 
   const matchingPairs = generateMatchingPairs(mockups, designs, activeFolderId);

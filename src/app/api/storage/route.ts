@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { getSession } from '@/lib/auth-server';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || 'default_guest';
-    
+
+    // Prefer authenticated session; fallback to query param for backwards-compat
+    const session = await getSession();
+    const userId = session?.id || searchParams.get('userId') || 'default_guest';
+
     // Preset/Demo datası sorgulanıyorsa
     const isPreset = searchParams.get('preset') === 'default';
     if (isPreset) {
@@ -23,8 +27,8 @@ export async function GET(request: Request) {
     }
 
     const data = rows[0];
-    
-    let parsedModels: any = {};
+
+    let parsedModels: { vision?: string; reasoning?: string; generation?: string } = {};
     try {
       if (data.openrouter_model) {
         if (data.openrouter_model.startsWith('{')) {
@@ -48,7 +52,7 @@ export async function GET(request: Request) {
       etsyProductTypes: data.etsy_product_types || null,
       etsyUserNotes: data.etsy_user_notes || null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Storage GET Error:', error);
     return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
   }
@@ -57,7 +61,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || 'default_guest';
+    // Prefer authenticated session; fallback to query param for backwards-compat
+    const session = await getSession();
+    const userId = session?.id || searchParams.get('userId') || 'default_guest';
     const body = await request.json();
 
     const hasMockups = Array.isArray(body.mockups);
@@ -164,11 +170,14 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId') || 'default_guest';
+    // Prefer authenticated session; fallback to query param for backwards-compat
+    const session = await getSession();
+    const userId = session?.id || searchParams.get('userId') || 'default_guest';
     await sql`DELETE FROM user_workspaces WHERE user_id = ${userId}`;
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Storage DELETE Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown delete error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

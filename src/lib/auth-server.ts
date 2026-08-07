@@ -1,16 +1,24 @@
-import { jwtVerify, SignJWT } from 'jose';
+import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'automania-secret-key-fallback-2026'
-);
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    'FATAL: JWT_SECRET environment variable is not set. ' +
+    'Add JWT_SECRET to your .env.local file before starting the application.'
+  );
+}
 
-export interface TokenPayload {
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+
+// Extends JWTPayload so jose's SignJWT accepts it directly without unsafe casts
+export interface TokenPayload extends JWTPayload {
   id: string;
   email: string;
   role: 'admin' | 'user';
   name: string;
-  [key: string]: any;
+  avatarUrl?: string;
+  provider?: string;
+  status?: string;
 }
 
 export async function signToken(payload: TokenPayload): Promise<string> {
@@ -24,8 +32,12 @@ export async function signToken(payload: TokenPayload): Promise<string> {
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload as TokenPayload;
-  } catch (error) {
+    // Runtime guard: ensure required fields are present before trusting
+    if (typeof payload.id === 'string' && typeof payload.email === 'string') {
+      return payload as TokenPayload;
+    }
+    return null;
+  } catch {
     return null;
   }
 }

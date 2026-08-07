@@ -18,11 +18,7 @@ async function ensureUsersTable() {
         last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    await sql`
-      INSERT INTO users (id, name, email, role, status, provider)
-      VALUES ('user-demo-101', 'Salih TANRISEVEN', 'salihtanriseven25@gmail.com', 'admin', 'active', 'google')
-      ON CONFLICT (email) DO NOTHING
-    `;
+    // Note: First admin must be seeded via: npm run seed-admin
   } catch (err) {}
 }
 
@@ -76,7 +72,9 @@ export async function POST(request: Request) {
       const cleanEmail = email.toLowerCase().trim();
       const userId = id || 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
       const userName = name || cleanEmail.split('@')[0];
-      const userRole = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
+      // Role is always driven by the database — no hardcoded email checks.
+      // New users always start as 'user'. Promotion to admin is done via the Admin Dashboard.
+      const userRole: 'admin' | 'user' = 'user';
       const userProvider = provider || 'google';
 
       // Check existing status
@@ -117,8 +115,8 @@ export async function POST(request: Request) {
         avatarUrl: finalAvatar || null,
       };
 
-      // SECURITY FIX: Issue session cookie
-      await setSessionCookie(userProfile as any);
+      // Issue a secure HTTP-only JWT session cookie
+      await setSessionCookie(userProfile);
 
       return NextResponse.json({
         success: true,

@@ -165,27 +165,27 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
       window.location.href = googleAuthUrl;
     } else {
+      // Dev fallback: simulate login via prompt when Google OAuth is not configured
       const demoEmail = prompt(
-        'Google Hesabınızla Giriş Yapın:\nLütfen e-posta adresinizi girin (Google Auth simülasyonu):',
-        'kullanici@gmail.com'
+        'Google OAuth Yapılandırılmamış — Geliştirici Modu:\nTest e-posta adresinizi girin:',
+        'test@example.com'
       );
       if (demoEmail) {
         const cleanEmail = demoEmail.trim().toLowerCase();
         if (isUserBlocked(cleanEmail)) {
-          alert('⚠️ Bu e-posta adresi yönetici tarafından engellenmiştir. Sisteme giriş yapamazsınız.');
+          alert('⚠️ Bu e-posta adresi yönetici tarafından engellenmiştir.');
           return;
         }
 
         const name = cleanEmail.split('@')[0];
-        const role = cleanEmail === 'salihtanriseven25@gmail.com' ? 'admin' : 'user';
-
+        // Role is always 'user' for new sessions — DB will correct it on first /api/users sync
         const userProfile: UserProfile = {
           id: 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase(),
           name: name.charAt(0).toUpperCase() + name.slice(1),
           email: cleanEmail,
           avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanEmail)}`,
           provider: 'google',
-          role,
+          role: 'user',
         };
 
         saveUserSession(userProfile);
@@ -194,20 +194,20 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  // STRICT Admin security guard: ONLY salihtanriseven25@gmail.com or verified role === 'admin'
-  const isAdmin = Boolean(
-    user &&
-    (user.role === 'admin' || user.email.toLowerCase() === 'salihtanriseven25@gmail.com')
-  );
+  // isAdmin is derived solely from the role field set by the server (via JWT / DB).
+  // No hardcoded email fallbacks — role must be granted through the Admin Dashboard.
+  const isAdmin = Boolean(user && user.role === 'admin');
 
-  const loginWithDemo = (email = 'salihtanriseven25@gmail.com', name = 'Salih TANRISEVEN (Admin)', role: 'admin' | 'user' = 'admin') => {
+  // Demo login: creates a temporary local-only session for testing
+  // Role is always 'user' by default — to get admin, use seed-admin script + real login
+  const loginWithDemo = (email = 'demo@automania.app', name = 'Demo Kullanıcı', role: 'admin' | 'user' = 'user') => {
     if (isUserBlocked(email)) {
       alert('⚠️ Bu hesap yönetici tarafından engellenmiştir.');
       return;
     }
 
     const userProfile: UserProfile = {
-      id: 'user-demo-101',
+      id: 'user-demo-' + Date.now(),
       name,
       email,
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
