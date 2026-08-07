@@ -45,10 +45,14 @@ export async function POST(request: Request) {
     } catch(e) {}
 
     // Prepare OpenRouter Prompt for Vision Analysis
-    const prompt = `Analyze this T-shirt/apparel design specifically for the US market (Etsy/Pinterest). 
-Provide a medium-length description covering the niche, style (e.g. vintage, distressed, typography, illustration), target audience, and its relevance/meaning for the US market. 
+    const prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
+Provide a medium-length description covering the niche, style (e.g. vintage, distressed), target audience, and its relevance. 
 
-CRITICAL RULE FOR KEYWORDS: Extract 20-25 highly relevant Etsy SEO keywords/tags. EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces) so it strictly complies with Etsy's tag character limit.
+CRITICAL RULES FOR KEYWORDS (Etsy SEO):
+1. READ THE TEXT: Your keywords MUST strongly reflect the actual text/typography written on the design.
+2. PRIORITIZE THE MAIN THEME: Focus on the primary message over background details. Do not generate overly broad tags (like "van life" or "camping") unless they are the central focus of the text/design.
+3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
+4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces) to strictly comply with Etsy's tag limit.
 
 Return ONLY a valid JSON object in the following format, with no markdown formatting or extra text:
 {
