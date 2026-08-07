@@ -61,6 +61,8 @@ export async function GET(request: Request) {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_api_key VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_provider VARCHAR(100) DEFAULT 'scraperapi'`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS cloudflare_worker_url VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_product_types TEXT`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_user_notes TEXT`;
 
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS total_listings INT DEFAULT 0`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS competition_level VARCHAR(50) DEFAULT 'Henüz Taranmadı'`;

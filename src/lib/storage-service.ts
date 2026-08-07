@@ -42,6 +42,8 @@ export interface AppDataPayload {
   modelVision?: string;
   modelReasoning?: string;
   modelGeneration?: string;
+  etsyProductTypes?: string;
+  etsyUserNotes?: string;
   lastUpdated?: number;
 }
 

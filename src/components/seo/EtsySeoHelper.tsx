@@ -25,11 +25,12 @@ export const EtsySeoHelper: React.FC = () => {
   const [selectedDesign, setSelectedDesign] = useState<DesignItem | null>(null);
 
   // Input states for AI generation
-  const [niche, setNiche] = useState('Vintage Retro Cat');
+  const [niche, setNiche] = useState('');
   const [productType, setProductType] = useState('Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee');
   const [designDescription, setDesignDescription] = useState('');
   const [userNotes, setUserNotes] = useState('Beden tablosuna göre sipariş veriniz. %100 ring-spun yumuşak pamuk, 1 iş günü içinde kargolama.');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Generated AI Content states
@@ -37,23 +38,32 @@ export const EtsySeoHelper: React.FC = () => {
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  // Load user designs on mount
+  // Load user designs on mount & filter STRICTLY for AI-analyzed designs only!
   useEffect(() => {
     loadAppData().then((data) => {
-      if (data.designs && data.designs.length > 0) {
-        setUserDesigns(data.designs);
-        const first = data.designs[0];
-        setSelectedDesign(first);
-        const cleanName = (first.name || 'Vintage Retro Design').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
-        setNiche(cleanName);
-        if (first.analysis?.description) {
-          setDesignDescription(first.analysis.description);
+      // Load saved user notes and product types from DB if present
+      if (data.etsyProductTypes) setProductType(data.etsyProductTypes);
+      if (data.etsyUserNotes) setUserNotes(data.etsyUserNotes);
+
+      if (data.designs && Array.isArray(data.designs)) {
+        // STRICT FILTER: Only show designs that have been analyzed by AI!
+        const analyzed = data.designs.filter(d => d.analysis && d.analysis.keywords && d.analysis.keywords.length > 0);
+        setUserDesigns(analyzed);
+
+        if (analyzed.length > 0) {
+          const first = analyzed[0];
+          setSelectedDesign(first);
+          const cleanName = (first.name || 'Tasarım').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+          setNiche(cleanName);
+          if (first.analysis?.description) {
+            setDesignDescription(first.analysis.description);
+          }
         }
       }
     }).catch(console.warn);
   }, []);
 
-  // When selectedDesign changes, pre-populate details
+  // When selectedDesign changes, pre-populate details 100% automatically!
   const handleSelectDesign = (design: DesignItem) => {
     setSelectedDesign(design);
     const cleanName = (design.name || 'Tasarım').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
@@ -61,7 +71,31 @@ export const EtsySeoHelper: React.FC = () => {
     if (design.analysis?.description) {
       setDesignDescription(design.analysis.description);
     }
-    toast.info(`"${cleanName}" tasarımı Etsy Studio'ya yüklendi!`);
+    toast.info(`"${cleanName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
+  };
+
+  // Save Product Types & User Notes to Database
+  const handleSaveEtsySettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const res = await fetch('/api/storage?userId=default_guest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          etsyProductTypes: productType,
+          etsyUserNotes: userNotes
+        })
+      });
+      if (res.ok) {
+        toast.success('Özel Ürün Markaları ve Kullanıcı Talimatları Veritabanına Kaydedildi! (Sayfa yenilense de silinmez)');
+      } else {
+        toast.error('Ayarlar kaydedilirken hata oluştu.');
+      }
+    } catch (e: any) {
+      toast.error('Kaydetme hatası: ' + e.message);
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   // Variation Matrix state
@@ -103,6 +137,11 @@ export const EtsySeoHelper: React.FC = () => {
   };
 
   const handleGenerateAI = async () => {
+    if (!selectedDesign) {
+      toast.error('Lütfen önce yukarıdaki galeriden analiz edilmiş bir tasarım seçin.');
+      return;
+    }
+
     setIsGenerating(true);
     try {
       // 1. Detect primary subject from niche & design description
@@ -111,17 +150,41 @@ export const EtsySeoHelper: React.FC = () => {
       const isDog = descLower.includes('dog');
       const isCat = descLower.includes('cat');
 
-      // 2. Query Top Keywords from Database Keyword Pool
+      // 2. Extract design's own AI vision analysis keywords
+      const designKeywords = selectedDesign.analysis?.keywords || [];
+
+      // 3. Query DB Keyword Pool to fetch real scores for design keywords
       let kwList: any[] = [];
       try {
-        const kwRes = await fetch('/api/admin/keywords?limit=50&sortBy=opportunity_score&order=desc');
+        const kwRes = await fetch('/api/admin/keywords?limit=100&sortBy=opportunity_score&order=desc');
         const kwData = await kwRes.json();
         if (kwData.success && Array.isArray(kwData.keywords) && kwData.keywords.length > 0) {
-          kwList = kwData.keywords;
+          const dbPoolMap = new Map(kwData.keywords.map((k: any) => [k.keyword.toLowerCase(), k]));
+          
+          // Map design's AI keywords to DB pool metrics
+          kwList = designKeywords.map(kStr => {
+            const lower = kStr.toLowerCase();
+            if (dbPoolMap.has(lower)) {
+              return dbPoolMap.get(lower);
+            }
+            return { keyword: kStr, opportunity_score: 75, total_listings: 1500, tag_eligible: kStr.length <= 20 };
+          });
+
+          // Also merge top DB keywords matching design theme
+          const themeMatches = kwData.keywords.filter((k: any) => {
+            const kLower = k.keyword.toLowerCase();
+            return designKeywords.some(dk => kLower.includes(dk.toLowerCase()) || dk.toLowerCase().includes(kLower));
+          });
+          kwList = [...kwList, ...themeMatches];
         }
       } catch (e) {}
 
-      // 3. Pre-filter candidate keywords to eliminate contamination (e.g. remove 'dog' if design is rabbit)
+      // Fallback to raw design keywords if DB fetch fails
+      if (kwList.length === 0 && designKeywords.length > 0) {
+        kwList = designKeywords.map(kStr => ({ keyword: kStr, opportunity_score: 80, tag_eligible: kStr.length <= 20 }));
+      }
+
+      // 4. Anti-contamination filter (e.g. remove 'dog' if design is rabbit)
       if (isRabbit) {
         kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('dog') && !k.keyword.toLowerCase().includes('cat'));
       } else if (isDog) {
@@ -283,12 +346,20 @@ export const EtsySeoHelper: React.FC = () => {
       {activeTab === 'studio' && (
         <div className="space-y-6">
           {/* Design Selector Gallery Component */}
-          {userDesigns.length > 0 && (
+          {userDesigns.length === 0 ? (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 p-4 rounded-2xl flex items-center space-x-3">
+              <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
+              <div className="text-xs text-amber-800 dark:text-amber-200">
+                <span className="font-bold block">Henüz Yapay Zeka İle Analiz Edilmiş Tasarımınız Bulunmuyor</span>
+                Tasarımlar sekmesinden bir tasarım yükleyip yapay zeka analizini başlattığınızda, analiz edilen tüm tasarımlarınız bu üst galeride otomatik görüntülenecektir.
+              </div>
+            </div>
+          ) : (
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-emerald-500" />
-                  Kayıtlı Tasarımlarınızdan Seçin ({userDesigns.length} Tasarım):
+                  Yapay Zeka İle Analiz Edilmiş Tasarımlarınız ({userDesigns.length} Adet):
                 </label>
                 {selectedDesign && (
                   <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
@@ -329,13 +400,13 @@ export const EtsySeoHelper: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                Tasarım Nişi / Teması:
+                Tasarım Nişi / Teması (Otomatik Yüklenir):
               </label>
               <input
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
-                placeholder="Örn: Vintage Retro Cat Lover"
+                placeholder="Seçili tasarımdan otomatik yüklenir"
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
@@ -348,16 +419,26 @@ export const EtsySeoHelper: React.FC = () => {
                 type="text"
                 value={productType}
                 onChange={(e) => setProductType(e.target.value)}
-                placeholder="Örn: Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee, Hoodie"
+                placeholder="Örn: Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee"
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-              💡 Kullanıcı Notları / Özel Ürün Talimatları (Yapay Zekanın Metinde Kullanacağı Bilgiler):
-            </label>
+          <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                💡 Kullanıcı Notları / Özel Ürün Talimatları (Yapay Zekanın Açıklamada Kullanacağı Bilgiler):
+              </label>
+              <button
+                onClick={handleSaveEtsySettings}
+                disabled={isSavingSettings}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 shrink-0"
+              >
+                {isSavingSettings ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                💾 Ayarlarımı Veritabanına Kaydet
+              </button>
+            </div>
             <textarea
               rows={2}
               value={userNotes}
