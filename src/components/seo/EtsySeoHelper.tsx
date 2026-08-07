@@ -16,6 +16,36 @@ interface VariationRow {
   enabled: boolean;
 }
 
+function extractCleanNiche(design: DesignItem): string {
+  if (!design) return '';
+  const rawName = design.name ? design.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim() : '';
+  const isNumericOrFileId = !rawName || /^\d+$/.test(rawName) || /^(img|dsc|photo|file|image|design|export|temp)[_-]?\d+$/i.test(rawName);
+
+  if (!isNumericOrFileId && rawName.length > 2) {
+    return rawName;
+  }
+
+  // 1. Try extracting quote or primary subject from AI vision description
+  if (design.analysis?.description) {
+    const desc = design.analysis.description.trim();
+    const quoteMatch = desc.match(/["']([^"']{3,35})["']/);
+    if (quoteMatch && quoteMatch[1]) {
+      return quoteMatch[1].trim();
+    }
+    const words = desc.replace(/[^\w\s]/gi, ' ').split(/\s+/).filter(w => w.length > 2 && !['this', 'that', 'with', 'from', 'your', 'have', 'featuring', 'design', 'tshirt', 'shirt', 'apparel', 'market', 'etsy'].includes(w.toLowerCase()));
+    if (words.length >= 2) {
+      return words.slice(0, 4).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
+  }
+
+  // 2. Try using top 2 keywords from AI vision analysis
+  if (design.analysis?.keywords && design.analysis.keywords.length > 0) {
+    return design.analysis.keywords.slice(0, 2).map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
+  }
+
+  return 'Özel Tasarım Nişi';
+}
+
 export const EtsySeoHelper: React.FC = () => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
@@ -53,8 +83,8 @@ export const EtsySeoHelper: React.FC = () => {
         if (analyzed.length > 0) {
           const first = analyzed[0];
           setSelectedDesign(first);
-          const cleanName = (first.name || 'Tasarım').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
-          setNiche(cleanName);
+          const cleanNicheName = extractCleanNiche(first);
+          setNiche(cleanNicheName);
           if (first.analysis?.description) {
             setDesignDescription(first.analysis.description);
           }
@@ -63,15 +93,15 @@ export const EtsySeoHelper: React.FC = () => {
     }).catch(console.warn);
   }, []);
 
-  // When selectedDesign changes, pre-populate details 100% automatically!
+  // When selectedDesign changes, pre-populate details 100% automatically with AI extracted niche!
   const handleSelectDesign = (design: DesignItem) => {
     setSelectedDesign(design);
-    const cleanName = (design.name || 'Tasarım').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
-    setNiche(cleanName);
+    const cleanNicheName = extractCleanNiche(design);
+    setNiche(cleanNicheName);
     if (design.analysis?.description) {
       setDesignDescription(design.analysis.description);
     }
-    toast.info(`"${cleanName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
+    toast.info(`"${cleanNicheName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
   };
 
   // Save Product Types & User Notes to Database and IndexedDB
@@ -392,14 +422,14 @@ export const EtsySeoHelper: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                Tasarım Nişi / Teması (Otomatik Yüklenir):
+                Tasarım Nişi / Teması (AI Tarafından Çıkarılır):
               </label>
               <input
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
-                placeholder="Seçili tasarımdan otomatik yüklenir"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
+                placeholder="Örn: Nature's Legacy Conservation"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold text-emerald-600 dark:text-emerald-400"
               />
             </div>
 
