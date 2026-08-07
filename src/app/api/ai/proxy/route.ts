@@ -1,5 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth-server';
+import sql from '@/lib/db';
+
+async function getApiKey(): Promise<string | null> {
+  try {
+    const rows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'openrouter_api_key' LIMIT 1`;
+    if (rows && rows.length > 0 && rows[0].setting_value) {
+      return rows[0].setting_value;
+    }
+  } catch (err) {
+    console.warn('Could not read API key from DB, falling back to env', err);
+  }
+  return process.env.OPENROUTER_API_KEY || null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -8,9 +21,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = await getApiKey();
     if (!apiKey) {
-      return NextResponse.json({ success: false, error: 'OpenRouter API Key is not configured on the server.' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'OpenRouter API Key is not configured on the server or database.' }, { status: 500 });
     }
 
     const body = await req.json();
@@ -48,9 +61,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const apiKey = await getApiKey();
     if (!apiKey) {
-      return NextResponse.json({ success: false, error: 'OpenRouter API Key is not configured on the server.' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'OpenRouter API Key is not configured on the server or database.' }, { status: 500 });
     }
 
     const { searchParams } = new URL(req.url);

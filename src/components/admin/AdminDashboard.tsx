@@ -95,7 +95,8 @@ export const AdminDashboard: React.FC = () => {
     } catch (e) {}
   };
 
-  // 3-Tier Model System
+  // 3-Tier Model System & Global Settings
+  const [openRouterApiKey, setOpenRouterApiKey] = useState('');
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
   const [modelGeneration, setModelGeneration] = useState('');
@@ -178,6 +179,15 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (activeSubTab === 'ai') {
       fetchOpenRouterModels();
+      // Fetch global settings
+      fetch('/api/admin/settings')
+        .then(res => res.json())
+        .then(data => {
+          if (data.settings && data.settings.openrouter_api_key) {
+            setOpenRouterApiKey(data.settings.openrouter_api_key);
+          }
+        })
+        .catch(e => console.error("Could not fetch global settings", e));
     }
   }, [activeSubTab]);
 
@@ -186,6 +196,15 @@ export const AdminDashboard: React.FC = () => {
       localStorage.setItem(MODEL_VISION_STORAGE, modelVision);
       localStorage.setItem(MODEL_REASONING_STORAGE, modelReasoning);
       localStorage.setItem(MODEL_GENERATION_STORAGE, modelGeneration);
+
+      // Save global settings via Admin API
+      if (openRouterApiKey) {
+        await fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings: { openrouter_api_key: openRouterApiKey } })
+        });
+      }
 
       const currentData = await loadAppData();
       await saveAppData({
@@ -573,19 +592,20 @@ export const AdminDashboard: React.FC = () => {
                   <Key className="w-3.5 h-3.5 text-indigo-500" />
                   OpenRouter API Key
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
+                <span className="text-[10px] text-slate-400 font-normal">Sunucu Veritabanı Tabanlı</span>
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  disabled
-                  value="Sunucu üzerinde (.env.local) güvenle yapılandırıldı"
-                  className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono text-slate-500 dark:text-slate-400 focus:outline-none transition-all pr-10"
+                  value={openRouterApiKey}
+                  onChange={(e) => setOpenRouterApiKey(e.target.value)}
+                  placeholder="sk-or-v1-..."
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all pr-10"
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Bu anahtar güvenlik amacıyla tarayıcı yerine sunucuda saklanmaktadır.</span>
+                <span>Bu anahtar, doğrudan sunucu veritabanında şifreli saklanır. Tarayıcıda (Frontend) asla gösterilmez.</span>
               </p>
             </div>
 

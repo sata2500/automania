@@ -26,8 +26,18 @@ export async function ensureKeywordPoolColumns() {
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS avg_price NUMERIC(10,2) DEFAULT 0`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS last_scrape_error VARCHAR(1000) DEFAULT NULL`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS raw_metrics JSONB DEFAULT '{}'::jsonb`;
+
+    // Ensure app_settings table exists for global secure configurations
+    await sql`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        id VARCHAR(50) PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
   } catch (e) {
-    console.warn('ensureKeywordPoolColumns warning:', e);
+    console.warn('Database init warning:', e);
   }
 }
 
