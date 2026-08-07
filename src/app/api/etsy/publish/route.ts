@@ -1,0 +1,136 @@
+import { NextResponse } from 'next/server';
+import sql from '@/lib/db';
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { 
+      title, 
+      description, 
+      tags, 
+      price = 24.99, 
+      quantity = 999, 
+      variations = [], 
+      images = [],
+      state = 'draft' // 'draft' or 'active'
+    } = body;
+
+    if (!title || !description || !tags || !Array.isArray(tags)) {
+      return NextResponse.json({ success: false, error: 'Başlık, açıklama ve etiketler zorunludur.' }, { status: 400 });
+    }
+
+    // Enforce 13 tag & 20 char limit
+    const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
+
+    // Fetch Etsy Store Credentials from Workspace Settings
+    const settingsRows = await sql`
+      SELECT etsy_keystring, etsy_shared_secret, etsy_access_token, etsy_shop_id 
+      FROM user_workspaces 
+      WHERE (etsy_keystring IS NOT NULL AND etsy_keystring != '') OR (etsy_access_token IS NOT NULL AND etsy_access_token != '')
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `;
+
+    const etsyApiKey = settingsRows[0]?.etsy_keystring || process.env.ETSY_API_KEY;
+    const etsyAccessToken = settingsRows[0]?.etsy_access_token || process.env.ETSY_ACCESS_TOKEN;
+    const etsyShopId = settingsRows[0]?.etsy_shop_id || process.env.ETSY_SHOP_ID;
+
+    // If Etsy OAuth is not connected yet, return a clean simulated draft preview
+    if (!etsyAccessToken || !etsyShopId) {
+      return NextResponse.json({
+        success: true,
+        simulated: true,
+        message: 'Etsy Mağaza Bağlantısı Henüz Tamamlanmadı. Oluşturulan İlan İçeriği ve Varyasyon Tablosu Yayına Hazır!',
+        draftPreview: {
+          title: title.slice(0, 140),
+          description,
+          tags: validTags,
+          price,
+          quantity,
+          variationsCount: variations.length,
+          state
+        }
+      });
+    }
+
+    // Call Official Etsy API v3 createDraftListing endpoint
+    const createRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
+      method: 'POST',
+      headers: {
+        'x-api-key': etsyApiKey,
+        'Authorization': `Bearer ${etsyAccessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        quantity,
+        title: title.slice(0, 140),
+        description,
+        price,
+        who_made: 'i_did',
+        when_made: '2020_2026',
+        taxonomy_id: 1081, // Clothing -> Shirts & Tees -> T-Shirts
+        tags: validTags,
+        type: 'physical',
+        is_customizable: true,
+        state
+      })
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      throw new Error(`Etsy API Hatası (${createRes.status}): ${errText}`);
+    }
+
+    const listingData = await createRes.json();
+    const listingId = listingData.listing_id;
+
+    // If variations are provided, update inventory matrix via PUT /v3/application/listings/{listing_id}/inventory
+    let variationsUpdated = false;
+    if (listingId && Array.isArray(variations) && variations.length > 0) {
+      try {
+        const productsPayload = variations.map((v: any, idx: number) => ({
+          sku: v.sku || `POD-${listingId}-${idx + 1}`,
+          property_values: [
+            { property_id: 504, property_name: 'Size', values: [v.size || 'M'] },
+            { property_id: 489, property_name: 'Color', values: [v.color || 'Black'] }
+          ],
+          offerings: [
+            {
+              price: v.price || price,
+              quantity: v.quantity || quantity,
+              is_enabled: true
+            }
+          ]
+        }));
+
+        const invRes = await fetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
+          method: 'PUT',
+          headers: {
+            'x-api-key': etsyApiKey,
+            'Authorization': `Bearer ${etsyAccessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ products: productsPayload })
+        });
+
+        if (invRes.ok) {
+          variationsUpdated = true;
+        }
+      } catch (e: any) {
+        console.warn('Etsy Variations update warning:', e.message);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      listingId,
+      listingUrl: listingData.url || `https://www.etsy.com/listing/${listingId}`,
+      variationsUpdated,
+      message: `İlan Etsy Mağazanıza (${state.toUpperCase()}) olarak aktarıldı!`
+    });
+
+  } catch (error: any) {
+    console.error('Etsy Publish API Error:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
