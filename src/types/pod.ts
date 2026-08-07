@@ -72,6 +72,14 @@ export interface DesignItem {
     keywords: string[];
     analyzedAt: number;
   };
+  
+  /** Generated SEO Listing for the design */
+  seo?: {
+    title: string;
+    description: string;
+    tags: string[];
+    generatedAt: number;
+  };
 }
 
 export interface MockupPreset {

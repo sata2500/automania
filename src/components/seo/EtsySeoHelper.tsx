@@ -56,9 +56,9 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
 
   // Input states for AI generation
   const [niche, setNiche] = useState('');
-  const [productType, setProductType] = useState('Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee');
+  const [productType, setProductType] = useState('');
   const [designDescription, setDesignDescription] = useState('');
-  const [userNotes, setUserNotes] = useState('Beden tablosuna göre sipariş veriniz. %100 ring-spun yumuşak pamuk, 1 iş günü içinde kargolama.');
+  const [userNotes, setUserNotes] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -88,6 +88,15 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           if (first.analysis?.description) {
             setDesignDescription(first.analysis.description);
           }
+          if (first.seo) {
+            setGeneratedTitle(first.seo.title || '');
+            setGeneratedDescription(first.seo.description || '');
+            setSelectedTags(first.seo.tags || []);
+          } else {
+            setGeneratedTitle('');
+            setGeneratedDescription('');
+            setSelectedTags([]);
+          }
         }
       }
     }).catch(console.warn);
@@ -100,6 +109,15 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
     setNiche(cleanNicheName);
     if (design.analysis?.description) {
       setDesignDescription(design.analysis.description);
+    }
+    if (design.seo) {
+      setGeneratedTitle(design.seo.title || '');
+      setGeneratedDescription(design.seo.description || '');
+      setSelectedTags(design.seo.tags || []);
+    } else {
+      setGeneratedTitle('');
+      setGeneratedDescription('');
+      setSelectedTags([]);
     }
     toast.info(`"${cleanNicheName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
   };
@@ -259,7 +277,36 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
         if (data.listing.suggestedBasePrice) {
           setBasePrice(data.listing.suggestedBasePrice);
         }
-        toast.success(`Görsel Doğrulama Destekli AI (${data.modelUsed}) ile SEO İçerikleriniz Üretildi!`);
+        
+        // Save generated SEO to database
+        try {
+          const currentData = await loadAppData();
+          const designIndex = currentData.designs.findIndex(d => d.id === selectedDesign.id);
+          if (designIndex > -1) {
+            currentData.designs[designIndex].seo = {
+              title: data.listing.title,
+              description: data.listing.description,
+              tags: data.listing.selectedTags || [],
+              generatedAt: Date.now()
+            };
+            await saveAppData(currentData);
+            
+            // Update local component state
+            setSelectedDesign(currentData.designs[designIndex]);
+            setUserDesigns(prev => {
+              const updated = [...prev];
+              const idx = updated.findIndex(d => d.id === selectedDesign.id);
+              if (idx > -1) {
+                updated[idx].seo = currentData.designs[designIndex].seo;
+              }
+              return updated;
+            });
+          }
+        } catch (dbErr) {
+          console.error("SEO verisi veritabanına kaydedilemedi:", dbErr);
+        }
+
+        toast.success(`Görsel Doğrulama Destekli AI (${data.modelUsed}) ile SEO İçerikleriniz Üretildi ve Kaydedildi!`);
       } else {
         toast.error(data.error || 'İçerik üretilirken hata oluştu.');
       }
