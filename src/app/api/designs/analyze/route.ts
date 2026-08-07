@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // Admin kullanıcısının API anahtarını, Vision modelini ve Scraping ayarlarını çekiyoruz
     const rows = await sql`
-      SELECT openrouter_key, openrouter_model, scraping_api_key, scraping_provider 
+      SELECT openrouter_key, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
       FROM user_workspaces 
       WHERE openrouter_key IS NOT NULL 
         AND openrouter_key != ''
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     const apiKey = rows[0].openrouter_key;
     const scrapingApiKey = rows[0].scraping_api_key;
     const scrapingProvider = rows[0].scraping_provider || 'scraperapi';
+    const workerUrl = rows[0].cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
     
     // Parse JSON models
     let visionModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
@@ -144,22 +145,29 @@ Return ONLY a valid JSON object in the following format, with no markdown format
           ON CONFLICT (keyword) DO NOTHING
         `;
 
-        // Trigger background scraping via Cloudflare Worker Proxy
-        scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider })
+        // Trigger background scraping via Cloudflare Worker Proxy with workerUrl
+        scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl })
           .then(async (scraped) => {
+            // Auto-retry once if scrapeError occurred during burst
+            let finalScraped = scraped;
+            if (finalScraped.scrapeError) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              finalScraped = await scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl });
+            }
+
             await sql`
               UPDATE keyword_pool 
               SET 
-                etsy_score = ${scraped.opportunityScore},
-                opportunity_score = ${scraped.opportunityScore},
-                total_listings = ${scraped.totalListings},
-                competition_level = ${scraped.competitionLevel},
-                bestseller_count = ${scraped.bestsellerCount},
-                is_etsy_suggested = ${scraped.isEtsySuggested},
-                autocomplete_rank = ${scraped.autocompleteRank},
-                avg_price = ${scraped.avgPrice},
-                last_scrape_error = ${scraped.scrapeError},
-                raw_metrics = ${JSON.stringify(scraped.rawMetrics)},
+                etsy_score = ${finalScraped.opportunityScore},
+                opportunity_score = ${finalScraped.opportunityScore},
+                total_listings = ${finalScraped.totalListings},
+                competition_level = ${finalScraped.competitionLevel},
+                bestseller_count = ${finalScraped.bestsellerCount},
+                is_etsy_suggested = ${finalScraped.isEtsySuggested},
+                autocomplete_rank = ${finalScraped.autocompleteRank},
+                avg_price = ${finalScraped.avgPrice},
+                last_scrape_error = ${finalScraped.scrapeError},
+                raw_metrics = ${JSON.stringify(finalScraped.rawMetrics)},
                 last_evaluated_at = CURRENT_TIMESTAMP
               WHERE id = ${id}
             `;
