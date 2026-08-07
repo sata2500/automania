@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Plus, Trash2 } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
+import { loadAppData } from '@/lib/storage-service';
+import { DesignItem } from '@/types/pod';
 
 interface VariationRow {
   id: string;
@@ -18,11 +20,42 @@ export const EtsySeoHelper: React.FC = () => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
 
+  // Loaded user designs
+  const [userDesigns, setUserDesigns] = useState<DesignItem[]>([]);
+  const [selectedDesign, setSelectedDesign] = useState<DesignItem | null>(null);
+
   // Input states for AI generation
   const [niche, setNiche] = useState('Vintage Retro Cat');
   const [productType, setProductType] = useState('Comfort Colors 1717 T-Shirt');
+  const [designDescription, setDesignDescription] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Load user designs on mount
+  useEffect(() => {
+    loadAppData().then((data) => {
+      if (data.designs && data.designs.length > 0) {
+        setUserDesigns(data.designs);
+        // Pre-select first design if available
+        const first = data.designs[0];
+        setSelectedDesign(first);
+        setNiche(first.name || 'Vintage Retro Design');
+        if (first.analysis?.description) {
+          setDesignDescription(first.analysis.description);
+        }
+      }
+    }).catch(console.warn);
+  }, []);
+
+  // When selectedDesign changes, pre-populate details
+  const handleSelectDesign = (design: DesignItem) => {
+    setSelectedDesign(design);
+    setNiche(design.name || 'Tasarım');
+    if (design.analysis?.description) {
+      setDesignDescription(design.analysis.description);
+    }
+    toast.info(`"${design.name}" tasarımı Etsy Studio'ya yüklendi!`);
+  };
 
   // Generated AI Content states
   const [generatedTitle, setGeneratedTitle] = useState(
@@ -231,6 +264,50 @@ export const EtsySeoHelper: React.FC = () => {
       {/* TAB 1: AI LISTING STUDIO */}
       {activeTab === 'studio' && (
         <div className="space-y-6">
+          {/* Design Selector Gallery Component */}
+          {userDesigns.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-emerald-500" />
+                  Kayıtlı Tasarımlarınızdan Seçin ({userDesigns.length} Tasarım):
+                </label>
+                {selectedDesign && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                    Seçili: {selectedDesign.name}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                {userDesigns.map((design) => {
+                  const isSelected = selectedDesign?.id === design.id;
+                  return (
+                    <div
+                      key={design.id}
+                      onClick={() => handleSelectDesign(design)}
+                      className={`relative shrink-0 w-24 h-24 rounded-xl border-2 cursor-pointer overflow-hidden transition-all group ${isSelected ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'}`}
+                    >
+                      <img 
+                        src={design.src} 
+                        alt={design.name} 
+                        className="w-full h-full object-contain p-1 bg-slate-50 dark:bg-slate-950" 
+                      />
+                      <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold">
+                        {design.name}
+                      </div>
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
@@ -240,7 +317,7 @@ export const EtsySeoHelper: React.FC = () => {
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
 
@@ -252,7 +329,7 @@ export const EtsySeoHelper: React.FC = () => {
                 type="text"
                 value={productType}
                 onChange={(e) => setProductType(e.target.value)}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
           </div>
