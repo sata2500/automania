@@ -5,21 +5,21 @@ import { uploadMediaToServer } from './image-optimizer';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { SAMPLE_MOCKUPS, SAMPLE_DESIGNS, DEFAULT_FOLDERS } from './sample-data';
 
-function getCurrentUserId(): string | null {
-  if (typeof window === 'undefined') return null;
+function getCurrentUserId(): string {
+  if (typeof window === 'undefined') return 'default_user';
   try {
     const saved = localStorage.getItem('automania_pod_user_session');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return parsed.id || null;
+      if (parsed.id) return parsed.id;
     }
   } catch {}
-  return null;
+  return 'default_user';
 }
 
 function getStorageKeys() {
   const userId = getCurrentUserId();
-  const prefix = userId ? `user_${userId}_` : '';
+  const prefix = userId && userId !== 'default_user' ? `user_${userId}_` : '';
   return {
     MOCKUPS: `${prefix}automania_pod_mockups_v1`,
     DESIGNS: `${prefix}automania_pod_designs_v1`,
@@ -51,15 +51,15 @@ export interface AppDataPayload {
 
 /**
  * Loads application data from IndexedDB first, with fallback to Server API endpoint (/api/storage).
- * For new users or uninitialized workspaces, returns an empty workspace payload.
+ * For new users or uninitialized workspaces, recovers legacy keys or pulls from database.
  */
 export async function loadAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
   const userId = getCurrentUserId();
 
   try {
-    // 1. Try loading from IndexedDB (Fastest & handles binary images/videos)
-    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes] =
+    // 1. Try loading from IndexedDB
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -72,8 +72,30 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ETSY_USER_NOTES),
       ]);
 
-    // If local IndexedDB has been initialized for this user, respect its state completely (even if empty)
-    if (hasInit) {
+    // 1b. Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys!
+    if ((!savedMockups || savedMockups.length === 0) && (!savedDesigns || savedDesigns.length === 0)) {
+      const [legacyMockups, legacyDesigns, legacyFolders] = await Promise.all([
+        get<MockupItem[]>('automania_pod_mockups_v1'),
+        get<DesignItem[]>('automania_pod_designs_v1'),
+        get<MockupFolder[]>('automania_pod_folders_v1'),
+      ]);
+      if ((legacyMockups && legacyMockups.length > 0) || (legacyDesigns && legacyDesigns.length > 0)) {
+        savedMockups = legacyMockups || [];
+        savedDesigns = legacyDesigns || [];
+        savedFolders = legacyFolders || [];
+        // Save recovered data into current active storage key
+        await saveToIndexedDB({
+          mockups: savedMockups,
+          designs: savedDesigns,
+          folders: savedFolders,
+          activeFolderId: savedActiveFolder ?? null,
+          selectedMockupId: savedSelectedMockup ?? null,
+        });
+      }
+    }
+
+    // If local IndexedDB has data, return immediately
+    if (hasInit && (savedMockups?.length || savedDesigns?.length || savedFolders?.length)) {
       return {
         mockups: savedMockups || [],
         designs: savedDesigns || [],
@@ -86,12 +108,12 @@ export async function loadAppData(): Promise<AppDataPayload> {
       };
     }
 
-    // 2. Fallback to Server API storage if local IndexedDB isn't initialized yet
-    const query = userId ? `?userId=${userId}` : '';
+    // 2. Fallback to Server API storage if local IndexedDB doesn't have data
+    const query = `?userId=${userId}`;
     const res = await fetch(`/api/storage${query}`);
     if (res.ok) {
       const serverData = await res.json();
-      if (serverData && (serverData.mockups || serverData.designs || serverData.folders)) {
+      if (serverData && (serverData.mockups?.length || serverData.designs?.length || serverData.folders?.length)) {
         await saveToIndexedDB(serverData);
         if (serverData.openRouterKey) {
           try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
