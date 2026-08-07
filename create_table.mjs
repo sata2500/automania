@@ -21,13 +21,40 @@ async function main() {
         keyword VARCHAR(255) UNIQUE NOT NULL,
         usage_count INT DEFAULT 1,
         etsy_score INT DEFAULT 0,
+        total_listings INT DEFAULT 0,
+        competition_level VARCHAR(50) DEFAULT 'Henüz Taranmadı',
+        bestseller_count INT DEFAULT 0,
+        is_etsy_suggested BOOLEAN DEFAULT FALSE,
+        autocomplete_rank INT DEFAULT 0,
+        char_length INT DEFAULT 0,
+        tag_eligible BOOLEAN DEFAULT TRUE,
+        opportunity_score INT DEFAULT 0,
+        avg_price NUMERIC(10,2) DEFAULT 0,
+        last_scrape_error VARCHAR(1000) DEFAULT NULL,
+        raw_metrics JSONB DEFAULT '{}'::jsonb,
         last_evaluated_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    console.log('Table keyword_pool created or already exists.');
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_api_key VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_provider VARCHAR(100) DEFAULT 'scraperapi'`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS cloudflare_worker_url VARCHAR(500)`;
+    await sql`UPDATE user_workspaces SET cloudflare_worker_url = 'https://automania-etsy-proxy.salihtanriseven25.workers.dev'`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS total_listings INT DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS competition_level VARCHAR(50) DEFAULT 'Henüz Taranmadı'`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS bestseller_count INT DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS is_etsy_suggested BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS autocomplete_rank INT DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS char_length INT DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS tag_eligible BOOLEAN DEFAULT TRUE`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS opportunity_score INT DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS avg_price NUMERIC(10,2) DEFAULT 0`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS last_scrape_error VARCHAR(1000) DEFAULT NULL`;
+    await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS raw_metrics JSONB DEFAULT '{}'::jsonb`;
+    
+    console.log('Table keyword_pool updated with new columns successfully.');
   } catch (error) {
-    console.error('Error creating table:', error);
+    console.error('Error creating/updating table:', error);
   }
 }
 

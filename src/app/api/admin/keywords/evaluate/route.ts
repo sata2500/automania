@@ -1,47 +1,33 @@
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 
 export async function POST(req: Request) {
   try {
+    await ensureKeywordPoolColumns();
     const body = await req.json();
-    let { ids, limit = 50 } = body;
+    let { ids, limit = 20 } = body;
 
-    // We need the admin's API key and model to evaluate
+    // Fetch Admin Scraping API Key settings
     const settingsRows = await sql`
-      SELECT openrouter_key, openrouter_model 
+      SELECT scraping_api_key, scraping_provider 
       FROM user_workspaces 
-      WHERE openrouter_key IS NOT NULL 
-        AND openrouter_key != ''
+      WHERE scraping_api_key IS NOT NULL AND scraping_api_key != ''
       ORDER BY updated_at DESC
       LIMIT 1
     `;
-
-    if (settingsRows.length === 0 || !settingsRows[0].openrouter_key) {
-      return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
-    }
-
-    const apiKey = settingsRows[0].openrouter_key;
-    
-    // Parse JSON models
-    let writerModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
-    try {
-      if (settingsRows[0].openrouter_model && settingsRows[0].openrouter_model.startsWith('{')) {
-        const parsed = JSON.parse(settingsRows[0].openrouter_model);
-        if (parsed.vision) writerModel = parsed.vision; // Fallback to vision model by default
-        if (parsed.reasoning) writerModel = parsed.reasoning;
-      }
-    } catch(e) {}
+    const scrapingApiKey = settingsRows[0]?.scraping_api_key;
+    const scrapingProvider = settingsRows[0]?.scraping_provider || 'scraperapi';
 
     let targetKeywords: { id: string, keyword: string }[] = [];
 
-    // If specific IDs are provided, use them. Otherwise, find oldest evaluated keywords.
+    // If specific IDs are provided, use them. Otherwise, find oldest evaluated keywords (null or > 7 days)
     if (ids && Array.isArray(ids) && ids.length > 0) {
       const rows = await sql`
         SELECT id, keyword FROM keyword_pool WHERE id = ANY(${ids as any})
       `;
       targetKeywords = rows as { id: string, keyword: string }[];
     } else {
-      // Find keywords that haven't been evaluated in the last 7 days (or never evaluated)
       const rows = await sql`
         SELECT id, keyword FROM keyword_pool 
         WHERE last_evaluated_at IS NULL 
@@ -53,109 +39,63 @@ export async function POST(req: Request) {
     }
 
     if (targetKeywords.length === 0) {
-      return NextResponse.json({ success: true, message: 'Değerlendirilecek kelime bulunamadı.', evaluatedCount: 0 });
+      return NextResponse.json({ success: true, message: 'Değerlendirilecek eskimiş kelime bulunamadı.', evaluatedCount: 0 });
     }
 
-    const keywordList = targetKeywords.map(k => k.keyword);
-
-    // Prepare Prompt for Evaluation
-    const evalPrompt = `Use web search (Google/Etsy/Pinterest) to find CURRENT, real-time search volume and competition data for the following keywords in the US market.
-Score each keyword from 0 to 100 based on HIGH search volume and LOW competition. 
-Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown formatting.
-Keywords: ${JSON.stringify(keywordList)}
-Example Output:
-{
-  "vintage shirt": 85,
-  "retro": 70
-}`;
-
-    let payload: any = {
-      model: writerModel,
-      messages: [
-        { role: 'user', content: evalPrompt }
-      ],
-      plugins: [
-        { id: "web", max_results: 5 }
-      ]
-    };
-
-    let openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': 'Automania POD Studio Admin',
-      },
-      body: JSON.stringify(payload)
-    });
-
-    let webSearchFailed = false;
-
-    if (openRouterRes.status === 402) {
-      webSearchFailed = true;
-      // Fallback: Remove web plugin if account has insufficient credits
-      delete payload.plugins;
-      payload.messages[0].content = `Evaluate the following keywords for Etsy/Pinterest print-on-demand search volume and relevance in the US market.
-Score each keyword from 0 to 100 based on HIGH search volume and LOW competition. 
-Return ONLY a valid JSON object mapping the exact keyword to its integer score. No markdown formatting.
-Keywords: ${JSON.stringify(keywordList)}
-Example Output:
-{
-  "vintage shirt": 85,
-  "retro": 70
-}`;
-
-      openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'X-Title': 'Automania POD Studio Admin',
-        },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    if (!openRouterRes.ok) {
-      const err = await openRouterRes.text();
-      throw new Error(`OpenRouter API hatası: ${openRouterRes.status} - ${err}`);
-    }
-
-    const aiData = await openRouterRes.json();
-    let content = aiData.choices?.[0]?.message?.content || '{}';
-    
-    // Cleanup if model wrapped in markdown
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      content = jsonMatch[0];
-    }
-
-    let parsedScores: Record<string, number> = {};
-    try {
-      parsedScores = JSON.parse(content);
-    } catch (e) {
-      throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
-    }
-
-    // Update the database with new scores
     let evaluatedCount = 0;
+    let botBlockedCount = 0;
+    const errors: string[] = [];
+
     for (const item of targetKeywords) {
-      const score = parsedScores[item.keyword];
-      if (score !== undefined) {
+      try {
+        const scraped = await scrapeEtsyKeywordData(item.keyword, { apiKey: scrapingApiKey, provider: scrapingProvider });
+
+        if (scraped.scrapeError) {
+          botBlockedCount++;
+          errors.push(`"${item.keyword}": ${scraped.scrapeError}`);
+        }
+
         await sql`
           UPDATE keyword_pool 
-          SET etsy_score = ${score}, last_evaluated_at = CURRENT_TIMESTAMP
+          SET 
+            etsy_score = ${scraped.opportunityScore},
+            opportunity_score = ${scraped.opportunityScore},
+            total_listings = ${scraped.totalListings},
+            competition_level = ${scraped.competitionLevel},
+            bestseller_count = ${scraped.bestsellerCount},
+            is_etsy_suggested = ${scraped.isEtsySuggested},
+            autocomplete_rank = ${scraped.autocompleteRank},
+            char_length = ${scraped.charLength},
+            tag_eligible = ${scraped.tagEligible},
+            avg_price = ${scraped.avgPrice},
+            last_scrape_error = ${scraped.scrapeError},
+            raw_metrics = ${JSON.stringify(scraped.rawMetrics)},
+            last_evaluated_at = CURRENT_TIMESTAMP
           WHERE id = ${item.id}
         `;
+
         evaluatedCount++;
+
+        // Add 500ms delay between keywords to reduce risk of IP rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (e: any) {
+        console.error(`Error scraping keyword ${item.keyword}:`, e);
+        errors.push(`"${item.keyword}": ${e.message}`);
       }
+    }
+
+    let warning: string | undefined = undefined;
+    if (botBlockedCount > 0) {
+      warning = `${botBlockedCount} adet kelimede Etsy Bot Koruması / CAPTCHA engeline takılındı. Hatalar veritabanına işlendi.`;
     }
 
     return NextResponse.json({
       success: true,
       evaluatedCount,
+      botBlockedCount,
       totalRequested: targetKeywords.length,
-      warning: webSearchFailed ? "Yeterli bakiye olmadığı için web araması devre dışı bırakıldı." : undefined
+      errors: errors.length > 0 ? errors : undefined,
+      warning
     });
 
   } catch (error: any) {
