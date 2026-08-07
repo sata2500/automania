@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { forceSyncFromServer } from '@/lib/storage-service';
 
 export interface UserProfile {
   id: string;
@@ -92,6 +93,10 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
               }
             }
+            
+            // DİKKAT: Kullanıcı oturumu doğrulandıktan hemen sonra sunucudaki en güncel çalışma alanını yerel tarayıcıya zorla eşitle!
+            await forceSyncFromServer();
+            
           } catch (err) {
             console.error('Session sync error', err);
           }

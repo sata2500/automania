@@ -50,15 +50,80 @@ export interface AppDataPayload {
 }
 
 /**
- * Loads application data from IndexedDB first, with fallback to Server API endpoint (/api/storage).
- * For new users or uninitialized workspaces, recovers legacy keys or pulls from database.
+ * Forces a synchronization from the Server API, treating the Server as the Single Source of Truth.
+ * Preserves local UI state (active folders, selected mockup) if available.
+ */
+export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
+  const userId = getCurrentUserId();
+  try {
+    const res = await fetch(`/api/storage?userId=${userId}`);
+    if (res.ok) {
+      const serverData = await res.json();
+      if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
+        const keys = getStorageKeys();
+        // Preserve local UI state so user doesn't lose their place
+        const [activeFolderId, selectedMockupId, activeDesignFolderId] = await Promise.all([
+          get<string | null>(keys.ACTIVE_FOLDER),
+          get<string | null>(keys.SELECTED_MOCKUP),
+          get<string | null>(keys.ACTIVE_DESIGN_FOLDER)
+        ]);
+
+        const payload: AppDataPayload = {
+          mockups: serverData.mockups || [],
+          designs: serverData.designs || [],
+          folders: serverData.folders || [],
+          activeFolderId: activeFolderId ?? serverData.activeFolderId ?? null,
+          selectedMockupId: selectedMockupId ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
+          activeDesignFolderId: activeDesignFolderId ?? null,
+          openRouterKey: serverData.openRouterKey,
+          modelVision: serverData.modelVision,
+          modelReasoning: serverData.modelReasoning,
+          modelGeneration: serverData.modelGeneration,
+          etsyProductTypes: serverData.etsyProductTypes,
+          etsyUserNotes: serverData.etsyUserNotes,
+        };
+
+        // Write the fresh server data back to local IndexedDB
+        await saveToIndexedDB(payload);
+
+        // Also update local storage caches for AI keys
+        if (serverData.openRouterKey) {
+          try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
+        }
+        if (serverData.modelVision) {
+          try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
+        }
+        if (serverData.modelReasoning) {
+          try { localStorage.setItem('automania_model_reasoning', serverData.modelReasoning); } catch {}
+        }
+        if (serverData.modelGeneration) {
+          try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
+        }
+
+        return payload;
+      }
+    }
+  } catch (err) {
+    console.warn('Force sync from server failed:', err);
+  }
+  return null;
+}
+
+/**
+ * Loads application data, prioritizing the Server API as the Single Source of Truth.
+ * If the server is offline or fails, falls back to IndexedDB.
  */
 export async function loadAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
-  const userId = getCurrentUserId();
 
+  // 1. Try to fetch from Server first (Single Source of Truth)
+  const serverPayload = await forceSyncFromServer();
+  if (serverPayload) {
+    return serverPayload;
+  }
+
+  // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    // 1. Try loading from IndexedDB
     let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
@@ -72,7 +137,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ETSY_USER_NOTES),
       ]);
 
-    // 1b. Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys!
+    // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
     if ((!savedMockups || savedMockups.length === 0) && (!savedDesigns || savedDesigns.length === 0)) {
       const [legacyMockups, legacyDesigns, legacyFolders] = await Promise.all([
         get<MockupItem[]>('automania_pod_mockups_v1'),
@@ -83,7 +148,6 @@ export async function loadAppData(): Promise<AppDataPayload> {
         savedMockups = legacyMockups || [];
         savedDesigns = legacyDesigns || [];
         savedFolders = legacyFolders || [];
-        // Save recovered data into current active storage key
         await saveToIndexedDB({
           mockups: savedMockups,
           designs: savedDesigns,
@@ -94,7 +158,6 @@ export async function loadAppData(): Promise<AppDataPayload> {
       }
     }
 
-    // If local IndexedDB has data, return immediately
     if (hasInit && (savedMockups?.length || savedDesigns?.length || savedFolders?.length)) {
       return {
         mockups: savedMockups || [],
@@ -107,44 +170,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         etsyUserNotes: savedEtsyUserNotes ?? undefined,
       };
     }
-
-    // 2. Fallback to Server API storage if local IndexedDB doesn't have data
-    const query = `?userId=${userId}`;
-    const res = await fetch(`/api/storage${query}`);
-    if (res.ok) {
-      const serverData = await res.json();
-      if (serverData && (serverData.mockups?.length || serverData.designs?.length || serverData.folders?.length)) {
-        await saveToIndexedDB(serverData);
-        if (serverData.openRouterKey) {
-          try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
-        }
-        if (serverData.modelVision) {
-          try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
-        }
-        if (serverData.modelReasoning) {
-          try { localStorage.setItem('automania_model_reasoning', serverData.modelReasoning); } catch {}
-        }
-        if (serverData.modelGeneration) {
-          try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
-        }
-        return {
-          mockups: serverData.mockups || [],
-          designs: serverData.designs || [],
-          folders: serverData.folders || [],
-          activeFolderId: serverData.activeFolderId ?? null,
-          selectedMockupId: serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
-          activeDesignFolderId: null,
-          openRouterKey: serverData.openRouterKey,
-          modelVision: serverData.modelVision,
-          modelReasoning: serverData.modelReasoning,
-          modelGeneration: serverData.modelGeneration,
-          etsyProductTypes: serverData.etsyProductTypes,
-          etsyUserNotes: serverData.etsyUserNotes,
-        };
-      }
-    }
   } catch (err) {
-    console.warn('Failed to load saved state from storage:', err);
+    console.warn('Failed to load saved state from local storage fallback:', err);
   }
 
   // 3. Default empty workspace for new users

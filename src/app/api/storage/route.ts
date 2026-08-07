@@ -12,25 +12,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
     }
 
-    let rows = await sql`
+    const rows = await sql`
       SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes
       FROM user_workspaces
       WHERE user_id = ${userId}
     `;
-
-    // Universal Recovery: If requested userId workspace is empty, fetch any populated user_workspaces row
-    if (rows.length === 0 || (!rows[0]?.mockups?.length && !rows[0]?.designs?.length)) {
-      const fallbackRows = await sql`
-        SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes
-        FROM user_workspaces
-        WHERE (jsonb_array_length(mockups) > 0 OR jsonb_array_length(designs) > 0)
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `;
-      if (fallbackRows.length > 0) {
-        rows = fallbackRows;
-      }
-    }
 
     if (rows.length === 0) {
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
