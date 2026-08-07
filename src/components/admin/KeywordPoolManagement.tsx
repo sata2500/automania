@@ -418,7 +418,103 @@ export default function KeywordPoolManagement() {
           </div>
         </div>
 
-        <div className="overflow-x-auto w-full">
+        {/* Mobile View: Responsive Cards (visible below md breakpoint) */}
+        <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+          {isLoading ? (
+            <div className="p-8 text-center text-slate-500 text-xs">Yükleniyor...</div>
+          ) : keywords.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-xs">Aranan kriterlere uygun kelime bulunamadı.</div>
+          ) : (
+            keywords.map((kw) => {
+              const charLen = kw.keyword.length;
+              const isTagOk = charLen <= 20;
+              const oppScore = kw.opportunity_score ?? kw.etsy_score;
+              const isSelected = selectedIds.has(kw.id);
+
+              return (
+                <div 
+                  key={`mobile-${kw.id}`} 
+                  className={`p-4 transition-colors space-y-3 ${isSelected ? 'bg-emerald-50/60 dark:bg-emerald-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="cursor-pointer shrink-0" onClick={() => handleSelect(kw.id)}>
+                        {isSelected ? (
+                          <CheckSquare className="w-5 h-5 text-emerald-600" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white text-sm">
+                          {kw.keyword}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isTagOk ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {charLen}/20 Karakter
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            Kullanım: {kw.usage_count}x
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      {getScoreBadge(oppScore)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-950/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">İlan & Rekabet</span>
+                      {kw.total_listings ? (
+                        <div className="font-bold text-slate-800 dark:text-slate-200">
+                          {kw.total_listings.toLocaleString()} <span className="text-[10px] text-slate-500 font-normal">({kw.competition_level})</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px]">Taranmadı</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Etsy Autocomplete</span>
+                      {kw.is_etsy_suggested ? (
+                        <span className="text-emerald-600 font-bold text-[11px] flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" /> #{kw.autocomplete_rank || 1} Öneri
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">-</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Bestsellers</span>
+                      <span className="font-bold text-amber-600 text-[11px]">
+                        {kw.bestseller_count ? `${kw.bestseller_count} adet` : '-'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Son Tarama</span>
+                      {kw.last_scrape_error ? (
+                        <span className="text-rose-600 font-bold text-[10px] flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" /> Hata
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-[11px]">
+                          {kw.last_evaluated_at ? new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR') : 'Hiç'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop View: Full Data Table (visible on md screens and above) */}
+        <div className="hidden md:block overflow-x-auto w-full">
           <table className="w-full text-left text-xs sm:text-sm text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                <tr>
