@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
-import { loadAppData } from '@/lib/storage-service';
+import { loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem } from '@/types/pod';
 
 interface VariationRow {
@@ -38,7 +38,7 @@ export const EtsySeoHelper: React.FC = () => {
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  // Load user designs on mount & filter STRICTLY for AI-analyzed designs only!
+  // Load user designs on mount & filter STRICTLY for AI-analyzed designs!
   useEffect(() => {
     loadAppData().then((data) => {
       // Load saved user notes and product types from DB if present
@@ -46,8 +46,8 @@ export const EtsySeoHelper: React.FC = () => {
       if (data.etsyUserNotes) setUserNotes(data.etsyUserNotes);
 
       if (data.designs && Array.isArray(data.designs)) {
-        // STRICT FILTER: Only show designs that have been analyzed by AI!
-        const analyzed = data.designs.filter(d => d.analysis && d.analysis.keywords && d.analysis.keywords.length > 0);
+        // FILTER: Include any design that has AI analysis (description or keywords)!
+        const analyzed = data.designs.filter(d => d.analysis && (d.analysis.description || (d.analysis.keywords && d.analysis.keywords.length > 0)));
         setUserDesigns(analyzed);
 
         if (analyzed.length > 0) {
@@ -74,23 +74,15 @@ export const EtsySeoHelper: React.FC = () => {
     toast.info(`"${cleanName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
   };
 
-  // Save Product Types & User Notes to Database
+  // Save Product Types & User Notes to Database and IndexedDB
   const handleSaveEtsySettings = async () => {
     setIsSavingSettings(true);
     try {
-      const res = await fetch('/api/storage?userId=default_guest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          etsyProductTypes: productType,
-          etsyUserNotes: userNotes
-        })
-      });
-      if (res.ok) {
-        toast.success('Özel Ürün Markaları ve Kullanıcı Talimatları Veritabanına Kaydedildi! (Sayfa yenilense de silinmez)');
-      } else {
-        toast.error('Ayarlar kaydedilirken hata oluştu.');
-      }
+      const appData = await loadAppData();
+      appData.etsyProductTypes = productType;
+      appData.etsyUserNotes = userNotes;
+      await saveAppData(appData);
+      toast.success('Özel Ürün Markaları ve Kullanıcı Talimatları Veritabanına Kaydedildi!');
     } catch (e: any) {
       toast.error('Kaydetme hatası: ' + e.message);
     } finally {

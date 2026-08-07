@@ -9,8 +9,6 @@ export async function GET(request: Request) {
     // Preset/Demo datası sorgulanıyorsa
     const isPreset = searchParams.get('preset') === 'default';
     if (isPreset) {
-      // Şimdilik demo datasını boş dönebiliriz ya da sample-data.ts'den import edilebilir
-      // Ancak storage-service zaten client'ta demo veriyi dolduruyor.
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
     }
 
@@ -62,6 +60,12 @@ export async function POST(request: Request) {
     const userId = searchParams.get('userId') || 'default_guest';
     const body = await request.json();
 
+    const hasMockups = Array.isArray(body.mockups);
+    const hasDesigns = Array.isArray(body.designs);
+    const hasFolders = Array.isArray(body.folders);
+    const hasProductTypes = body.etsyProductTypes !== undefined;
+    const hasUserNotes = body.etsyUserNotes !== undefined;
+
     const mockupsJson = JSON.stringify(body.mockups || []);
     const designsJson = JSON.stringify(body.designs || []);
     const foldersJson = JSON.stringify(body.folders || []);
@@ -89,7 +93,6 @@ export async function POST(request: Request) {
       `;
       if (checkRows.length > 0 && checkRows[0].server_time) {
         const serverTime = parseFloat(checkRows[0].server_time);
-        // If server data is newer than what client knew when it tried to save (with a 2s clock drift buffer)
         if (serverTime > lastKnownServerTimestamp + 2000) {
           return NextResponse.json({ 
             success: false, 
@@ -101,9 +104,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Perform Save
+    // 2. Perform Save - NEVER overwrite existing columns with empty arrays if not passed!
     await sql`
-      INSERT INTO user_workspaces (user_id, mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes)
+      INSERT INTO user_workspaces (
+        user_id, 
+        mockups, 
+        designs, 
+        folders, 
+        active_folder_id, 
+        selected_mockup_id, 
+        openrouter_key, 
+        openrouter_model, 
+        etsy_product_types, 
+        etsy_user_notes
+      )
       VALUES (
         ${userId}, 
         ${mockupsJson}::jsonb, 
@@ -117,15 +131,15 @@ export async function POST(request: Request) {
         ${etsyUserNotes}
       )
       ON CONFLICT (user_id) DO UPDATE SET
-        mockups = EXCLUDED.mockups,
-        designs = EXCLUDED.designs,
-        folders = EXCLUDED.folders,
-        active_folder_id = EXCLUDED.active_folder_id,
-        selected_mockup_id = EXCLUDED.selected_mockup_id,
+        mockups = CASE WHEN ${hasMockups} THEN ${mockupsJson}::jsonb ELSE user_workspaces.mockups END,
+        designs = CASE WHEN ${hasDesigns} THEN ${designsJson}::jsonb ELSE user_workspaces.designs END,
+        folders = CASE WHEN ${hasFolders} THEN ${foldersJson}::jsonb ELSE user_workspaces.folders END,
+        active_folder_id = COALESCE(EXCLUDED.active_folder_id, user_workspaces.active_folder_id),
+        selected_mockup_id = COALESCE(EXCLUDED.selected_mockup_id, user_workspaces.selected_mockup_id),
         openrouter_key = COALESCE(EXCLUDED.openrouter_key, user_workspaces.openrouter_key),
         openrouter_model = COALESCE(EXCLUDED.openrouter_model, user_workspaces.openrouter_model),
-        etsy_product_types = COALESCE(EXCLUDED.etsy_product_types, user_workspaces.etsy_product_types),
-        etsy_user_notes = COALESCE(EXCLUDED.etsy_user_notes, user_workspaces.etsy_user_notes),
+        etsy_product_types = CASE WHEN ${hasProductTypes} THEN ${etsyProductTypes} ELSE user_workspaces.etsy_product_types END,
+        etsy_user_notes = CASE WHEN ${hasUserNotes} THEN ${etsyUserNotes} ELSE user_workspaces.etsy_user_notes END,
         updated_at = CURRENT_TIMESTAMP
     `;
 
@@ -151,10 +165,10 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId') || 'default_guest';
-
     await sql`DELETE FROM user_workspaces WHERE user_id = ${userId}`;
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error('Storage DELETE Error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
