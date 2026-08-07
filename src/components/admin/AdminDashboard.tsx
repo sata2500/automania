@@ -38,7 +38,8 @@ import {
   FileText,
   Coins,
   MessageSquare,
-  XCircle
+  XCircle,
+  ShoppingBag
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -97,6 +98,8 @@ export const AdminDashboard: React.FC = () => {
 
   // 3-Tier Model System & Global Settings
   const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+  const [etsyKeystring, setEtsyKeystring] = useState('');
+  const [etsySharedSecret, setEtsySharedSecret] = useState('');
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
   const [modelGeneration, setModelGeneration] = useState('');
@@ -183,8 +186,10 @@ export const AdminDashboard: React.FC = () => {
       fetch('/api/admin/settings')
         .then(res => res.json())
         .then(data => {
-          if (data.settings && data.settings.openrouter_api_key) {
-            setOpenRouterApiKey(data.settings.openrouter_api_key);
+          if (data.settings) {
+            if (data.settings.openrouter_api_key) setOpenRouterApiKey(data.settings.openrouter_api_key);
+            if (data.settings.etsy_keystring) setEtsyKeystring(data.settings.etsy_keystring);
+            if (data.settings.etsy_shared_secret) setEtsySharedSecret(data.settings.etsy_shared_secret);
           }
         })
         .catch(e => console.error("Could not fetch global settings", e));
@@ -198,11 +203,16 @@ export const AdminDashboard: React.FC = () => {
       localStorage.setItem(MODEL_GENERATION_STORAGE, modelGeneration);
 
       // Save global settings via Admin API
-      if (openRouterApiKey) {
+      const settingsToSave: any = {};
+      if (openRouterApiKey) settingsToSave.openrouter_api_key = openRouterApiKey;
+      if (etsyKeystring) settingsToSave.etsy_keystring = etsyKeystring;
+      if (etsySharedSecret) settingsToSave.etsy_shared_secret = etsySharedSecret;
+
+      if (Object.keys(settingsToSave).length > 0) {
         await fetch('/api/admin/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ settings: { openrouter_api_key: openRouterApiKey } })
+          body: JSON.stringify({ settings: settingsToSave })
         });
       }
 
@@ -585,27 +595,63 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="space-y-5">
-            {/* API Key Input */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-indigo-500" />
-                  OpenRouter API Key
-                </span>
-                <span className="text-[10px] text-slate-400 font-normal">Sunucu Veritabanı Tabanlı</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={openRouterApiKey}
-                  onChange={(e) => setOpenRouterApiKey(e.target.value)}
-                  placeholder="sk-or-v1-..."
-                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all pr-10"
-                />
+            {/* API Key Inputs */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-indigo-500" />
+                    OpenRouter API Key
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Sunucu Veritabanı Tabanlı</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={openRouterApiKey}
+                    onChange={(e) => setOpenRouterApiKey(e.target.value)}
+                    placeholder="sk-or-v1-..."
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all pr-10"
+                  />
+                </div>
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-orange-500" />
+                      Etsy Keystring (App Key)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={etsyKeystring}
+                    onChange={(e) => setEtsyKeystring(e.target.value)}
+                    placeholder="Etsy Developer App Keystring"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-orange-500" />
+                      Etsy Shared Secret
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    value={etsySharedSecret}
+                    onChange={(e) => setEtsySharedSecret(e.target.value)}
+                    placeholder="Etsy Shared Secret"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
+                  />
+                </div>
+              </div>
+
               <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Bu anahtar, doğrudan sunucu veritabanında şifreli saklanır. Tarayıcıda (Frontend) asla gösterilmez.</span>
+                <span>Bu anahtarlar doğrudan sunucu veritabanında (app_settings) şifreli saklanır.</span>
               </p>
             </div>
 

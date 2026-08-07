@@ -40,6 +40,14 @@ async function main() {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_provider VARCHAR(100) DEFAULT 'scraperapi'`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS cloudflare_worker_url VARCHAR(500)`;
     await sql`UPDATE user_workspaces SET cloudflare_worker_url = 'https://automania-etsy-proxy.salihtanriseven25.workers.dev'`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_verifier VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_state VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_refresh_token VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_token_expires_at TIMESTAMP`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_access_token TEXT`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_shop_id VARCHAR(200)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_variation_template JSONB`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_variation_templates JSONB`;
 
     // Ensure app_settings table exists
     await sql`

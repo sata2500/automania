@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     }
 
     const rows = await sql`
-      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes
+      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes, etsy_variation_templates
       FROM user_workspaces
       WHERE user_id = ${userId}
     `;
@@ -51,6 +51,7 @@ export async function GET(request: Request) {
       modelGeneration: parsedModels.generation || null,
       etsyProductTypes: data.etsy_product_types || null,
       etsyUserNotes: data.etsy_user_notes || null,
+      etsyVariationTemplates: data.etsy_variation_templates || [],
     });
   } catch (error) {
     console.error('Storage GET Error:', error);
@@ -80,6 +81,8 @@ export async function POST(request: Request) {
     const openRouterKey = body.openRouterKey || null;
     const etsyProductTypes = body.etsyProductTypes || null;
     const etsyUserNotes = body.etsyUserNotes || null;
+    const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
+    const variationTemplatesJson = hasVariationTemplates ? JSON.stringify(body.etsyVariationTemplates) : null;
     
     const hasModelUpdate = body.modelVision !== undefined || body.modelReasoning !== undefined || body.modelGeneration !== undefined;
     const openRouterModel = hasModelUpdate ? JSON.stringify({
@@ -122,7 +125,8 @@ export async function POST(request: Request) {
         openrouter_key, 
         openrouter_model, 
         etsy_product_types, 
-        etsy_user_notes
+        etsy_user_notes,
+        etsy_variation_templates
       )
       VALUES (
         ${userId}, 
@@ -134,7 +138,8 @@ export async function POST(request: Request) {
         ${openRouterKey},
         ${openRouterModel},
         ${etsyProductTypes},
-        ${etsyUserNotes}
+        ${etsyUserNotes},
+        ${variationTemplatesJson}::jsonb
       )
       ON CONFLICT (user_id) DO UPDATE SET
         mockups = CASE WHEN ${hasMockups} THEN ${mockupsJson}::jsonb ELSE user_workspaces.mockups END,
@@ -146,6 +151,7 @@ export async function POST(request: Request) {
         openrouter_model = COALESCE(EXCLUDED.openrouter_model, user_workspaces.openrouter_model),
         etsy_product_types = CASE WHEN ${hasProductTypes} THEN ${etsyProductTypes} ELSE user_workspaces.etsy_product_types END,
         etsy_user_notes = CASE WHEN ${hasUserNotes} THEN ${etsyUserNotes} ELSE user_workspaces.etsy_user_notes END,
+        etsy_variation_templates = CASE WHEN ${hasVariationTemplates} THEN ${variationTemplatesJson}::jsonb ELSE user_workspaces.etsy_variation_templates END,
         updated_at = CURRENT_TIMESTAMP
     `;
 

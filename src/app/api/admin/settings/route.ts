@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       let val = row.setting_value || '';
       
       // Mask API keys for security even in admin panel
-      if (row.setting_key === 'openrouter_api_key' && val) {
+      if (['openrouter_api_key', 'etsy_keystring', 'etsy_shared_secret'].includes(row.setting_key) && val) {
         if (val.length > 12) {
           val = val.substring(0, 8) + '•'.repeat(val.length - 12) + val.substring(val.length - 4);
         } else {

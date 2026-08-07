@@ -27,6 +27,7 @@ function getStorageKeys() {
     HAS_INITIALIZED: `${prefix}automania_pod_has_init_v1`,
     ETSY_PRODUCT_TYPES: `${prefix}automania_etsy_product_types_v1`,
     ETSY_USER_NOTES: `${prefix}automania_etsy_user_notes_v1`,
+    ETSY_VARIATION_TEMPLATES: `${prefix}automania_etsy_variation_templates_v1`,
   };
 }
 
@@ -43,6 +44,7 @@ export interface AppDataPayload {
   modelGeneration?: string;
   etsyProductTypes?: string;
   etsyUserNotes?: string;
+  etsyVariationTemplates?: { id: string; name: string; updatedAt: string; variations: any[] }[];
   lastUpdated?: number;
 }
 
@@ -78,6 +80,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           modelGeneration: serverData.modelGeneration,
           etsyProductTypes: serverData.etsyProductTypes,
           etsyUserNotes: serverData.etsyUserNotes,
+          etsyVariationTemplates: serverData.etsyVariationTemplates || [],
         };
 
         // Write the fresh server data back to local IndexedDB
@@ -121,7 +124,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes] =
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -132,6 +135,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
         get<string | null>(keys.ETSY_PRODUCT_TYPES),
         get<string | null>(keys.ETSY_USER_NOTES),
+        get<any[] | null>(keys.ETSY_VARIATION_TEMPLATES),
       ]);
 
     // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
@@ -163,8 +167,10 @@ export async function loadAppData(): Promise<AppDataPayload> {
         activeFolderId: savedActiveFolder ?? null,
         selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
         activeDesignFolderId: savedActiveDesignFolder ?? null,
-        etsyProductTypes: savedEtsyProductTypes ?? undefined,
-        etsyUserNotes: savedEtsyUserNotes ?? undefined,
+        etsyProductTypes: savedEtsyProductTypes ?? '',
+        etsyUserNotes: savedEtsyUserNotes ?? '',
+        etsyVariationTemplates: savedEtsyVariationTemplates || [],
+        lastUpdated: Date.now(),
       };
     }
   } catch (err) {
@@ -357,6 +363,7 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     set(keys.SELECTED_MOCKUP, payload.selectedMockupId),
     ...(payload.etsyProductTypes !== undefined ? [set(keys.ETSY_PRODUCT_TYPES, payload.etsyProductTypes)] : []),
     ...(payload.etsyUserNotes !== undefined ? [set(keys.ETSY_USER_NOTES, payload.etsyUserNotes)] : []),
+    ...(payload.etsyVariationTemplates !== undefined ? [set(keys.ETSY_VARIATION_TEMPLATES, payload.etsyVariationTemplates)] : []),
   ]);
 }
 

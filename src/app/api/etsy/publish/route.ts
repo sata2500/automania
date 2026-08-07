@@ -18,6 +18,8 @@ export async function POST(req: Request) {
       quantity = 999, 
       variations = [], 
       images = [],
+      shipping_profile_id,
+      readiness_state_id,
       state = 'draft' // 'draft' or 'active'
     } = body;
 
@@ -28,19 +30,24 @@ export async function POST(req: Request) {
     // Enforce 13 tag & 20 char limit
     const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
 
+    // Fetch Global Settings
+    const settingsRows = await sql`SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')`;
+    let etsyApiKey = process.env.ETSY_API_KEY;
+    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
+    for (const row of settingsRows) {
+      if (row.setting_key === 'etsy_keystring') etsyApiKey = row.setting_value;
+      if (row.setting_key === 'etsy_shared_secret') etsySharedSecret = row.setting_value;
+    }
+
     // Fetch Etsy Store Credentials from Workspace Settings
-    const settingsRows = await sql`
-      SELECT etsy_keystring, etsy_shared_secret, etsy_access_token, etsy_shop_id 
+    const workspaceRows = await sql`
+      SELECT etsy_access_token, etsy_shop_id 
       FROM user_workspaces 
       WHERE user_id = ${session.id} 
-        AND ((etsy_keystring IS NOT NULL AND etsy_keystring != '') OR (etsy_access_token IS NOT NULL AND etsy_access_token != ''))
-      ORDER BY updated_at DESC
-      LIMIT 1
     `;
 
-    const etsyApiKey = settingsRows[0]?.etsy_keystring || process.env.ETSY_API_KEY;
-    const etsyAccessToken = settingsRows[0]?.etsy_access_token || process.env.ETSY_ACCESS_TOKEN;
-    const etsyShopId = settingsRows[0]?.etsy_shop_id || process.env.ETSY_SHOP_ID;
+    const etsyAccessToken = workspaceRows[0]?.etsy_access_token || process.env.ETSY_ACCESS_TOKEN;
+    const etsyShopId = workspaceRows[0]?.etsy_shop_id || process.env.ETSY_SHOP_ID;
 
     // If Etsy OAuth is not connected yet, return a clean simulated draft preview
     if (!etsyAccessToken || !etsyShopId) {
@@ -64,7 +71,7 @@ export async function POST(req: Request) {
     const createRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
       method: 'POST',
       headers: {
-        'x-api-key': etsyApiKey,
+        'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
         'Authorization': `Bearer ${etsyAccessToken}`,
         'Content-Type': 'application/json',
       },
@@ -77,6 +84,8 @@ export async function POST(req: Request) {
         when_made: '2020_2026',
         taxonomy_id: 1081, // Clothing -> Shirts & Tees -> T-Shirts
         tags: validTags,
+        shipping_profile_id,
+        readiness_state_id,
         type: 'physical',
         is_customizable: true,
         state
@@ -96,7 +105,7 @@ export async function POST(req: Request) {
     if (listingId && Array.isArray(variations) && variations.length > 0) {
       try {
         const productsPayload = variations.map((v: any, idx: number) => ({
-          sku: v.sku || `POD-${listingId}-${idx + 1}`,
+          ...(v.sku ? { sku: v.sku } : {}),
           property_values: [
             { property_id: 504, property_name: 'Size', values: [v.size || 'M'] },
             { property_id: 489, property_name: 'Color', values: [v.color || 'Black'] }
@@ -105,7 +114,8 @@ export async function POST(req: Request) {
             {
               price: v.price || price,
               quantity: v.quantity || quantity,
-              is_enabled: true
+              is_enabled: true,
+              readiness_state_id: readiness_state_id
             }
           ]
         }));
@@ -113,7 +123,7 @@ export async function POST(req: Request) {
         const invRes = await fetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
           method: 'PUT',
           headers: {
-            'x-api-key': etsyApiKey,
+            'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
             'Authorization': `Bearer ${etsyAccessToken}`,
             'Content-Type': 'application/json',
           },
@@ -128,11 +138,46 @@ export async function POST(req: Request) {
       }
     }
 
+    // Upload images if provided
+    let imagesUploaded = 0;
+    if (listingId && Array.isArray(images) && images.length > 0) {
+      for (const imgUrl of images) {
+        if (!imgUrl.startsWith('data:image')) continue;
+        try {
+          // Extract base64 and create a blob to upload via FormData
+          const base64Data = imgUrl.split(',')[1];
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          const formData = new FormData();
+          const file = new File([buffer], `mockup-${Date.now()}.png`, { type: 'image/png' });
+          formData.append('image', file);
+
+          const imgRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`, {
+            method: 'POST',
+            headers: {
+              'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+              'Authorization': `Bearer ${etsyAccessToken}`,
+            },
+            body: formData
+          });
+
+          if (imgRes.ok) {
+            imagesUploaded++;
+          } else {
+            console.warn('Image upload failed:', await imgRes.text());
+          }
+        } catch (imgErr) {
+          console.warn('Image upload error:', imgErr);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       listingId,
       listingUrl: listingData.url || `https://www.etsy.com/listing/${listingId}`,
       variationsUpdated,
+      imagesUploaded,
       message: `İlan Etsy Mağazanıza (${state.toUpperCase()}) olarak aktarıldı!`
     });
 
