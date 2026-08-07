@@ -231,9 +231,15 @@ export default function KeywordPoolManagement() {
         const item = targetList[i];
         setScrapeProgress({ current: i + 1, total: targetList.length });
         try {
-          const res = await scrapeEtsyFromBrowser(item.id, item.keyword);
+          let res = await scrapeEtsyFromBrowser(item.id, item.keyword);
+          // Auto-retry once if initial browser fetch got rate limited
+          if (res.scrapeError) {
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            res = await scrapeEtsyFromBrowser(item.id, item.keyword);
+          }
           scrapedResults.push(res);
-          await new Promise(resolve => setTimeout(resolve, 250));
+          // Human-like jitter delay (600ms - 1000ms) to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
         } catch (e) {
           console.warn(`Browser scrape error for ${item.keyword}:`, e);
         }

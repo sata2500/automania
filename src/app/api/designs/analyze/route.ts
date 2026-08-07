@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const prompt = `Analyze this T-shirt/apparel design specifically for the US market (Etsy/Pinterest). 
 Provide a medium-length description covering the niche, style (e.g. vintage, distressed, typography, illustration), target audience, and its relevance/meaning for the US market. 
 
-CRITICAL RULE FOR KEYWORDS: Extract 10-15 highly relevant Etsy SEO keywords/tags. EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces) so it strictly complies with Etsy's tag character limit.
+CRITICAL RULE FOR KEYWORDS: Extract 20-25 highly relevant Etsy SEO keywords/tags. EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces) so it strictly complies with Etsy's tag character limit.
 
 Return ONLY a valid JSON object in the following format, with no markdown formatting or extra text:
 {
@@ -101,11 +101,15 @@ Return ONLY a valid JSON object in the following format, with no markdown format
 
     const { description, keywords } = parsedResult;
 
-    // Process Keywords into the Keyword Pool
+    // Process Keywords into the Keyword Pool with 20-char tag eligibility check
     await ensureKeywordPoolColumns();
-    const uniqueKeywords = (Array.from(new Set(keywords.map((k: string) => k.toLowerCase().trim()))) as string[]).filter(k => k.length > 0);
+    const uniqueKeywords = (Array.from(new Set(
+      keywords
+        .map((k: string) => k.toLowerCase().trim())
+        .filter((k: string) => k.length > 0 && k.length <= 20)
+    )) as string[]);
     
-    // Check which ones are new
+    // Check which ones already exist in database keyword pool
     let existingKeywords: string[] = [];
     if (uniqueKeywords.length > 0) {
       const existingRows = await sql`
@@ -140,7 +144,7 @@ Return ONLY a valid JSON object in the following format, with no markdown format
           ON CONFLICT (keyword) DO NOTHING
         `;
 
-        // Trigger scraping in background (non-blocking)
+        // Trigger background scraping via Cloudflare Worker Proxy
         scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider })
           .then(async (scraped) => {
             await sql`
@@ -162,6 +166,7 @@ Return ONLY a valid JSON object in the following format, with no markdown format
           })
           .catch((err) => console.warn(`Background scrape error for "${kw}":`, err.message));
       } else {
+        // Keyword exists: increment usage count
         await sql`
           UPDATE keyword_pool
           SET usage_count = usage_count + 1
