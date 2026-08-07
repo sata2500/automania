@@ -536,7 +536,7 @@ function MainContent() {
           />
         )}
 
-        {activeTab === 'seo' && <EtsySeoHelper />}
+        {activeTab === 'seo' && <EtsySeoHelper renderedMatches={renderedMatches} />}
 
 
       </main>
@@ -559,12 +559,6 @@ function MainContent() {
 
 export default function Home() {
   return (
-    <UserAuthProvider>
-      <ThemeProvider>
-        <ToastProvider>
-          <MainContent />
-        </ToastProvider>
-      </ThemeProvider>
-    </UserAuthProvider>
+    <MainContent />
   );
 }

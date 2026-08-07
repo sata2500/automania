@@ -1,11 +1,19 @@
 import { MockupItem, DesignItem, ExportFormatType } from '@/types/pod';
 
+const imageCache = new Map<string, HTMLImageElement>();
+
 export function loadImage(src: string): Promise<HTMLImageElement> {
+  if (imageCache.has(src)) {
+    return Promise.resolve(imageCache.get(src)!);
+  }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = (err) => reject(err);
+    img.onload = () => {
+      imageCache.set(src, img);
+      resolve(img);
+    };
+    img.onerror = () => reject(new Error(`Görsel yüklenemedi: ${src}`));
     img.src = src;
   });
 }
@@ -67,7 +75,12 @@ export async function renderMockupWithDesign(
   // If this item is a static visual (size chart, color chart) or has no print area, return base image directly
   const isStaticAsset = mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
   if (isStaticAsset) {
-    return canvas.toDataURL(format, quality);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error('Canvas export failed'));
+        resolve(URL.createObjectURL(blob));
+      }, format, quality);
+    });
   }
 
   // 2. Process design overlay for each print area cleanly
@@ -107,7 +120,12 @@ export async function renderMockupWithDesign(
     ctx.restore();
   }
 
-  return canvas.toDataURL(format, quality);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error('Canvas export failed'));
+      resolve(URL.createObjectURL(blob));
+    }, format, quality);
+  });
 }
 
 export function generateMatchingPairs(

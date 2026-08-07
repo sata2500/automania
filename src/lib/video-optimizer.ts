@@ -26,12 +26,14 @@ export async function optimizeVideoFile(
   }
 
   return new Promise((resolve) => {
-    const objectUrl = URL.createObjectURL(file);
-    const fallbackUrl = serverUrl || objectUrl;
+    let finalUrl = serverUrl;
+    if (!finalUrl) {
+      finalUrl = URL.createObjectURL(file);
+    }
 
     resolve({
-      dataUrl: fallbackUrl,
-      url: fallbackUrl,
+      dataUrl: finalUrl,
+      url: finalUrl,
       blob: file,
       mimeType: file.type || 'video/mp4',
       extension: 'mp4',

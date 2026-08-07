@@ -75,6 +75,8 @@ const themeScript = `
 })();
 `;
 
+import { Providers } from '@/components/common/Providers';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -93,7 +95,11 @@ export default function RootLayout({
         {/* eslint-disable-next-line react/no-danger */}
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Providers>
+          {children}
+        </Providers>
+      </body>
     </html>
   );
 }

@@ -49,7 +49,6 @@ import KeywordPoolManagement from './KeywordPoolManagement';
 
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
 
-const OPENROUTER_KEY_STORAGE = 'automania_openrouter_api_key';
 const MODEL_VISION_STORAGE = 'automania_model_vision';
 const MODEL_REASONING_STORAGE = 'automania_model_reasoning';
 const MODEL_GENERATION_STORAGE = 'automania_model_generation';
@@ -96,10 +95,6 @@ export const AdminDashboard: React.FC = () => {
     } catch (e) {}
   };
 
-  // API Key & Model state
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-
   // 3-Tier Model System
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
@@ -120,11 +115,9 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     try {
-      const savedKey = localStorage.getItem(OPENROUTER_KEY_STORAGE) || '';
       const v = localStorage.getItem(MODEL_VISION_STORAGE) || '';
       const r = localStorage.getItem(MODEL_REASONING_STORAGE) || '';
       const g = localStorage.getItem(MODEL_GENERATION_STORAGE) || '';
-      setApiKey(savedKey);
       setModelVision(v);
       setModelReasoning(r);
       setModelGeneration(g);
@@ -143,11 +136,6 @@ export const AdminDashboard: React.FC = () => {
           const data = await res.json();
           if (data) {
             let updated = false;
-            if (data.openRouterKey && data.openRouterKey !== apiKey) {
-              setApiKey(data.openRouterKey);
-              localStorage.setItem(OPENROUTER_KEY_STORAGE, data.openRouterKey);
-              updated = true;
-            }
             if (data.modelVision && data.modelVision !== modelVision) {
               setModelVision(data.modelVision);
               localStorage.setItem(MODEL_VISION_STORAGE, data.modelVision);
@@ -173,13 +161,12 @@ export const AdminDashboard: React.FC = () => {
   }, [user?.id]);
 
   const fetchOpenRouterModels = async () => {
-    if (!apiKey) return;
     setIsLoadingModels(true);
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/models');
+      const res = await fetch('/api/ai/proxy?endpoint=https://openrouter.ai/api/v1/models');
       const data = await res.json();
-      if (data && data.data) {
-        setOpenRouterModels(data.data);
+      if (data && data.success && data.data.data) {
+        setOpenRouterModels(data.data.data);
       }
     } catch (e) {
       toast.error('OpenRouter modelleri çekilirken hata oluştu.');
@@ -189,15 +176,13 @@ export const AdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (activeSubTab === 'ai' && apiKey) {
+    if (activeSubTab === 'ai') {
       fetchOpenRouterModels();
     }
-  }, [activeSubTab, apiKey]);
+  }, [activeSubTab]);
 
   const handleSaveApiSettings = async () => {
     try {
-      const trimmedKey = apiKey.trim();
-      localStorage.setItem(OPENROUTER_KEY_STORAGE, trimmedKey);
       localStorage.setItem(MODEL_VISION_STORAGE, modelVision);
       localStorage.setItem(MODEL_REASONING_STORAGE, modelReasoning);
       localStorage.setItem(MODEL_GENERATION_STORAGE, modelGeneration);
@@ -205,7 +190,6 @@ export const AdminDashboard: React.FC = () => {
       const currentData = await loadAppData();
       await saveAppData({
         ...currentData,
-        openRouterKey: trimmedKey,
         modelVision,
         modelReasoning,
         modelGeneration,
@@ -218,12 +202,6 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleTestSpecificModel = async (modelId: string, role: 'vision' | 'reasoning' | 'generation') => {
-    const trimmedKey = apiKey.trim();
-    if (!trimmedKey) {
-      toast.warning('Lütfen önce bir OpenRouter API Key girin.');
-      return;
-    }
-
     setTestingModel(modelId);
     const startTime = Date.now();
 
@@ -245,15 +223,13 @@ export const AdminDashboard: React.FC = () => {
     }
 
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch('/api/ai/proxy', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${trimmedKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'Automania POD Studio',
         },
         body: JSON.stringify({
+          endpoint: 'https://openrouter.ai/api/v1/chat/completions',
           model: modelId,
           messages,
           max_tokens: 30,
@@ -263,8 +239,9 @@ export const AdminDashboard: React.FC = () => {
       const latencyMs = Date.now() - startTime;
 
       if (res.ok) {
-        const data = await res.json();
-        const content = data.choices?.[0]?.message?.content || JSON.stringify(data);
+        const result = await res.json();
+        const data = result.data;
+        const content = data?.choices?.[0]?.message?.content || JSON.stringify(data);
         
         // Markdown içinden resim URL'si ayıklama (Text-to-Image modelleri için)
         const urlMatch = content.match(/!\[.*?\]\((.*?)\)/);
@@ -372,8 +349,8 @@ export const AdminDashboard: React.FC = () => {
             <div className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 px-3.5 py-2 rounded-2xl text-xs font-semibold">
               <Zap className="w-4 h-4 text-amber-500" />
               <span className="text-slate-600 dark:text-slate-300">OpenRouter:</span>
-              <span className={`font-extrabold ${apiKey ? 'text-indigo-600 dark:text-amber-300' : 'text-slate-400'}`}>
-                {apiKey ? 'Tanımlı (Eşitlendi)' : 'Yapılandırılmadı'}
+              <span className="font-extrabold text-indigo-600 dark:text-amber-300">
+                Sunucuda Tanımlı
               </span>
             </div>
           </div>
@@ -556,7 +533,7 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Yapay Zeka Altyapısı</span>
                 <p className="font-bold text-slate-800 dark:text-slate-200">OpenRouter Multi-Model Router</p>
-                <p className="text-[10px] text-slate-500">{apiKey ? '3 Farklı Görev Modeli Aktif' : 'API Anahtarı bekleniyor'}</p>
+                <p className="text-[10px] text-slate-500">Sunucu API Anahtarı ile Aktif</p>
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Uygulama Sürümü</span>
@@ -594,29 +571,21 @@ export const AdminDashboard: React.FC = () => {
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-indigo-500" />
-                  OpenRouter API Key:
+                  OpenRouter API Key
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal">Format: sk-or-v1-...</span>
+                <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
               </label>
               <div className="relative">
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all pr-10"
+                  type="text"
+                  disabled
+                  value="Sunucu üzerinde (.env.local) güvenle yapılandırıldı"
+                  className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono text-slate-500 dark:text-slate-400 focus:outline-none transition-all pr-10"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-                <CloudSyncBadge />
-                <span>Bu anahtar kaydedildiğinde telefon dahil tüm cihazlarınıza veritabanından eşitlenir.</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Bu anahtar güvenlik amacıyla tarayıcı yerine sunucuda saklanmaktadır.</span>
               </p>
             </div>
 
@@ -711,13 +680,7 @@ export const AdminDashboard: React.FC = () => {
                 OpenRouter Model Kataloğu
               </label>
 
-              {!apiKey ? (
-                <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-center text-slate-500 dark:text-slate-400 text-xs flex flex-col items-center justify-center">
-                  <Lock className="w-6 h-6 mb-2 text-slate-400" />
-                  <p>Modelleri görüntülemek ve atama yapmak için lütfen geçerli bir OpenRouter API anahtarı girin.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
+              <div className="space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
@@ -826,7 +789,6 @@ export const AdminDashboard: React.FC = () => {
                     )}
                   </div>
                 </div>
-              )}
             </div>
 
             {/* Save & Test Buttons */}

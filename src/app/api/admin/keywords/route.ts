@@ -1,15 +1,24 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth-server';
 
 export async function GET(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     await ensureKeywordPoolColumns();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') || '';
     const filter = searchParams.get('filter') || 'all'; // 'all', 'tag_eligible', 'gold', 'error'
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const order = searchParams.get('order') || 'desc';
-    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    
+    // Cap limit to prevent OOM
+    const rawLimit = parseInt(searchParams.get('limit') || '100', 10);
+    const limit = Math.min(Math.max(1, rawLimit), 200);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     const validSortCols = ['keyword', 'usage_count', 'etsy_score', 'opportunity_score', 'total_listings', 'bestseller_count', 'char_length', 'created_at', 'last_evaluated_at'];
@@ -83,12 +92,17 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error('Keywords API GET Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Sunucu hatası oluştu.' }, { status: 500 });
   }
 }
 
 export async function DELETE(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { ids } = body;
 
@@ -103,6 +117,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Keywords API DELETE Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Sunucu hatası oluştu.' }, { status: 500 });
   }
 }

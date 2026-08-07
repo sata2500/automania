@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { getSession } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { 
       title, 
@@ -26,7 +32,8 @@ export async function POST(req: Request) {
     const settingsRows = await sql`
       SELECT etsy_keystring, etsy_shared_secret, etsy_access_token, etsy_shop_id 
       FROM user_workspaces 
-      WHERE (etsy_keystring IS NOT NULL AND etsy_keystring != '') OR (etsy_access_token IS NOT NULL AND etsy_access_token != '')
+      WHERE user_id = ${session.id} 
+        AND ((etsy_keystring IS NOT NULL AND etsy_keystring != '') OR (etsy_access_token IS NOT NULL AND etsy_access_token != ''))
       ORDER BY updated_at DESC
       LIMIT 1
     `;

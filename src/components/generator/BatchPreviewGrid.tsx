@@ -58,8 +58,25 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   const outputResolution = 3000;
   const outputQuality = 0.95;
 
-  const currentPairs = generateMatchingPairs(mockups, designs, activeFolderId, activeDesignFolderId);
-  const allPairsCount = generateMatchingPairs(mockups, designs, null, activeDesignFolderId).length;
+  const currentPairs = React.useMemo(
+    () => generateMatchingPairs(mockups, designs, activeFolderId, activeDesignFolderId),
+    [mockups, designs, activeFolderId, activeDesignFolderId]
+  );
+  
+  const allPairsCount = React.useMemo(
+    () => generateMatchingPairs(mockups, designs, null, activeDesignFolderId).length,
+    [mockups, designs, activeDesignFolderId]
+  );
+
+  const folderPairsCountMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    folders.forEach(f => {
+      if (f.type !== 'design') {
+        map.set(f.id, generateMatchingPairs(mockups, designs, f.id, activeDesignFolderId).length);
+      }
+    });
+    return map;
+  }, [folders, mockups, designs, activeDesignFolderId]);
 
   const [aspectOverride, setAspectOverride] = useState<'mockup' | 'original' | 'square'>('mockup');
 
@@ -286,7 +303,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
 
           {folders.filter(f => f.type !== 'design').map((folder) => {
             const isActive = activeFolderId === folder.id;
-            const folderPairs = generateMatchingPairs(mockups, designs, folder.id, activeDesignFolderId);
+            const pairCount = folderPairsCountMap.get(folder.id) || 0;
             return (
               <button
                 key={folder.id}
@@ -296,14 +313,14 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
                     ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
                     : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title={`${folder.name} (${folderPairs.length} Varyasyon)`}
+                title={`${folder.name} (${pairCount} Varyasyon)`}
               >
                 {isActive ? <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" /> : <Folder className="w-4 h-4 text-slate-400 shrink-0" />}
                 <span className="truncate">{folder.name}</span>
                 <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
                   isActive ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                 }`}>
-                  {folderPairs.length}
+                  {pairCount}
                 </span>
               </button>
             );

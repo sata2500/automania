@@ -1,9 +1,6 @@
 import { get, set, del } from 'idb-keyval';
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
 import { uploadMediaToServer } from './image-optimizer';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
-import { SAMPLE_MOCKUPS, SAMPLE_DESIGNS, DEFAULT_FOLDERS } from './sample-data';
 
 function getCurrentUserId(): string {
   if (typeof window === 'undefined') return 'default_user';
@@ -189,6 +186,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
  * Loads standard factory sample data (60 mockups, designs, folders) into the user's workspace.
  */
 export async function loadSampleAppData(): Promise<AppDataPayload> {
+  const { SAMPLE_MOCKUPS, SAMPLE_DESIGNS, DEFAULT_FOLDERS } = await import('./sample-data');
   const payload: AppDataPayload = {
     mockups: SAMPLE_MOCKUPS,
     designs: SAMPLE_DESIGNS,
@@ -366,6 +364,9 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
  * Exports current mockups, designs, and folders as a ZIP file for backup.
  */
 export async function exportAppDataFile(payload: AppDataPayload): Promise<void> {
+  const JSZip = (await import('jszip')).default;
+  const { saveAs } = await import('file-saver');
+
   const zip = new JSZip();
   const imagesFolder = zip.folder("images");
   if (!imagesFolder) throw new Error("Failed to create zip folder");
@@ -407,6 +408,7 @@ export async function exportAppDataFile(payload: AppDataPayload): Promise<void> 
  * Imports application backup from a ZIP file containing backup.json and an images folder.
  */
 export async function parseAppDataBackupFile(file: File): Promise<AppDataPayload> {
+  const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
   const loadedZip = await zip.loadAsync(file);
   

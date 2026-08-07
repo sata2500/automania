@@ -46,7 +46,7 @@ function extractCleanNiche(design: DesignItem): string {
   return 'Özel Tasarım Nişi';
 }
 
-export const EtsySeoHelper: React.FC = () => {
+export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedMatches = [] }) => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
 
@@ -132,24 +132,32 @@ export const EtsySeoHelper: React.FC = () => {
 
   // Generate Variations Matrix whenever sizes or colors change
   useEffect(() => {
-    const newVars: VariationRow[] = [];
-    colors.forEach(color => {
-      sizes.forEach(size => {
-        const isPlusSize = size === '2XL' || size === '3XL';
-        const price = isPlusSize ? basePrice + 3.00 : basePrice;
-        newVars.push({
-          id: `${color}-${size}`,
-          color,
-          size,
-          price: Math.round(price * 100) / 100,
-          quantity: 999,
-          sku: `POD-${color.toUpperCase().slice(0, 3)}-${size}`,
-          enabled: true
+    setVariations(prev => {
+      const newVars: VariationRow[] = [];
+      colors.forEach(color => {
+        sizes.forEach(size => {
+          const id = `${color}-${size}`;
+          const existing = prev.find(v => v.id === id);
+          if (existing) {
+            newVars.push(existing);
+          } else {
+            const isPlusSize = size === '2XL' || size === '3XL' || size === '4XL';
+            const price = isPlusSize ? basePrice + 3.00 : basePrice;
+            newVars.push({
+              id,
+              color,
+              size,
+              price: Math.round(price * 100) / 100,
+              quantity: 999,
+              sku: `POD-${color.toUpperCase().slice(0, 3)}-${size}`,
+              enabled: true
+            });
+          }
         });
       });
+      return newVars;
     });
-    setVariations(newVars);
-  }, [sizes, colors, basePrice]);
+  }, [sizes, colors]); // intentionally omitted basePrice to prevent resetting manual edits
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -288,7 +296,11 @@ export const EtsySeoHelper: React.FC = () => {
           price: basePrice,
           quantity: 999,
           variations: variations.filter(v => v.enabled),
-          state
+          state,
+          images: renderedMatches
+            ?.filter(m => m.designId === selectedDesign?.id && m.renderedDataUrl)
+            .map(m => m.renderedDataUrl)
+            .slice(0, 10)
         })
       });
       const data = await res.json();

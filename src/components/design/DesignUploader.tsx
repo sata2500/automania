@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
+import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
 import {
   Upload,
@@ -76,6 +77,19 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   // Drag & drop folder state
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
 
+  // Confirm Modal State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
   const designFolders = folders.filter(f => f.type === 'design');
   
   const handleOpenAddFolderModal = () => {
@@ -123,13 +137,20 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   };
 
   const handleDeleteFolder = (id: string, name: string) => {
-    if (!confirm(`"${name}" klasörünü silmek istediğinize emin misiniz? (İçindeki tasarımlar 'Tüm Tasarımlar'a taşınacaktır)`)) return;
-    setFolders((prev) => prev.filter((f) => f.id !== id));
-    setDesigns((prev) => prev.map(d => d.folderId === id ? { ...d, folderId: undefined } : d));
-    if (activeDesignFolderId === id) {
-      setActiveDesignFolderId(null);
-    }
-    toast.info(`"${name}" klasörü silindi.`);
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Klasörü Sil',
+      message: `"${name}" klasörünü silmek istediğinize emin misiniz? (İçindeki tasarımlar 'Tüm Tasarımlar'a taşınacaktır)`,
+      onConfirm: () => {
+        setFolders((prev) => prev.filter((f) => f.id !== id));
+        setDesigns((prev) => prev.map(d => d.folderId === id ? { ...d, folderId: undefined } : d));
+        if (activeDesignFolderId === id) {
+          setActiveDesignFolderId(null);
+        }
+        toast.info(`"${name}" klasörü silindi.`);
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   // Drag & drop handlers for folder reordering
@@ -195,23 +216,20 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
     const uploadToastId = toast.progress('Tasarımlar işleniyor...', 10);
     let uploadedCount = 0;
+    const newDesigns: DesignItem[] = [];
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       try {
         const optimized = await optimizeDesignImage(file, 2000);
-        setDesigns((prev) => {
-          const slotFree = !prev.some((d) => d.isSelected && d.targetApparel === 'light');
-          const newDesign: DesignItem = {
-            id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-            name: file.name.replace(/\.[^/.]+$/, ''),
-            src: optimized.url || optimized.dataUrl,
-            targetApparel: 'light',
-            isSelected: slotFree,
-            width: optimized.width,
-            height: optimized.height,
-          };
-          return [newDesign, ...prev];
+        newDesigns.push({
+          id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) + i,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          src: optimized.url || optimized.dataUrl,
+          targetApparel: 'light',
+          isSelected: false,
+          width: optimized.width,
+          height: optimized.height,
         });
         uploadedCount++;
         const percent = Math.round(((i + 1) / fileArray.length) * 100);
@@ -220,6 +238,16 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         console.error('Tasarım optimizasyon hatası:', err);
         toast.error(`'${file.name}' yüklenirken hata oluştu.`);
       }
+    }
+    
+    if (newDesigns.length > 0) {
+      setDesigns(prev => {
+        const slotFree = !prev.some((d) => d.isSelected && d.targetApparel === 'light');
+        if (slotFree && newDesigns.length > 0) {
+          newDesigns[0].isSelected = true;
+        }
+        return [...newDesigns, ...prev];
+      });
     }
 
     toast.removeToast(uploadToastId);
@@ -387,17 +415,23 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
   const handleBulkDelete = () => {
     if (selectedDesignIds.length === 0) return;
-    if (!confirm(`${selectedDesignIds.length} tasarımı silmek istediğinize emin misiniz?`)) return;
-    
-    const targets = designs.filter(d => selectedDesignIds.includes(d.id));
-    const blobsToDelete = targets.map(t => t.src).filter(Boolean);
-    if (blobsToDelete.length > 0) {
-      deleteBlobs(blobsToDelete);
-    }
-    
-    setDesigns((prev) => prev.filter((d) => !selectedDesignIds.includes(d.id)));
-    setSelectedDesignIds([]);
-    toast.info(`${targets.length} tasarım silindi.`);
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Toplu Silme Onayı',
+      message: `${selectedDesignIds.length} tasarımı silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      onConfirm: () => {
+        const targets = designs.filter(d => selectedDesignIds.includes(d.id));
+        const blobsToDelete = targets.map(t => t.src).filter(Boolean);
+        if (blobsToDelete.length > 0) {
+          deleteBlobs(blobsToDelete);
+        }
+        
+        setDesigns((prev) => prev.filter((d) => !selectedDesignIds.includes(d.id)));
+        setSelectedDesignIds([]);
+        toast.info(`${targets.length} tasarım silindi.`);
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
   };
 
   const handleBulkMove = (folderId: string | null) => {
@@ -798,6 +832,15 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
             onCropComplete={handleCropComplete}
           />
         )}
+        
+        <ConfirmModal
+          isOpen={confirmConfig.isOpen}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          onConfirm={confirmConfig.onConfirm}
+          onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        />
+
 
         {/* Analysis Modal */}
         {analysisModalData && analysisModalData.analysis && (

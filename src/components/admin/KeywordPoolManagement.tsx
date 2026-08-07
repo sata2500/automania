@@ -28,6 +28,7 @@ export default function KeywordPoolManagement() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'tag_eligible' | 'gold' | 'error'>('all');
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState('created_at');
@@ -37,15 +38,23 @@ export default function KeywordPoolManagement() {
   const limit = 50;
 
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  useEffect(() => {
     fetchKeywords();
-  }, [page, sortBy, order, search, filter]);
+    setSelectedIds(new Set());
+  }, [page, sortBy, order, debouncedSearch, filter]);
 
   const fetchKeywords = async () => {
     setIsLoading(true);
     try {
       const offset = page * limit;
       const query = new URLSearchParams({
-        search,
+        search: debouncedSearch,
         filter,
         sortBy,
         order,

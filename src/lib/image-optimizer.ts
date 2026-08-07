@@ -181,20 +181,23 @@ function loadImageSource(
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
-    img.onload = () => resolve({ img, originalSize });
-    img.onerror = (err) => reject(err);
-
     if (typeof source === 'string') {
       originalSize = Math.round((source.length * 3) / 4);
+      img.onload = () => resolve({ img, originalSize });
+      img.onerror = (err) => reject(err);
       img.src = source;
     } else {
       originalSize = source.size;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
+      const objectUrl = URL.createObjectURL(source);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve({ img, originalSize });
       };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(source);
+      img.onerror = (err) => {
+        URL.revokeObjectURL(objectUrl);
+        reject(err);
+      };
+      img.src = objectUrl;
     }
   });
 }
