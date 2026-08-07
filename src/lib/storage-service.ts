@@ -28,6 +28,8 @@ function getStorageKeys() {
     SELECTED_MOCKUP: `${prefix}automania_pod_selected_mockup_v1`,
     ACTIVE_DESIGN_FOLDER: `${prefix}automania_pod_active_design_folder_v1`,
     HAS_INITIALIZED: `${prefix}automania_pod_has_init_v1`,
+    ETSY_PRODUCT_TYPES: `${prefix}automania_etsy_product_types_v1`,
+    ETSY_USER_NOTES: `${prefix}automania_etsy_user_notes_v1`,
   };
 }
 
@@ -57,7 +59,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   try {
     // 1. Try loading from IndexedDB (Fastest & handles binary images/videos)
-    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder] =
+    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -66,6 +68,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ACTIVE_FOLDER),
         get<string | null>(keys.SELECTED_MOCKUP),
         get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
+        get<string | null>(keys.ETSY_PRODUCT_TYPES),
+        get<string | null>(keys.ETSY_USER_NOTES),
       ]);
 
     // If local IndexedDB has been initialized for this user, respect its state completely (even if empty)
@@ -77,6 +81,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         activeFolderId: savedActiveFolder ?? null,
         selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
         activeDesignFolderId: savedActiveDesignFolder ?? null,
+        etsyProductTypes: savedEtsyProductTypes ?? undefined,
+        etsyUserNotes: savedEtsyUserNotes ?? undefined,
       };
     }
 
@@ -110,6 +116,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
           modelVision: serverData.modelVision,
           modelReasoning: serverData.modelReasoning,
           modelGeneration: serverData.modelGeneration,
+          etsyProductTypes: serverData.etsyProductTypes,
+          etsyUserNotes: serverData.etsyUserNotes,
         };
       }
     }
@@ -300,6 +308,8 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     set(keys.FOLDERS, payload.folders || []),
     set(keys.ACTIVE_FOLDER, payload.activeFolderId),
     set(keys.SELECTED_MOCKUP, payload.selectedMockupId),
+    ...(payload.etsyProductTypes !== undefined ? [set(keys.ETSY_PRODUCT_TYPES, payload.etsyProductTypes)] : []),
+    ...(payload.etsyUserNotes !== undefined ? [set(keys.ETSY_USER_NOTES, payload.etsyUserNotes)] : []),
   ]);
 }
 
