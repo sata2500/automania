@@ -4,7 +4,7 @@ import sql from '@/lib/db';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { designDescription, keywords, productType, userNotes } = body;
+    const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic } = body;
 
     if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
       return NextResponse.json({ success: false, error: 'İçerik oluşturmak için en az bir kelime gereklidir.' }, { status: 400 });
@@ -25,8 +25,8 @@ export async function POST(req: Request) {
 
     const apiKey = rows[0].openrouter_key;
     
-    // Parse SEO Copywriter Model (reads `reasoning` or `text` or `seo` from DB JSON, or raw string)
-    let seoModel = 'google/gemma-2-9b-it:free'; // fallback default
+    // Parse SEO Copywriter Model
+    let seoModel = 'google/gemma-4-26b-a4b-it:free';
     try {
       if (rows[0].openrouter_model) {
         const raw = rows[0].openrouter_model.trim();
@@ -39,33 +39,47 @@ export async function POST(req: Request) {
       }
     } catch(e) {}
 
-    // Prepare prompt with design context, apparel brands, user custom notes, and scored keyword metrics
-    const prompt = `You are a World-Class Etsy SEO Copywriter and POD Listing Specialist for the US market.
-We have an apparel design listing with the following details:
+    // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
+    const prompt = `You are an Elite Etsy SEO Specialist and POD Listing Copywriter for the US market.
+We have an apparel design with the following details:
 
-DESIGN CONCEPT:
+DESIGN CONCEPT / DESCRIPTION:
 ${designDescription || 'Apparel design for US market.'}
+
+PRIMARY SUBJECT / THEME DETECTED:
+${primarySubject || 'Extracted from design concept'}
+
+PRIMARY AESTHETIC / STYLE DETECTED:
+${primaryAesthetic || 'Extracted from design concept'}
 
 APPAREL BRANDS / GARMENT TYPES IN LISTING:
 ${productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee'}
 
-USER CUSTOM NOTES & PRODUCT DETAILS:
-${userNotes || 'Standard high quality print, soft ring-spun cotton, retail fit, size up for oversized look.'}
+USER CUSTOM NOTES:
+${userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.'}
 
-ANALYZED KEYWORDS & METRICS (Keyword, Character Length, Opportunity Score 0-100, Total Listings, Autocomplete Rank):
-${keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Score: ${k.opportunity_score ?? k.etsy_score ?? 0}/100, Listings: ${k.total_listings || 0}, Autocomplete: ${k.is_etsy_suggested ? '#' + (k.autocomplete_rank || 1) : 'No'})`).join('\n')}
+CANDIDATE KEYWORDS & METRICS:
+${keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Score: ${k.opportunity_score ?? k.etsy_score ?? 0}/100)`).join('\n')}
 
-YOUR TASK:
-1. SELECT THE TOP 13 ETSY TAGS: Select EXACTLY 13 tags from the analyzed keywords (or highly relevant variants). EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Prioritize tags with highest opportunity scores, high demand, low competition, and strong niche relevance.
-2. WRITE AN ETSY SEO TITLE: Max 140 characters. Include high-converting long-tail keywords separated cleanly by " | " or ", ". Make it appealing to US Etsy shoppers.
-3. WRITE AN ETSY PRODUCT DESCRIPTION: A high-converting, professional description including product highlights, fabric/quality details for all included garment types, sizing recommendation, care instructions, user custom notes, and bullet points.
+CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
+1. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject (${primarySubject || 'design subject'}) and aesthetic (${primaryAesthetic || 'aesthetic'}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
+2. 13 TAG DISTRIBUTION: Select EXACTLY 13 tags. EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Distribute tags across:
+   - Subject + Product (e.g., cottagecore rabbit, bunny lover gift)
+   - Quote / Message (e.g., grow through quote, inspirational tee)
+   - Aesthetic / Style (e.g., wildflower shirt, botanical shirt)
+   - Buyer Intent / Gifting (e.g., self care gift, nature lover gift)
+   - Micro-Niche & Mindset (e.g., growth mindset, cottagecore shirt)
+3. ETSY SEO TITLE: Max 140 characters. Structure: Primary Message -> Subject/Animal -> Aesthetic -> Botanical -> Buyer Intent. Example: "Grow Through What You Go Through Shirt, Cottagecore Rabbit Tee, Wildflower Botanical Shirt, Inspirational Gift".
+4. ETSY DESCRIPTION: Balanced, high-converting description. Broaden buyer intent beyond just mental health to include nature lovers, rabbit lovers, cottagecore fans, self-care gifts, and everyday botanical apparel. Include PRODUCT HIGHLIGHTS, GARMENT OPTIONS, SIZING, CARE, SHIPPING.
 
-Return ONLY a valid JSON object in the following format with no markdown wrappers or extra commentary:
+Return ONLY a valid JSON object in the following format:
 {
   "title": "Your 140-char SEO Title Here",
-  "description": "Your detailed structured Etsy description here...",
+  "description": "Your structured Etsy description here...",
   "selectedTags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10", "tag11", "tag12", "tag13"],
-  "suggestedBasePrice": 24.99
+  "suggestedBasePrice": 24.99,
+  "detectedSubject": "rabbit",
+  "detectedAesthetic": "cottagecore botanical"
 }`;
 
     const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -107,10 +121,18 @@ Return ONLY a valid JSON object in the following format with no markdown wrapper
       throw new Error('Yapay zeka eksik veri döndürdü.');
     }
 
-    // Enforce 20-character tag limit on AI tags
+    // Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
+    const detectedSubj = (parsedResult.detectedSubject || primarySubject || '').toLowerCase();
+    const forbiddenTerms = ['dog', 'cat', 'horse', 'nurse', 'teacher', 'halloween', 'christmas']
+      .filter(term => !detectedSubj.includes(term) && !(designDescription || '').toLowerCase().includes(term));
+
     parsedResult.selectedTags = parsedResult.selectedTags
       .map((t: string) => t.trim())
-      .filter((t: string) => t.length > 0 && t.length <= 20)
+      .filter((t: string) => {
+        if (t.length === 0 || t.length > 20) return false;
+        const lower = t.toLowerCase();
+        return !forbiddenTerms.some(term => lower.includes(term));
+      })
       .slice(0, 13);
 
     return NextResponse.json({

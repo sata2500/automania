@@ -105,26 +105,41 @@ export const EtsySeoHelper: React.FC = () => {
   const handleGenerateAI = async () => {
     setIsGenerating(true);
     try {
-      // 1. Query Top Keywords from Database Keyword Pool
+      // 1. Detect primary subject from niche & design description
+      const descLower = (designDescription + ' ' + niche).toLowerCase();
+      const isRabbit = descLower.includes('rabbit') || descLower.includes('bunny');
+      const isDog = descLower.includes('dog');
+      const isCat = descLower.includes('cat');
+
+      // 2. Query Top Keywords from Database Keyword Pool
       let kwList: any[] = [];
       try {
-        const kwRes = await fetch('/api/admin/keywords?limit=25&sortBy=opportunity_score&order=desc');
+        const kwRes = await fetch('/api/admin/keywords?limit=50&sortBy=opportunity_score&order=desc');
         const kwData = await kwRes.json();
         if (kwData.success && Array.isArray(kwData.keywords) && kwData.keywords.length > 0) {
           kwList = kwData.keywords;
         }
       } catch (e) {}
 
-      // Fallback keywords if DB pool is empty
+      // 3. Pre-filter candidate keywords to eliminate contamination (e.g. remove 'dog' if design is rabbit)
+      if (isRabbit) {
+        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('dog') && !k.keyword.toLowerCase().includes('cat'));
+      } else if (isDog) {
+        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('cat') && !k.keyword.toLowerCase().includes('rabbit'));
+      } else if (isCat) {
+        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('dog') && !k.keyword.toLowerCase().includes('rabbit'));
+      }
+
+      // Fallback keywords if DB pool is empty or completely filtered out
       if (kwList.length === 0) {
         kwList = [
           { keyword: `${niche.slice(0,12)} shirt`, opportunity_score: 91, total_listings: 1200, is_etsy_suggested: true, autocomplete_rank: 1 },
-          { keyword: 'cat mom gift', opportunity_score: 88, total_listings: 2400, is_etsy_suggested: true, autocomplete_rank: 2 },
-          { keyword: 'retro cat tee', opportunity_score: 85, total_listings: 1800, is_etsy_suggested: true, autocomplete_rank: 3 },
-          { keyword: 'vintage graphic tee', opportunity_score: 82, total_listings: 4500, is_etsy_suggested: true, autocomplete_rank: 4 },
-          { keyword: 'comfort colors 1717', opportunity_score: 95, total_listings: 950, is_etsy_suggested: true, autocomplete_rank: 1 },
-          { keyword: 'oversized cat tee', opportunity_score: 89, total_listings: 1400, is_etsy_suggested: true, autocomplete_rank: 2 },
-          { keyword: 'cute cat lover', opportunity_score: 87, total_listings: 1900, is_etsy_suggested: true, autocomplete_rank: 3 }
+          { keyword: 'grow through quote', opportunity_score: 88, total_listings: 2400, is_etsy_suggested: true, autocomplete_rank: 2 },
+          { keyword: 'wildflower shirt', opportunity_score: 85, total_listings: 1800, is_etsy_suggested: true, autocomplete_rank: 3 },
+          { keyword: 'botanical shirt', opportunity_score: 82, total_listings: 4500, is_etsy_suggested: true, autocomplete_rank: 4 },
+          { keyword: 'cottagecore shirt', opportunity_score: 95, total_listings: 950, is_etsy_suggested: true, autocomplete_rank: 1 },
+          { keyword: 'self care gift', opportunity_score: 89, total_listings: 1400, is_etsy_suggested: true, autocomplete_rank: 2 },
+          { keyword: 'inspirational tee', opportunity_score: 87, total_listings: 1900, is_etsy_suggested: true, autocomplete_rank: 3 }
         ];
       }
 
@@ -135,7 +150,9 @@ export const EtsySeoHelper: React.FC = () => {
           designDescription: designDescription || `${niche} design for US market`,
           keywords: kwList,
           productType,
-          userNotes
+          userNotes,
+          primarySubject: isRabbit ? 'rabbit bunny' : isDog ? 'dog' : isCat ? 'cat' : niche,
+          primaryAesthetic: 'cottagecore botanical wildflower'
         })
       });
 
@@ -149,7 +166,7 @@ export const EtsySeoHelper: React.FC = () => {
         if (data.listing.suggestedBasePrice) {
           setBasePrice(data.listing.suggestedBasePrice);
         }
-        toast.success(`Yapay Zeka (${data.modelUsed}) ile SEO İçerikleriniz Başarıyla Üretildi!`);
+        toast.success(`Görsel Doğrulama Destekli AI (${data.modelUsed}) ile SEO İçerikleriniz Üretildi!`);
       } else {
         toast.error(data.error || 'İçerik üretilirken hata oluştu.');
       }
