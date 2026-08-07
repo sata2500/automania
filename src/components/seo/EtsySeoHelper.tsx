@@ -26,20 +26,26 @@ export const EtsySeoHelper: React.FC = () => {
 
   // Input states for AI generation
   const [niche, setNiche] = useState('Vintage Retro Cat');
-  const [productType, setProductType] = useState('Comfort Colors 1717 T-Shirt');
+  const [productType, setProductType] = useState('Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee');
   const [designDescription, setDesignDescription] = useState('');
+  const [userNotes, setUserNotes] = useState('Beden tablosuna göre sipariş veriniz. %100 ring-spun yumuşak pamuk, 1 iş günü içinde kargolama.');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Generated AI Content states
+  const [generatedTitle, setGeneratedTitle] = useState('');
+  const [generatedDescription, setGeneratedDescription] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Load user designs on mount
   useEffect(() => {
     loadAppData().then((data) => {
       if (data.designs && data.designs.length > 0) {
         setUserDesigns(data.designs);
-        // Pre-select first design if available
         const first = data.designs[0];
         setSelectedDesign(first);
-        setNiche(first.name || 'Vintage Retro Design');
+        const cleanName = (first.name || 'Vintage Retro Design').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+        setNiche(cleanName);
         if (first.analysis?.description) {
           setDesignDescription(first.analysis.description);
         }
@@ -50,26 +56,13 @@ export const EtsySeoHelper: React.FC = () => {
   // When selectedDesign changes, pre-populate details
   const handleSelectDesign = (design: DesignItem) => {
     setSelectedDesign(design);
-    setNiche(design.name || 'Tasarım');
+    const cleanName = (design.name || 'Tasarım').replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+    setNiche(cleanName);
     if (design.analysis?.description) {
       setDesignDescription(design.analysis.description);
     }
-    toast.info(`"${design.name}" tasarımı Etsy Studio'ya yüklendi!`);
+    toast.info(`"${cleanName}" tasarımı Etsy Studio'ya yüklendi!`);
   };
-
-  // Generated AI Content states
-  const [generatedTitle, setGeneratedTitle] = useState(
-    'Vintage Retro Cat T-Shirt | Cute Cat Mom Shirt | Aesthetic Cat Lover Gift, Unisex Oversized Streetwear Graphic Tee'
-  );
-  const [generatedDescription, setGeneratedDescription] = useState(
-    `✨ VINTAGE RETRO CAT SHIRT ✨\n\nThe perfect graphic tee for cat lovers, cat moms, and aesthetic vintage apparel fans! Printed on premium Comfort Colors 1717 super-soft cotton.\n\n🌿 PRODUCT DETAILS:\n- 100% Ring-Spun Cotton\n- Medium fabric (6.1 oz/yd²)\n- Relaxed unisex fit\n- Pre-shrunk fabric for durable wash\n\n🧼 CARE INSTRUCTIONS:\nMachine wash cold inside-out, tumble dry low or hang dry. Do not iron directly on print.\n\n🚚 SHIPPING & PROCESSING:\nProcessed and shipped from US within 2-4 business days.`
-  );
-  const [selectedTags, setSelectedTags] = useState<string[]>([
-    'Vintage Cat Shirt', 'Cat Mom Gift', 'Retro Cat Tee', 'Cute Cat Lover',
-    'Aesthetic Apparel', 'Comfort Colors 1717', 'Unisex Graphic Tee',
-    'Cat Person Shirt', 'Trendy Cat Gift', 'Streetwear Shirt',
-    'Summer T-Shirt', 'oversized cat tee', 'Gift For Her'
-  ]);
 
   // Variation Matrix state
   const [sizes, setSizes] = useState<string[]>(['S', 'M', 'L', 'XL', '2XL', '3XL']);
@@ -112,29 +105,37 @@ export const EtsySeoHelper: React.FC = () => {
   const handleGenerateAI = async () => {
     setIsGenerating(true);
     try {
-      // Mock keyword pool data for AI generator
-      const mockKeywords = [
-        { keyword: `${niche.slice(0,12)} shirt`, opportunity_score: 91, total_listings: 1200, is_etsy_suggested: true, autocomplete_rank: 1 },
-        { keyword: 'cat mom gift', opportunity_score: 88, total_listings: 2400, is_etsy_suggested: true, autocomplete_rank: 2 },
-        { keyword: 'retro cat tee', opportunity_score: 85, total_listings: 1800, is_etsy_suggested: true, autocomplete_rank: 3 },
-        { keyword: 'vintage graphic tee', opportunity_score: 82, total_listings: 4500, is_etsy_suggested: true, autocomplete_rank: 4 },
-        { keyword: 'aesthetic apparel', opportunity_score: 79, total_listings: 3200, is_etsy_suggested: false, autocomplete_rank: 0 },
-        { keyword: 'comfort colors 1717', opportunity_score: 95, total_listings: 950, is_etsy_suggested: true, autocomplete_rank: 1 },
-        { keyword: 'unisex graphic tee', opportunity_score: 76, total_listings: 6200, is_etsy_suggested: false, autocomplete_rank: 0 },
-        { keyword: 'trendy cat shirt', opportunity_score: 84, total_listings: 2100, is_etsy_suggested: true, autocomplete_rank: 5 },
-        { keyword: 'streetwear shirt', opportunity_score: 73, total_listings: 8900, is_etsy_suggested: false, autocomplete_rank: 0 },
-        { keyword: 'gift for her', opportunity_score: 70, total_listings: 15000, is_etsy_suggested: false, autocomplete_rank: 0 },
-        { keyword: 'oversized cat tee', opportunity_score: 89, total_listings: 1400, is_etsy_suggested: true, autocomplete_rank: 2 },
-        { keyword: 'summer t-shirt', opportunity_score: 68, total_listings: 18000, is_etsy_suggested: false, autocomplete_rank: 0 },
-        { keyword: 'cute cat lover', opportunity_score: 87, total_listings: 1900, is_etsy_suggested: true, autocomplete_rank: 3 }
-      ];
+      // 1. Query Top Keywords from Database Keyword Pool
+      let kwList: any[] = [];
+      try {
+        const kwRes = await fetch('/api/admin/keywords?limit=25&sortBy=opportunity_score&order=desc');
+        const kwData = await kwRes.json();
+        if (kwData.success && Array.isArray(kwData.keywords) && kwData.keywords.length > 0) {
+          kwList = kwData.keywords;
+        }
+      } catch (e) {}
+
+      // Fallback keywords if DB pool is empty
+      if (kwList.length === 0) {
+        kwList = [
+          { keyword: `${niche.slice(0,12)} shirt`, opportunity_score: 91, total_listings: 1200, is_etsy_suggested: true, autocomplete_rank: 1 },
+          { keyword: 'cat mom gift', opportunity_score: 88, total_listings: 2400, is_etsy_suggested: true, autocomplete_rank: 2 },
+          { keyword: 'retro cat tee', opportunity_score: 85, total_listings: 1800, is_etsy_suggested: true, autocomplete_rank: 3 },
+          { keyword: 'vintage graphic tee', opportunity_score: 82, total_listings: 4500, is_etsy_suggested: true, autocomplete_rank: 4 },
+          { keyword: 'comfort colors 1717', opportunity_score: 95, total_listings: 950, is_etsy_suggested: true, autocomplete_rank: 1 },
+          { keyword: 'oversized cat tee', opportunity_score: 89, total_listings: 1400, is_etsy_suggested: true, autocomplete_rank: 2 },
+          { keyword: 'cute cat lover', opportunity_score: 87, total_listings: 1900, is_etsy_suggested: true, autocomplete_rank: 3 }
+        ];
+      }
 
       const res = await fetch('/api/designs/generate-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          designDescription: `${niche} theme for ${productType}`,
-          keywords: mockKeywords
+          designDescription: designDescription || `${niche} design for US market`,
+          keywords: kwList,
+          productType,
+          userNotes
         })
       });
 
@@ -148,7 +149,7 @@ export const EtsySeoHelper: React.FC = () => {
         if (data.listing.suggestedBasePrice) {
           setBasePrice(data.listing.suggestedBasePrice);
         }
-        toast.success(`Yapay zeka (${data.modelUsed || 'SEO Modeli'}) ile başlık, açıklama ve 13 etiket başarıyla üretildi!`);
+        toast.success(`Yapay Zeka (${data.modelUsed}) ile SEO İçerikleriniz Başarıyla Üretildi!`);
       } else {
         toast.error(data.error || 'İçerik üretilirken hata oluştu.');
       }
@@ -317,21 +318,36 @@ export const EtsySeoHelper: React.FC = () => {
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
+                placeholder="Örn: Vintage Retro Cat Lover"
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                Ürün Tipi / Kumaş:
+                İlandaki Ürün Tipleri / Markalar:
               </label>
               <input
                 type="text"
                 value={productType}
                 onChange={(e) => setProductType(e.target.value)}
+                placeholder="Örn: Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee, Hoodie"
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+              💡 Kullanıcı Notları / Özel Ürün Talimatları (Yapay Zekanın Metinde Kullanacağı Bilgiler):
+            </label>
+            <textarea
+              rows={2}
+              value={userNotes}
+              onChange={(e) => setUserNotes(e.target.value)}
+              placeholder="Örn: Beden tablosuna göre 1 beden büyük tercih ediniz. %100 taranmış pamuk, 1 iş gününde kargo."
+              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
+            />
           </div>
 
           {/* Title Editor */}

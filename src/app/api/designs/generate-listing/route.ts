@@ -4,7 +4,7 @@ import sql from '@/lib/db';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { designDescription, keywords } = body;
+    const { designDescription, keywords, productType, userNotes } = body;
 
     if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
       return NextResponse.json({ success: false, error: 'İçerik oluşturmak için en az bir kelime gereklidir.' }, { status: 400 });
@@ -25,23 +25,32 @@ export async function POST(req: Request) {
 
     const apiKey = rows[0].openrouter_key;
     
-    // Parse SEO Copywriter Model (defaults to llama-3.3-70b-instruct or text model if defined)
-    let seoModel = 'meta-llama/llama-3.3-70b-instruct:free';
+    // Parse SEO Copywriter Model (reads `reasoning` or `text` or `seo` from DB JSON, or raw string)
+    let seoModel = 'google/gemma-2-9b-it:free'; // fallback default
     try {
-      if (rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
-        const parsed = JSON.parse(rows[0].openrouter_model);
-        if (parsed.text || parsed.seo) {
-          seoModel = parsed.text || parsed.seo;
+      if (rows[0].openrouter_model) {
+        const raw = rows[0].openrouter_model.trim();
+        if (raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          seoModel = parsed.reasoning || parsed.text || parsed.seo || parsed.vision || seoModel;
+        } else if (raw.length > 0) {
+          seoModel = raw;
         }
       }
     } catch(e) {}
 
-    // Prepare prompt with design context and scored keyword metrics
+    // Prepare prompt with design context, apparel brands, user custom notes, and scored keyword metrics
     const prompt = `You are a World-Class Etsy SEO Copywriter and POD Listing Specialist for the US market.
-We have a T-shirt / apparel design with the following details:
+We have an apparel design listing with the following details:
 
 DESIGN CONCEPT:
 ${designDescription || 'Apparel design for US market.'}
+
+APPAREL BRANDS / GARMENT TYPES IN LISTING:
+${productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee'}
+
+USER CUSTOM NOTES & PRODUCT DETAILS:
+${userNotes || 'Standard high quality print, soft ring-spun cotton, retail fit, size up for oversized look.'}
 
 ANALYZED KEYWORDS & METRICS (Keyword, Character Length, Opportunity Score 0-100, Total Listings, Autocomplete Rank):
 ${keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Score: ${k.opportunity_score ?? k.etsy_score ?? 0}/100, Listings: ${k.total_listings || 0}, Autocomplete: ${k.is_etsy_suggested ? '#' + (k.autocomplete_rank || 1) : 'No'})`).join('\n')}
@@ -49,7 +58,7 @@ ${keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Sc
 YOUR TASK:
 1. SELECT THE TOP 13 ETSY TAGS: Select EXACTLY 13 tags from the analyzed keywords (or highly relevant variants). EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Prioritize tags with highest opportunity scores, high demand, low competition, and strong niche relevance.
 2. WRITE AN ETSY SEO TITLE: Max 140 characters. Include high-converting long-tail keywords separated cleanly by " | " or ", ". Make it appealing to US Etsy shoppers.
-3. WRITE AN ETSY PRODUCT DESCRIPTION: A high-converting, professional description including product highlights, fabric/quality details, sizing recommendation, care instructions, and bullet points.
+3. WRITE AN ETSY PRODUCT DESCRIPTION: A high-converting, professional description including product highlights, fabric/quality details for all included garment types, sizing recommendation, care instructions, user custom notes, and bullet points.
 
 Return ONLY a valid JSON object in the following format with no markdown wrappers or extra commentary:
 {
