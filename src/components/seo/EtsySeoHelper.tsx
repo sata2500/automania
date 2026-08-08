@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
@@ -49,6 +49,27 @@ function extractCleanNiche(design: DesignItem): string {
 export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedMatches = [] }) => {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
+  const isTabInitialized = useRef(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('automania_seo_active_tab');
+      if (saved === 'studio' || saved === 'variations' || saved === 'publish') {
+        setActiveTab(saved);
+      }
+    } catch {}
+    // Bir sonraki tick'te initialized olduğunu kabul et
+    setTimeout(() => {
+      isTabInitialized.current = true;
+    }, 50);
+  }, []);
+
+  useEffect(() => {
+    if (!isTabInitialized.current) return;
+    try {
+      localStorage.setItem('automania_seo_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
 
   // Loaded user designs
   const [userDesigns, setUserDesigns] = useState<DesignItem[]>([]);
@@ -1801,7 +1822,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                   Otomatik ilan oluşturabilmek için lütfen Etsy mağazanızı yetkilendirin.
                 </p>
                 <a 
-                  href="/api/etsy/auth"
+                  href="/api/etsy/auth?returnUrl=/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors"

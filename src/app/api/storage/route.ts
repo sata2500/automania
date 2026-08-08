@@ -1,26 +1,32 @@
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import { db } from '@/lib/db';
+import { userWorkspaces } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { getSession } from '@/lib/auth-server';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // Prefer authenticated session; fallback to query param for backwards-compat
+    // GÜVENLİK GÜNCELLEMESİ (2026): Yalnızca doğrulanmış oturumlar (session) kabul ediliyor.
+    // Query parameter fallback kaldırıldı.
     const session = await getSession();
-    const userId = session?.id || searchParams.get('userId') || 'default_guest';
+    if (!session || !session.id) {
+       // Sadece preset veriler isteniyorsa auth hatası vermeden boş dön
+       const isPreset = searchParams.get('preset') === 'default';
+       if (isPreset) {
+         return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+       }
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = session.id;
 
-    // Preset/Demo datası sorgulanıyorsa
     const isPreset = searchParams.get('preset') === 'default';
     if (isPreset) {
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
     }
 
-    const rows = await sql`
-      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes, etsy_variation_templates, etsy_custom_sizes, etsy_custom_colors, etsy_generated_mockups
-      FROM user_workspaces
-      WHERE user_id = ${userId}
-    `;
+    const rows = await db.select().from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
 
     if (rows.length === 0) {
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
@@ -30,11 +36,11 @@ export async function GET(request: Request) {
 
     let parsedModels: { vision?: string; reasoning?: string; generation?: string } = {};
     try {
-      if (data.openrouter_model) {
-        if (data.openrouter_model.startsWith('{')) {
-          parsedModels = JSON.parse(data.openrouter_model);
+      if (data.openrouterModel) {
+        if (data.openrouterModel.startsWith('{')) {
+          parsedModels = JSON.parse(data.openrouterModel);
         } else {
-          parsedModels.reasoning = data.openrouter_model;
+          parsedModels.reasoning = data.openrouterModel;
         }
       }
     } catch(e) {}
@@ -43,18 +49,18 @@ export async function GET(request: Request) {
       mockups: data.mockups || [],
       designs: data.designs || [],
       folders: data.folders || [],
-      activeFolderId: data.active_folder_id,
-      selectedMockupId: data.selected_mockup_id,
-      openRouterKey: data.openrouter_key || null,
+      activeFolderId: data.activeFolderId,
+      selectedMockupId: data.selectedMockupId,
+      openRouterKey: data.openrouterKey || null,
       modelVision: parsedModels.vision || null,
       modelReasoning: parsedModels.reasoning || null,
       modelGeneration: parsedModels.generation || null,
-      etsyProductTypes: data.etsy_product_types || null,
-      etsyUserNotes: data.etsy_user_notes || null,
-      etsyVariationTemplates: data.etsy_variation_templates || [],
-      etsyCustomSizes: data.etsy_custom_sizes || [],
-      etsyCustomColors: data.etsy_custom_colors || [],
-      etsyGeneratedMockups: data.etsy_generated_mockups || [],
+      etsyProductTypes: data.etsyProductTypes || null,
+      etsyUserNotes: data.etsyUserNotes || null,
+      etsyVariationTemplates: data.etsyVariationTemplates || [],
+      etsyCustomSizes: data.etsyCustomSizes || [],
+      etsyCustomColors: data.etsyCustomColors || [],
+      etsyGeneratedMockups: data.etsyGeneratedMockups || [],
     });
   } catch (error) {
     console.error('Storage GET Error:', error);
@@ -64,10 +70,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    // Prefer authenticated session; fallback to query param for backwards-compat
     const session = await getSession();
-    const userId = session?.id || searchParams.get('userId') || 'default_guest';
+    if (!session || !session.id) {
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = session.id;
     const body = await request.json();
 
     const hasMockups = Array.isArray(body.mockups);
@@ -76,22 +83,22 @@ export async function POST(request: Request) {
     const hasProductTypes = body.etsyProductTypes !== undefined;
     const hasUserNotes = body.etsyUserNotes !== undefined;
 
-    const mockupsJson = JSON.stringify(body.mockups || []);
-    const designsJson = JSON.stringify(body.designs || []);
-    const foldersJson = JSON.stringify(body.folders || []);
+    const mockupsJson = body.mockups || [];
+    const designsJson = body.designs || [];
+    const foldersJson = body.folders || [];
     const activeFolderId = body.activeFolderId || null;
     const selectedMockupId = body.selectedMockupId || null;
     const openRouterKey = body.openRouterKey || null;
     const etsyProductTypes = body.etsyProductTypes || null;
     const etsyUserNotes = body.etsyUserNotes || null;
     const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
-    const variationTemplatesJson = hasVariationTemplates ? JSON.stringify(body.etsyVariationTemplates) : null;
+    const variationTemplatesJson = hasVariationTemplates ? body.etsyVariationTemplates : [];
     const hasCustomSizes = Array.isArray(body.etsyCustomSizes);
-    const customSizesJson = hasCustomSizes ? JSON.stringify(body.etsyCustomSizes) : null;
+    const customSizesJson = hasCustomSizes ? body.etsyCustomSizes : [];
     const hasCustomColors = Array.isArray(body.etsyCustomColors);
-    const customColorsJson = hasCustomColors ? JSON.stringify(body.etsyCustomColors) : null;
+    const customColorsJson = hasCustomColors ? body.etsyCustomColors : [];
     const hasGeneratedMockups = Array.isArray(body.etsyGeneratedMockups);
-    const generatedMockupsJson = hasGeneratedMockups ? JSON.stringify(body.etsyGeneratedMockups) : null;
+    const generatedMockupsJson = hasGeneratedMockups ? body.etsyGeneratedMockups : [];
     
     const hasModelUpdate = body.modelVision !== undefined || body.modelReasoning !== undefined || body.modelGeneration !== undefined;
     const openRouterModel = hasModelUpdate ? JSON.stringify({
@@ -104,13 +111,9 @@ export async function POST(request: Request) {
 
     // 1. Optimistic Concurrency Control
     if (lastKnownServerTimestamp) {
-      const checkRows = await sql`
-        SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS server_time
-        FROM user_workspaces
-        WHERE user_id = ${userId}
-      `;
-      if (checkRows.length > 0 && checkRows[0].server_time) {
-        const serverTime = parseFloat(checkRows[0].server_time);
+      const checkRows = await db.select({ updatedAt: userWorkspaces.updatedAt }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
+      if (checkRows.length > 0 && checkRows[0].updatedAt) {
+        const serverTime = new Date(checkRows[0].updatedAt).getTime();
         if (serverTime > lastKnownServerTimestamp + 2000) {
           return NextResponse.json({ 
             success: false, 
@@ -122,65 +125,53 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Perform Save - NEVER overwrite existing columns with empty arrays if not passed!
-    await sql`
-      INSERT INTO user_workspaces (
-        user_id, 
-        mockups, 
-        designs, 
-        folders, 
-        active_folder_id, 
-        selected_mockup_id, 
-        openrouter_key, 
-        openrouter_model, 
-        etsy_product_types, 
-        etsy_user_notes,
-        etsy_variation_templates,
-        etsy_custom_sizes,
-        etsy_custom_colors,
-        etsy_generated_mockups
-      )
-      VALUES (
-        ${userId}, 
-        ${mockupsJson}::jsonb, 
-        ${designsJson}::jsonb, 
-        ${foldersJson}::jsonb, 
-        ${activeFolderId}, 
-        ${selectedMockupId},
-        ${openRouterKey},
-        ${openRouterModel},
-        ${etsyProductTypes},
-        ${etsyUserNotes},
-        ${variationTemplatesJson}::jsonb,
-        ${customSizesJson}::jsonb,
-        ${customColorsJson}::jsonb,
-        ${generatedMockupsJson}::jsonb
-      )
-      ON CONFLICT (user_id) DO UPDATE SET
-        mockups = CASE WHEN ${hasMockups} THEN ${mockupsJson}::jsonb ELSE user_workspaces.mockups END,
-        designs = CASE WHEN ${hasDesigns} THEN ${designsJson}::jsonb ELSE user_workspaces.designs END,
-        folders = CASE WHEN ${hasFolders} THEN ${foldersJson}::jsonb ELSE user_workspaces.folders END,
-        active_folder_id = COALESCE(EXCLUDED.active_folder_id, user_workspaces.active_folder_id),
-        selected_mockup_id = COALESCE(EXCLUDED.selected_mockup_id, user_workspaces.selected_mockup_id),
-        openrouter_key = COALESCE(EXCLUDED.openrouter_key, user_workspaces.openrouter_key),
-        openrouter_model = COALESCE(EXCLUDED.openrouter_model, user_workspaces.openrouter_model),
-        etsy_product_types = CASE WHEN ${hasProductTypes} THEN ${etsyProductTypes} ELSE user_workspaces.etsy_product_types END,
-        etsy_user_notes = CASE WHEN ${hasUserNotes} THEN ${etsyUserNotes} ELSE user_workspaces.etsy_user_notes END,
-        etsy_variation_templates = CASE WHEN ${hasVariationTemplates} THEN ${variationTemplatesJson}::jsonb ELSE user_workspaces.etsy_variation_templates END,
-        etsy_custom_sizes = CASE WHEN ${hasCustomSizes} THEN ${customSizesJson}::jsonb ELSE user_workspaces.etsy_custom_sizes END,
-        etsy_custom_colors = CASE WHEN ${hasCustomColors} THEN ${customColorsJson}::jsonb ELSE user_workspaces.etsy_custom_colors END,
-        etsy_generated_mockups = CASE WHEN ${hasGeneratedMockups} THEN ${generatedMockupsJson}::jsonb ELSE user_workspaces.etsy_generated_mockups END,
-        updated_at = CURRENT_TIMESTAMP
-    `;
+    // 2. Perform Save
+    // Prepare data to insert/update
+    const insertData: any = {
+      userId,
+      mockups: mockupsJson,
+      designs: designsJson,
+      folders: foldersJson,
+      activeFolderId,
+      selectedMockupId,
+      openrouterKey: openRouterKey,
+      openrouterModel: openRouterModel,
+      etsyProductTypes,
+      etsyUserNotes,
+      etsyVariationTemplates: variationTemplatesJson,
+      etsyCustomSizes: customSizesJson,
+      etsyCustomColors: customColorsJson,
+      etsyGeneratedMockups: generatedMockupsJson,
+      updatedAt: new Date()
+    };
+
+    // Prepare update data, ignoring nulls for things not provided
+    const updateData: any = { updatedAt: new Date() };
+    if (hasMockups) updateData.mockups = mockupsJson;
+    if (hasDesigns) updateData.designs = designsJson;
+    if (hasFolders) updateData.folders = foldersJson;
+    if (activeFolderId !== undefined) updateData.activeFolderId = activeFolderId;
+    if (selectedMockupId !== undefined) updateData.selectedMockupId = selectedMockupId;
+    if (openRouterKey !== undefined) updateData.openrouterKey = openRouterKey;
+    if (openRouterModel !== undefined) updateData.openrouterModel = openRouterModel;
+    if (hasProductTypes) updateData.etsyProductTypes = etsyProductTypes;
+    if (hasUserNotes) updateData.etsyUserNotes = etsyUserNotes;
+    if (hasVariationTemplates) updateData.etsyVariationTemplates = variationTemplatesJson;
+    if (hasCustomSizes) updateData.etsyCustomSizes = customSizesJson;
+    if (hasCustomColors) updateData.etsyCustomColors = customColorsJson;
+    if (hasGeneratedMockups) updateData.etsyGeneratedMockups = generatedMockupsJson;
+
+    await db.insert(userWorkspaces)
+      .values(insertData)
+      .onConflictDoUpdate({
+        target: userWorkspaces.userId,
+        set: updateData
+      });
 
     // Fetch the exact Postgres timestamp that was just saved
-    const updatedRows = await sql`
-      SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS server_time
-      FROM user_workspaces
-      WHERE user_id = ${userId}
-    `;
-    const finalTimestamp = updatedRows.length > 0 && updatedRows[0].server_time 
-      ? parseFloat(updatedRows[0].server_time) 
+    const updatedRows = await db.select({ updatedAt: userWorkspaces.updatedAt }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
+    const finalTimestamp = updatedRows.length > 0 && updatedRows[0].updatedAt 
+      ? new Date(updatedRows[0].updatedAt).getTime() 
       : Date.now();
 
     return NextResponse.json({ success: true, timestamp: finalTimestamp });
@@ -193,11 +184,13 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    // Prefer authenticated session; fallback to query param for backwards-compat
     const session = await getSession();
-    const userId = session?.id || searchParams.get('userId') || 'default_guest';
-    await sql`DELETE FROM user_workspaces WHERE user_id = ${userId}`;
+    if (!session || !session.id) {
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = session.id;
+    
+    await db.delete(userWorkspaces).where(eq(userWorkspaces.userId, userId));
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Storage DELETE Error:', error);

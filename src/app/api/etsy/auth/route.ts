@@ -61,8 +61,12 @@ export async function GET(req: Request) {
     authUrl.searchParams.append('code_challenge', codeChallenge);
     authUrl.searchParams.append('code_challenge_method', 'S256');
 
-    // We can redirect the user directly, or return the URL for frontend to redirect
-    return NextResponse.redirect(authUrl.toString());
+    // Create response and set returnUrl cookie
+    const response = NextResponse.redirect(authUrl.toString());
+    const returnUrl = searchParams.get('returnUrl') || '/';
+    response.cookies.set('etsy_return_to', returnUrl, { path: '/', maxAge: 600 });
+
+    return response;
 
   } catch (error: any) {
     console.error('Etsy Auth Route Error:', error);

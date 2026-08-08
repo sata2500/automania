@@ -24,6 +24,7 @@ import { ToastProvider } from '@/components/common/ToastContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
+import { useWorkspace } from '@/hooks/useWorkspace';
 
 const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo'];
 
@@ -82,192 +83,27 @@ function MainContent() {
   };
 
   const activeTab = activeTabState;
-  const [folders, setFolders] = useState<MockupFolder[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
 
-  const [mockups, setMockups] = useState<MockupItem[]>([]);
-  const [designs, setDesigns] = useState<DesignItem[]>([]);
-  const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
-  const [activeDesignFolderId, setActiveDesignFolderId] = useState<string | null>(null);
-
-  // Batch Generation State (Persists in memory across tab switches)
-  const [renderedMatches, setRenderedMatches] = useState<RenderedMatch[]>([]);
-  const [hasGenerated, setHasGenerated] = useState<boolean>(false);
-
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isBackupProcessing, setIsBackupProcessing] = useState(false);
-
-  const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(false);
-  const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(false);
-  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(false);
-  const [isPwaInstalled, setIsPwaInstalled] = useState(true); // Default to true to prevent flash, then check in useEffect
+  const {
+    folders, setFolders,
+    activeFolderId, setActiveFolderId,
+    mockups, setMockups,
+    designs, setDesigns,
+    selectedMockupId, setSelectedMockupId,
+    activeDesignFolderId, setActiveDesignFolderId,
+    renderedMatches, setRenderedMatches,
+    hasGenerated, setHasGenerated,
+    isInitialized, setIsInitialized,
+    isSaving, setIsSaving,
+    isBackupProcessing, setIsBackupProcessing,
+    isGuestInfoDismissed, setIsGuestInfoDismissed,
+    isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed,
+    isPwaInfoDismissed, setIsPwaInfoDismissed,
+    isPwaInstalled, setIsPwaInstalled
+  } = useWorkspace();
 
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Real-time sync refs
-  const lastSyncTimestampRef = useRef<number>(0);
-  const syncedFromServerRef = useRef<boolean>(false);
-  const isSyncFetchingRef = useRef<boolean>(false);
-  const isFirstRenderAfterInit = useRef<boolean>(true);
-
-  // 1. Initial Load from Persistent Storage (IndexedDB + API) and check dismissal flags
-  useEffect(() => {
-    let isMounted = true;
-    try {
-      if (localStorage.getItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED) === 'true') {
-        setIsGuestInfoDismissed(true);
-      }
-      if (localStorage.getItem(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED) === 'true') {
-        setIsEmptyWorkspaceDismissed(true);
-      }
-      if (localStorage.getItem(STORAGE_KEYS.PWA_BANNER_DISMISSED) === 'true') {
-        setIsPwaInfoDismissed(true);
-      }
-      
-      // Check if installed as PWA
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-      setIsPwaInstalled(!!isStandalone);
-    } catch {}
-
-    loadAppData().then((data) => {
-      if (!isMounted) return;
-      setMockups(data.mockups);
-      setDesigns(data.designs);
-      setFolders(data.folders);
-      setActiveFolderId(data.activeFolderId);
-      setSelectedMockupId(data.selectedMockupId);
-      setActiveDesignFolderId(data.activeDesignFolderId ?? null);
-      setIsInitialized(true);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // 2a. Auto-save DATA to Server (debounced 400ms)
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    if (isFirstRenderAfterInit.current) {
-      isFirstRenderAfterInit.current = false;
-      return;
-    }
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    if (syncedFromServerRef.current) {
-      syncedFromServerRef.current = false;
-      setIsSaving(false);
-      return;
-    }
-
-    setIsSaving(true);
-    saveTimeoutRef.current = setTimeout(async () => {
-      const result = await saveAppData({
-        mockups,
-        designs,
-        folders,
-        activeFolderId,
-        selectedMockupId,
-      }, lastSyncTimestampRef.current);
-
-      if (result.conflict) {
-        console.warn('Sync conflict detected! Server has newer data. Forcing sync on next poll...');
-        lastSyncTimestampRef.current = 0; // Force the next 5s poll to fetch the server data
-      } else if (result.success && result.timestamp) {
-        lastSyncTimestampRef.current = result.timestamp;
-      }
-      setIsSaving(false);
-    }, 400);
-
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
-  }, [mockups, designs, folders, isInitialized]); // Removed activeFolderId and selectedMockupId from dependencies
-
-  // 2b. Auto-save UI STATE locally (IndexedDB only)
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    const uiSaveTimer = setTimeout(() => {
-      saveUIStateToIndexedDB(activeFolderId, selectedMockupId, activeDesignFolderId).catch(console.error);
-    }, 200);
-    
-    return () => clearTimeout(uiSaveTimer);
-  }, [activeFolderId, selectedMockupId, activeDesignFolderId, isInitialized]);
-
-  // 3. Real-time cross-device sync — polls server every 5s for changes made on other devices.
-  //    Polling is paused when the tab is hidden (Page Visibility API) to save resources.
-  useEffect(() => {
-    if (!isInitialized || !user) return;
-
-    async function doCheckForUpdates() {
-      if (isSyncFetchingRef.current) return;
-      if (document.visibilityState === 'hidden') return; // Skip while tab is backgrounded
-
-      try {
-        const res = await fetch(`/api/storage/version?userId=${user!.id}`);
-        if (!res.ok) return;
-
-        const { updatedAt } = await res.json();
-        if (!updatedAt) return;
-
-        if (updatedAt > lastSyncTimestampRef.current + TIMING.SYNC_CLOCK_DRIFT_MS) {
-          isSyncFetchingRef.current = true;
-          console.log(`[Sync] Remote change detected. Fetching...`);
-
-          const dataRes = await fetch(`/api/storage?userId=${user!.id}`);
-          if (dataRes.ok) {
-            const serverData = await dataRes.json();
-            if (serverData && Array.isArray(serverData.mockups)) {
-              syncedFromServerRef.current = true;
-              setMockups(serverData.mockups || []);
-              setDesigns(serverData.designs || []);
-              setFolders(serverData.folders || []);
-              lastSyncTimestampRef.current = updatedAt;
-
-              await updateLocalCache({
-                mockups: serverData.mockups || [],
-                designs: serverData.designs || [],
-                folders: serverData.folders || [],
-                activeFolderId: activeFolderId,
-                selectedMockupId: selectedMockupId,
-              });
-
-              console.log('[Sync] State updated from remote.');
-            }
-          }
-          isSyncFetchingRef.current = false;
-        }
-      } catch (err) {
-        console.warn('[Sync] Version check failed:', err);
-        isSyncFetchingRef.current = false;
-      }
-    }
-
-    // Immediate check on mount
-    doCheckForUpdates();
-
-    // Poll interval
-    const interval = setInterval(doCheckForUpdates, TIMING.SYNC_POLL_INTERVAL_MS);
-
-    // Page Visibility: resume polling + immediate sync when user returns to tab
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        doCheckForUpdates();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isInitialized, user]);
 
   // Handlers for Backup Export / Import / Sample Load / Clear All
   const handleExportBackup = async () => {

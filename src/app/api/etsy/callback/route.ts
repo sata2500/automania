@@ -1,8 +1,9 @@
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import { sql } from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) {
@@ -14,12 +15,20 @@ export async function GET(req: Request) {
     const state = searchParams.get('state');
     const error = searchParams.get('error');
 
+    const returnUrl = req.cookies.get('etsy_return_to')?.value || '/admin';
+    const getRedirectUrl = (query: string) => {
+      const targetUrl = new URL(returnUrl, req.url);
+      const [key, val] = query.split('=');
+      targetUrl.searchParams.set(key, val);
+      return targetUrl;
+    };
+
     if (error) {
-      return NextResponse.redirect(new URL(`/admin?etsy_error=${error}`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=${error}`));
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(new URL(`/admin?etsy_error=missing_params`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=missing_params`));
     }
 
     // 1. Fetch user's saved PKCE state and verifier
@@ -30,14 +39,14 @@ export async function GET(req: Request) {
     `;
 
     if (workspaceRows.length === 0) {
-      return NextResponse.redirect(new URL(`/admin?etsy_error=workspace_not_found`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=workspace_not_found`));
     }
 
     const { etsy_pkce_state, etsy_pkce_verifier } = workspaceRows[0];
 
     // 2. Validate state to prevent CSRF
     if (state !== etsy_pkce_state) {
-      return NextResponse.redirect(new URL(`/admin?etsy_error=invalid_state`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=invalid_state`));
     }
 
     // 3. Fetch Etsy Keystring & Shared Secret from global app_settings
@@ -54,7 +63,7 @@ export async function GET(req: Request) {
     }
 
     if (!etsyApiKey) {
-      return NextResponse.redirect(new URL(`/admin?etsy_error=missing_api_key`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=missing_api_key`));
     }
 
     const url = new URL(req.url);
@@ -78,7 +87,7 @@ export async function GET(req: Request) {
     if (!tokenRes.ok) {
       const errorText = await tokenRes.text();
       console.error("Etsy Token Exchange Error:", errorText);
-      return NextResponse.redirect(new URL(`/admin?etsy_error=token_exchange_failed`, req.url));
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=token_exchange_failed`));
     }
 
     const tokenData = await tokenRes.json();
@@ -88,7 +97,6 @@ export async function GET(req: Request) {
     const expiresAt = new Date(Date.now() + expires_in * 1000);
 
     // 5. Fetch User's Shop ID using the new access token
-    // Etsy API v3 encodes the user_id as the first part of the access token before the dot.
     const etsyUserId = access_token.split('.')[0];
     
     let shopId = null;
@@ -103,7 +111,6 @@ export async function GET(req: Request) {
 
       if (meRes.ok) {
         const meData = await meRes.json();
-        // Etsy API v3 usually returns a single shop object here, or an object containing it
         shopId = meData.shop_id || (meData.results && meData.results[0]?.shop_id) || null;
       } else {
         console.warn("Failed to fetch shop ID:", await meRes.text());
@@ -122,11 +129,17 @@ export async function GET(req: Request) {
       WHERE user_id = ${session.id}
     `;
 
-    // 7. Redirect back to admin with success flag
-    return NextResponse.redirect(new URL(`/admin?etsy_success=true`, req.url));
+    // 7. Redirect back with success flag
+    const response = NextResponse.redirect(getRedirectUrl(`etsy_success=true`));
+    
+    // Clear the cookie
+    response.cookies.delete('etsy_return_to');
+    
+    return response;
 
   } catch (error: any) {
     console.error('Etsy Callback Route Error:', error);
+    // Fallback to absolute admin path if cookies or request URL fail
     return NextResponse.redirect(new URL(`/admin?etsy_error=internal_error`, req.url));
   }
 }

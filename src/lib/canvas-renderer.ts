@@ -1,15 +1,25 @@
 import { MockupItem, DesignItem, ExportFormatType } from '@/types/pod';
 
+const MAX_CACHE_SIZE = 50;
 const imageCache = new Map<string, HTMLImageElement>();
 
 export function loadImage(src: string): Promise<HTMLImageElement> {
   if (imageCache.has(src)) {
-    return Promise.resolve(imageCache.get(src)!);
+    // LRU: Move to end (most recently used)
+    const img = imageCache.get(src)!;
+    imageCache.delete(src);
+    imageCache.set(src, img);
+    return Promise.resolve(img);
   }
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      if (imageCache.size >= MAX_CACHE_SIZE) {
+        // Remove oldest (first item in Map)
+        const firstKey = imageCache.keys().next().value;
+        if (firstKey) imageCache.delete(firstKey);
+      }
       imageCache.set(src, img);
       resolve(img);
     };

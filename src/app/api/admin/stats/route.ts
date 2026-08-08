@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import { sql } from '@/lib/db'; // Re-exported raw sql client
 import { requireAdmin } from '@/lib/auth-server';
 
 export async function GET() {
