@@ -144,26 +144,45 @@ export async function POST(req: Request) {
       for (const imgUrl of images) {
         try {
           let blob: Blob;
-          let filename = `mockup-${Date.now()}.png`;
+          let filename = `media-${Date.now()}.png`;
+          let isVideo = false;
 
-          if (imgUrl.startsWith('data:image')) {
+          if (imgUrl.startsWith('data:video')) {
+            isVideo = true;
             const base64Data = imgUrl.split(',')[1];
             const buffer = Buffer.from(base64Data, 'base64');
-            blob = new Blob([buffer], { type: 'image/png' });
+            const mimeType = imgUrl.split(';')[0].split(':')[1] || 'video/mp4';
+            blob = new Blob([buffer], { type: mimeType });
+            filename = `video-${Date.now()}.mp4`;
+          } else if (imgUrl.startsWith('data:image')) {
+            const base64Data = imgUrl.split(',')[1];
+            const buffer = Buffer.from(base64Data, 'base64');
+            const mimeType = imgUrl.split(';')[0].split(':')[1] || 'image/png';
+            blob = new Blob([buffer], { type: mimeType });
+            filename = `mockup-${Date.now()}.png`;
           } else if (imgUrl.startsWith('http')) {
             const response = await fetch(imgUrl);
             blob = await response.blob();
-            const ext = blob.type.split('/')[1] || 'webp';
-            filename = `mockup-${Date.now()}.${ext}`;
+            if (blob.type.startsWith('video')) {
+              isVideo = true;
+            }
+            const ext = blob.type.split('/')[1] || (isVideo ? 'mp4' : 'webp');
+            filename = isVideo ? `video-${Date.now()}.${ext}` : `mockup-${Date.now()}.${ext}`;
           } else {
             continue;
           }
           
-          const formData = new FormData();
-          formData.append('image', blob, filename);
-          formData.append('rank', String(imagesUploaded + 1));
+          const endpoint = isVideo 
+            ? `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/videos`
+            : `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`;
 
-          const imgRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`, {
+          const formData = new FormData();
+          formData.append(isVideo ? 'video' : 'image', blob, filename);
+          if (!isVideo) {
+            formData.append('rank', String(imagesUploaded + 1));
+          }
+
+          const mediaRes = await fetch(endpoint, {
             method: 'POST',
             headers: {
               'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
@@ -172,13 +191,13 @@ export async function POST(req: Request) {
             body: formData
           });
 
-          if (imgRes.ok) {
-            imagesUploaded++;
+          if (mediaRes.ok) {
+            if (!isVideo) imagesUploaded++;
           } else {
-            console.warn('Image upload failed:', await imgRes.text());
+            console.warn('Media upload failed:', await mediaRes.text());
           }
         } catch (imgErr) {
-          console.warn('Image upload error:', imgErr);
+          console.warn('Media upload error:', imgErr);
         }
       }
     }

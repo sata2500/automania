@@ -161,6 +161,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [colorFilter, setColorFilter] = useState<string>('all');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
+  const [combineAllDesigns, setCombineAllDesigns] = useState(false);
   // --- New Variation Generator State ---
   const [genProduct, setGenProduct] = useState('');
   const [genSizes, setGenSizes] = useState<string[]>([]);
@@ -864,7 +865,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
           images: dbGeneratedMockups
-            .filter(m => m.designId === selectedDesign?.id && m.previewUrl)
+            .filter(m => (combineAllDesigns || m.designId === selectedDesign?.id) && m.previewUrl)
             .map(m => m.previewUrl)
             .slice(0, 22)
         })
@@ -995,13 +996,24 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                 })}
               </div>
 
-              {selectedDesign && dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).length > 0 && (
+              {selectedDesign && dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
-                    Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).length} Adet):
-                  </label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                      Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).length} Adet):
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative">
+                        <input type="checkbox" className="sr-only peer" checked={combineAllDesigns} onChange={e => setCombineAllDesigns(e.target.checked)} />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors">
+                        Tüm aktif tasarımları tek ilanda birleştir
+                      </span>
+                    </label>
+                  </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                    {dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).map((mockup, idx) => (
+                    {dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).map((mockup, idx) => (
                       <div key={mockup.id} className="relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
                         {mockup.isVideo ? (
                           <div className="w-full h-full flex items-center justify-center bg-slate-800">
