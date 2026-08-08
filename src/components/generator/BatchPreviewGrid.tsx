@@ -9,6 +9,9 @@ import {
   generateMatchingPairs,
 } from '@/lib/canvas-renderer';
 import { downloadMatchesAsZip, formatExportFileName } from '@/lib/export-utils';
+import { uploadMediaToServer } from '@/lib/image-optimizer';
+import { loadAppData, saveAppData } from '@/lib/storage-service';
+import { useAuth } from '@/components/common/UserAuthContext';
 import confetti from 'canvas-confetti';
 import {
   Sparkles,
@@ -23,6 +26,7 @@ import {
   Video,
   Trash2,
   Download,
+  CloudUpload,
 } from 'lucide-react';
 
 interface BatchPreviewGridProps {
@@ -51,6 +55,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   setHasGenerated,
 }) => {
   const toast = useToast();
+  const { user } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
 
@@ -192,6 +197,51 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     }
   };
 
+  const handleSaveForEtsy = async () => {
+    if (renderedMatches.length === 0) return;
+    const saveToastId = toast.progress('Görseller buluta kaydediliyor...', renderedMatches.length);
+    setIsGenerating(true);
+    setExportProgress(10);
+    
+    try {
+      const uploadedMatches: RenderedMatch[] = [];
+      for (let i = 0; i < renderedMatches.length; i++) {
+        const match = renderedMatches[i];
+        toast.updateProgressToast(saveToastId, Math.round(((i + 1) / renderedMatches.length) * 100), `${i + 1}/${renderedMatches.length} görsel yükleniyor`);
+        
+        try {
+          const uploadedUrl = await uploadMediaToServer(match.previewUrl, match.format);
+          uploadedMatches.push({ ...match, previewUrl: uploadedUrl });
+        } catch (uploadErr) {
+          console.error('Upload failed for match:', match.id, uploadErr);
+          // If one fails, we continue with the rest or abort? Let's just push original if it fails so it doesn't break everything, or throw.
+          throw new Error(`Görsel yüklenemedi: ${match.mockupName}`);
+        }
+      }
+      
+      const currentData = await loadAppData();
+      // Veritabanındaki eski üretilmiş görsellerin üzerine yazar (kullanıcı her ürettiğinde güncel seti tutarız)
+      currentData.etsyGeneratedMockups = uploadedMatches;
+      await saveAppData(currentData);
+      
+      toast.removeToast(saveToastId);
+      toast.success('Görseller Etsy Yöneticisine kaydedildi! Şimdi Etsy SEO sekmesinden seçebilirsiniz.');
+      
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch (err: any) {
+      console.error('Save to Etsy error:', err);
+      toast.removeToast(saveToastId);
+      toast.error(err.message || 'Buluta kaydedilirken bir hata oluştu.');
+    } finally {
+      setIsGenerating(false);
+      setTimeout(() => setExportProgress(null), 1000);
+    }
+  };
+
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const handleClearResults = () => {
@@ -261,6 +311,18 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
             >
               <FileArchive className="w-4 h-4" />
               <span>ZIP İndir ({renderedMatches.length})</span>
+            </button>
+          )}
+
+          {hasGenerated && user && (
+            <button
+              onClick={handleSaveForEtsy}
+              disabled={isGenerating || renderedMatches.length === 0 || exportProgress !== null}
+              className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-400 hover:to-rose-400 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-orange-500/30 cursor-pointer"
+              title="Görselleri Etsy Yöneticisi sayfasına gönderir"
+            >
+              <CloudUpload className="w-4 h-4" />
+              <span>Etsy İçin Kaydet</span>
             </button>
           )}
 

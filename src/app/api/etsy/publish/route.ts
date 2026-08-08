@@ -142,15 +142,25 @@ export async function POST(req: Request) {
     let imagesUploaded = 0;
     if (listingId && Array.isArray(images) && images.length > 0) {
       for (const imgUrl of images) {
-        if (!imgUrl.startsWith('data:image')) continue;
         try {
-          // Extract base64 and create a blob to upload via FormData
-          const base64Data = imgUrl.split(',')[1];
-          const buffer = Buffer.from(base64Data, 'base64');
+          let blob: Blob;
+          let filename = `mockup-${Date.now()}.png`;
+
+          if (imgUrl.startsWith('data:image')) {
+            const base64Data = imgUrl.split(',')[1];
+            const buffer = Buffer.from(base64Data, 'base64');
+            blob = new Blob([buffer], { type: 'image/png' });
+          } else if (imgUrl.startsWith('http')) {
+            const response = await fetch(imgUrl);
+            blob = await response.blob();
+            const ext = blob.type.split('/')[1] || 'webp';
+            filename = `mockup-${Date.now()}.${ext}`;
+          } else {
+            continue;
+          }
           
           const formData = new FormData();
-          const file = new File([buffer], `mockup-${Date.now()}.png`, { type: 'image/png' });
-          formData.append('image', file);
+          formData.append('image', blob, filename);
 
           const imgRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`, {
             method: 'POST',

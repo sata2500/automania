@@ -1,6 +1,6 @@
 import { get, set, del } from 'idb-keyval';
 import { uploadMediaToServer } from './image-optimizer';
-import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
+import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
 function getCurrentUserId(): string {
   if (typeof window === 'undefined') return 'default_user';
@@ -30,6 +30,7 @@ function getStorageKeys() {
     ETSY_VARIATION_TEMPLATES: `${prefix}automania_etsy_variation_templates_v1`,
     ETSY_CUSTOM_SIZES: `${prefix}automania_etsy_custom_sizes_v1`,
     ETSY_CUSTOM_COLORS: `${prefix}automania_etsy_custom_colors_v1`,
+    ETSY_GENERATED_MOCKUPS: `${prefix}automania_etsy_generated_mockups_v1`,
   };
 }
 
@@ -49,6 +50,7 @@ export interface AppDataPayload {
   etsyVariationTemplates?: { id: string; name: string; updatedAt: string; variations: any[] }[];
   etsyCustomSizes?: string[];
   etsyCustomColors?: string[];
+  etsyGeneratedMockups?: RenderedMatch[];
   lastUpdated?: number;
 }
 
@@ -87,6 +89,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           etsyVariationTemplates: serverData.etsyVariationTemplates || [],
           etsyCustomSizes: serverData.etsyCustomSizes || [],
           etsyCustomColors: serverData.etsyCustomColors || [],
+          etsyGeneratedMockups: serverData.etsyGeneratedMockups || [],
         };
 
         // Write the fresh server data back to local IndexedDB
@@ -130,7 +133,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors] =
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -144,6 +147,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<any[] | null>(keys.ETSY_VARIATION_TEMPLATES),
         get<string[] | null>(keys.ETSY_CUSTOM_SIZES),
         get<string[] | null>(keys.ETSY_CUSTOM_COLORS),
+        get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
       ]);
 
     // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
@@ -180,6 +184,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         etsyVariationTemplates: savedEtsyVariationTemplates || [],
         etsyCustomSizes: savedEtsyCustomSizes || [],
         etsyCustomColors: savedEtsyCustomColors || [],
+        etsyGeneratedMockups: savedEtsyGeneratedMockups || [],
         lastUpdated: Date.now(),
       };
     }
@@ -376,6 +381,7 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     ...(payload.etsyVariationTemplates !== undefined ? [set(keys.ETSY_VARIATION_TEMPLATES, payload.etsyVariationTemplates)] : []),
     ...(payload.etsyCustomSizes !== undefined ? [set(keys.ETSY_CUSTOM_SIZES, payload.etsyCustomSizes)] : []),
     ...(payload.etsyCustomColors !== undefined ? [set(keys.ETSY_CUSTOM_COLORS, payload.etsyCustomColors)] : []),
+    ...(payload.etsyGeneratedMockups !== undefined ? [set(keys.ETSY_GENERATED_MOCKUPS, payload.etsyGeneratedMockups)] : []),
   ]);
 }
 

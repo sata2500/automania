@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
-import { DesignItem } from '@/types/pod';
+import { DesignItem, RenderedMatch } from '@/types/pod';
 
 interface VariationRow {
   id: string;
@@ -74,6 +74,9 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
+  // Generated Mockups State
+  const [dbGeneratedMockups, setDbGeneratedMockups] = useState<RenderedMatch[]>([]);
+
   // Load user designs on mount & filter STRICTLY for AI-analyzed designs!
   useEffect(() => {
     loadAppData().then((data) => {
@@ -89,6 +92,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       }
       if (data.etsyCustomSizes) setSavedCustomSizes(data.etsyCustomSizes);
       if (data.etsyCustomColors) setSavedCustomColors(data.etsyCustomColors);
+      if (data.etsyGeneratedMockups) setDbGeneratedMockups(data.etsyGeneratedMockups);
 
       if (data.designs && Array.isArray(data.designs)) {
         // FILTER: Include any design that has AI analysis (description or keywords)!
@@ -859,10 +863,10 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           state,
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
-          images: renderedMatches
-            ?.filter(m => m.designId === selectedDesign?.id && m.renderedDataUrl)
-            .map(m => m.renderedDataUrl)
-            .slice(0, 10)
+          images: dbGeneratedMockups
+            .filter(m => m.designId === selectedDesign?.id && m.previewUrl)
+            .map(m => m.previewUrl)
+            .slice(0, 22)
         })
       });
       const data = await res.json();
@@ -990,6 +994,30 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                   );
                 })}
               </div>
+
+              {selectedDesign && dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2">
+                    Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).length} Adet):
+                  </label>
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    {dbGeneratedMockups.filter(m => m.designId === selectedDesign.id).map((mockup, idx) => (
+                      <div key={mockup.id} className="relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
+                        {mockup.isVideo ? (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-800">
+                            <span className="text-[8px] font-bold text-white uppercase">VİDEO</span>
+                          </div>
+                        ) : (
+                          <img src={mockup.previewUrl} alt={mockup.mockupName} className="w-full h-full object-cover" />
+                        )}
+                        <div className="absolute top-0 left-0 bg-black/60 text-white text-[8px] px-1 font-bold rounded-br-md">
+                          #{idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
