@@ -161,6 +161,7 @@ export async function POST(req: Request) {
           
           const formData = new FormData();
           formData.append('image', blob, filename);
+          formData.append('rank', String(imagesUploaded + 1));
 
           const imgRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`, {
             method: 'POST',

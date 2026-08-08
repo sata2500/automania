@@ -152,17 +152,21 @@ export function generateMatchingPairs(
     const isStaticAsset = mockup.isVideo || mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
 
     if (isStaticAsset) {
-      // Static charts and videos have no print area so they do NOT multiply per design.
-      // Output exactly ONCE per static asset.
-      const refDesign = activeDesigns[0] || {
-        id: 'static-ref',
-        name: '',
-        src: '',
-        targetApparel: 'both',
-        width: 1000,
-        height: 1000,
-      };
-      pairs.push({ mockup, design: refDesign as DesignItem });
+      if (activeDesigns.length > 0) {
+        for (const design of activeDesigns) {
+          pairs.push({ mockup, design });
+        }
+      } else {
+        const refDesign = {
+          id: 'static-ref',
+          name: '',
+          src: '',
+          targetApparel: 'both',
+          width: 1000,
+          height: 1000,
+        };
+        pairs.push({ mockup, design: refDesign as DesignItem });
+      }
     } else {
       for (const design of activeDesigns) {
         let isMatch = false;
