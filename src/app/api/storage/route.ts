@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     }
 
     const rows = await sql`
-      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes, etsy_variation_templates
+      SELECT mockups, designs, folders, active_folder_id, selected_mockup_id, openrouter_key, openrouter_model, etsy_product_types, etsy_user_notes, etsy_variation_templates, etsy_custom_sizes, etsy_custom_colors
       FROM user_workspaces
       WHERE user_id = ${userId}
     `;
@@ -52,6 +52,8 @@ export async function GET(request: Request) {
       etsyProductTypes: data.etsy_product_types || null,
       etsyUserNotes: data.etsy_user_notes || null,
       etsyVariationTemplates: data.etsy_variation_templates || [],
+      etsyCustomSizes: data.etsy_custom_sizes || [],
+      etsyCustomColors: data.etsy_custom_colors || [],
     });
   } catch (error) {
     console.error('Storage GET Error:', error);
@@ -83,6 +85,10 @@ export async function POST(request: Request) {
     const etsyUserNotes = body.etsyUserNotes || null;
     const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
     const variationTemplatesJson = hasVariationTemplates ? JSON.stringify(body.etsyVariationTemplates) : null;
+    const hasCustomSizes = Array.isArray(body.etsyCustomSizes);
+    const customSizesJson = hasCustomSizes ? JSON.stringify(body.etsyCustomSizes) : null;
+    const hasCustomColors = Array.isArray(body.etsyCustomColors);
+    const customColorsJson = hasCustomColors ? JSON.stringify(body.etsyCustomColors) : null;
     
     const hasModelUpdate = body.modelVision !== undefined || body.modelReasoning !== undefined || body.modelGeneration !== undefined;
     const openRouterModel = hasModelUpdate ? JSON.stringify({
@@ -126,7 +132,9 @@ export async function POST(request: Request) {
         openrouter_model, 
         etsy_product_types, 
         etsy_user_notes,
-        etsy_variation_templates
+        etsy_variation_templates,
+        etsy_custom_sizes,
+        etsy_custom_colors
       )
       VALUES (
         ${userId}, 
@@ -139,7 +147,9 @@ export async function POST(request: Request) {
         ${openRouterModel},
         ${etsyProductTypes},
         ${etsyUserNotes},
-        ${variationTemplatesJson}::jsonb
+        ${variationTemplatesJson}::jsonb,
+        ${customSizesJson}::jsonb,
+        ${customColorsJson}::jsonb
       )
       ON CONFLICT (user_id) DO UPDATE SET
         mockups = CASE WHEN ${hasMockups} THEN ${mockupsJson}::jsonb ELSE user_workspaces.mockups END,
@@ -152,6 +162,8 @@ export async function POST(request: Request) {
         etsy_product_types = CASE WHEN ${hasProductTypes} THEN ${etsyProductTypes} ELSE user_workspaces.etsy_product_types END,
         etsy_user_notes = CASE WHEN ${hasUserNotes} THEN ${etsyUserNotes} ELSE user_workspaces.etsy_user_notes END,
         etsy_variation_templates = CASE WHEN ${hasVariationTemplates} THEN ${variationTemplatesJson}::jsonb ELSE user_workspaces.etsy_variation_templates END,
+        etsy_custom_sizes = CASE WHEN ${hasCustomSizes} THEN ${customSizesJson}::jsonb ELSE user_workspaces.etsy_custom_sizes END,
+        etsy_custom_colors = CASE WHEN ${hasCustomColors} THEN ${customColorsJson}::jsonb ELSE user_workspaces.etsy_custom_colors END,
         updated_at = CURRENT_TIMESTAMP
     `;
 

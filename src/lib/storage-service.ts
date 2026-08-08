@@ -28,6 +28,8 @@ function getStorageKeys() {
     ETSY_PRODUCT_TYPES: `${prefix}automania_etsy_product_types_v1`,
     ETSY_USER_NOTES: `${prefix}automania_etsy_user_notes_v1`,
     ETSY_VARIATION_TEMPLATES: `${prefix}automania_etsy_variation_templates_v1`,
+    ETSY_CUSTOM_SIZES: `${prefix}automania_etsy_custom_sizes_v1`,
+    ETSY_CUSTOM_COLORS: `${prefix}automania_etsy_custom_colors_v1`,
   };
 }
 
@@ -45,6 +47,8 @@ export interface AppDataPayload {
   etsyProductTypes?: string;
   etsyUserNotes?: string;
   etsyVariationTemplates?: { id: string; name: string; updatedAt: string; variations: any[] }[];
+  etsyCustomSizes?: string[];
+  etsyCustomColors?: string[];
   lastUpdated?: number;
 }
 
@@ -81,6 +85,8 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           etsyProductTypes: serverData.etsyProductTypes,
           etsyUserNotes: serverData.etsyUserNotes,
           etsyVariationTemplates: serverData.etsyVariationTemplates || [],
+          etsyCustomSizes: serverData.etsyCustomSizes || [],
+          etsyCustomColors: serverData.etsyCustomColors || [],
         };
 
         // Write the fresh server data back to local IndexedDB
@@ -124,7 +130,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates] =
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -136,6 +142,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ETSY_PRODUCT_TYPES),
         get<string | null>(keys.ETSY_USER_NOTES),
         get<any[] | null>(keys.ETSY_VARIATION_TEMPLATES),
+        get<string[] | null>(keys.ETSY_CUSTOM_SIZES),
+        get<string[] | null>(keys.ETSY_CUSTOM_COLORS),
       ]);
 
     // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
@@ -170,6 +178,8 @@ export async function loadAppData(): Promise<AppDataPayload> {
         etsyProductTypes: savedEtsyProductTypes ?? '',
         etsyUserNotes: savedEtsyUserNotes ?? '',
         etsyVariationTemplates: savedEtsyVariationTemplates || [],
+        etsyCustomSizes: savedEtsyCustomSizes || [],
+        etsyCustomColors: savedEtsyCustomColors || [],
         lastUpdated: Date.now(),
       };
     }
@@ -364,6 +374,8 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     ...(payload.etsyProductTypes !== undefined ? [set(keys.ETSY_PRODUCT_TYPES, payload.etsyProductTypes)] : []),
     ...(payload.etsyUserNotes !== undefined ? [set(keys.ETSY_USER_NOTES, payload.etsyUserNotes)] : []),
     ...(payload.etsyVariationTemplates !== undefined ? [set(keys.ETSY_VARIATION_TEMPLATES, payload.etsyVariationTemplates)] : []),
+    ...(payload.etsyCustomSizes !== undefined ? [set(keys.ETSY_CUSTOM_SIZES, payload.etsyCustomSizes)] : []),
+    ...(payload.etsyCustomColors !== undefined ? [set(keys.ETSY_CUSTOM_COLORS, payload.etsyCustomColors)] : []),
   ]);
 }
 

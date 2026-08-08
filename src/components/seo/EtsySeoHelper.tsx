@@ -87,6 +87,8 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           setVariations(latest.variations || []);
         }, 50);
       }
+      if (data.etsyCustomSizes) setSavedCustomSizes(data.etsyCustomSizes);
+      if (data.etsyCustomColors) setSavedCustomColors(data.etsyCustomColors);
 
       if (data.designs && Array.isArray(data.designs)) {
         // FILTER: Include any design that has AI analysis (description or keywords)!
@@ -164,6 +166,79 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
 
   const [newGenSizeInput, setNewGenSizeInput] = useState('');
   const [newGenColorInput, setNewGenColorInput] = useState('');
+
+  const [savedCustomSizes, setSavedCustomSizes] = useState<string[]>([]);
+  const [savedCustomColors, setSavedCustomColors] = useState<string[]>([]);
+
+  const handleAddCustomSize = async () => {
+    const trimmed = newGenSizeInput.trim();
+    if (!trimmed || savedCustomSizes.includes(trimmed)) {
+      if (trimmed && !genSizes.includes(trimmed)) setGenSizes(prev => [...prev, trimmed]);
+      setNewGenSizeInput('');
+      return;
+    }
+    const newSizes = [...savedCustomSizes, trimmed];
+    setSavedCustomSizes(newSizes);
+    setNewGenSizeInput('');
+    if (!genSizes.includes(trimmed)) setGenSizes(prev => [...prev, trimmed]);
+    try {
+      const appData = await loadAppData();
+      appData.etsyCustomSizes = newSizes;
+      await saveAppData(appData);
+      toast.success('Özel beden kalıcı olarak kaydedildi.');
+    } catch (e: any) {
+      toast.error('Kaydedilemedi: ' + e.message);
+    }
+  };
+
+  const handleDeleteCustomSize = async (size: string) => {
+    const newSizes = savedCustomSizes.filter(s => s !== size);
+    setSavedCustomSizes(newSizes);
+    setGenSizes(prev => prev.filter(s => s !== size));
+    try {
+      const appData = await loadAppData();
+      appData.etsyCustomSizes = newSizes;
+      await saveAppData(appData);
+      toast.success('Özel beden silindi.');
+    } catch (e: any) {
+      toast.error('Silinemedi: ' + e.message);
+    }
+  };
+
+  const handleAddCustomColor = async () => {
+    const trimmed = newGenColorInput.trim();
+    if (!trimmed || savedCustomColors.includes(trimmed)) {
+      if (trimmed && !genColors.includes(trimmed)) setGenColors(prev => [...prev, trimmed]);
+      setNewGenColorInput('');
+      return;
+    }
+    const newColors = [...savedCustomColors, trimmed];
+    setSavedCustomColors(newColors);
+    setNewGenColorInput('');
+    if (!genColors.includes(trimmed)) setGenColors(prev => [...prev, trimmed]);
+    try {
+      const appData = await loadAppData();
+      appData.etsyCustomColors = newColors;
+      await saveAppData(appData);
+      toast.success('Özel renk kalıcı olarak kaydedildi.');
+    } catch (e: any) {
+      toast.error('Kaydedilemedi: ' + e.message);
+    }
+  };
+
+  const handleDeleteCustomColor = async (color: string) => {
+    const newColors = savedCustomColors.filter(c => c !== color);
+    setSavedCustomColors(newColors);
+    setGenColors(prev => prev.filter(c => c !== color));
+    try {
+      const appData = await loadAppData();
+      appData.etsyCustomColors = newColors;
+      await saveAppData(appData);
+      toast.success('Özel renk silindi.');
+    } catch (e: any) {
+      toast.error('Silinemedi: ' + e.message);
+    }
+  };
 
   // Default options for quick selection
   const defaultSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
@@ -1134,6 +1209,23 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         {size}
                       </button>
                     ))}
+                    {savedCustomSizes.map(size => (
+                      <div key={size} className="relative group flex">
+                        <button
+                          onClick={() => setGenSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size])}
+                          className={`px-2.5 py-1 pr-6 rounded text-xs font-bold transition-all border ${genSizes.includes(size) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900'}`}
+                        >
+                          {size}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteCustomSize(size)} 
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Kalıcı Sil"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                     <div className="flex items-center ml-auto">
                       <input
                         type="text"
@@ -1141,20 +1233,13 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         value={newGenSizeInput}
                         onChange={e => setNewGenSizeInput(e.target.value)}
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && newGenSizeInput.trim()) {
-                            if (!genSizes.includes(newGenSizeInput.trim())) setGenSizes(prev => [...prev, newGenSizeInput.trim()]);
-                            setNewGenSizeInput('');
-                          }
+                          if (e.key === 'Enter') handleAddCustomSize();
                         }}
                         className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-l text-xs font-semibold w-20 outline-none focus:border-indigo-500"
                       />
                       <button
-                        onClick={() => {
-                          if (newGenSizeInput.trim()) {
-                            if (!genSizes.includes(newGenSizeInput.trim())) setGenSizes(prev => [...prev, newGenSizeInput.trim()]);
-                            setNewGenSizeInput('');
-                          }
-                        }}
+                        onClick={handleAddCustomSize}
+                        title="Kalıcı Kaydet ve Seç"
                         className="px-2 py-1 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-400 border border-l-0 border-indigo-200 dark:border-indigo-800 rounded-r text-xs font-bold hover:bg-indigo-200 dark:hover:bg-indigo-900 transition-colors"
                       >
                         Ekle
@@ -1176,6 +1261,23 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         {color}
                       </button>
                     ))}
+                    {savedCustomColors.map(color => (
+                      <div key={color} className="relative group flex">
+                        <button
+                          onClick={() => setGenColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color])}
+                          className={`px-2.5 py-1 pr-6 rounded text-xs font-bold transition-all border ${genColors.includes(color) ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900'}`}
+                        >
+                          {color}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteCustomColor(color)} 
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-emerald-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Kalıcı Sil"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                     <div className="flex items-center ml-auto">
                       <input
                         type="text"
@@ -1183,20 +1285,13 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         value={newGenColorInput}
                         onChange={e => setNewGenColorInput(e.target.value)}
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && newGenColorInput.trim()) {
-                            if (!genColors.includes(newGenColorInput.trim())) setGenColors(prev => [...prev, newGenColorInput.trim()]);
-                            setNewGenColorInput('');
-                          }
+                          if (e.key === 'Enter') handleAddCustomColor();
                         }}
                         className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-l text-xs font-semibold w-24 outline-none focus:border-emerald-500"
                       />
                       <button
-                        onClick={() => {
-                          if (newGenColorInput.trim()) {
-                            if (!genColors.includes(newGenColorInput.trim())) setGenColors(prev => [...prev, newGenColorInput.trim()]);
-                            setNewGenColorInput('');
-                          }
-                        }}
+                        onClick={handleAddCustomColor}
+                        title="Kalıcı Kaydet ve Seç"
                         className="px-2 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 border border-l-0 border-emerald-200 dark:border-emerald-800 rounded-r text-xs font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors"
                       >
                         Ekle
