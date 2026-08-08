@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, RenderedMatch } from '@/types/pod';
@@ -74,10 +74,24 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  // Generated Mockups State
   const [dbGeneratedMockups, setDbGeneratedMockups] = useState<RenderedMatch[]>([]);
+  const [allDesigns, setAllDesigns] = useState<DesignItem[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [combineAllDesigns, setCombineAllDesigns] = useState(false); // We'll keep this around in case we need it, but hide it in UI
 
-  // Load user designs on mount & filter STRICTLY for AI-analyzed designs!
+  const foldersWithMockups = useMemo(() => {
+    const map = new Map<string, { id: string, name: string, count: number }>();
+    dbGeneratedMockups.forEach(m => {
+      const fId = m.folderId;
+      if (!map.has(fId)) {
+        map.set(fId, { id: fId, name: m.folderName || 'Bilinmeyen Klasör', count: 0 });
+      }
+      map.get(fId)!.count++;
+    });
+    return Array.from(map.values());
+  }, [dbGeneratedMockups]);
+
+  // Load user designs on mount
   useEffect(() => {
     loadAppData().then((data) => {
       // Load saved user notes and product types from DB if present
@@ -95,50 +109,62 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       if (data.etsyGeneratedMockups) setDbGeneratedMockups(data.etsyGeneratedMockups);
 
       if (data.designs && Array.isArray(data.designs)) {
-        // FILTER: Include any design that has AI analysis (description or keywords)!
-        const analyzed = data.designs.filter(d => d.analysis && (d.analysis.description || (d.analysis.keywords && d.analysis.keywords.length > 0)));
-        setUserDesigns(analyzed);
-
-        if (analyzed.length > 0) {
-          const first = analyzed[0];
-          setSelectedDesign(first);
-          const cleanNicheName = extractCleanNiche(first);
-          setNiche(cleanNicheName);
-          if (first.analysis?.description) {
-            setDesignDescription(first.analysis.description);
-          }
-          if (first.seo) {
-            setGeneratedTitle(first.seo.title || '');
-            setGeneratedDescription(first.seo.description || '');
-            setSelectedTags(first.seo.tags || []);
-          } else {
-            setGeneratedTitle('');
-            setGeneratedDescription('');
-            setSelectedTags([]);
-          }
-        }
+        setAllDesigns(data.designs);
+        setUserDesigns(data.designs); // Keep for compatibility if used elsewhere
       }
     }).catch(console.warn);
   }, []);
 
-  // When selectedDesign changes, pre-populate details 100% automatically with AI extracted niche!
-  const handleSelectDesign = (design: DesignItem) => {
-    setSelectedDesign(design);
-    const cleanNicheName = extractCleanNiche(design);
-    setNiche(cleanNicheName);
-    if (design.analysis?.description) {
-      setDesignDescription(design.analysis.description);
+  // When a folder is selected or mockups load, automatically select the first folder and extract AI data
+  useEffect(() => {
+    if (dbGeneratedMockups.length === 0 || allDesigns.length === 0) return;
+
+    let targetFolderId = selectedFolderId;
+    if (!targetFolderId && foldersWithMockups.length > 0) {
+      targetFolderId = foldersWithMockups[0].id;
+      setSelectedFolderId(targetFolderId);
     }
-    if (design.seo) {
-      setGeneratedTitle(design.seo.title || '');
-      setGeneratedDescription(design.seo.description || '');
-      setSelectedTags(design.seo.tags || []);
-    } else {
-      setGeneratedTitle('');
-      setGeneratedDescription('');
-      setSelectedTags([]);
+
+    if (!targetFolderId) return;
+
+    const folderMockups = dbGeneratedMockups.filter(m => m.folderId === targetFolderId);
+    if (folderMockups.length === 0) return;
+
+    const usedDesignIds = new Set(folderMockups.map(m => m.designId).filter(id => id && id !== 'static-ref'));
+    const usedDesigns = allDesigns.filter(d => usedDesignIds.has(d.id));
+    const designWithAi = usedDesigns.find(d => d.analysis?.description || (d.analysis?.keywords && d.analysis.keywords.length > 0));
+
+    if (designWithAi) {
+      if (selectedDesign?.id !== designWithAi.id) {
+        setSelectedDesign(designWithAi);
+        const cleanNicheName = extractCleanNiche(designWithAi);
+        setNiche(cleanNicheName);
+        if (designWithAi.analysis?.description) setDesignDescription(designWithAi.analysis.description);
+        if (designWithAi.seo) {
+          setGeneratedTitle(designWithAi.seo.title || '');
+          setGeneratedDescription(designWithAi.seo.description || '');
+          setSelectedTags(designWithAi.seo.tags || []);
+        }
+        toast.info(`'${foldersWithMockups.find(f=>f.id===targetFolderId)?.name}' klasörü seçildi. AI verileri: '${designWithAi.name}'`);
+      }
+    } else if (usedDesignIds.size > 0) {
+      if (selectedDesign) {
+        setSelectedDesign(null);
+        setNiche('');
+        setDesignDescription('');
+        setGeneratedTitle('');
+        setGeneratedDescription('');
+        setSelectedTags([]);
+        toast.warning('Seçilen klasördeki hiçbir tasarımda Yapay Zeka SEO analizi bulunamadı!');
+      }
     }
-    toast.info(`"${cleanNicheName}" tasarımı ve Yapay Zeka analiz verileri yüklendi!`);
+  }, [selectedFolderId, dbGeneratedMockups, allDesigns, foldersWithMockups]);
+
+  // Handler for manual folder selection
+  const handleSelectFolder = (folderId: string) => {
+    setSelectedFolderId(folderId);
+    // Setting to null forces the useEffect above to re-evaluate and notify the user
+    setSelectedDesign(null);
   };
 
   // Save Product Types & User Notes to Database and IndexedDB
@@ -161,7 +187,6 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [colorFilter, setColorFilter] = useState<string>('all');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
-  const [combineAllDesigns, setCombineAllDesigns] = useState(false);
   // --- New Variation Generator State ---
   const [genProduct, setGenProduct] = useState('');
   const [genSizes, setGenSizes] = useState<string[]>([]);
@@ -865,7 +890,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
           images: dbGeneratedMockups
-            .filter(m => (combineAllDesigns || m.designId === selectedDesign?.id) && m.previewUrl)
+            .filter(m => m.folderId === selectedFolderId && m.previewUrl)
             .map(m => m.previewUrl)
             .slice(0, 22)
         })
@@ -873,7 +898,11 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       const data = await res.json();
       setPublishResult(data);
       if (data.success) {
-        toast.success(data.message || 'İlan Etsy mağazanıza aktarıldı!');
+        if (data.uploadErrors && data.uploadErrors.length > 0) {
+          toast.warning(`İlan aktarıldı ancak bazı görseller/videolar yüklenemedi: ${data.uploadErrors[0]}`);
+        } else {
+          toast.success(data.message || 'İlan Etsy mağazanıza aktarıldı!');
+        }
       } else {
         toast.error(data.error || 'İlan aktarılırken hata oluştu.');
       }
@@ -947,44 +976,53 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       {activeTab === 'studio' && (
         <div className="space-y-6">
           {/* Design Selector Gallery Component */}
-          {userDesigns.length === 0 ? (
+          {foldersWithMockups.length === 0 ? (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 p-4 rounded-2xl flex items-center space-x-3">
               <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
               <div className="text-xs text-amber-800 dark:text-amber-200">
-                <span className="font-bold block">Henüz Yapay Zeka İle Analiz Edilmiş Tasarımınız Bulunmuyor</span>
-                Tasarımlar sekmesinden bir tasarım yükleyip yapay zeka analizini başlattığınızda, analiz edilen tüm tasarımlarınız bu üst galeride otomatik görüntülenecektir.
+                <span className="font-bold block">Henüz Toplu Üretim Yapmadınız</span>
+                Mockup sekmesinde tasarımlarınızı hazırlayıp toplu üretime gönderdiğinizde, üretilen klasörler burada görüntülenecektir.
               </div>
             </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-emerald-500" />
-                  Yapay Zeka İle Analiz Edilmiş Tasarımlarınız ({userDesigns.length} Adet):
+                  <Folder className="w-4 h-4 text-emerald-500" />
+                  Toplu Üretim Klasörleriniz ({foldersWithMockups.length} Adet):
                 </label>
-                {selectedDesign && (
+                {selectedFolderId && (
                   <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
-                    Seçili: {selectedDesign.name}
+                    Seçili Klasör: {foldersWithMockups.find(f => f.id === selectedFolderId)?.name}
                   </span>
                 )}
               </div>
 
               <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                {userDesigns.map((design) => {
-                  const isSelected = selectedDesign?.id === design.id;
+                {foldersWithMockups.map((folder) => {
+                  const isSelected = selectedFolderId === folder.id;
+                  // Get a thumbnail from this folder's mockups
+                  const thumbnailMockup = dbGeneratedMockups.find(m => m.folderId === folder.id && !m.isVideo);
                   return (
                     <div
-                      key={design.id}
-                      onClick={() => handleSelectDesign(design)}
+                      key={folder.id}
+                      onClick={() => handleSelectFolder(folder.id)}
                       className={`relative shrink-0 w-24 h-24 rounded-xl border-2 cursor-pointer overflow-hidden transition-all group ${isSelected ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'}`}
                     >
-                      <img 
-                        src={design.src} 
-                        alt={design.name} 
-                        className="w-full h-full object-contain p-1 bg-slate-50 dark:bg-slate-950" 
-                      />
-                      <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold">
-                        {design.name}
+                      {thumbnailMockup ? (
+                        <img 
+                          src={thumbnailMockup.previewUrl} 
+                          alt={folder.name} 
+                          className="w-full h-full object-cover p-0.5 bg-slate-50 dark:bg-slate-950" 
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400">
+                          <Folder className="w-8 h-8 mb-1" />
+                        </div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold text-center leading-tight">
+                        {folder.name}<br/>
+                        <span className="text-[8px] text-slate-300">({folder.count} Görsel)</span>
                       </div>
                       {isSelected && (
                         <div className="absolute top-1 right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow">
@@ -996,24 +1034,15 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                 })}
               </div>
 
-              {selectedDesign && dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).length > 0 && (
+              {selectedFolderId && dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                     <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                      Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).length} Adet):
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <div className="relative">
-                        <input type="checkbox" className="sr-only peer" checked={combineAllDesigns} onChange={e => setCombineAllDesigns(e.target.checked)} />
-                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors">
-                        Tüm aktif tasarımları tek ilanda birleştir
-                      </span>
+                      Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length} Adet):
                     </label>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                    {dbGeneratedMockups.filter(m => (combineAllDesigns || m.designId === selectedDesign.id)).map((mockup, idx) => (
+                    {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx) => (
                       <div key={mockup.id} className="relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
                         {mockup.isVideo ? (
                           <div className="w-full h-full flex items-center justify-center bg-slate-800">

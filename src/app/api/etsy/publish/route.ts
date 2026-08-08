@@ -140,6 +140,7 @@ export async function POST(req: Request) {
 
     // Upload images if provided
     let imagesUploaded = 0;
+    const uploadErrors: string[] = [];
     if (listingId && Array.isArray(images) && images.length > 0) {
       for (const imgUrl of images) {
         try {
@@ -180,6 +181,8 @@ export async function POST(req: Request) {
           formData.append(isVideo ? 'video' : 'image', blob, filename);
           if (!isVideo) {
             formData.append('rank', String(imagesUploaded + 1));
+          } else {
+            formData.append('name', filename);
           }
 
           const mediaRes = await fetch(endpoint, {
@@ -194,10 +197,13 @@ export async function POST(req: Request) {
           if (mediaRes.ok) {
             if (!isVideo) imagesUploaded++;
           } else {
-            console.warn('Media upload failed:', await mediaRes.text());
+            const errorText = await mediaRes.text();
+            console.warn('Media upload failed:', errorText);
+            uploadErrors.push(`Format: ${isVideo ? 'Video' : 'Image'}, Error: ${errorText}`);
           }
-        } catch (imgErr) {
+        } catch (imgErr: any) {
           console.warn('Media upload error:', imgErr);
+          uploadErrors.push(`Upload exception: ${imgErr.message}`);
         }
       }
     }
@@ -208,6 +214,7 @@ export async function POST(req: Request) {
       listingUrl: listingData.url || `https://www.etsy.com/listing/${listingId}`,
       variationsUpdated,
       imagesUploaded,
+      uploadErrors: uploadErrors.length > 0 ? uploadErrors : undefined,
       message: `İlan Etsy Mağazanıza (${state.toUpperCase()}) olarak aktarıldı!`
     });
 
