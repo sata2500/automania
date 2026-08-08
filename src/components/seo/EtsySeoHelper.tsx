@@ -81,6 +81,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [folderOrder, setFolderOrder] = useState<string[]>([]);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
 
   const foldersWithMockups = useMemo(() => {
@@ -212,9 +213,6 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    // Confirm first
-    if (!confirm('Bu klasörü silmek istediğinize emin misiniz? (Bu işlem Etsy gönderim listesinden çıkaracaktır)')) return;
-
     // Remove from folderOrder if present
     let currentOrder = [...folderOrder];
     const idx = currentOrder.indexOf(folderId);
@@ -237,6 +235,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       setSelectedFolderId(null);
       setSelectedDesign(null);
     }
+    setDeletingFolderId(null);
     toast.success('Klasör silindi.');
   };
 
@@ -1137,19 +1136,52 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                       )}
                       
                       {editingFolderId === folder.id ? (
-                        <div className="absolute inset-x-0 bottom-0 bg-black/90 p-1 flex items-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 p-2 flex flex-col justify-center items-center gap-2 z-10" onClick={(e) => e.stopPropagation()}>
                           <input 
                             type="text"
                             autoFocus
-                            className="w-full text-[10px] px-1 py-0.5 bg-white text-black rounded outline-none"
+                            className="w-full text-[11px] px-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-md outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                             value={editingFolderName}
                             onChange={(e) => setEditingFolderName(e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleRenameFolder(folder.id, editingFolderName);
                               if (e.key === 'Escape') setEditingFolderId(null);
                             }}
-                            onBlur={() => handleRenameFolder(folder.id, editingFolderName)}
                           />
+                          <div className="flex gap-1 w-full mt-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder.id, editingFolderName); }}
+                              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white p-1 rounded-md flex items-center justify-center transition-colors"
+                              title="Kaydet"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditingFolderId(null); }}
+                              className="flex-1 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 p-1 rounded-md flex items-center justify-center transition-colors"
+                              title="İptal"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : deletingFolderId === folder.id ? (
+                        <div className="absolute inset-0 bg-red-500/95 p-2 flex flex-col justify-center items-center gap-1 z-10" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-white font-bold text-center leading-tight">Klasörü Sil?</span>
+                          <div className="flex gap-1 w-full mt-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                              className="flex-1 bg-white text-red-600 hover:bg-red-50 p-1 rounded-md flex items-center justify-center font-bold text-[10px]"
+                            >
+                              Evet
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeletingFolderId(null); }}
+                              className="flex-1 bg-red-700 text-white hover:bg-red-800 p-1 rounded-md flex items-center justify-center font-bold text-[10px]"
+                            >
+                              Hayır
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold text-center leading-tight">
@@ -1158,13 +1190,13 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         </div>
                       )}
 
-                      {isSelected && !editingFolderId && (
+                      {isSelected && !editingFolderId && !deletingFolderId && (
                         <div className="absolute top-1 right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow">
                           <Check className="w-3 h-3" />
                         </div>
                       )}
 
-                      {!editingFolderId && (
+                      {!editingFolderId && !deletingFolderId && (
                         <div 
                           className="absolute top-1 left-1 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
                           onClick={(e) => {
@@ -1177,12 +1209,12 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         </div>
                       )}
                       
-                      {!editingFolderId && (
+                      {!editingFolderId && !deletingFolderId && (
                         <div 
                           className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteFolder(folder.id);
+                            setDeletingFolderId(folder.id);
                           }}
                         >
                           <Trash2 className="w-3 h-3" />
