@@ -2,10 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Header, TabKey } from '@/components/common/Header';
-import { MockupCanvasEditor } from '@/components/mockup/MockupCanvasEditor';
-import { DesignUploader } from '@/components/design/DesignUploader';
-import { BatchPreviewGrid } from '@/components/generator/BatchPreviewGrid';
-import { EtsySeoHelper } from '@/components/seo/EtsySeoHelper';
+import dynamic from 'next/dynamic';
+const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Editör yükleniyor...</div> });
+const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Tasarımlar yükleniyor...</div> });
+const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
+const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
