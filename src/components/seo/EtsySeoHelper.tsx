@@ -1134,7 +1134,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         {size}
                       </button>
                     ))}
-                    <div className="flex items-center gap-1 ml-auto">
+                    <div className="flex items-center ml-auto">
                       <input
                         type="text"
                         placeholder="+ Özel"
@@ -1146,8 +1146,19 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                             setNewGenSizeInput('');
                           }
                         }}
-                        className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-xs font-semibold w-20 outline-none focus:border-indigo-500"
+                        className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-l text-xs font-semibold w-20 outline-none focus:border-indigo-500"
                       />
+                      <button
+                        onClick={() => {
+                          if (newGenSizeInput.trim()) {
+                            if (!genSizes.includes(newGenSizeInput.trim())) setGenSizes(prev => [...prev, newGenSizeInput.trim()]);
+                            setNewGenSizeInput('');
+                          }
+                        }}
+                        className="px-2 py-1 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-400 border border-l-0 border-indigo-200 dark:border-indigo-800 rounded-r text-xs font-bold hover:bg-indigo-200 dark:hover:bg-indigo-900 transition-colors"
+                      >
+                        Ekle
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1165,7 +1176,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         {color}
                       </button>
                     ))}
-                    <div className="flex items-center gap-1 ml-auto">
+                    <div className="flex items-center ml-auto">
                       <input
                         type="text"
                         placeholder="+ Özel"
@@ -1177,8 +1188,19 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                             setNewGenColorInput('');
                           }
                         }}
-                        className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-xs font-semibold w-24 outline-none focus:border-emerald-500"
+                        className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-l text-xs font-semibold w-24 outline-none focus:border-emerald-500"
                       />
+                      <button
+                        onClick={() => {
+                          if (newGenColorInput.trim()) {
+                            if (!genColors.includes(newGenColorInput.trim())) setGenColors(prev => [...prev, newGenColorInput.trim()]);
+                            setNewGenColorInput('');
+                          }
+                        }}
+                        className="px-2 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 border border-l-0 border-emerald-200 dark:border-emerald-800 rounded-r text-xs font-bold hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors"
+                      >
+                        Ekle
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1262,8 +1284,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                       </select>
                     </th>
                     <th className="p-3 text-center border-r border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-[11px] uppercase tracking-wider">Fiyat ($)</th>
-                    <th className="p-3 text-center border-r border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-[11px] uppercase tracking-wider">Stok</th>
-                    <th className="p-3 bg-slate-100 dark:bg-slate-900 text-[11px] uppercase tracking-wider">Otomatik SKU</th>
+                    <th className="p-3 text-center bg-slate-100 dark:bg-slate-900 text-[11px] uppercase tracking-wider">Stok</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono bg-white dark:bg-slate-900">
@@ -1367,14 +1388,12 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                             />
                           </div>
                         </td>
-                        
-                        <td className="p-2 text-slate-400 dark:text-slate-500 text-[11px] truncate max-w-[120px]">{row.sku}</td>
                       </tr>
                     );
                   })}
                   {filteredVariations.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500 font-sans">
+                      <td colSpan={5} className="p-8 text-center text-slate-500 font-sans">
                         Seçili filtrelere uygun varyasyon bulunamadı. Lütfen filtreleri temizleyin.
                       </td>
                     </tr>
