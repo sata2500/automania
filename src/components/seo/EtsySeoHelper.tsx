@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, RenderedMatch } from '@/types/pod';
@@ -78,6 +78,10 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
   const [allDesigns, setAllDesigns] = useState<DesignItem[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [combineAllDesigns, setCombineAllDesigns] = useState(false); // We'll keep this around in case we need it, but hide it in UI
+  const [folderOrder, setFolderOrder] = useState<string[]>([]);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
 
   const foldersWithMockups = useMemo(() => {
     const map = new Map<string, { id: string, name: string, count: number }>();
@@ -88,8 +92,19 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       }
       map.get(fId)!.count++;
     });
-    return Array.from(map.values());
-  }, [dbGeneratedMockups]);
+    const arr = Array.from(map.values());
+    if (folderOrder.length > 0) {
+      arr.sort((a, b) => {
+        const idxA = folderOrder.indexOf(a.id);
+        const idxB = folderOrder.indexOf(b.id);
+        if (idxA === -1 && idxB === -1) return 0;
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+    }
+    return arr;
+  }, [dbGeneratedMockups, folderOrder]);
 
   // Load user designs on mount
   useEffect(() => {
@@ -107,6 +122,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       if (data.etsyCustomSizes) setSavedCustomSizes(data.etsyCustomSizes);
       if (data.etsyCustomColors) setSavedCustomColors(data.etsyCustomColors);
       if (data.etsyGeneratedMockups) setDbGeneratedMockups(data.etsyGeneratedMockups);
+      if (data.etsyFolderOrder) setFolderOrder(data.etsyFolderOrder);
 
       if (data.designs && Array.isArray(data.designs)) {
         setAllDesigns(data.designs);
@@ -162,9 +178,104 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
 
   // Handler for manual folder selection
   const handleSelectFolder = (folderId: string) => {
+    if (editingFolderId === folderId) return;
     setSelectedFolderId(folderId);
     // Setting to null forces the useEffect above to re-evaluate and notify the user
     setSelectedDesign(null);
+  };
+
+  const handleRenameFolder = async (folderId: string, newName: string) => {
+    if (!newName.trim()) {
+      setEditingFolderId(null);
+      return;
+    }
+    const updated = dbGeneratedMockups.map(m => m.folderId === folderId ? { ...m, folderName: newName.trim() } : m);
+    setDbGeneratedMockups(updated);
+    
+    // Save to DB
+    const data = await loadAppData();
+    data.etsyGeneratedMockups = updated;
+    await saveAppData(data);
+    toast.success('Klasör adı güncellendi.');
+    setEditingFolderId(null);
+  };
+
+  const handleDeleteMockup = async (mockupId: string) => {
+    const updated = dbGeneratedMockups.filter(m => m.id !== mockupId);
+    setDbGeneratedMockups(updated);
+    
+    // Save to DB
+    const data = await loadAppData();
+    data.etsyGeneratedMockups = updated;
+    await saveAppData(data);
+    toast.success('Öğe klasörden kaldırıldı.');
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    // Confirm first
+    if (!confirm('Bu klasörü silmek istediğinize emin misiniz? (Bu işlem Etsy gönderim listesinden çıkaracaktır)')) return;
+
+    // Remove from folderOrder if present
+    let currentOrder = [...folderOrder];
+    const idx = currentOrder.indexOf(folderId);
+    if (idx !== -1) {
+      currentOrder.splice(idx, 1);
+      setFolderOrder(currentOrder);
+    }
+
+    // Remove all mockups in this folder
+    const updated = dbGeneratedMockups.filter(m => m.folderId !== folderId);
+    setDbGeneratedMockups(updated);
+    
+    // Save to DB
+    const data = await loadAppData();
+    data.etsyFolderOrder = currentOrder;
+    data.etsyGeneratedMockups = updated;
+    await saveAppData(data);
+    
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId(null);
+      setSelectedDesign(null);
+    }
+    toast.success('Klasör silindi.');
+  };
+
+  const handleFolderDragStart = (e: React.DragEvent, folderId: string) => {
+    setDraggedFolderId(folderId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+    if (!draggedFolderId || draggedFolderId === targetFolderId) return;
+
+    let currentOrder = [...folderOrder];
+    // if order is empty, populate it first from foldersWithMockups
+    if (currentOrder.length === 0) {
+      currentOrder = foldersWithMockups.map(f => f.id);
+    }
+    
+    const draggedIdx = currentOrder.indexOf(draggedFolderId);
+    const targetIdx = currentOrder.indexOf(targetFolderId);
+
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    currentOrder.splice(draggedIdx, 1);
+    currentOrder.splice(targetIdx, 0, draggedFolderId);
+
+    setFolderOrder(currentOrder);
+    
+    // Save to DB
+    const data = await loadAppData();
+    data.etsyFolderOrder = currentOrder;
+    await saveAppData(data);
+    
+    setDraggedFolderId(null);
   };
 
   // Save Product Types & User Notes to Database and IndexedDB
@@ -1006,8 +1117,12 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                   return (
                     <div
                       key={folder.id}
+                      draggable
+                      onDragStart={(e) => handleFolderDragStart(e, folder.id)}
+                      onDragOver={handleFolderDragOver}
+                      onDrop={(e) => handleFolderDrop(e, folder.id)}
                       onClick={() => handleSelectFolder(folder.id)}
-                      className={`relative shrink-0 w-24 h-24 rounded-xl border-2 cursor-pointer overflow-hidden transition-all group ${isSelected ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'}`}
+                      className={`relative shrink-0 w-24 h-24 rounded-xl border-2 cursor-pointer overflow-hidden transition-all group ${isSelected ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'} ${draggedFolderId === folder.id ? 'opacity-50' : ''}`}
                     >
                       {thumbnailMockup ? (
                         <img 
@@ -1020,15 +1135,62 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                           <Folder className="w-8 h-8 mb-1" />
                         </div>
                       )}
-                      <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold text-center leading-tight">
-                        {folder.name}<br/>
-                        <span className="text-[8px] text-slate-300">({folder.count} Görsel)</span>
-                      </div>
-                      {isSelected && (
+                      
+                      {editingFolderId === folder.id ? (
+                        <div className="absolute inset-x-0 bottom-0 bg-black/90 p-1 flex items-center" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="text"
+                            autoFocus
+                            className="w-full text-[10px] px-1 py-0.5 bg-white text-black rounded outline-none"
+                            value={editingFolderName}
+                            onChange={(e) => setEditingFolderName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameFolder(folder.id, editingFolderName);
+                              if (e.key === 'Escape') setEditingFolderId(null);
+                            }}
+                            onBlur={() => handleRenameFolder(folder.id, editingFolderName)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold text-center leading-tight">
+                          {folder.name}<br/>
+                          <span className="text-[8px] text-slate-300">({folder.count} Görsel)</span>
+                        </div>
+                      )}
+
+                      {isSelected && !editingFolderId && (
                         <div className="absolute top-1 right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow">
                           <Check className="w-3 h-3" />
                         </div>
                       )}
+
+                      {!editingFolderId && (
+                        <div 
+                          className="absolute top-1 left-1 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingFolderId(folder.id);
+                            setEditingFolderName(folder.name);
+                          }}
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </div>
+                      )}
+                      
+                      {!editingFolderId && (
+                        <div 
+                          className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFolder(folder.id);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </div>
+                      )}
+                      <div className="absolute top-1 right-1/2 translate-x-1/2 opacity-0 group-hover:opacity-50 text-white cursor-grab active:cursor-grabbing">
+                        <GripVertical className="w-4 h-4 drop-shadow-md" />
+                      </div>
                     </div>
                   );
                 })}
@@ -1043,7 +1205,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                     {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx) => (
-                      <div key={mockup.id} className="relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
+                      <div key={mockup.id} className="group relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
                         {mockup.isVideo ? (
                           <div className="w-full h-full flex items-center justify-center bg-slate-800">
                             <span className="text-[8px] font-bold text-white uppercase">VİDEO</span>
@@ -1053,6 +1215,12 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
                         )}
                         <div className="absolute top-0 left-0 bg-black/60 text-white text-[8px] px-1 font-bold rounded-br-md">
                           #{idx + 1}
+                        </div>
+                        <div 
+                          className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                          onClick={() => handleDeleteMockup(mockup.id)}
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </div>
                       </div>
                     ))}

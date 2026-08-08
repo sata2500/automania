@@ -31,6 +31,7 @@ function getStorageKeys() {
     ETSY_CUSTOM_SIZES: `${prefix}automania_etsy_custom_sizes_v1`,
     ETSY_CUSTOM_COLORS: `${prefix}automania_etsy_custom_colors_v1`,
     ETSY_GENERATED_MOCKUPS: `${prefix}automania_etsy_generated_mockups_v1`,
+    ETSY_FOLDER_ORDER: `${prefix}automania_etsy_folder_order_v1`,
   };
 }
 
@@ -51,6 +52,7 @@ export interface AppDataPayload {
   etsyCustomSizes?: string[];
   etsyCustomColors?: string[];
   etsyGeneratedMockups?: RenderedMatch[];
+  etsyFolderOrder?: string[];
   lastUpdated?: number;
 }
 
@@ -133,7 +135,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups] =
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -148,6 +150,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string[] | null>(keys.ETSY_CUSTOM_SIZES),
         get<string[] | null>(keys.ETSY_CUSTOM_COLORS),
         get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
+        get<string[] | null>(keys.ETSY_FOLDER_ORDER),
       ]);
 
     // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
@@ -185,6 +188,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         etsyCustomSizes: savedEtsyCustomSizes || [],
         etsyCustomColors: savedEtsyCustomColors || [],
         etsyGeneratedMockups: savedEtsyGeneratedMockups || [],
+        etsyFolderOrder: savedEtsyFolderOrder || [],
         lastUpdated: Date.now(),
       };
     }
@@ -382,6 +386,7 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     ...(payload.etsyCustomSizes !== undefined ? [set(keys.ETSY_CUSTOM_SIZES, payload.etsyCustomSizes)] : []),
     ...(payload.etsyCustomColors !== undefined ? [set(keys.ETSY_CUSTOM_COLORS, payload.etsyCustomColors)] : []),
     ...(payload.etsyGeneratedMockups !== undefined ? [set(keys.ETSY_GENERATED_MOCKUPS, payload.etsyGeneratedMockups)] : []),
+    ...(payload.etsyFolderOrder !== undefined ? [set(keys.ETSY_FOLDER_ORDER, payload.etsyFolderOrder)] : []),
   ]);
 }
 

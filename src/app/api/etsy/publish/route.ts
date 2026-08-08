@@ -142,10 +142,13 @@ export async function POST(req: Request) {
     let imagesUploaded = 0;
     const uploadErrors: string[] = [];
     if (listingId && Array.isArray(images) && images.length > 0) {
+      let mediaIndex = 0;
       for (const imgUrl of images) {
+        mediaIndex++;
         try {
           let blob: Blob;
-          let filename = `media-${Date.now()}.png`;
+          const uniqueId = `${Date.now()}-${mediaIndex}-${Math.random().toString(36).substring(7)}`;
+          let filename = `media-${uniqueId}.png`;
           let isVideo = false;
 
           if (imgUrl.startsWith('data:video')) {
@@ -154,13 +157,13 @@ export async function POST(req: Request) {
             const buffer = Buffer.from(base64Data, 'base64');
             const mimeType = imgUrl.split(';')[0].split(':')[1] || 'video/mp4';
             blob = new Blob([buffer], { type: mimeType });
-            filename = `video-${Date.now()}.mp4`;
+            filename = `video-${uniqueId}.mp4`;
           } else if (imgUrl.startsWith('data:image')) {
             const base64Data = imgUrl.split(',')[1];
             const buffer = Buffer.from(base64Data, 'base64');
             const mimeType = imgUrl.split(';')[0].split(':')[1] || 'image/png';
             blob = new Blob([buffer], { type: mimeType });
-            filename = `mockup-${Date.now()}.png`;
+            filename = `mockup-${uniqueId}.png`;
           } else if (imgUrl.startsWith('http')) {
             const response = await fetch(imgUrl);
             blob = await response.blob();
@@ -168,7 +171,7 @@ export async function POST(req: Request) {
               isVideo = true;
             }
             const ext = blob.type.split('/')[1] || (isVideo ? 'mp4' : 'webp');
-            filename = isVideo ? `video-${Date.now()}.${ext}` : `mockup-${Date.now()}.${ext}`;
+            filename = isVideo ? `video-${uniqueId}.${ext}` : `mockup-${uniqueId}.${ext}`;
           } else {
             continue;
           }
