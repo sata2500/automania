@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   try {
     const session = await getSession();
@@ -209,8 +211,8 @@ export async function POST(req: Request) {
           
           // Etsy rate limiting or processing delay for videos
           if (isVideo) {
-            console.log(`[Etsy Upload] Waiting 2 seconds after video upload...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log(`[Etsy Upload] Waiting 10 seconds after video upload...`);
+            await new Promise(resolve => setTimeout(resolve, 10000));
           }
         } catch (imgErr: any) {
           console.warn(`[Etsy Upload] Media upload error for mediaIndex ${mediaIndex}:`, imgErr);
