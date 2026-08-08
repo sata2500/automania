@@ -1001,7 +1001,7 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
           images: dbGeneratedMockups
             .filter(m => m.folderId === selectedFolderId && m.previewUrl)
-            .map(m => m.previewUrl)
+            .map(m => ({ url: m.previewUrl, isVideo: m.isVideo === true }))
             .slice(0, 22)
         })
       });
