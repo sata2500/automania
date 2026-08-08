@@ -161,6 +161,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     setRenderedMatches(results);
     setHasGenerated(true);
     setIsGenerating(false);
+    setExportProgress(null);
     toast.removeToast(genToastId);
     toast.success(`${results.length} adet mockup görseli üretildi!`);
   };
