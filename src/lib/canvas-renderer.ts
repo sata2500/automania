@@ -37,8 +37,23 @@ export async function renderMockupWithDesign(
   design: DesignItem,
   options: RenderOptions = {}
 ): Promise<string> {
-  // If this item is a video file, return video URL directly
+  // If this item is a video file, return video URL directly (converted to base64 if it's a blob, relative, or external URL)
   if (mockup.isVideo) {
+    if (!mockup.src.startsWith('data:')) {
+      try {
+        const response = await fetch(mockup.src);
+        const blob = await response.blob();
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.warn('Failed to convert video blob to base64', err);
+        return mockup.src;
+      }
+    }
     return mockup.src;
   }
 

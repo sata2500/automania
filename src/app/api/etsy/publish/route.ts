@@ -198,14 +198,22 @@ export async function POST(req: Request) {
           });
 
           if (mediaRes.ok) {
+            const successData = await mediaRes.json();
+            console.log(`[Etsy Upload] ${isVideo ? 'Video' : 'Image'} uploaded successfully. Filename: ${filename}. Response:`, successData);
             if (!isVideo) imagesUploaded++;
           } else {
             const errorText = await mediaRes.text();
-            console.warn('Media upload failed:', errorText);
+            console.warn(`[Etsy Upload] Media upload failed for ${filename}. Status: ${mediaRes.status}, Error:`, errorText);
             uploadErrors.push(`Format: ${isVideo ? 'Video' : 'Image'}, Error: ${errorText}`);
           }
+          
+          // Etsy rate limiting or processing delay for videos
+          if (isVideo) {
+            console.log(`[Etsy Upload] Waiting 2 seconds after video upload...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         } catch (imgErr: any) {
-          console.warn('Media upload error:', imgErr);
+          console.warn(`[Etsy Upload] Media upload error for mediaIndex ${mediaIndex}:`, imgErr);
           uploadErrors.push(`Upload exception: ${imgErr.message}`);
         }
       }
