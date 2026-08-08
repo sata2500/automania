@@ -34,7 +34,12 @@ export async function uploadMediaToServer(
     let fileToUpload: File;
 
     if (dataUrlOrFile instanceof File) {
-      fileToUpload = dataUrlOrFile;
+      let actualType = dataUrlOrFile.type || mimeType || 'image/webp';
+      if (actualType.startsWith('video/')) {
+        fileToUpload = new File([dataUrlOrFile], `upload-${Date.now()}.mp4`, { type: actualType });
+      } else {
+        fileToUpload = dataUrlOrFile;
+      }
     } else {
       // Base64 to Blob to File
       const res = await fetch(dataUrlOrFile);
@@ -44,7 +49,16 @@ export async function uploadMediaToServer(
       if (blob.type && blob.type.startsWith('video/')) {
         actualType = blob.type;
       }
-      const ext = actualType.split('/')[1] || 'webp';
+      
+      let ext = 'webp';
+      if (actualType.startsWith('video/')) {
+        ext = 'mp4';
+      } else if (actualType === 'image/png') {
+        ext = 'png';
+      } else if (actualType === 'image/jpeg') {
+        ext = 'jpg';
+      }
+
       fileToUpload = new File([blob], `upload-${Date.now()}.${ext}`, { type: actualType });
     }
 
