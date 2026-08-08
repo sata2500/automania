@@ -1,6 +1,6 @@
 export type ApparelType = 'light' | 'dark' | 'any';
 export type TargetApparel = 'light' | 'dark' | 'both';
-export type ExportFormatType = 'image/webp' | 'image/jpeg' | 'image/png';
+export type ExportFormatType = 'image/webp' | 'image/jpeg' | 'image/png' | 'video/mp4' | string;
 
 export interface PrintArea {
   id: string;
