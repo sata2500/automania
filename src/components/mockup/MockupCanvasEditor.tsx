@@ -494,11 +494,11 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
 
         if (isVideo) {
-          if (currentVideoCount >= 2) {
-            toast.warning(`'${file.name}' eklenemedi! Klasörde maks. 2 video sınırı mevcut. (Etsy Limiti)`);
+          if (currentVideoCount >= 1) {
+            toast.warning(`'${file.name}' eklenemedi! Klasörde en fazla 1 video yüklenebilir. (Etsy API Limiti)`);
             continue;
           }
-          currentVideoCount++;
+          currentVideoCount++
         } else {
           if (currentImageCount >= 20) {
             toast.warning(`'${file.name}' eklenemedi! Klasörde maks. 20 görsel sınırı mevcut. (Etsy Limiti)`);

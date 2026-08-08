@@ -292,7 +292,8 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
           {hasGenerated && (
             <button
               onClick={handleGenerate}
-              disabled={isGenerating || currentPairs.length === 0}
+              disabled={isGenerating || currentPairs.length === 0 || activeFolderId === null}
+              title={activeFolderId === null ? 'Lütfen önce bir klasör seçin' : undefined}
               className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs transition-all shadow-lg shadow-purple-600/30 cursor-pointer"
             >
               {isGenerating ? (
@@ -347,22 +348,23 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
           Üretim İçin Klasör Seçin:
         </label>
         <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-2 overflow-x-auto custom-scrollbar pb-2.5 max-h-[95px]">
-          <button
-            onClick={() => setActiveFolderId(null)}
-            className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[210px] min-w-0 ${
-              activeFolderId === null
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/30'
-                : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <FolderOpen className={`w-4 h-4 shrink-0 ${activeFolderId === null ? 'text-amber-300' : 'text-indigo-500 dark:text-indigo-400'}`} />
-            <span className="truncate">Tüm Klasörler</span>
-            <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
-              activeFolderId === null ? 'bg-slate-950/80 text-amber-300' : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-            }`}>
-              {allPairsCount} Varyasyon
-            </span>
-          </button>
+          <div className="relative group shrink-0">
+            <button
+              disabled
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-not-allowed max-w-[210px] min-w-0 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 opacity-60"
+            >
+              <FolderOpen className="w-4 h-4 shrink-0 text-slate-400 dark:text-slate-600" />
+              <span className="truncate">Tüm Klasörler</span>
+              <span className="px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500">
+                {allPairsCount} Var.
+              </span>
+            </button>
+            {/* Tooltip */}
+            <div className="absolute bottom-full left-0 mb-2 w-64 bg-slate-900 dark:bg-slate-800 text-white text-[11px] rounded-xl px-3 py-2.5 shadow-xl border border-slate-700 z-50 hidden group-hover:block pointer-events-none">
+              <p className="font-bold text-amber-400 mb-1">⚠️ Tüm Klasörler Seçilemiyor</p>
+              <p className="text-slate-300 leading-relaxed">Etsy'ye aktarım, klasör başına ayrı ayrı yapılmaktadır. Lütfen üretmek istediğiniz spesifik bir klasörü seçin.</p>
+            </div>
+          </div>
 
           {folders.filter(f => f.type !== 'design').map((folder) => {
             const isActive = activeFolderId === folder.id;
@@ -400,9 +402,21 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
 
           <div className="max-w-md mx-auto space-y-2">
             <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">Toplu Mockup Üretimini Başlatın</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Seçili klasördeki mockup'lar ile aktif PNG tasarımları eşleştirilip yüksek çözünürlüklü Etsy çıktısına dönüştürülür.
-            </p>
+            {activeFolderId === null ? (
+              <div className="flex items-start gap-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/60 rounded-xl px-4 py-3 text-left mt-3">
+                <span className="text-lg shrink-0">⚠️</span>
+                <div>
+                  <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Önce bir klasör seçin</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-500 leading-relaxed mt-0.5">
+                    Toplu üretim ve Etsy'ye aktarım klasör bazında yapılmaktadır. Yukarıdan spesifik bir klasör seçerek üretimi başlatabilirsiniz.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Seçili klasördeki mockup'lar ile aktif PNG tasarımları eşleştirilip yüksek çözünürlüklü Etsy çıktısına dönüştürülür.
+              </p>
+            )}
           </div>
 
           <div className="inline-flex items-center gap-3 bg-slate-100 dark:bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
@@ -413,7 +427,8 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
           <div>
             <button
               onClick={handleGenerate}
-              disabled={isGenerating || currentPairs.length === 0}
+              disabled={isGenerating || currentPairs.length === 0 || activeFolderId === null}
+              title={activeFolderId === null ? 'Lütfen önce bir klasör seçin' : undefined}
               className="px-8 py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 disabled:opacity-50 text-white font-extrabold rounded-2xl text-sm transition-all shadow-xl shadow-purple-600/30 hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-2"
             >
               {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 text-amber-300 fill-amber-300" />}
