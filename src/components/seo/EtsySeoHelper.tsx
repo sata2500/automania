@@ -1008,10 +1008,16 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
       const data = await res.json();
       setPublishResult(data);
       if (data.success) {
-        if (data.uploadErrors && data.uploadErrors.length > 0) {
-          toast.warning(`İlan aktarıldı ancak bazı görseller/videolar yüklenemedi: ${data.uploadErrors[0]}`);
+        const realErrors = (data.uploadErrors || []).filter((e: string) => !e.startsWith('Bilgi:'));
+        const infoMessages = (data.uploadErrors || []).filter((e: string) => e.startsWith('Bilgi:'));
+        
+        if (realErrors.length > 0) {
+          toast.warning(`İlan aktarıldı ancak bazı görseller yüklenemedi: ${realErrors[0]}`);
         } else {
           toast.success(data.message || 'İlan Etsy mağazanıza aktarıldı!');
+        }
+        if (infoMessages.length > 0) {
+          setTimeout(() => toast.warning(infoMessages[0]), 1500);
         }
       } else {
         toast.error(data.error || 'İlan aktarılırken hata oluştu.');

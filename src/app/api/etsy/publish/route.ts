@@ -225,10 +225,19 @@ export async function POST(req: Request) {
       }
     }
 
-    // Upload videos sequentially with delay between them
-    if (listingId && videoItems.length > 0) {
+    // Upload videos sequentially
+    // NOTE: Etsy Open API v3 currently supports only 1 video per listing.
+    // The UI shows 2 slots but the API /videos endpoint acts as a setter — each call replaces the previous.
+    // We upload only the first video. The second can be added manually from the Etsy dashboard.
+    const videosToUpload = videoItems.slice(0, 1);
+    if (videoItems.length > 1) {
+      console.warn(`[Etsy Upload] ${videoItems.length} videos found but Etsy API only supports 1 per listing. Only the first video will be uploaded.`);
+      uploadErrors.push(`Bilgi: Etsy API'si şu an ilanlar için yalnızca 1 video desteklemektedir. İkinci videonuzu Etsy panelinden manuel olarak ekleyebilirsiniz.`);
+    }
+
+    if (listingId && videosToUpload.length > 0) {
       let vidIndex = 0;
-      for (const vidUrl of videoItems) {
+      for (const vidUrl of videosToUpload) {
         vidIndex++;
         try {
           let blob: Blob;
