@@ -146,7 +146,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
           designTarget: design.targetApparel,
           previewUrl,
           exportFileName,
-          format: exportFormat,
+          format: isVideo ? (mockup.mimeType || 'video/mp4') : exportFormat,
           isVideo,
           mimeType: mockup.mimeType,
         });
