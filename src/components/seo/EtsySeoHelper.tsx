@@ -242,7 +242,14 @@ export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedM
 
   // Default options for quick selection
   const defaultSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'];
-  const defaultColors = ['Black', 'White', 'Navy', 'Pepper', 'Dark Heather', 'Sport Grey', 'Maroon', 'Red', 'Pink'];
+  const defaultColors = [
+    'Athletic Heather', 'Bay', 'Black', 'Blossom', 'Blue Jean', 'Dark Gray Heather',
+    'Dark Heather', 'Forest', 'Gold', 'Heather Light Gray', 'Heather Maroon',
+    'Heather Mauve', 'Heather Navy', 'Heather Peach', 'Heather Raspberry',
+    'Ivory', 'Maroon', 'Military Green', 'Moss', 'Natural', 'Navy', 'Orange',
+    'Pepper', 'Pink', 'Purple', 'Red', 'Royal', 'Soft Pink', 'Sport Grey',
+    'True Royal', 'White', 'Yam'
+  ];
 
   const uniqueTableSizes = useMemo(() => Array.from(new Set(variations.map(v => v.size))), [variations]);
   const uniqueTableColors = useMemo(() => Array.from(new Set(variations.map(v => v.color))), [variations]);
