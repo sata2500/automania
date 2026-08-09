@@ -65,16 +65,17 @@ export const AdminDashboard: React.FC = () => {
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
+  const fetchGlobalStats = async () => {
+    setIsLoadingStats(true);
+    try {
+      const res = await fetch('/api/admin/stats');
+      const data = await res.json();
+      if (data.success) setGlobalStats(data.stats);
+    } catch (err) {}
+    setIsLoadingStats(false);
+  };
+
   useEffect(() => {
-    const fetchGlobalStats = async () => {
-      setIsLoadingStats(true);
-      try {
-        const res = await fetch('/api/admin/stats');
-        const data = await res.json();
-        if (data.success) setGlobalStats(data.stats);
-      } catch (err) {}
-      setIsLoadingStats(false);
-    };
     if (activeSubTab === 'overview') {
       fetchGlobalStats();
     }
@@ -336,7 +337,7 @@ export const AdminDashboard: React.FC = () => {
           if (res.ok) {
             const data = await res.json();
             toast.success(data.message || 'Çöp görseller depolama alanından temizlendi.');
-            fetchStats(); // Update dashboard stats after cleaning
+            fetchGlobalStats(); // Update dashboard stats after cleaning
           } else {
             toast.error('Depolama temizleme işlemi başarısız oldu.');
           }
