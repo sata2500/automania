@@ -118,14 +118,14 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       }
       map.get(fId)!.count++;
     });
-    const arr = Array.from(map.values());
+    const arr = Array.from(map.values()).reverse();
     if (folderOrder.length > 0) {
       arr.sort((a, b) => {
         const idxA = folderOrder.indexOf(a.id);
         const idxB = folderOrder.indexOf(b.id);
         if (idxA === -1 && idxB === -1) return 0;
-        if (idxA === -1) return 1;
-        if (idxB === -1) return -1;
+        if (idxA === -1) return -1;
+        if (idxB === -1) return 1;
         return idxA - idxB;
       });
     }
@@ -227,6 +227,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   };
 
   const handleDeleteMockup = async (mockupId: string) => {
+    const mockupToDelete = dbGeneratedMockups.find(m => m.id === mockupId);
     const updated = dbGeneratedMockups.filter(m => m.id !== mockupId);
     setDbGeneratedMockups(updated);
     
@@ -234,6 +235,12 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     const data = await loadAppData();
     data.etsyGeneratedMockups = updated;
     await saveAppData(data);
+
+    // Kalıcı Olarak Vercel'dan Sil
+    if (mockupToDelete && mockupToDelete.previewUrl) {
+      deleteBlobs([mockupToDelete.previewUrl]).catch(console.error);
+    }
+    
     toast.success('Öğe klasörden kaldırıldı.');
   };
 
@@ -247,6 +254,9 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     }
 
     // Remove all mockups in this folder
+    const mockupsToDelete = dbGeneratedMockups.filter(m => m.folderId === folderId);
+    const urlsToDelete = mockupsToDelete.map(m => m.previewUrl).filter(Boolean);
+
     const updated = dbGeneratedMockups.filter(m => m.folderId !== folderId);
     setDbGeneratedMockups(updated);
     
@@ -256,6 +266,11 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     data.etsyGeneratedMockups = updated;
     await saveAppData(data);
     
+    // Kalıcı Olarak Vercel'dan Sil
+    if (urlsToDelete.length > 0) {
+      deleteBlobs(urlsToDelete).catch(console.error);
+    }
+
     if (selectedFolderId === folderId) {
       setSelectedFolderId(null);
       setSelectedDesign(null);

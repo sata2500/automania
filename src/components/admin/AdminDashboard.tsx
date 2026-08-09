@@ -190,6 +190,9 @@ export const AdminDashboard: React.FC = () => {
             if (data.settings.openrouter_api_key) setOpenRouterApiKey(data.settings.openrouter_api_key);
             if (data.settings.etsy_keystring) setEtsyKeystring(data.settings.etsy_keystring);
             if (data.settings.etsy_shared_secret) setEtsySharedSecret(data.settings.etsy_shared_secret);
+            if (data.settings.openrouter_model_vision) setModelVision(data.settings.openrouter_model_vision);
+            if (data.settings.openrouter_model_reasoning) setModelReasoning(data.settings.openrouter_model_reasoning);
+            if (data.settings.openrouter_model_generation) setModelGeneration(data.settings.openrouter_model_generation);
           }
         })
         .catch(e => console.error("Could not fetch global settings", e));
@@ -207,6 +210,9 @@ export const AdminDashboard: React.FC = () => {
       if (openRouterApiKey) settingsToSave.openrouter_api_key = openRouterApiKey;
       if (etsyKeystring) settingsToSave.etsy_keystring = etsyKeystring;
       if (etsySharedSecret) settingsToSave.etsy_shared_secret = etsySharedSecret;
+      if (modelVision) settingsToSave.openrouter_model_vision = modelVision;
+      if (modelReasoning) settingsToSave.openrouter_model_reasoning = modelReasoning;
+      if (modelGeneration) settingsToSave.openrouter_model_generation = modelGeneration;
 
       if (Object.keys(settingsToSave).length > 0) {
         await fetch('/api/admin/settings', {
@@ -543,6 +549,31 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-800/50">
                 <Activity className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Storage Metric */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Depolama Alanı (Vercel)
+                </span>
+                <div className="flex items-baseline space-x-2">
+                  <span className={`text-3xl font-extrabold ${
+                    (globalStats?.storage?.usedBytes || 0) / (globalStats?.storage?.limitBytes || 1) > 0.85 ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'
+                  }`}>
+                    {isLoadingStats ? '...' : ((globalStats?.storage?.usedBytes || 0) / (1024 * 1024)).toFixed(1)}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">MB Dolu</span>
+                </div>
+                <div className="flex gap-2 text-[10px] mt-3 font-bold">
+                  <span className="text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-2 py-0.5 rounded-md border border-sky-100 dark:border-sky-800">
+                    🖼️ {globalStats?.storage?.blobCount || 0} Görsel
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-2xl shadow-sm border border-sky-100 dark:border-sky-800/50">
+                <HardDrive className="w-6 h-6" />
               </div>
             </div>
           </div>

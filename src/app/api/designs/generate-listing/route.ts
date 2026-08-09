@@ -18,16 +18,28 @@ export async function POST(req: Request) {
       LIMIT 1
     `;
 
-    // Get API Key from app_settings or env
-    const settingsRows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'openrouter_api_key' LIMIT 1`;
-    const dbApiKey = settingsRows.length > 0 ? settingsRows[0].setting_value : null;
+    // Get API Key and Models from app_settings or env
+    const settingsRows = await sql`
+      SELECT setting_key, setting_value 
+      FROM app_settings 
+      WHERE setting_key IN ('openrouter_api_key', 'openrouter_model_reasoning')
+    `;
+    
+    let dbApiKey = null;
+    let dbReasoningModel = null;
+    
+    settingsRows.forEach(row => {
+      if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
+      if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
+    });
+
     const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
     }
     
-    // Parse SEO Copywriter Model
+    // Parse SEO Copywriter Model fallback
     let seoModel = 'google/gemma-4-26b-a4b-it:free';
     try {
       if (rows.length > 0 && rows[0].openrouter_model) {
@@ -40,6 +52,11 @@ export async function POST(req: Request) {
         }
       }
     } catch(e) {}
+
+    // Override with global setting if present
+    if (dbReasoningModel) {
+      seoModel = dbReasoningModel;
+    }
 
     // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
     const prompt = `You are an Elite Etsy SEO Specialist and POD Listing Copywriter for the US market.

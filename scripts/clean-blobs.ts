@@ -27,7 +27,7 @@ async function main() {
   
   // 1. Get all active blobs from the database
   console.log('Fetching active workspaces from Neon DB...');
-  const rows = await sql`SELECT mockups, designs FROM user_workspaces`;
+  const rows = await sql`SELECT mockups, designs, etsy_generated_mockups FROM user_workspaces`;
   
   const activeUrls = new Set<string>();
   
@@ -35,12 +35,16 @@ async function main() {
     try {
       const mockups = typeof row.mockups === 'string' ? JSON.parse(row.mockups) : row.mockups;
       const designs = typeof row.designs === 'string' ? JSON.parse(row.designs) : row.designs;
+      const etsyMockups = typeof row.etsy_generated_mockups === 'string' ? JSON.parse(row.etsy_generated_mockups) : row.etsy_generated_mockups;
       
       if (Array.isArray(mockups)) {
         mockups.forEach((m: any) => m.src && activeUrls.add(m.src));
       }
       if (Array.isArray(designs)) {
         designs.forEach((d: any) => d.src && activeUrls.add(d.src));
+      }
+      if (Array.isArray(etsyMockups)) {
+        etsyMockups.forEach((m: any) => m.previewUrl && activeUrls.add(m.previewUrl));
       }
     } catch (e) {
       console.error('Failed to parse a row', e);

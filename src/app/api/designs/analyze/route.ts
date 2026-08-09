@@ -20,9 +20,21 @@ export async function POST(request: Request) {
       LIMIT 1
     `;
 
-    // Get API Key from app_settings or env
-    const settingsRows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'openrouter_api_key' LIMIT 1`;
-    const dbApiKey = settingsRows.length > 0 ? settingsRows[0].setting_value : null;
+    // Get API Key and Models from app_settings or env
+    const settingsRows = await sql`
+      SELECT setting_key, setting_value 
+      FROM app_settings 
+      WHERE setting_key IN ('openrouter_api_key', 'openrouter_model_vision')
+    `;
+    
+    let dbApiKey = null;
+    let dbVisionModel = null;
+    
+    settingsRows.forEach(row => {
+      if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
+      if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
+    });
+
     const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
@@ -33,8 +45,8 @@ export async function POST(request: Request) {
     const scrapingProvider = rows.length > 0 && rows[0].scraping_provider ? rows[0].scraping_provider : 'scraperapi';
     const workerUrl = (rows.length > 0 ? rows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
     
-    // Parse JSON models
-    let visionModel = 'meta-llama/llama-3.2-11b-vision-instruct:free'; // fallback default
+    // Parse JSON models from workspace as fallback
+    let visionModel = 'google/gemma-4-26b-a4b-it:free'; // fallback default
     try {
       if (rows.length > 0 && rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
         const parsed = JSON.parse(rows[0].openrouter_model);
@@ -43,6 +55,11 @@ export async function POST(request: Request) {
         }
       }
     } catch(e) {}
+    
+    // Override with global setting if present
+    if (dbVisionModel) {
+      visionModel = dbVisionModel;
+    }
 
     // Prepare OpenRouter Prompt for Vision Analysis
     const prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 

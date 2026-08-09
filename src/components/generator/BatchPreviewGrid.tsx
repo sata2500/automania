@@ -101,7 +101,10 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     for (let i = 0; i < pairs.length; i++) {
       const { mockup, design } = pairs[i];
       const folder = folders.find((f) => f.id === mockup.folderId);
-      const folderName = folder?.name || 'Mockup';
+      const baseFolderName = folder?.name || 'Mockup';
+      const folderName = `${design.name} (${baseFolderName})`;
+      const virtualFolderId = `${design.id}-${mockup.folderId}`;
+      
       const isVideo = mockup.isVideo;
       const isStaticAsset = isVideo || mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
 
@@ -125,7 +128,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
         const exportFileName = formatExportFileName(
           design.name,
           mockup.name,
-          folderName,
+          baseFolderName,
           folderOrderIndex,
           exportFormat,
           isStaticAsset,
@@ -138,7 +141,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
           mockupId: mockup.id,
           mockupName: mockup.name,
           mockupApparel: mockup.apparelType,
-          folderId: mockup.folderId,
+          folderId: virtualFolderId,
           folderName,
           folderOrderIndex,
           designId: design.id,
@@ -221,11 +224,11 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
       }
       
       const currentData = await loadAppData();
-      // Veritabanındaki eski üretilmiş görsellerin üzerine tamamen yazmak yerine, 
-      // sadece aktif klasördeki eskileri temizleyip yeni klasörü ekleriz.
-      // Böylece diğer klasörler silinmez.
+      // Sadece şu an yüklediğimiz tasarım-klasör kombinasyonlarını eskilerden temizleyip yenilerini ekleriz.
       const existing = currentData.etsyGeneratedMockups || [];
-      const filtered = existing.filter(m => m.folderId !== activeFolderId);
+      const uploadedFolderIds = new Set(uploadedMatches.map(m => m.folderId));
+      const filtered = existing.filter(m => !uploadedFolderIds.has(m.folderId));
+      
       currentData.etsyGeneratedMockups = [...filtered, ...uploadedMatches];
       
       await saveAppData(currentData);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db'; // Re-exported raw sql client
 import { requireAdmin } from '@/lib/auth-server';
+import { list } from '@vercel/blob';
 
 export async function GET() {
   try {
@@ -34,6 +35,26 @@ export async function GET() {
 
     const dbLatencyMs = Date.now() - startTime;
 
+    // 3. Vercel Blob Storage Statistics
+    let totalSizeBytes = 0;
+    let blobCount = 0;
+    
+    try {
+      let hasMore = true;
+      let cursor: string | undefined = undefined;
+      while (hasMore) {
+        const res = await list({ token: process.env.BLOB_READ_WRITE_TOKEN, cursor, limit: 1000 });
+        blobCount += res.blobs.length;
+        for (const b of res.blobs) {
+          totalSizeBytes += b.size;
+        }
+        hasMore = res.hasMore;
+        cursor = res.cursor;
+      }
+    } catch (blobErr) {
+      console.error('Failed to fetch blob stats:', blobErr);
+    }
+
     const stats = {
       users: {
         total: parseInt(usersData[0].total_users || '0', 10),
@@ -48,6 +69,11 @@ export async function GET() {
       health: {
         status: dbLatencyMs < 500 ? 'excellent' : dbLatencyMs < 1500 ? 'good' : 'degraded',
         dbLatencyMs,
+      },
+      storage: {
+        usedBytes: totalSizeBytes,
+        limitBytes: 1073741824, // 1GB in bytes for Hobby tier
+        blobCount
       }
     };
 
