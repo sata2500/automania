@@ -221,8 +221,13 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
       }
       
       const currentData = await loadAppData();
-      // Veritabanındaki eski üretilmiş görsellerin üzerine yazar (kullanıcı her ürettiğinde güncel seti tutarız)
-      currentData.etsyGeneratedMockups = uploadedMatches;
+      // Veritabanındaki eski üretilmiş görsellerin üzerine tamamen yazmak yerine, 
+      // sadece aktif klasördeki eskileri temizleyip yeni klasörü ekleriz.
+      // Böylece diğer klasörler silinmez.
+      const existing = currentData.etsyGeneratedMockups || [];
+      const filtered = existing.filter(m => m.folderId !== activeFolderId);
+      currentData.etsyGeneratedMockups = [...filtered, ...uploadedMatches];
+      
       await saveAppData(currentData);
       
       toast.removeToast(saveToastId);
