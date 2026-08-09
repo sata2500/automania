@@ -47,15 +47,15 @@ export async function POST(request: Request) {
     const allBlobs: any[] = [];
     
     while (hasMore) {
-      const response = await list({
+      const blobListResponse = (await list({
         token: process.env.BLOB_READ_WRITE_TOKEN,
         limit: 1000,
         cursor
-      });
+      })) as any;
       
-      allBlobs.push(...response.blobs);
-      hasMore = response.hasMore;
-      cursor = response.cursor;
+      allBlobs.push(...blobListResponse.blobs);
+      hasMore = blobListResponse.hasMore;
+      cursor = blobListResponse.cursor;
     }
 
     // 4. Find orphaned blobs
