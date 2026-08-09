@@ -58,6 +58,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   const { user } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [currentBatchId, setCurrentBatchId] = useState<string>('');
 
   const exportFormat: ExportFormatType = 'image/webp';
   const outputResolution = 3000;
@@ -94,16 +95,23 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
 
     setIsGenerating(true);
     setExportProgress(0);
+    
+    const newBatchId = `batch-${Date.now()}`;
+    setCurrentBatchId(newBatchId);
 
     const genToastId = toast.progress('Toplu mockup görselleri üretiliyor...', 5);
     const results: RenderedMatch[] = [];
+    
+    const uniqueDesignNames = Array.from(new Set(pairs.map(p => p.design.name)));
+    const combinedDesignName = uniqueDesignNames.join(' & ');
+    const displayDesignName = combinedDesignName.length > 40 ? combinedDesignName.substring(0, 40) + '...' : combinedDesignName;
 
     for (let i = 0; i < pairs.length; i++) {
       const { mockup, design } = pairs[i];
       const folder = folders.find((f) => f.id === mockup.folderId);
       const baseFolderName = folder?.name || 'Mockup';
-      const folderName = `${design.name} (${baseFolderName})`;
-      const virtualFolderId = `${design.id}-${mockup.folderId}`;
+      const folderName = `${displayDesignName} (${baseFolderName})`;
+      const virtualFolderId = `${newBatchId}-${mockup.folderId}`;
       
       const isVideo = mockup.isVideo;
       const isStaticAsset = isVideo || mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
