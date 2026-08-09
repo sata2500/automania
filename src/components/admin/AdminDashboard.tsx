@@ -329,14 +329,16 @@ export const AdminDashboard: React.FC = () => {
     setConfirmConfig({
       isOpen: true,
       title: 'Sistem Verilerini Temizle',
-      message: 'Bu işlem PostgreSQL veritabanındaki yetkisiz test kayıtlarını ve eski veritabanı artıklarını temizleyecektir.\n\nSistemdeki hazır örnek taslak ve mockup kütüphanesi KORUNACAKTIR. Devam etmek istiyor musunuz?',
+      message: 'Bu işlem, veritabanında karşılığı olmayan veya kullanılmayan tüm çöp (yetim) görselleri Vercel Depolama (Blob) alanından tamamen silecektir.\n\nSistemdeki hazır örnek taslaklar ve kullanıcıların aktif mockupları KORUNACAKTIR. Devam etmek istiyor musunuz?',
       action: async () => {
         try {
-          const res = await fetch('/api/setup?action=reset');
+          const res = await fetch('/api/admin/clean-blobs', { method: 'POST' });
           if (res.ok) {
-            toast.success('Sistemdeki tüm çöp veriler ve veritabanı artıkları temizlendi! Örnek demo şablon kütüphanesi korundu.');
+            const data = await res.json();
+            toast.success(data.message || 'Çöp görseller depolama alanından temizlendi.');
+            fetchStats(); // Update dashboard stats after cleaning
           } else {
-            toast.error('Veritabanı temizleme işlemi başarısız oldu.');
+            toast.error('Depolama temizleme işlemi başarısız oldu.');
           }
         } catch (err) {
           toast.error('Sistem temizleme sırasında bir hata oluştu.');

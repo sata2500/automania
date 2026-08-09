@@ -7,16 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
-    // SECURITY FIX: If resetting the database, strictly require admin session
-    if (action === 'reset') {
-      const adminSession = await requireAdmin();
-      if (!adminSession) {
-        return NextResponse.json(
-          { success: false, message: 'Veritabanı sıfırlama işlemi için admin yetkisi gerekiyor.' },
-          { status: 403 }
-        );
-      }
-    }
+
 
     await sql`
       CREATE TABLE IF NOT EXISTS user_workspaces (
@@ -83,11 +74,6 @@ export async function GET(request: Request) {
       ON CONFLICT (email) DO NOTHING
     `;
     
-    if (action === 'reset') {
-      await sql`TRUNCATE TABLE user_workspaces`;
-      return NextResponse.json({ success: true, message: 'Veritabanı sıfırlandı. Eski hatalı veriler silindi.' });
-    }
-
     return NextResponse.json({ success: true, message: 'Veritabanı tabloları başarıyla oluşturuldu/kontrol edildi.' });
   } catch (error: any) {
     console.error('Setup Error:', error);
