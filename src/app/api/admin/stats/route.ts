@@ -43,13 +43,13 @@ export async function GET() {
       let hasMore = true;
       let cursor: string | undefined = undefined;
       while (hasMore) {
-        const res = await list({ token: process.env.BLOB_READ_WRITE_TOKEN, cursor, limit: 1000 });
-        blobCount += res.blobs.length;
-        for (const b of res.blobs) {
+        const blobListResponse = (await list({ token: process.env.BLOB_READ_WRITE_TOKEN, cursor, limit: 1000 })) as any;
+        blobCount += blobListResponse.blobs.length;
+        for (const b of blobListResponse.blobs) {
           totalSizeBytes += b.size;
         }
-        hasMore = res.hasMore;
-        cursor = res.cursor;
+        hasMore = blobListResponse.hasMore;
+        cursor = blobListResponse.cursor;
       }
     } catch (blobErr) {
       console.error('Failed to fetch blob stats:', blobErr);
