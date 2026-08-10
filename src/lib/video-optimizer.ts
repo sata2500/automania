@@ -17,26 +17,95 @@ export async function optimizeVideoFile(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<OptimizedVideoResult> {
-  // First upload original video file directly to server binary storage endpoint (/api/upload)
-  let serverUrl = '';
-  try {
-    serverUrl = await uploadMediaToServer(file, file.type || 'video/mp4');
-  } catch (err) {
-    console.warn('Failed to upload video to server endpoint:', err);
-  }
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.src = URL.createObjectURL(file);
+    video.muted = true;
+    video.crossOrigin = 'anonymous';
+    video.playsInline = true;
 
-  return new Promise((resolve) => {
-    let finalUrl = serverUrl;
-    if (!finalUrl) {
-      finalUrl = URL.createObjectURL(file);
-    }
+    video.onloadedmetadata = () => {
+      // Calculate 720p dimensions maintaining aspect ratio
+      const MAX_HEIGHT = 720;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
 
-    resolve({
-      dataUrl: finalUrl,
-      url: finalUrl,
-      blob: file,
-      mimeType: file.type || 'video/mp4',
-      extension: 'mp4',
-    });
+      if (height > MAX_HEIGHT) {
+        width = Math.round((width * MAX_HEIGHT) / height);
+        height = MAX_HEIGHT;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        URL.revokeObjectURL(video.src);
+        return reject(new Error('Canvas 2D context could not be created'));
+      }
+
+      // 30 FPS Stream
+      const stream = canvas.captureStream(30);
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 2500000 // 2.5 Mbps is good for 720p
+      });
+
+      const chunks: BlobPart[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        URL.revokeObjectURL(video.src);
+        const webmBlob = new Blob(chunks, { type: 'video/webm' });
+        const compressedFile = new File([webmBlob], file.name.replace(/\.[^/.]+$/, "") + ".webm", { type: 'video/webm' });
+
+        try {
+          if (onProgress) onProgress(100);
+          const serverUrl = await uploadMediaToServer(compressedFile, 'video/webm');
+          resolve({
+            dataUrl: serverUrl,
+            url: serverUrl,
+            blob: compressedFile,
+            mimeType: 'video/webm',
+            extension: 'webm'
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      let animationFrameId: number;
+      const drawFrame = () => {
+        if (video.paused || video.ended) return;
+        ctx.drawImage(video, 0, 0, width, height);
+        if (onProgress && video.duration) {
+          onProgress(Math.round((video.currentTime / video.duration) * 90)); // Leave 10% for upload
+        }
+        animationFrameId = requestAnimationFrame(drawFrame);
+      };
+
+      video.onplay = () => {
+        mediaRecorder.start();
+        drawFrame();
+      };
+
+      video.onended = () => {
+        cancelAnimationFrame(animationFrameId);
+        mediaRecorder.stop();
+      };
+
+      video.play().catch((err) => {
+        URL.revokeObjectURL(video.src);
+        reject(err);
+      });
+    };
+
+    video.onerror = (err) => {
+      URL.revokeObjectURL(video.src);
+      reject(new Error('Video format could not be decoded'));
+    };
   });
 }
