@@ -14,6 +14,9 @@
     "clean-blobs": "tsx scripts/clean-blobs.ts"
   },
   "dependencies": {
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@google/generative-ai": "^0.24.1",
     "@neondatabase/serverless": "^1.1.0",
     "@serwist/next": "^9.5.12",

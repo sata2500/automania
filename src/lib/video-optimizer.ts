@@ -4,6 +4,7 @@
  */
 
 import { uploadMediaToServer } from './image-optimizer';
+import { transcodeWithFFmpeg } from './ffmpeg-service';
 
 export interface OptimizedVideoResult {
   dataUrl: string;
@@ -11,6 +12,8 @@ export interface OptimizedVideoResult {
   blob: Blob;
   mimeType: string;
   extension: string;
+  originalSize: number;
+  optimizedSize: number;
 }
 
 export async function optimizeVideoFile(
@@ -80,8 +83,10 @@ export async function optimizeVideoFile(
             dataUrl: serverUrl,
             url: serverUrl,
             blob: compressedFile,
-            mimeType: 'video/webm',
-            extension: 'webm'
+            mimeType: 'webm', // Since we used webm format here natively
+            extension: 'webm',
+            originalSize: file.size,
+            optimizedSize: compressedFile.size
           });
         } catch (err) {
           reject(err);
@@ -116,7 +121,36 @@ export async function optimizeVideoFile(
 
     video.onerror = (err) => {
       cleanup();
-      reject(new Error('Video format could not be decoded'));
+      console.log("Native video decode failed, starting FFmpeg transcoding...");
+      transcodeWithFFmpeg(file, onProgress)
+        .then(async (ffmpegFile) => {
+          try {
+            const serverUrl = await uploadMediaToServer(ffmpegFile, 'video/mp4');
+            resolve({
+              dataUrl: serverUrl,
+              url: serverUrl,
+              blob: ffmpegFile,
+              mimeType: 'video/mp4',
+              extension: 'mp4',
+              originalSize: file.size,
+              optimizedSize: ffmpegFile.size
+            });
+          } catch (uploadErr) {
+            reject(uploadErr);
+          }
+        })
+        .catch((ffmpegErr) => {
+          let msg = "Bilinmeyen Hata";
+          if (ffmpegErr instanceof Error) {
+            msg = ffmpegErr.message;
+          } else if (typeof ffmpegErr === 'string') {
+            msg = ffmpegErr;
+          } else if (ffmpegErr && typeof ffmpegErr === 'object') {
+            msg = ffmpegErr.message || JSON.stringify(ffmpegErr);
+          }
+          console.error("FFmpeg catch block received:", ffmpegErr);
+          reject(new Error('Video format could not be decoded natively nor via FFmpeg: ' + msg));
+        });
     };
   });
 }

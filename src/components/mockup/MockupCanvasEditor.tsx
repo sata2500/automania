@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { optimizeMockupImage, uploadMediaToServer } from '@/lib/image-optimizer';
 import { optimizeVideoFile } from '@/lib/video-optimizer';
+import { getDurationWithFFmpeg } from '@/lib/ffmpeg-service';
 import { deleteBlobs } from '@/lib/storage-service';
 
 interface MockupCanvasEditorProps {
@@ -506,12 +507,26 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
       video.onerror = () => {
         cleanup();
-        reject(new Error('Desteklenmeyen veya bozuk video formatı.'));
+        reject(new Error('Desteklenmeyen veya bozuk video formatı. FFmpeg fallback denenecek.'));
       };
 
       video.src = URL.createObjectURL(file);
       video.load();
     });
+  };
+
+  const getVideoDurationWithFallback = async (file: File): Promise<number> => {
+    try {
+      return await getVideoDuration(file);
+    } catch (e) {
+      console.log("Native süre hesabı başarısız, FFmpeg.wasm indiriliyor...");
+      toast.info("Video formatı desteklenmiyor. FFmpeg WASM motoru ile okunuyor (Lütfen bekleyin)...");
+      try {
+        return await getDurationWithFFmpeg(file);
+      } catch (ffErr) {
+        throw new Error('Video süresi hem tarayıcı hem FFmpeg tarafından okunamadı.');
+      }
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -543,13 +558,13 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             continue;
           }
           try {
-            const duration = await getVideoDuration(file);
+            const duration = await getVideoDurationWithFallback(file);
             if (duration > 15.5) { // 15s official limit, 0.5s grace period
               toast.warning(`'${file.name}' çok uzun! Etsy en fazla 15 saniyelik videolara izin vermektedir (Şu an: ${Math.round(duration)}sn).`);
               continue;
             }
           } catch (e) {
-            toast.error(`'${file.name}' okunamadı: Tarayıcınız bu video formatını (örn. HEVC codec) desteklemiyor olabilir. Lütfen standart H.264 formatında bir MP4 yükleyin.`);
+            toast.error(`'${file.name}' okunamadı: FFmpeg motoru bile bu video formatını çözümleyemedi.`);
             continue;
           }
           currentVideoCount++;
@@ -575,6 +590,15 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           const optimizedVideo = await optimizeVideoFile(file);
           srcUrl = optimizedVideo.url || optimizedVideo.dataUrl;
           mimeType = optimizedVideo.mimeType || 'video/mp4';
+          
+          if (optimizedVideo.originalSize && optimizedVideo.optimizedSize) {
+            const savedBytes = optimizedVideo.originalSize - optimizedVideo.optimizedSize;
+            if (savedBytes > 0) {
+              const savedMb = (savedBytes / (1024 * 1024)).toFixed(1);
+              const percent = ((savedBytes / optimizedVideo.originalSize) * 100).toFixed(0);
+              toast.success(`Video optimize edildi: %${percent} küçültüldü (${savedMb}MB tasarruf) 🚀`);
+            }
+          }
         } else {
           const optimized = await optimizeMockupImage(file, 2000, 0.90);
           srcUrl = optimized.url || optimized.dataUrl;

@@ -7,7 +7,7 @@ const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 dakika
 const MAX_REQUESTS_PER_WINDOW = 100; // dakikada maks 100 istek
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   // 1. Rate Limiting (Basit IP bazlı koruma)
   const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
   if (ip !== 'unknown' && request.nextUrl.pathname.startsWith('/api/')) {
@@ -37,6 +37,7 @@ export function proxy(request: NextRequest) {
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http:;
     style-src 'self' 'unsafe-inline';
     img-src 'self' blob: data: https:;
+    media-src 'self' blob: data: https:;
     font-src 'self' data: https:;
     connect-src 'self' blob: data: https: http: wss: ws:;
     object-src 'none';
