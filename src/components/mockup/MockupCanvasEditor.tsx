@@ -478,16 +478,39 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   const getVideoDuration = (file: File): Promise<number> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
+      video.style.display = 'none';
+      document.body.appendChild(video);
+
+      const cleanup = () => {
+        video.onloadedmetadata = null;
+        video.ondurationchange = null;
+        video.onerror = null;
+        window.URL.revokeObjectURL(video.src);
+        if (document.body.contains(video)) document.body.removeChild(video);
+      };
+
       video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
-        resolve(video.duration);
+      video.muted = true;
+      video.playsInline = true;
+
+      const checkDuration = () => {
+        if (video.duration && video.duration !== Infinity && !isNaN(video.duration)) {
+          const dur = video.duration;
+          cleanup();
+          resolve(dur);
+        }
       };
+
+      video.onloadedmetadata = checkDuration;
+      video.ondurationchange = checkDuration;
+
       video.onerror = () => {
-        window.URL.revokeObjectURL(video.src);
-        reject('Geçersiz video dosyası');
+        cleanup();
+        reject(new Error('Desteklenmeyen veya bozuk video formatı.'));
       };
+
       video.src = URL.createObjectURL(file);
+      video.load();
     });
   };
 
@@ -526,7 +549,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
               continue;
             }
           } catch (e) {
-            toast.error(`'${file.name}' video süresi hesaplanamadı.`);
+            toast.error(`'${file.name}' okunamadı: Tarayıcınız bu video formatını (örn. HEVC codec) desteklemiyor olabilir. Lütfen standart H.264 formatında bir MP4 yükleyin.`);
             continue;
           }
           currentVideoCount++;

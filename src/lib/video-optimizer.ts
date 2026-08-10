@@ -19,10 +19,21 @@ export async function optimizeVideoFile(
 ): Promise<OptimizedVideoResult> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
+    video.style.display = 'none';
+    document.body.appendChild(video);
+
     video.src = URL.createObjectURL(file);
     video.muted = true;
     video.crossOrigin = 'anonymous';
     video.playsInline = true;
+    video.preload = 'auto';
+
+    const cleanup = () => {
+      URL.revokeObjectURL(video.src);
+      if (document.body.contains(video)) {
+        document.body.removeChild(video);
+      }
+    };
 
     video.onloadedmetadata = () => {
       // Calculate 720p dimensions maintaining aspect ratio
@@ -41,8 +52,8 @@ export async function optimizeVideoFile(
       const ctx = canvas.getContext('2d');
 
       if (!ctx) {
-        URL.revokeObjectURL(video.src);
-        return reject(new Error('Canvas 2D context could not be created'));
+        cleanup();
+        return reject(new Error('Tarayıcı 2D Canvas oluşturamadı.'));
       }
 
       // 30 FPS Stream
@@ -58,7 +69,7 @@ export async function optimizeVideoFile(
       };
 
       mediaRecorder.onstop = async () => {
-        URL.revokeObjectURL(video.src);
+        cleanup();
         const webmBlob = new Blob(chunks, { type: 'video/webm' });
         const compressedFile = new File([webmBlob], file.name.replace(/\.[^/.]+$/, "") + ".webm", { type: 'video/webm' });
 
@@ -98,13 +109,13 @@ export async function optimizeVideoFile(
       };
 
       video.play().catch((err) => {
-        URL.revokeObjectURL(video.src);
+        cleanup();
         reject(err);
       });
     };
 
     video.onerror = (err) => {
-      URL.revokeObjectURL(video.src);
+      cleanup();
       reject(new Error('Video format could not be decoded'));
     };
   });
