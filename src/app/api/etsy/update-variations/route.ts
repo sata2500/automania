@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
+import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
 export async function POST(req: Request) {
   try {
@@ -20,31 +21,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Uygulanacak varyasyonlar eksik.' }, { status: 400 });
     }
 
-    // 1. Fetch User's Etsy Credentials
-    const workspaceRows = await sql`
-      SELECT etsy_access_token, etsy_shop_id 
-      FROM user_workspaces 
-      WHERE user_id = ${session.id}
-    `;
-
-    if (workspaceRows.length === 0 || !workspaceRows[0].etsy_access_token || !workspaceRows[0].etsy_shop_id) {
-      return NextResponse.json({ success: false, error: 'Etsy hesabı bağlı değil.' }, { status: 400 });
+    const tokenRes = await getValidEtsyToken(session.id);
+    if (!tokenRes.success) {
+      return NextResponse.json({ success: false, error: tokenRes.error }, { status: tokenRes.error?.includes('dolmuş') ? 401 : 400 });
     }
 
-    const { etsy_access_token, etsy_shop_id } = workspaceRows[0];
-
-    // 2. Fetch Etsy Keystring & Shared Secret
-    const settingsRows = await sql`SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')`;
-    let etsyApiKey = process.env.ETSY_API_KEY;
-    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
-    for (const row of settingsRows) {
-      if (row.setting_key === 'etsy_keystring') etsyApiKey = row.setting_value;
-      if (row.setting_key === 'etsy_shared_secret') etsySharedSecret = row.setting_value;
-    }
-
-    if (!etsyApiKey) {
-      return NextResponse.json({ success: false, error: 'API Anahtarı eksik.' }, { status: 400 });
-    }
+    const { access_token: etsy_access_token, shop_id: etsy_shop_id, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
 
     const headers = {
       'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,

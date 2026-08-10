@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
+import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
 export const maxDuration = 60;
 
@@ -32,27 +33,14 @@ export async function POST(req: Request) {
     // Enforce 13 tag & 20 char limit
     const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
 
-    // Fetch Global Settings
-    const settingsRows = await sql`SELECT setting_key, setting_value FROM app_settings WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')`;
-    let etsyApiKey = process.env.ETSY_API_KEY;
-    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
-    for (const row of settingsRows) {
-      if (row.setting_key === 'etsy_keystring') etsyApiKey = row.setting_value;
-      if (row.setting_key === 'etsy_shared_secret') etsySharedSecret = row.setting_value;
-    }
-
-    // Fetch Etsy Store Credentials from Workspace Settings
-    const workspaceRows = await sql`
-      SELECT etsy_access_token, etsy_shop_id 
-      FROM user_workspaces 
-      WHERE user_id = ${session.id} 
-    `;
-
-    const etsyAccessToken = workspaceRows[0]?.etsy_access_token || process.env.ETSY_ACCESS_TOKEN;
-    const etsyShopId = workspaceRows[0]?.etsy_shop_id || process.env.ETSY_SHOP_ID;
+    const tokenRes = await getValidEtsyToken(session.id);
+    const etsyAccessToken = tokenRes.access_token || process.env.ETSY_ACCESS_TOKEN;
+    const etsyShopId = tokenRes.shop_id || process.env.ETSY_SHOP_ID;
+    let etsyApiKey = tokenRes.api_key || process.env.ETSY_API_KEY;
+    let etsySharedSecret = tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET;
 
     // If Etsy OAuth is not connected yet, return a clean simulated draft preview
-    if (!etsyAccessToken || !etsyShopId) {
+    if (!tokenRes.success && (!etsyAccessToken || !etsyShopId)) {
       return NextResponse.json({
         success: true,
         simulated: true,
