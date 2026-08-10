@@ -108,6 +108,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [editingFolderName, setEditingFolderName] = useState('');
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [draggedMockupId, setDraggedMockupId] = useState<string | null>(null);
 
   const foldersWithMockups = useMemo(() => {
     const map = new Map<string, { id: string, name: string, count: number }>();
@@ -245,6 +246,13 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   };
 
   const handleDeleteFolder = async (folderId: string) => {
+    // FIX: Hızlı tıklamalarda bug oluşmaması için state'i anında temizliyoruz
+    setDeletingFolderId(null);
+    if (selectedFolderId === folderId) {
+      setSelectedFolderId(null);
+      setSelectedDesign(null);
+    }
+
     // Remove from folderOrder if present
     let currentOrder = [...folderOrder];
     const idx = currentOrder.indexOf(folderId);
@@ -271,11 +279,6 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       deleteBlobs(urlsToDelete).catch(console.error);
     }
 
-    if (selectedFolderId === folderId) {
-      setSelectedFolderId(null);
-      setSelectedDesign(null);
-    }
-    setDeletingFolderId(null);
     toast.success('Klasör silindi.');
   };
 
@@ -315,6 +318,42 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     await saveAppData(data);
     
     setDraggedFolderId(null);
+  };
+
+  const handleMockupDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedMockupId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleMockupDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleMockupDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedMockupId || draggedMockupId === targetId) return;
+
+    const currentMockups = [...dbGeneratedMockups];
+    const draggedIdx = currentMockups.findIndex(m => m.id === draggedMockupId);
+    const targetIdx = currentMockups.findIndex(m => m.id === targetId);
+
+    if (draggedIdx === -1 || targetIdx === -1) return;
+
+    const [draggedItem] = currentMockups.splice(draggedIdx, 1);
+    currentMockups.splice(targetIdx, 0, draggedItem);
+
+    setDbGeneratedMockups(currentMockups);
+    
+    // Save to DB
+    try {
+      const data = await loadAppData();
+      data.etsyGeneratedMockups = currentMockups;
+      await saveAppData(data);
+    } catch (err) {
+      console.error(err);
+    }
+    setDraggedMockupId(null);
   };
 
   // Save Product Types & User Notes to Database and IndexedDB

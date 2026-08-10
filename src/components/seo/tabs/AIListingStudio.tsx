@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 import React from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 
 export const AIListingStudio = () => {
@@ -13,6 +13,7 @@ export const AIListingStudio = () => {
     handleFolderDragStart, handleFolderDragOver, handleFolderDrop, handleSelectFolder,
     editingFolderId, editingFolderName, setEditingFolderName, handleRenameFolder, setEditingFolderId,
     deletingFolderId, handleDeleteFolder, setDeletingFolderId, draggedFolderId,
+    draggedMockupId, handleMockupDragStart, handleMockupDragOver, handleMockupDrop,
     handleDeleteMockup, niche, setNiche, productType, setProductType,
     userNotes, setUserNotes, isSavingSettings, handleSaveEtsySettings,
     generatedTitle, setGeneratedTitle, copyToClipboard, copiedKey,
@@ -176,8 +177,17 @@ export const AIListingStudio = () => {
                     </label>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                    {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx) => (
-                      <div key={mockup.id} className="group relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950">
+                    {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx) => {
+                      const isDragged = draggedMockupId === mockup.id;
+                      return (
+                      <div 
+                        key={mockup.id} 
+                        draggable
+                        onDragStart={(e) => handleMockupDragStart(e, mockup.id)}
+                        onDragOver={handleMockupDragOver}
+                        onDrop={(e) => handleMockupDrop(e, mockup.id)}
+                        className={`group relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950 cursor-grab active:cursor-grabbing ${isDragged ? 'opacity-50 border-emerald-500' : ''}`}
+                      >
                         {mockup.isVideo ? (
                           <div className="w-full h-full flex items-center justify-center bg-slate-800">
                             <span className="text-[8px] font-bold text-white uppercase">VİDEO</span>
@@ -188,14 +198,26 @@ export const AIListingStudio = () => {
                         <div className="absolute top-0 left-0 bg-black/60 text-white text-[8px] px-1 font-bold rounded-br-md">
                           #{idx + 1}
                         </div>
+                        <a 
+                          href={mockup.previewUrl} 
+                          download={mockup.exportFileName || mockup.mockupName || "mockup"} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="absolute top-1 left-1 bg-emerald-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-600 cursor-pointer flex items-center justify-center"
+                          title="İndir"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Download className="w-3 h-3" />
+                        </a>
                         <div 
-                          className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                          className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer flex items-center justify-center"
                           onClick={() => handleDeleteMockup(mockup.id)}
+                          title="Kaldır"
                         >
                           <Trash2 className="w-3 h-3" />
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               )}
