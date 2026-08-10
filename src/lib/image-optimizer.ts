@@ -171,12 +171,21 @@ export async function optimizeDesignImage(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Use PNG format to guarantee full transparency preservation
-  const optimizedDataUrl = canvas.toDataURL('image/png');
+  // Use WebP format to allow lossy compression while preserving alpha transparency
+  const quality = 0.90;
+  let optimizedDataUrl = canvas.toDataURL('image/webp', quality);
+  let finalMime = 'image/webp';
+
+  // Fallback to PNG if the browser does not support WebP export
+  if (!optimizedDataUrl.startsWith('data:image/webp')) {
+    optimizedDataUrl = canvas.toDataURL('image/png');
+    finalMime = 'image/png';
+  }
+  
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload optimized binary PNG design to server API
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, 'image/png');
+  // Upload optimized binary design to server API
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime);
 
   return {
     dataUrl: optimizedDataUrl,

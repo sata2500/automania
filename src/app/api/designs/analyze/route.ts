@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(request: Request) {
   try {
@@ -24,18 +25,26 @@ export async function POST(request: Request) {
     const settingsRows = await sql`
       SELECT setting_key, setting_value 
       FROM app_settings 
-      WHERE setting_key IN ('openrouter_api_key', 'openrouter_model_vision')
+      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision')
     `;
     
+    let activeAiProvider = 'openrouter';
     let dbApiKey = null;
     let dbVisionModel = null;
+    let geminiApiKey = null;
+    let dbGeminiVisionModel = null;
     
     settingsRows.forEach(row => {
+      if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
+      if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
+      if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
     });
 
-    const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
+    const apiKey = activeAiProvider === 'gemini' 
+      ? (geminiApiKey || process.env.GEMINI_API_KEY)
+      : (dbApiKey || process.env.OPENROUTER_API_KEY);
 
     if (!apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
@@ -57,8 +66,12 @@ export async function POST(request: Request) {
     } catch(e) {}
     
     // Override with global setting if present
-    if (dbVisionModel) {
-      visionModel = dbVisionModel;
+    if (activeAiProvider === 'gemini') {
+      visionModel = dbGeminiVisionModel || 'gemini-1.5-flash';
+    } else {
+      if (dbVisionModel) {
+        visionModel = dbVisionModel;
+      }
     }
 
     // Prepare OpenRouter Prompt for Vision Analysis
@@ -77,34 +90,73 @@ Return ONLY a valid JSON object in the following format, with no markdown format
   "keywords": ["keyword1", "keyword2", "keyword3"]
 }`;
 
-    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': 'Automania POD Studio',
-      },
-      body: JSON.stringify({
-        model: visionModel,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: src } }
-            ]
-          }
-        ]
-      })
-    });
+    let content = '';
 
-    if (!openRouterRes.ok) {
-      const err = await openRouterRes.text();
-      throw new Error(`OpenRouter API hatası: ${openRouterRes.status} - ${err}`);
+    if (activeAiProvider === 'gemini') {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: visionModel });
+      
+      const match = src.match(/^data:(image\/\w+);base64,(.*)$/);
+      let inlineData = null;
+      if (match) {
+        inlineData = {
+          mimeType: match[1],
+          data: match[2]
+        };
+      } else if (src.startsWith('http://') || src.startsWith('https://')) {
+        const imgRes = await fetch(src);
+        if (!imgRes.ok) throw new Error('Görsel sunucudan indirilemedi.');
+        const arrayBuffer = await imgRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const mimeType = imgRes.headers.get('content-type') || 'image/png';
+        inlineData = {
+          mimeType,
+          data: buffer.toString('base64')
+        };
+      } else {
+        // Fallback for some reason, assuming it's a raw base64 string
+        inlineData = {
+          mimeType: 'image/png',
+          data: src.replace(/^data:image\/\w+;base64,/, '')
+        };
+      }
+      
+      const result = await model.generateContent([
+        prompt,
+        { inlineData }
+      ]);
+      const response = await result.response;
+      content = response.text();
+    } else {
+      const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'Automania POD Studio',
+        },
+        body: JSON.stringify({
+          model: visionModel,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: src } }
+              ]
+            }
+          ]
+        })
+      });
+
+      if (!openRouterRes.ok) {
+        const err = await openRouterRes.text();
+        throw new Error(`OpenRouter API hatası: ${openRouterRes.status} - ${err}`);
+      }
+
+      const aiData = await openRouterRes.json();
+      content = aiData.choices?.[0]?.message?.content || '{}';
     }
-
-    const aiData = await openRouterRes.json();
-    let content = aiData.choices?.[0]?.message?.content || '{}';
     
     // Cleanup if model wrapped in markdown or returned extra text
     const jsonMatch = content.match(/\{[\s\S]*\}/);

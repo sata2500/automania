@@ -475,6 +475,22 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     toast.success("Baskı alanları bu mockup'a yapıştırıldı (Kaydetmek için tıklayın)!");
   };
 
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(video.duration);
+      };
+      video.onerror = () => {
+        window.URL.revokeObjectURL(video.src);
+        reject('Geçersiz video dosyası');
+      };
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -494,14 +510,34 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name);
 
         if (isVideo) {
-          if (currentVideoCount >= 1) {
-            toast.warning(`'${file.name}' eklenemedi! Klasörde en fazla 1 video yüklenebilir. (Etsy API Limiti)`);
+          // Video Limits (Etsy limits: Max 100MB, Max 15 sec, Max 1 per listing as requested)
+          if (file.size > 100 * 1024 * 1024) {
+            toast.warning(`'${file.name}' çok büyük! Etsy maksimum 100 MB video boyutuna izin vermektedir.`);
             continue;
           }
-          currentVideoCount++
+          if (currentVideoCount >= 1) {
+            toast.warning(`'${file.name}' eklenemedi! Klasörde en fazla 1 video yüklenebilir.`);
+            continue;
+          }
+          try {
+            const duration = await getVideoDuration(file);
+            if (duration > 15.5) { // 15s official limit, 0.5s grace period
+              toast.warning(`'${file.name}' çok uzun! Etsy en fazla 15 saniyelik videolara izin vermektedir (Şu an: ${Math.round(duration)}sn).`);
+              continue;
+            }
+          } catch (e) {
+            toast.error(`'${file.name}' video süresi hesaplanamadı.`);
+            continue;
+          }
+          currentVideoCount++;
         } else {
+          // Image Limits (Etsy 2026 limits: Max 20 per listing)
+          if (file.size > 20 * 1024 * 1024) {
+            toast.warning(`'${file.name}' çok büyük! Lütfen 20 MB'dan küçük görseller yükleyin.`);
+            continue;
+          }
           if (currentImageCount >= 20) {
-            toast.warning(`'${file.name}' eklenemedi! Klasörde maks. 20 görsel sınırı mevcut. (Etsy Limiti)`);
+            toast.warning(`'${file.name}' eklenemedi! Etsy güncel (2026) kısıtlamalarına göre maksimum 20 görsel sınırına sahiptir.`);
             continue;
           }
           currentImageCount++;

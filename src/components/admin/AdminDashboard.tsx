@@ -98,12 +98,20 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // 3-Tier Model System & Global Settings
+  const [activeAiProvider, setActiveAiProvider] = useState<'openrouter' | 'gemini'>('openrouter');
   const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  
   const [etsyKeystring, setEtsyKeystring] = useState('');
   const [etsySharedSecret, setEtsySharedSecret] = useState('');
+  
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
   const [modelGeneration, setModelGeneration] = useState('');
+  
+  const [geminiModelVision, setGeminiModelVision] = useState('');
+  const [geminiModelReasoning, setGeminiModelReasoning] = useState('');
+  const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
 
   // OpenRouter Dynamic Models State
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
@@ -188,12 +196,20 @@ export const AdminDashboard: React.FC = () => {
         .then(res => res.json())
         .then(data => {
           if (data.settings) {
+            if (data.settings.active_ai_provider) setActiveAiProvider(data.settings.active_ai_provider);
             if (data.settings.openrouter_api_key) setOpenRouterApiKey(data.settings.openrouter_api_key);
+            if (data.settings.gemini_api_key) setGeminiApiKey(data.settings.gemini_api_key);
+            
             if (data.settings.etsy_keystring) setEtsyKeystring(data.settings.etsy_keystring);
             if (data.settings.etsy_shared_secret) setEtsySharedSecret(data.settings.etsy_shared_secret);
+            
             if (data.settings.openrouter_model_vision) setModelVision(data.settings.openrouter_model_vision);
             if (data.settings.openrouter_model_reasoning) setModelReasoning(data.settings.openrouter_model_reasoning);
             if (data.settings.openrouter_model_generation) setModelGeneration(data.settings.openrouter_model_generation);
+            
+            if (data.settings.gemini_model_vision) setGeminiModelVision(data.settings.gemini_model_vision);
+            if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
+            if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
           }
         })
         .catch(e => console.error("Could not fetch global settings", e));
@@ -208,12 +224,20 @@ export const AdminDashboard: React.FC = () => {
 
       // Save global settings via Admin API
       const settingsToSave: any = {};
-      if (openRouterApiKey) settingsToSave.openrouter_api_key = openRouterApiKey;
+      if (activeAiProvider) settingsToSave.active_ai_provider = activeAiProvider;
+      if (openRouterApiKey !== undefined) settingsToSave.openrouter_api_key = openRouterApiKey;
+      if (geminiApiKey !== undefined) settingsToSave.gemini_api_key = geminiApiKey;
+      
       if (etsyKeystring) settingsToSave.etsy_keystring = etsyKeystring;
       if (etsySharedSecret) settingsToSave.etsy_shared_secret = etsySharedSecret;
+      
       if (modelVision) settingsToSave.openrouter_model_vision = modelVision;
       if (modelReasoning) settingsToSave.openrouter_model_reasoning = modelReasoning;
       if (modelGeneration) settingsToSave.openrouter_model_generation = modelGeneration;
+      
+      if (geminiModelVision) settingsToSave.gemini_model_vision = geminiModelVision;
+      if (geminiModelReasoning) settingsToSave.gemini_model_reasoning = geminiModelReasoning;
+      if (geminiModelGeneration) settingsToSave.gemini_model_generation = geminiModelGeneration;
 
       if (Object.keys(settingsToSave).length > 0) {
         await fetch('/api/admin/settings', {
@@ -231,13 +255,13 @@ export const AdminDashboard: React.FC = () => {
         modelGeneration,
       });
 
-      toast.success('OpenRouter API ayarları kaydedildi ve tüm cihazlarınıza eşitlendi! 📱💻');
+      toast.success('Yapay Zeka ve API ayarları başarıyla kaydedildi! 📱💻');
     } catch (e) {
       toast.error('Ayarlar kaydedilirken bir hata oluştu.');
     }
   };
 
-  const handleTestSpecificModel = async (modelId: string, role: 'vision' | 'reasoning' | 'generation') => {
+  const handleTestSpecificModel = async (modelId: string, role: 'vision' | 'reasoning' | 'generation', provider: 'openrouter' | 'gemini' = 'openrouter') => {
     setTestingModel(modelId);
     const startTime = Date.now();
 
@@ -265,7 +289,10 @@ export const AdminDashboard: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+          provider,
+          endpoint: provider === 'gemini' 
+            ? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+            : 'https://openrouter.ai/api/v1/chat/completions',
           model: modelId,
           messages,
           max_tokens: 30,
@@ -617,9 +644,9 @@ export const AdminDashboard: React.FC = () => {
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">OpenRouter Yapay Zeka &amp; API Yönetim Merkezi</h2>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Yapay Zeka &amp; API Yönetim Merkezi</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Görsel analiz, etiket üretimi ve Etsy optimizasyonu için OpenRouter API anahtarınızı yapılandırın.
+                  Görsel analiz, etiket üretimi ve Etsy optimizasyonu için AI sağlayıcınızı yapılandırın.
                 </p>
               </div>
             </div>
@@ -629,23 +656,68 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="space-y-5">
+            {/* Provider Selection */}
+            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Aktif Yapay Zeka Sağlayıcısı</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ai_provider"
+                    value="openrouter"
+                    checked={activeAiProvider === 'openrouter'}
+                    onChange={() => setActiveAiProvider('openrouter')}
+                    className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">OpenRouter</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ai_provider"
+                    value="gemini"
+                    checked={activeAiProvider === 'gemini'}
+                    onChange={() => setActiveAiProvider('gemini')}
+                    className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Google Gemini</span>
+                </label>
+              </div>
+            </div>
+
             {/* API Key Inputs */}
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-indigo-500" />
-                    OpenRouter API Key
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Sunucu Veritabanı Tabanlı</span>
-                </label>
-                <div className="relative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-indigo-500" />
+                      OpenRouter API Key
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
+                  </label>
                   <input
                     type="text"
                     value={openRouterApiKey}
                     onChange={(e) => setOpenRouterApiKey(e.target.value)}
                     placeholder="sk-or-v1-..."
-                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all pr-10"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-sky-500" />
+                      Google Gemini API Key
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-all"
                   />
                 </div>
               </div>
@@ -708,7 +780,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 {modelVision && (
                   <button 
-                    onClick={() => handleTestSpecificModel(modelVision, 'vision')}
+                    onClick={() => handleTestSpecificModel(modelVision, 'vision', 'openrouter')}
                     disabled={testingModel === modelVision}
                     className="mt-3 w-full py-1.5 bg-indigo-100/50 hover:bg-indigo-200/50 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   >
@@ -735,7 +807,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 {modelReasoning && (
                   <button 
-                    onClick={() => handleTestSpecificModel(modelReasoning, 'reasoning')}
+                    onClick={() => handleTestSpecificModel(modelReasoning, 'reasoning', 'openrouter')}
                     disabled={testingModel === modelReasoning}
                     className="mt-3 w-full py-1.5 bg-emerald-100/50 hover:bg-emerald-200/50 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   >
@@ -762,7 +834,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 {modelGeneration && (
                   <button 
-                    onClick={() => handleTestSpecificModel(modelGeneration, 'generation')}
+                    onClick={() => handleTestSpecificModel(modelGeneration, 'generation', 'openrouter')}
                     disabled={testingModel === modelGeneration}
                     className="mt-3 w-full py-1.5 bg-purple-100/50 hover:bg-purple-200/50 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   >
@@ -770,6 +842,110 @@ export const AdminDashboard: React.FC = () => {
                     Bu Modeli Test Et
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* 3-Tier Model Assignments - Gemini */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Google Gemini Modelleri</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Görsel Analiz Modeli (Vision)</label>
+                    <select
+                      value={geminiModelVision}
+                      onChange={(e) => setGeminiModelVision(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
+                    >
+                      <option value="">Seçiniz</option>
+                      <optgroup label="Gemini 3 Serisi">
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                      </optgroup>
+                      <optgroup label="Gemini 2.5 Serisi">
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
+                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  {geminiModelVision && (
+                    <button 
+                      onClick={() => handleTestSpecificModel(geminiModelVision, 'vision', 'gemini')}
+                      disabled={testingModel === geminiModelVision}
+                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      {testingModel === geminiModelVision ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                      Bu Modeli Test Et
+                    </button>
+                  )}
+                </div>
+                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">SEO Metin Modeli (Reasoning)</label>
+                    <select
+                      value={geminiModelReasoning}
+                      onChange={(e) => setGeminiModelReasoning(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
+                    >
+                      <option value="">Seçiniz</option>
+                      <optgroup label="Gemini 3 Serisi">
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                      </optgroup>
+                      <optgroup label="Gemini 2.5 Serisi">
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
+                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  {geminiModelReasoning && (
+                    <button 
+                      onClick={() => handleTestSpecificModel(geminiModelReasoning, 'reasoning', 'gemini')}
+                      disabled={testingModel === geminiModelReasoning}
+                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      {testingModel === geminiModelReasoning ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                      Bu Modeli Test Et
+                    </button>
+                  )}
+                </div>
+                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Görsel Üretim Modeli (T2I)</label>
+                    <select
+                      value={geminiModelGeneration}
+                      onChange={(e) => setGeminiModelGeneration(e.target.value)}
+                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
+                    >
+                      <option value="">Seçiniz</option>
+                      <optgroup label="Gemini Image Modelleri">
+                        <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2) - Ücretli</option>
+                        <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image - Ücretli</option>
+                        <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana Pro) - Ücretli</option>
+                        <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image - Ücretli</option>
+                        <option value="imagen-4.0-generate">Imagen 4.0 - Ücretli</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                  {geminiModelGeneration && (
+                    <button 
+                      onClick={() => handleTestSpecificModel(geminiModelGeneration, 'generation', 'gemini')}
+                      disabled={testingModel === geminiModelGeneration}
+                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      {testingModel === geminiModelGeneration ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                      Bu Modeli Test Et
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

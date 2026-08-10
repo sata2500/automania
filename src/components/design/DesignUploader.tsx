@@ -480,10 +480,10 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         >
           <Upload className="w-10 h-10 text-indigo-500 dark:text-indigo-400 mb-3 animate-bounce" />
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Tasarımlarınızı Buraya Sürükleyip Bırakın</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">veya bilgisayarınızdan dosya seçin (PNG, JPG, WEBP)</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">veya bilgisayarınızdan dosya seçin (PNG, SVG, JPG, WEBP)</p>
           <label className="mt-4 cursor-pointer inline-flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-5 py-2.5 rounded-xl text-xs transition-all shadow-md">
             <span>Dosya Seç</span>
-            <input type="file" accept="image/*" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} className="hidden" />
+            <input type="file" accept="image/*, image/svg+xml" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} className="hidden" />
           </label>
         </div>
       </div>

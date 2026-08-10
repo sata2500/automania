@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
@@ -22,18 +23,26 @@ export async function POST(req: Request) {
     const settingsRows = await sql`
       SELECT setting_key, setting_value 
       FROM app_settings 
-      WHERE setting_key IN ('openrouter_api_key', 'openrouter_model_reasoning')
+      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning')
     `;
     
+    let activeAiProvider = 'openrouter';
     let dbApiKey = null;
     let dbReasoningModel = null;
+    let geminiApiKey = null;
+    let dbGeminiReasoningModel = null;
     
     settingsRows.forEach(row => {
+      if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
+      if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
+      if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
     });
 
-    const apiKey = dbApiKey || process.env.OPENROUTER_API_KEY;
+    const apiKey = activeAiProvider === 'gemini' 
+      ? (geminiApiKey || process.env.GEMINI_API_KEY)
+      : (dbApiKey || process.env.OPENROUTER_API_KEY);
 
     if (!apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
@@ -54,8 +63,12 @@ export async function POST(req: Request) {
     } catch(e) {}
 
     // Override with global setting if present
-    if (dbReasoningModel) {
-      seoModel = dbReasoningModel;
+    if (activeAiProvider === 'gemini') {
+      seoModel = dbGeminiReasoningModel || 'gemini-1.5-pro';
+    } else {
+      if (dbReasoningModel) {
+        seoModel = dbReasoningModel;
+      }
     }
 
     // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
@@ -101,28 +114,39 @@ Return ONLY a valid JSON object in the following format:
   "detectedAesthetic": "cottagecore botanical"
 }`;
 
-    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': 'Automania POD Studio Listing Generator',
-      },
-      body: JSON.stringify({
-        model: seoModel,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
+    let content = '';
 
-    if (!openRouterRes.ok) {
-      const err = await openRouterRes.text();
-      throw new Error(`OpenRouter SEO API Hatası: ${openRouterRes.status} - ${err}`);
+    if (activeAiProvider === 'gemini') {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: seoModel });
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      content = response.text();
+    } else {
+      const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'Automania POD Studio Listing Generator',
+        },
+        body: JSON.stringify({
+          model: seoModel,
+          messages: [
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+
+      if (!openRouterRes.ok) {
+        const err = await openRouterRes.text();
+        throw new Error(`OpenRouter SEO API Hatası: ${openRouterRes.status} - ${err}`);
+      }
+
+      const aiData = await openRouterRes.json();
+      content = aiData.choices?.[0]?.message?.content || '{}';
     }
-
-    const aiData = await openRouterRes.json();
-    let content = aiData.choices?.[0]?.message?.content || '{}';
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
