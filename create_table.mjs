@@ -48,6 +48,7 @@ async function main() {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_shop_id VARCHAR(200)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_variation_template JSONB`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_variation_templates JSONB`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_default_templates JSONB DEFAULT '{}'::jsonb`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_custom_sizes JSONB DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_custom_colors JSONB DEFAULT '[]'::jsonb`;
 

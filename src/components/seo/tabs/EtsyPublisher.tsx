@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, ChevronDown } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, ChevronDown, Settings, Info } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 
 const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: any, selectedValues: number[], onChange: (vals: number[]) => void }) => {
@@ -61,13 +61,38 @@ export const EtsyPublisher = () => {
     shippingProfiles, selectedReadinessStateId, setSelectedReadinessStateId,
     readinessStates, isPublishing, handlePublishToEtsy, publishResult,
     generatedTitle, generatedDescription, selectedTags, basePrice, variations,
-    taxonomyId, whoMade, whenMade, materials, styles,
+    taxonomyId, whoMade, setWhoMade, whenMade, setWhenMade, isSupply, setIsSupply, materials, styles,
+    productionPartnerId, setProductionPartnerId, isCustomizable, setIsCustomizable, sku, setSku,
     shopSections, selectedShopSectionId, setSelectedShopSectionId,
     returnPolicies, selectedReturnPolicyId, setSelectedReturnPolicyId,
     shouldAutoRenew, setShouldAutoRenew,
     availableTaxonomyProperties, selectedTaxonomyProperties, setSelectedTaxonomyProperties,
-    savedTemplates, setVariations
+    savedTemplates, setVariations, defaultTemplates, setDefaultTemplates
   } = useEtsySeo();
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const handleSetDefaultTemplate = async (templateId: string) => {
+    if (!taxonomyId) {
+      toast.error('Lütfen önce bir kategori seçin (AI SEO üreterek veya manuel).');
+      return;
+    }
+    if (!templateId) return;
+
+    const newDefaults = { ...defaultTemplates, [taxonomyId]: templateId };
+    setDefaultTemplates(newDefaults);
+
+    try {
+      await fetch('/api/storage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ etsyDefaultTemplates: newDefaults })
+      });
+      toast.success(`Bu şablon geçerli kategori (${taxonomyId}) için varsayılan olarak ayarlandı!`);
+    } catch (e) {
+      toast.error('Varsayılan şablon kaydedilirken hata oluştu.');
+    }
+  };
 
   if (activeTab !== 'publish') return null;
 
@@ -163,19 +188,37 @@ export const EtsyPublisher = () => {
                       <Layers className="w-4 h-4 text-emerald-500" />
                       Kayıtlı Varyasyon Şablonu Yükle
                     </label>
-                    <select 
-                      onChange={(e) => {
-                        const t = savedTemplates?.find((st: any) => st.id === e.target.value);
-                        if (t) setVariations(t.variations || []);
-                      }}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">-- Şablon Seçin --</option>
-                      {savedTemplates?.map((t: any) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.variations?.length || 0} Varyasyon)</option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-slate-500 mt-1">Bu alandan bir şablon seçerseniz mevcut varyasyon listeniz üzerine yazılır.</p>
+                    <div className="flex gap-2">
+                      <select 
+                        onChange={(e) => {
+                          const t = savedTemplates?.find((st: any) => st.id === e.target.value);
+                          if (t) setVariations(t.variations || []);
+                        }}
+                        className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">-- Şablon Seçin --</option>
+                        {savedTemplates?.map((t: any) => {
+                          const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
+                          return (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.variations?.length || 0} Varyasyon) {isDefault ? ' (VARSAYILAN)' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const selectEl = document.querySelector('select[aria-label="template-select"]') as HTMLSelectElement;
+                          // But we didn't add aria-label, so we can just use the currently selected value if we track it in state.
+                          // Actually, let's just make the button appear next to the select, but how to know which one is selected?
+                        }}
+                        className="hidden"
+                      >
+                        Varsayılan Yap
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Bu alandan bir şablon seçerseniz mevcut varyasyon listeniz üzerine yazılır. Kategoriye özel varsayılan yapmak için gelişmiş ayarları kullanabilirsiniz.</p>
                   </div>
 
                   <div>
@@ -256,18 +299,129 @@ export const EtsyPublisher = () => {
                     </div>
                   ))}
 
-                  <div className="md:col-span-2 flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50">
-                    <input
-                      type="checkbox"
-                      id="autoRenewCheckbox"
-                      checked={shouldAutoRenew}
-                      onChange={(e) => setShouldAutoRenew(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                    />
-                    <label htmlFor="autoRenewCheckbox" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={shouldAutoRenew}
+                        onChange={(e) => setShouldAutoRenew(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                      />
                       Otomatik Yenileme (Automatic Renewal) - Kapatmanız önerilir
                     </label>
                   </div>
+
+                  {/* ADVANCED SETTINGS ACCORDION */}
+                  <div className="md:col-span-2 mt-4 border-t border-slate-200 dark:border-slate-800 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="flex items-center justify-between w-full text-sm font-bold text-slate-700 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400"
+                    >
+                      <span className="flex items-center gap-2"><Settings className="w-4 h-4" /> Gelişmiş Etsy Ayarları</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {showAdvanced && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-slate-50/50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                        {/* DEFAULT TEMPLATE MAPPING */}
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Şu Anki Kategori (ID: {taxonomyId}) İçin Varsayılan Şablon Ata</label>
+                          <div className="flex gap-2">
+                            <select 
+                              id="advanced-template-select"
+                              className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                            >
+                              <option value="">-- Şablon Seçin --</option>
+                              {savedTemplates?.map((t: any) => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const el = document.getElementById('advanced-template-select') as HTMLSelectElement;
+                                if (el && el.value) handleSetDefaultTemplate(el.value);
+                              }}
+                              className="px-4 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs font-bold rounded-lg hover:bg-purple-200"
+                            >
+                              Varsayılan Yap
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* WHO MADE */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Who Made?</label>
+                          <select value={whoMade} onChange={(e) => setWhoMade(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                            <option value="i_did">I did (Ben yaptım)</option>
+                            <option value="someone_else">Someone else (Başkası/Üretim Ortağı)</option>
+                            <option value="collective">A collective (Kolektif)</option>
+                          </select>
+                        </div>
+
+                        {/* WHEN MADE */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">When Made?</label>
+                          <select value={whenMade} onChange={(e) => setWhenMade(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                            <option value="made_to_order">Made to order (Siparişe göre)</option>
+                            <option value="2020_2026">2020-2026</option>
+                            <option value="2010_2019">2010-2019</option>
+                          </select>
+                        </div>
+
+                        {/* IS SUPPLY */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Is Supply? (Tedarik Malzemesi mi?)</label>
+                          <select value={isSupply ? "true" : "false"} onChange={(e) => setIsSupply(e.target.value === "true")} className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                            <option value="false">Hayır, Bitmiş Ürün</option>
+                            <option value="true">Evet, Tedarik Malzemesi</option>
+                          </select>
+                        </div>
+
+                        {/* IS CUSTOMIZABLE */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Kişiselleştirilebilir mi? (Is Customizable?)</label>
+                          <select value={isCustomizable ? "true" : "false"} onChange={(e) => setIsCustomizable(e.target.value === "true")} className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                            <option value="false">Hayır</option>
+                            <option value="true">Evet</option>
+                          </select>
+                        </div>
+
+                        {/* PRODUCTION PARTNER */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Üretim Ortağı ID (Production Partner)</label>
+                          <input 
+                            type="text" 
+                            placeholder="Boş bırakılabilir"
+                            value={productionPartnerId}
+                            onChange={(e) => setProductionPartnerId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                          />
+                        </div>
+
+                        {/* SKU */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">İlan Ana SKU Kodu</label>
+                          <input 
+                            type="text" 
+                            placeholder="Örn: TSHIRT-001"
+                            value={sku}
+                            onChange={(e) => setSku(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 mt-2 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg flex gap-3">
+                          <Info className="w-5 h-5 text-blue-500 shrink-0" />
+                          <p className="text-xs text-blue-800 dark:text-blue-300">
+                            <strong>Bilgi:</strong> Bahsettiğiniz yeni <em>"How does your shop produce this item?"</em> ve <em>"What tools are used to make this item?"</em> (Creativity Standards) ayarları şu an Etsy'nin dışa açık (Public V3) API'si tarafından doğrudan desteklenmemektedir. Bu sebeple şu an için maalesef API üzerinden otomatik işaretlenemiyorlar. Etsy API güncellemesi yayınladığı an sisteme entegre edilecektir. Şimdilik bu iki alanı Etsy panelinden manuel işaretlemeniz gerekmektedir.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
                 <div className="flex flex-wrap gap-3 pt-2">

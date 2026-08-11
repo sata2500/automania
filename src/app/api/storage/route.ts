@@ -58,6 +58,7 @@ export async function GET(request: Request) {
       etsyProductTypes: data.etsyProductTypes || null,
       etsyUserNotes: data.etsyUserNotes || null,
       etsyVariationTemplates: data.etsyVariationTemplates || [],
+      etsyDefaultTemplates: data.etsyDefaultTemplates || {},
       etsyCustomSizes: data.etsyCustomSizes || [],
       etsyCustomColors: data.etsyCustomColors || [],
       etsyGeneratedMockups: data.etsyGeneratedMockups || [],
@@ -93,6 +94,8 @@ export async function POST(request: Request) {
     const etsyUserNotes = body.etsyUserNotes || null;
     const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
     const variationTemplatesJson = hasVariationTemplates ? body.etsyVariationTemplates : [];
+    const hasDefaultTemplates = body.etsyDefaultTemplates !== undefined;
+    const defaultTemplatesJson = hasDefaultTemplates ? body.etsyDefaultTemplates : {};
     const hasCustomSizes = Array.isArray(body.etsyCustomSizes);
     const customSizesJson = hasCustomSizes ? body.etsyCustomSizes : [];
     const hasCustomColors = Array.isArray(body.etsyCustomColors);
@@ -139,6 +142,7 @@ export async function POST(request: Request) {
       etsyProductTypes,
       etsyUserNotes,
       etsyVariationTemplates: variationTemplatesJson,
+      etsyDefaultTemplates: defaultTemplatesJson,
       etsyCustomSizes: customSizesJson,
       etsyCustomColors: customColorsJson,
       etsyGeneratedMockups: generatedMockupsJson,
@@ -157,6 +161,7 @@ export async function POST(request: Request) {
     if (hasProductTypes) updateData.etsyProductTypes = etsyProductTypes;
     if (hasUserNotes) updateData.etsyUserNotes = etsyUserNotes;
     if (hasVariationTemplates) updateData.etsyVariationTemplates = variationTemplatesJson;
+    if (hasDefaultTemplates) updateData.etsyDefaultTemplates = defaultTemplatesJson;
     if (hasCustomSizes) updateData.etsyCustomSizes = customSizesJson;
     if (hasCustomColors) updateData.etsyCustomColors = customColorsJson;
     if (hasGeneratedMockups) updateData.etsyGeneratedMockups = generatedMockupsJson;

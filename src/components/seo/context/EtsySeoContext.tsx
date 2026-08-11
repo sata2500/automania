@@ -83,6 +83,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [sizes, setSizes] = useState<string[]>(['S', 'M', 'L', 'XL', '2XL', '3XL']);
   const [colors, setColors] = useState<string[]>(['Black', 'White', 'Navy', 'Pepper']);
   const [variations, setVariations] = useState<VariationRow[]>([]);
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [defaultTemplates, setDefaultTemplates] = useState<Record<number, string>>({});
   const [basePrice, setBasePrice] = useState<number>(24.99);
 
   // Input states for AI generation
@@ -102,6 +104,9 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [whoMade, setWhoMade] = useState<string>('someone_else');
   const [whenMade, setWhenMade] = useState<string>('made_to_order');
   const [isSupply, setIsSupply] = useState<boolean>(false);
+  const [productionPartnerId, setProductionPartnerId] = useState<string>('');
+  const [isCustomizable, setIsCustomizable] = useState<boolean>(false);
+  const [sku, setSku] = useState<string>('');
   const [materials, setMaterials] = useState<string[]>([]);
   const [styles, setStyles] = useState<string[]>([]);
 
@@ -147,11 +152,10 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       if (data.etsyUserNotes) setUserNotes(data.etsyUserNotes);
       if (data.etsyVariationTemplates && data.etsyVariationTemplates.length > 0) {
         setSavedTemplates(data.etsyVariationTemplates);
-        // Find the most recently updated template
-        const latest = [...data.etsyVariationTemplates].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-        setTimeout(() => {
-          setVariations(latest.variations || []);
-        }, 50);
+        // We will apply default template later if needed
+      }
+      if (data.etsyDefaultTemplates) {
+        setDefaultTemplates(data.etsyDefaultTemplates);
       }
       if (data.etsyCustomSizes) setSavedCustomSizes(data.etsyCustomSizes);
       if (data.etsyCustomColors) setSavedCustomColors(data.etsyCustomColors);
@@ -815,6 +819,21 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           });
           setSelectedTaxonomyProperties(formattedProps);
         }
+
+        // Auto-apply default template if exists for the selected taxonomy ID
+        if (data.listing.taxonomy_id) {
+           setTimeout(async () => {
+             const appData = await loadAppData();
+             const defaultMap = appData.etsyDefaultTemplates || {};
+             const templateId = defaultMap[data.listing.taxonomy_id];
+             if (templateId) {
+               const template = (appData.etsyVariationTemplates || []).find((t: any) => t.id === templateId);
+               if (template) {
+                 setVariations(template.variations || []);
+               }
+             }
+           }, 200);
+        }
         
         // Save generated SEO to database
         try {
@@ -1157,6 +1176,9 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           who_made: whoMade,
           when_made: whenMade,
           is_supply: isSupply,
+          production_partner_id: productionPartnerId ? [Number(productionPartnerId)] : undefined,
+          is_customizable: isCustomizable,
+          sku: sku || undefined,
           materials: materials,
           styles: styles,
           shop_section_id: selectedShopSectionId ? parseInt(selectedShopSectionId, 10) : undefined,
@@ -1219,10 +1241,14 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     whoMade, setWhoMade,
     whenMade, setWhenMade,
     isSupply, setIsSupply,
+    productionPartnerId, setProductionPartnerId,
+    isCustomizable, setIsCustomizable,
+    sku, setSku,
     materials, setMaterials,
     styles, setStyles,
     shopSections, setShopSections,
     selectedShopSectionId, setSelectedShopSectionId,
+    defaultTemplates, setDefaultTemplates,
     returnPolicies, setReturnPolicies,
     selectedReturnPolicyId, setSelectedReturnPolicyId,
     shouldAutoRenew, setShouldAutoRenew,

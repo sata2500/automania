@@ -28,6 +28,7 @@ function getStorageKeys() {
     ETSY_PRODUCT_TYPES: `${prefix}automania_etsy_product_types_v1`,
     ETSY_USER_NOTES: `${prefix}automania_etsy_user_notes_v1`,
     ETSY_VARIATION_TEMPLATES: `${prefix}automania_etsy_variation_templates_v1`,
+    ETSY_DEFAULT_TEMPLATES: `${prefix}automania_etsy_default_templates_v1`,
     ETSY_CUSTOM_SIZES: `${prefix}automania_etsy_custom_sizes_v1`,
     ETSY_CUSTOM_COLORS: `${prefix}automania_etsy_custom_colors_v1`,
     ETSY_GENERATED_MOCKUPS: `${prefix}automania_etsy_generated_mockups_v1`,
@@ -49,6 +50,7 @@ export interface AppDataPayload {
   etsyProductTypes?: string;
   etsyUserNotes?: string;
   etsyVariationTemplates?: { id: string; name: string; updatedAt: string; variations: any[] }[];
+  etsyDefaultTemplates?: Record<number, string>;
   etsyCustomSizes?: string[];
   etsyCustomColors?: string[];
   etsyGeneratedMockups?: RenderedMatch[];
@@ -89,6 +91,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           etsyProductTypes: serverData.etsyProductTypes,
           etsyUserNotes: serverData.etsyUserNotes,
           etsyVariationTemplates: serverData.etsyVariationTemplates || [],
+          etsyDefaultTemplates: serverData.etsyDefaultTemplates || {},
           etsyCustomSizes: serverData.etsyCustomSizes || [],
           etsyCustomColors: serverData.etsyCustomColors || [],
           etsyGeneratedMockups: serverData.etsyGeneratedMockups || [],
@@ -135,7 +138,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
+    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyDefaultTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -147,6 +150,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ETSY_PRODUCT_TYPES),
         get<string | null>(keys.ETSY_USER_NOTES),
         get<any[] | null>(keys.ETSY_VARIATION_TEMPLATES),
+        get<Record<number, string> | null>(keys.ETSY_DEFAULT_TEMPLATES),
         get<string[] | null>(keys.ETSY_CUSTOM_SIZES),
         get<string[] | null>(keys.ETSY_CUSTOM_COLORS),
         get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
@@ -185,6 +189,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         etsyProductTypes: savedEtsyProductTypes ?? '',
         etsyUserNotes: savedEtsyUserNotes ?? '',
         etsyVariationTemplates: savedEtsyVariationTemplates || [],
+        etsyDefaultTemplates: savedEtsyDefaultTemplates || {},
         etsyCustomSizes: savedEtsyCustomSizes || [],
         etsyCustomColors: savedEtsyCustomColors || [],
         etsyGeneratedMockups: savedEtsyGeneratedMockups || [],
@@ -383,6 +388,7 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
     ...(payload.etsyProductTypes !== undefined ? [set(keys.ETSY_PRODUCT_TYPES, payload.etsyProductTypes)] : []),
     ...(payload.etsyUserNotes !== undefined ? [set(keys.ETSY_USER_NOTES, payload.etsyUserNotes)] : []),
     ...(payload.etsyVariationTemplates !== undefined ? [set(keys.ETSY_VARIATION_TEMPLATES, payload.etsyVariationTemplates)] : []),
+    ...(payload.etsyDefaultTemplates !== undefined ? [set(keys.ETSY_DEFAULT_TEMPLATES, payload.etsyDefaultTemplates)] : []),
     ...(payload.etsyCustomSizes !== undefined ? [set(keys.ETSY_CUSTOM_SIZES, payload.etsyCustomSizes)] : []),
     ...(payload.etsyCustomColors !== undefined ? [set(keys.ETSY_CUSTOM_COLORS, payload.etsyCustomColors)] : []),
     ...(payload.etsyGeneratedMockups !== undefined ? [set(keys.ETSY_GENERATED_MOCKUPS, payload.etsyGeneratedMockups)] : []),

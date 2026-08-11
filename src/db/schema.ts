@@ -25,6 +25,7 @@ export const userWorkspaces = pgTable('user_workspaces', {
   etsyProductTypes: varchar('etsy_product_types', { length: 1000 }),
   etsyUserNotes: text('etsy_user_notes'),
   etsyVariationTemplates: jsonb('etsy_variation_templates').default([]),
+  etsyDefaultTemplates: jsonb('etsy_default_templates').$type<Record<number, string>>().default({}),
   etsyCustomSizes: jsonb('etsy_custom_sizes').$type<string[]>().default([]),
   etsyCustomColors: jsonb('etsy_custom_colors').$type<string[]>().default([]),
   etsyGeneratedMockups: jsonb('etsy_generated_mockups').$type<RenderedMatch[]>().default([]),
