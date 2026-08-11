@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     if (listingId && Array.isArray(variations) && variations.length > 0) {
       try {
         const productsPayload = variations.map((v: any, idx: number) => ({
-          ...(v.sku ? { sku: v.sku } : {}),
+          ...(v.sku ? { sku: v.sku } : (sku ? { sku: sku } : {})),
           property_values: [
             { property_id: 513, property_name: 'Size', values: [v.size || 'M'] },
             { property_id: 514, property_name: 'Color', values: [v.color || 'Black'] }
