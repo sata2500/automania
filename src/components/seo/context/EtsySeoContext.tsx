@@ -883,7 +883,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
   const [templateSaveName, setTemplateSaveName] = useState('');
   const [isLoadTemplateModalOpen, setIsLoadTemplateModalOpen] = useState(false);
-  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+
 
   // Bulk Sync States
   const [isBulkSyncModalOpen, setIsBulkSyncModalOpen] = useState(false);
