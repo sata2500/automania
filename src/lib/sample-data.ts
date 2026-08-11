@@ -42,20 +42,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
-    "id": "mockup-1785931057389-vx17",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/T-shirt_on_mannequin_different_a%E2%80%A6_202606191429.mp4",
-    "name": "T-shirt_on_mannequin_different_a…_202606191429",
-    "width": 2000,
-    "height": 2000,
-    "isVideo": true,
-    "opacity": 1,
-    "folderId": "folder-1785843819101",
-    "mimeType": "video/mp4",
-    "printAreas": [],
-    "apparelType": "light",
-    "hasPrintArea": false
-  },
-  {
     "id": "mockup-1785844010580-9f34",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352737417.webp",
     "name": "1717BohoFlatLayBlack",
@@ -312,6 +298,30 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "apparelType": "dark"
   },
   {
+    "id": "mockup-1786396876947-4h0n",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786396883567.webp",
+    "name": "5.BellaCanvas3001 Atlantic FlatLay Mockups.jfif",
+    "width": 2000,
+    "height": 1600,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 24.5,
+        "y": 26.9,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 48.5,
+        "height": 44.9,
+        "rotation": -1
+      }
+    ],
+    "apparelType": "dark",
+    "hasPrintArea": true
+  },
+  {
     "id": "mockup-1785844411430-1q3e",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352768528.webp",
     "name": "23.BellaCanvas3001 DustyBlue FlatLay Mockups",
@@ -378,6 +388,30 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "apparelType": "dark"
   },
   {
+    "id": "mockup-1786396980748-ys1p",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786396991420.webp",
+    "name": "Dark Grey Heather-2",
+    "width": 1000,
+    "height": 1250,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 27.3,
+        "y": 17.3,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 43.7,
+        "height": 45.7,
+        "rotation": -1
+      }
+    ],
+    "apparelType": "dark",
+    "hasPrintArea": true
+  },
+  {
     "id": "mockup-1785844454893-yvsp",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352772633.webp",
     "name": "Natural-2",
@@ -421,20 +455,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1785848097565-ozni",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474604-ce6ea7.mp4",
-    "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
-    "width": 2000,
-    "height": 2000,
-    "isVideo": true,
-    "opacity": 1,
-    "folderId": "folder-1785843819101",
-    "mimeType": "video/mp4",
-    "printAreas": [],
-    "apparelType": "light",
-    "hasPrintArea": false
-  },
-  {
     "id": "mockup-1785895264284-rez5",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352775861.webp",
     "name": "1717BohoFlatLayWhite",
@@ -457,20 +477,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     ],
     "apparelType": "light",
     "hasPrintArea": true
-  },
-  {
-    "id": "mockup-1785931201966-la36",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/T-shirt_on_mannequin_different_a%E2%80%A6_202608021732.mp4",
-    "name": "T-shirt_on_mannequin_different_a…_202608021732",
-    "width": 2000,
-    "height": 2000,
-    "isVideo": true,
-    "opacity": 1,
-    "folderId": "folder-1785843837086",
-    "mimeType": "video/mp4",
-    "printAreas": [],
-    "apparelType": "light",
-    "hasPrintArea": false
   },
   {
     "id": "mockup-1785895258752-wzsc",
@@ -662,6 +668,54 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
       }
     ],
     "apparelType": "light",
+    "hasPrintArea": true
+  },
+  {
+    "id": "mockup-1786439528809-5tmz",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439567614.webp",
+    "name": "BayCC1717_1688_",
+    "width": 1429,
+    "height": 2000,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843837086",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 30.1,
+        "y": 28.2,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 41,
+        "height": 53.8,
+        "rotation": 0
+      }
+    ],
+    "apparelType": "light",
+    "hasPrintArea": true
+  },
+  {
+    "id": "mockup-1786439530851-jn19",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439540666.webp",
+    "name": "BerryCC1717_1704",
+    "width": 1467,
+    "height": 2000,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843837086",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 30.1,
+        "y": 26.6,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 41.6,
+        "height": 52.9,
+        "rotation": 2
+      }
+    ],
+    "apparelType": "dark",
     "hasPrintArea": true
   },
   {
@@ -881,30 +935,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1785895371075-x6y5",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903474954-6701a4.mp4",
-    "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
-    "width": 2000,
-    "height": 2000,
-    "isVideo": true,
-    "opacity": 1,
-    "folderId": "folder-1785843837086",
-    "mimeType": "video/mp4",
-    "printAreas": [
-      {
-        "x": 33,
-        "y": 30,
-        "id": "area-1785895383962",
-        "name": "Ana Baskı Alanı",
-        "width": 34,
-        "height": 40,
-        "rotation": 0
-      }
-    ],
-    "apparelType": "light",
-    "hasPrintArea": false
-  },
-  {
     "id": "mockup-1785897506992-awku",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352818778.webp",
     "name": "1717BohoFlatLayWhite",
@@ -927,20 +957,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     ],
     "apparelType": "light",
     "hasPrintArea": true
-  },
-  {
-    "id": "mockup-1785931651773-4xj7",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/T-shirt_on_mannequin_different_a%E2%80%A6_2026080217322.mp4",
-    "name": "T-shirt_on_mannequin_different_a…_2026080217322",
-    "width": 2000,
-    "height": 2000,
-    "isVideo": true,
-    "opacity": 1,
-    "folderId": "folder-1785843860082",
-    "mimeType": "video/mp4",
-    "printAreas": [],
-    "apparelType": "light",
-    "hasPrintArea": false
   },
   {
     "id": "mockup-1785897501545-vfs3",
@@ -1111,6 +1127,30 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
+    "id": "mockup-1786439823047-c1ux",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439899400.webp",
+    "name": "BayCC1717_1688_",
+    "width": 1429,
+    "height": 2000,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843860082",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 29.4,
+        "y": 25.4,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 42.7,
+        "height": 52.8,
+        "rotation": 0
+      }
+    ],
+    "apparelType": "light",
+    "hasPrintArea": true
+  },
+  {
     "id": "mockup-1785897520670-ccax",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352842490.webp",
     "name": "PepperCC1717_1569",
@@ -1153,6 +1193,30 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
         "width": 50.6,
         "height": 44.4,
         "rotation": 0
+      }
+    ],
+    "apparelType": "light",
+    "hasPrintArea": true
+  },
+  {
+    "id": "mockup-1786439824886-j59z",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439837903.webp",
+    "name": "Man Comfort Colors 1717 Mockup (14)_result",
+    "width": 2000,
+    "height": 1500,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843860082",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 26.9,
+        "y": 32.2,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 43.6,
+        "height": 51.7,
+        "rotation": -1
       }
     ],
     "apparelType": "light",
@@ -1351,15 +1415,43 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1785897755663-emyr",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/sample-uploads/upload-clean-1785903475333-58310f.mp4",
+    "id": "mockup-1786439448963-8l35",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439444635.mp4",
+    "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
+    "width": 2000,
+    "height": 2000,
+    "isVideo": true,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "mimeType": "webm",
+    "printAreas": [],
+    "apparelType": "light",
+    "hasPrintArea": false
+  },
+  {
+    "id": "mockup-1786439700537-i2zx",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439694912.mp4",
+    "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
+    "width": 2000,
+    "height": 2000,
+    "isVideo": true,
+    "opacity": 1,
+    "folderId": "folder-1785843837086",
+    "mimeType": "webm",
+    "printAreas": [],
+    "apparelType": "light",
+    "hasPrintArea": false
+  },
+  {
+    "id": "mockup-1786439976898-sa8j",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439972743.mp4",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
     "width": 2000,
     "height": 2000,
     "isVideo": true,
     "opacity": 1,
     "folderId": "folder-1785843860082",
-    "mimeType": "video/mp4",
+    "mimeType": "webm",
     "printAreas": [],
     "apparelType": "light",
     "hasPrintArea": false
@@ -1373,6 +1465,37 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
     "name": "Rabbit_in_lavender_and_daisies_202607301727light",
     "width": 1500,
     "height": 1500,
+    "analysis": {
+      "keywords": [
+        "grow through",
+        "what you go through",
+        "grow through quote",
+        "inspirational tee",
+        "mental health shirt",
+        "positivity shirt",
+        "motivational shirt",
+        "bunny shirt",
+        "rabbit t shirt",
+        "lavender shirt",
+        "daisy t-shirt",
+        "floral bunny shirt",
+        "botanical graphic",
+        "cottagecore shirt",
+        "cottagecore clothes",
+        "nature lover gift",
+        "bunny lover gift",
+        "vintage bunny",
+        "floral rabbit tee",
+        "spring shirt",
+        "easter bunny shirt",
+        "wildflower shirt",
+        "cute rabbit tee",
+        "self care shirt",
+        "mindfulness shirt"
+      ],
+      "analyzedAt": 1786357520896,
+      "description": "This charming t-shirt design seamlessly blends the cottagecore aesthetic with inspirational messaging, featuring a hand-drawn white rabbit nestled among vibrant purple lavender sprigs and blooming white daisies. Below the soft botanical illustration, the typography reads 'GROW THROUGH what YOU GO THROUGH' in an elegant mix of serif and script fonts. Designed in a vintage-inspired watercolor and line art style, this piece appeals strongly to bunny owners, nature lovers, gardeners, and those passionate about mental health awareness and self-growth. It serves as a meaningful, trendy option for spring fashion, Easter apparel, and everyday positive mindset graphic tees on platforms like Etsy and Pinterest."
+    },
     "isSelected": false,
     "targetApparel": "light"
   },
@@ -1387,25 +1510,60 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
   },
   {
     "id": "design-1785928438775-f4cx",
+    "seo": {
+      "tags": [
+        "250th anniversary",
+        "semiquincentennial",
+        "conservation shirt",
+        "american wilderness",
+        "retro nature shirt",
+        "retro postcard tee",
+        "1776 2026",
+        "usa wilderness",
+        "earthy nature tee",
+        "outdoor gift",
+        "wilderness gift",
+        "hiking shirt",
+        "eagle graphic shirt"
+      ],
+      "title": "250 Years American Wilderness Shirt, Semiquincentennial 1776-2026 Tee, Retro Postcard Hiking Graphic Shirt, National Parks Outdoor Gift",
+      "description": "Celebrate 250 years of American freedom, conservation, and majestic natural heritage with this vintage postcard-style apparel. Featuring detailed line art of towering pine trees, river valleys, rugged mountain peaks, a classic camper, and a proud American Bald Eagle badge, this design honors the spirit of the US wilderness leading into the 2026 Semiquincentennial (1776-2026).\n\nRendered in warm, earthy tones of forest green, terracotta orange, and cozy beige, this piece is ideal for campers, hikers, national park travelers, conservationists, and anyone who loves the great outdoors.\n\n----------------------------------------\nGARMENT OPTIONS & HIGHLIGHTS\n----------------------------------------\n• Comfort Colors 1717:\n  - Premium 100% ring-spun cotton\n  - Garment-dyed for a soft-washed, vintage look and feel\n  - Relaxed unisex fit with durable double-needle stitching\n\n• Bella Canvas 3001:\n  - 100% combed and ring-spun lightweight cotton\n  - Super soft, tailored retail unisex fit\n  - Modern casual drape suitable for everyday wear\n\n• Youth Unisex Tee:\n  - Ultra-comfortable, lightweight cotton fit\n  - Durable print for young adventurers and outdoors lovers\n\n----------------------------------------\nSIZING & FIT\n----------------------------------------\n• Fits true to size for a standard unisex fit.\n• For an oversized retro streetwear style, we recommend sizing up 1-2 sizes.\n• Please consult our size chart in the listing photos prior to placing your order.\n\n----------------------------------------\nCARE INSTRUCTIONS\n----------------------------------------\n• Machine wash cold, inside out, with mild detergent and like colors.\n• Tumble dry low or line dry for maximum print longevity.\n• Do not iron directly on or over the graphic print.\n• Do not dry clean.\n\n----------------------------------------\nPROCESSING & SHIPPING\n----------------------------------------\n• Processing Time: 1 - 2 business days\n• Standard Shipping: 2 - 5 business days (US domestic delivery)\n\nThank you for supporting sustainable conservation and American outdoor freedom!",
+      "generatedAt": 1786357701907
+    },
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1785928433172.png",
     "name": "1000071181",
     "width": 2000,
     "height": 1493,
+    "analysis": {
+      "keywords": [
+        "natures legacy",
+        "250 years freedom",
+        "1776 2026",
+        "usa wilderness",
+        "conservation shirt",
+        "semiquincentennial",
+        "250th anniversary",
+        "retro nature shirt",
+        "preservation freedom",
+        "greetings from",
+        "american wilderness",
+        "250 years shirt",
+        "conservation tee",
+        "retro wilderness",
+        "250th celebration",
+        "earthy nature tee",
+        "patriotic nature",
+        "us conservation",
+        "wilderness gift",
+        "retro postcard tee",
+        "eagle graphic shirt",
+        "hiking shirt",
+        "outdoor gift"
+      ],
+      "analyzedAt": 1786357538238,
+      "description": "This vintage retro-style apparel design celebrates 250 years of American conservation and wilderness freedom leading up to the 2026 US Semiquincentennial (1776-2026). Styled like a classic distressed postcard, the artwork features detailed line drawings of majestic mountains, river valleys, giant pine trees, classic camper trailers, and a badge with the American Bald Eagle. With an earthy color scheme of forest green, terracotta orange, and warm beige, it appeals strongly to national park lovers, hikers, campers, conservationists, and patriotic outdoor enthusiasts looking to honor America's natural heritage."
+    },
     "isSelected": true,
     "targetApparel": "both"
   }
 ];
-
-export function isProtectedUrl(url: string): boolean {
-  if (!url) return false;
-  
-  // Check if it's in sample mockups
-  const inMockups = SAMPLE_MOCKUPS.some(m => m.src === url);
-  if (inMockups) return true;
-  
-  // Check if it's in sample designs
-  const inDesigns = SAMPLE_DESIGNS.some(d => d.src === url);
-  if (inDesigns) return true;
-  
-  return false;
-}
