@@ -1151,7 +1151,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           tags: selectedTags,
           price: basePrice,
           quantity: 999,
-          variations: variations.filter(v => v.enabled),
+          variations: variations, // Send all variations (including disabled) to maintain matrix integrity
           state,
           taxonomy_id: taxonomyId,
           who_made: whoMade,

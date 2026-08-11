@@ -153,7 +153,7 @@ export async function POST(req: Request) {
             {
               price: v.price || price,
               quantity: v.quantity || quantity,
-              is_enabled: true,
+              is_enabled: v.enabled !== false,
               readiness_state_id: readiness_state_id
             }
           ]
