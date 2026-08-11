@@ -98,6 +98,12 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [generatedTitle, setGeneratedTitle] = useState('');
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [taxonomyId, setTaxonomyId] = useState<number>(1081);
+  const [whoMade, setWhoMade] = useState<string>('someone_else');
+  const [whenMade, setWhenMade] = useState<string>('made_to_order');
+  const [isSupply, setIsSupply] = useState<boolean>(false);
+  const [materials, setMaterials] = useState<string[]>([]);
+  const [styles, setStyles] = useState<string[]>([]);
 
   const [dbGeneratedMockups, setDbGeneratedMockups] = useState<RenderedMatch[]>([]);
   const [allDesigns, setAllDesigns] = useState<DesignItem[]>([]);
@@ -140,6 +146,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       if (data.etsyProductTypes) setProductType(data.etsyProductTypes);
       if (data.etsyUserNotes) setUserNotes(data.etsyUserNotes);
       if (data.etsyVariationTemplates && data.etsyVariationTemplates.length > 0) {
+        setSavedTemplates(data.etsyVariationTemplates);
         // Find the most recently updated template
         const latest = [...data.etsyVariationTemplates].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
         setTimeout(() => {
@@ -586,6 +593,17 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [readinessStates, setReadinessStates] = useState<any[]>([]);
   const [selectedReadinessStateId, setSelectedReadinessStateId] = useState<string>('');
 
+  const [shopSections, setShopSections] = useState<any[]>([]);
+  const [selectedShopSectionId, setSelectedShopSectionId] = useState<string>('');
+
+  const [returnPolicies, setReturnPolicies] = useState<any[]>([]);
+  const [selectedReturnPolicyId, setSelectedReturnPolicyId] = useState<string>('');
+
+  const [shouldAutoRenew, setShouldAutoRenew] = useState<boolean>(false);
+
+  const [availableTaxonomyProperties, setAvailableTaxonomyProperties] = useState<any[]>([]);
+  const [selectedTaxonomyProperties, setSelectedTaxonomyProperties] = useState<Record<number, number[]>>({});
+
   useEffect(() => {
     if (activeTab === 'publish') {
       fetch('/api/etsy/shipping-profiles')
@@ -601,6 +619,23 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
               setReadinessStates(data.readinessStates);
               setSelectedReadinessStateId(data.readinessStates[0].readiness_state_id.toString());
             }
+            // Fetch shop sections
+            fetch('/api/etsy/shop-sections')
+              .then(s => s.json())
+              .then(sData => {
+                if (sData.success && sData.sections) {
+                  setShopSections(sData.sections);
+                }
+              });
+            // Fetch return policies
+            fetch('/api/etsy/return-policies')
+              .then(r => r.json())
+              .then(rData => {
+                if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
+                  setReturnPolicies(rData.returnPolicies);
+                  setSelectedReturnPolicyId(rData.returnPolicies[0].return_policy_id.toString());
+                }
+              });
           } else {
             setEtsyConnected(false);
           }
@@ -715,6 +750,28 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         ];
       }
 
+      // We now receive taxonomyId directly from the analyze step
+      let predictedTaxonomyId = analyzeData.taxonomyId || 482;
+
+      let fetchedTaxonomyProperties = [];
+      try {
+        const propRes = await fetch(`/api/etsy/taxonomy-properties?taxonomy_id=${predictedTaxonomyId}`);
+        const propData = await propRes.json();
+        if (propData.success && propData.properties) {
+          // Filter to only include useful properties that AI can choose from,
+          // avoiding huge lists like 'Size', 'Color', and 'Primary color' / 'Secondary color' which are handled in variations
+          fetchedTaxonomyProperties = propData.properties.filter((p: any) => 
+            p.name !== 'Size' && p.name !== 'Color' && p.name !== 'Width' && p.name !== 'Length' && p.name !== 'Capacity' &&
+            p.name.toLowerCase() !== 'primary color' && p.name.toLowerCase() !== 'secondary color' &&
+            !p.name.toLowerCase().startsWith('custom') &&
+            p.possible_values && p.possible_values.length > 0
+          );
+          setAvailableTaxonomyProperties(fetchedTaxonomyProperties);
+        }
+      } catch (e) {
+        console.error("Error fetching taxonomy properties", e);
+      }
+
       const res = await fetch('/api/designs/generate-listing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -724,7 +781,10 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           productType,
           userNotes,
           primarySubject: isRabbit ? 'rabbit bunny' : isDog ? 'dog' : isCat ? 'cat' : niche,
-          primaryAesthetic: 'cottagecore botanical wildflower'
+          primaryAesthetic: 'cottagecore botanical wildflower',
+          shopSections,
+          taxonomyId: predictedTaxonomyId,
+          taxonomyProperties: fetchedTaxonomyProperties
         })
       });
 
@@ -737,6 +797,23 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         }
         if (data.listing.suggestedBasePrice) {
           setBasePrice(data.listing.suggestedBasePrice);
+        }
+        if (data.listing.taxonomy_id) setTaxonomyId(data.listing.taxonomy_id);
+        if (data.listing.who_made) setWhoMade(data.listing.who_made);
+        if (data.listing.when_made) setWhenMade(data.listing.when_made);
+        if (data.listing.is_supply !== undefined) setIsSupply(data.listing.is_supply);
+        if (data.listing.materials && Array.isArray(data.listing.materials)) setMaterials(data.listing.materials);
+        if (data.listing.styles && Array.isArray(data.listing.styles)) setStyles(data.listing.styles);
+        if (data.listing.shop_section_id) setSelectedShopSectionId(data.listing.shop_section_id.toString());
+        
+        if (data.listing.taxonomy_properties_values) {
+          const formattedProps: Record<number, number[]> = {};
+          data.listing.taxonomy_properties_values.forEach((p: any) => {
+            if (p.property_id && p.value_ids && p.value_ids.length > 0) {
+              formattedProps[p.property_id] = p.value_ids;
+            }
+          });
+          setSelectedTaxonomyProperties(formattedProps);
         }
         
         // Save generated SEO to database
@@ -1076,6 +1153,16 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           quantity: 999,
           variations: variations.filter(v => v.enabled),
           state,
+          taxonomy_id: taxonomyId,
+          who_made: whoMade,
+          when_made: whenMade,
+          is_supply: isSupply,
+          materials: materials,
+          styles: styles,
+          shop_section_id: selectedShopSectionId ? parseInt(selectedShopSectionId, 10) : undefined,
+          return_policy_id: selectedReturnPolicyId ? parseInt(selectedReturnPolicyId, 10) : undefined,
+          should_auto_renew: shouldAutoRenew,
+          taxonomy_properties_values: selectedTaxonomyProperties,
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
           images: dbGeneratedMockups
@@ -1128,6 +1215,19 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     generatedTitle, setGeneratedTitle,
     generatedDescription, setGeneratedDescription,
     selectedTags, setSelectedTags,
+    taxonomyId, setTaxonomyId,
+    whoMade, setWhoMade,
+    whenMade, setWhenMade,
+    isSupply, setIsSupply,
+    materials, setMaterials,
+    styles, setStyles,
+    shopSections, setShopSections,
+    selectedShopSectionId, setSelectedShopSectionId,
+    returnPolicies, setReturnPolicies,
+    selectedReturnPolicyId, setSelectedReturnPolicyId,
+    shouldAutoRenew, setShouldAutoRenew,
+    availableTaxonomyProperties, setAvailableTaxonomyProperties,
+    selectedTaxonomyProperties, setSelectedTaxonomyProperties,
     dbGeneratedMockups, setDbGeneratedMockups,
     allDesigns, setAllDesigns,
     selectedFolderId, setSelectedFolderId,

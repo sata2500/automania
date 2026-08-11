@@ -5,7 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic } = body;
+    const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties } = body;
 
     if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
       return NextResponse.json({ success: false, error: 'İçerik oluşturmak için en az bir kelime gereklidir.' }, { status: 400 });
@@ -103,6 +103,21 @@ CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
    - Micro-Niche & Mindset (e.g., growth mindset, cottagecore shirt)
 3. ETSY SEO TITLE: Max 140 characters. Structure: Primary Message -> Subject/Animal -> Aesthetic -> Botanical -> Buyer Intent. Example: "Grow Through What You Go Through Shirt, Cottagecore Rabbit Tee, Wildflower Botanical Shirt, Inspirational Gift".
 4. ETSY DESCRIPTION: Balanced, high-converting description. Broaden buyer intent beyond just mental health to include nature lovers, rabbit lovers, cottagecore fans, self-care gifts, and everyday botanical apparel. Include PRODUCT HIGHLIGHTS, GARMENT OPTIONS, SIZING, CARE, SHIPPING.
+5. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
+   - taxonomy_id: Always return ${taxonomyId || 482}.
+   - who_made: Always use "i_did".
+   - when_made: Always use "2020_2026" or "made_to_order". Use "made_to_order" if applicable.
+   - materials: Provide up to 5 simple material names from this list if applicable: "Cotton", "Polyester", "Ceramic", "Glass", "Wood", "Metal", "Paper", "Canvas". Do not use special characters or %.
+   - styles: Provide up to 2 style names (e.g., "Boho & Hippie", "Minimalist").
+   - is_supply: false.
+   - shop_section_id: Based on the provided shop sections, select the most appropriate ID. If none fit, use null.
+   Available Shop Sections:
+   ${shopSections && Array.isArray(shopSections) ? shopSections.map((s: any) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None'}
+   - taxonomy_properties_values: Select appropriate value_ids for the following properties based on the design. If none fit perfectly, omit the property.
+   Available Properties and Values:
+   ${taxonomyProperties && Array.isArray(taxonomyProperties) ? taxonomyProperties.map((p: any) => 
+     `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${p.possible_values.map((v: any) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
+   ).join('\n   ') : 'None'}
 
 Return ONLY a valid JSON object in the following format:
 {
@@ -111,7 +126,18 @@ Return ONLY a valid JSON object in the following format:
   "selectedTags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10", "tag11", "tag12", "tag13"],
   "suggestedBasePrice": 24.99,
   "detectedSubject": "rabbit",
-  "detectedAesthetic": "cottagecore botanical"
+  "detectedAesthetic": "cottagecore botanical",
+  "taxonomy_id": 1081,
+  "who_made": "i_did",
+  "when_made": "made_to_order",
+  "materials": ["100% Cotton", "Polyester"],
+  "styles": ["Boho & Hippie", "Cottagecore"],
+  "is_supply": false,
+  "shop_section_id": 12345678,
+  "taxonomy_properties_values": [
+    { "property_id": 468, "value_ids": [12345] },
+    { "property_id": 469, "value_ids": [67890] }
+  ]
 }`;
 
     let content = '';

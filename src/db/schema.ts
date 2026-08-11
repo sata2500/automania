@@ -57,3 +57,11 @@ export const appSettings = pgTable('app_settings', {
   settingValue: text('setting_value'),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const etsyTaxonomyCache = pgTable('etsy_taxonomy_cache', {
+  id: integer('id').primaryKey(),
+  name: varchar('name', { length: 500 }).notNull(),
+  path: varchar('path', { length: 1000 }),
+  isActive: boolean('is_active').default(false),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});

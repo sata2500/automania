@@ -23,7 +23,17 @@ export async function POST(req: Request) {
       images = [],
       shipping_profile_id,
       readiness_state_id,
-      state = 'draft' // 'draft' or 'active'
+      state = 'draft',
+      taxonomy_id = 1081,
+      who_made = 'i_did',
+      when_made = 'made_to_order',
+      is_supply = false,
+      materials = [],
+      styles = [],
+      shop_section_id,
+      return_policy_id,
+      should_auto_renew = false,
+      taxonomy_properties_values = {}
     } = body;
 
     if (!title || !description || !tags || !Array.isArray(tags)) {
@@ -70,15 +80,25 @@ export async function POST(req: Request) {
         title: title.slice(0, 140),
         description,
         price,
-        who_made: 'i_did',
-        when_made: '2020_2026',
-        taxonomy_id: 1081, // Clothing -> Shirts & Tees -> T-Shirts
+        who_made,
+        when_made,
+        taxonomy_id,
+        materials: Array.isArray(materials) 
+          ? materials.flatMap((m: string) => (typeof m === 'string' ? m.split(',') : []))
+              .map(m => m.replace(/[^a-zA-Z0-9 _\-&+]/g, '').trim().substring(0, 13).trim())
+              .filter(Boolean).slice(0, 13) 
+          : [],
+        styles: Array.isArray(styles) ? styles.slice(0, 2) : [],
+        is_supply,
         tags: validTags,
         shipping_profile_id,
         readiness_state_id,
         type: 'physical',
         is_customizable: true,
-        state
+        state,
+        shop_section_id,
+        return_policy_id,
+        should_auto_renew
       })
     });
 
@@ -90,6 +110,35 @@ export async function POST(req: Request) {
     const listingData = await createRes.json();
     const listingId = listingData.listing_id;
 
+    // Update dynamic taxonomy properties if provided
+    let propertiesUpdatedCount = 0;
+    const uploadErrors: string[] = [];
+    if (listingId && taxonomy_properties_values && Object.keys(taxonomy_properties_values).length > 0) {
+      for (const [propId, valueIds] of Object.entries(taxonomy_properties_values)) {
+        if (Array.isArray(valueIds) && valueIds.length > 0) {
+          try {
+            const propRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/properties/${propId}`, {
+              method: 'PUT',
+              headers: {
+                'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+                'Authorization': `Bearer ${etsyAccessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ value_ids: valueIds, values: [] })
+            });
+            if (propRes.ok) {
+              propertiesUpdatedCount++;
+            } else {
+              const err = await propRes.text();
+              uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err}`);
+            }
+          } catch (err: any) {
+            uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err.message}`);
+          }
+        }
+      }
+    }
+
     // If variations are provided, update inventory matrix via PUT /v3/application/listings/{listing_id}/inventory
     let variationsUpdated = false;
     if (listingId && Array.isArray(variations) && variations.length > 0) {
@@ -97,8 +146,8 @@ export async function POST(req: Request) {
         const productsPayload = variations.map((v: any, idx: number) => ({
           ...(v.sku ? { sku: v.sku } : {}),
           property_values: [
-            { property_id: 504, property_name: 'Size', values: [v.size || 'M'] },
-            { property_id: 489, property_name: 'Color', values: [v.color || 'Black'] }
+            { property_id: 513, property_name: 'Size', values: [v.size || 'M'] },
+            { property_id: 514, property_name: 'Color', values: [v.color || 'Black'] }
           ],
           offerings: [
             {
@@ -117,21 +166,28 @@ export async function POST(req: Request) {
             'Authorization': `Bearer ${etsyAccessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ products: productsPayload })
+          body: JSON.stringify({ 
+            products: productsPayload,
+            price_on_property: [513, 514],
+            quantity_on_property: [513, 514],
+            sku_on_property: [513, 514]
+          })
         });
 
         if (invRes.ok) {
           variationsUpdated = true;
+        } else {
+          const invErr = await invRes.text();
+          uploadErrors.push(`Varyasyon hatası: ${invErr}`);
         }
-      } catch (e: any) {
-        console.warn('Etsy Variations update warning:', e.message);
+      } catch (err: any) {
+        uploadErrors.push(`Varyasyon hatası: ${err.message}`);
       }
     }
 
     // Upload images/videos if provided
     // Accept both old format (array of URL strings) and new format (array of {url, isVideo} objects)
     let imagesUploaded = 0;
-    const uploadErrors: string[] = [];
     
     // Separate images and videos — videos go to /videos endpoint, images to /images endpoint
     const imageItems: string[] = [];

@@ -61,6 +61,16 @@ async function main() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS etsy_taxonomy_cache (
+        id INT PRIMARY KEY,
+        name VARCHAR(500) NOT NULL,
+        path VARCHAR(1000),
+        is_active BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS total_listings INT DEFAULT 0`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS competition_level VARCHAR(50) DEFAULT 'Henüz Taranmadı'`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS bestseller_count INT DEFAULT 0`;

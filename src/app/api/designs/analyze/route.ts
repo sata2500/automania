@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql, { db, ensureKeywordPoolColumns } from '@/lib/db';
+import { etsyTaxonomyCache } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -74,20 +76,35 @@ export async function POST(request: Request) {
       }
     }
 
+    // Fetch active categories from DB
+    const activeCategories = await db.select().from(etsyTaxonomyCache).where(eq(etsyTaxonomyCache.isActive, true));
+    let taxonomyHint = '';
+    if (activeCategories.length > 0) {
+      taxonomyHint = `Choose the most appropriate taxonomyId from this list ONLY:\n` + activeCategories.map(c => `- ID: ${c.id} (${c.name}, ${c.path})`).join('\n');
+    } else {
+      taxonomyHint = `Choose a taxonomyId like 482 for T-shirts, 2202 for Sweatshirts, etc.`;
+    }
+
     // Prepare OpenRouter Prompt for Vision Analysis
     const prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
-Provide a medium-length description covering the niche, style (e.g. vintage, distressed), target audience, and its relevance. 
 
 CRITICAL RULES FOR KEYWORDS (Etsy SEO):
 1. READ THE TEXT: Your keywords MUST strongly reflect the actual text/typography written on the design.
 2. PRIORITIZE THE MAIN THEME: Focus on the primary message over background details. Do not generate overly broad tags (like "van life" or "camping") unless they are the central focus of the text/design.
 3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
-4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces) to strictly comply with Etsy's tag limit.
+4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces)
 
-Return ONLY a valid JSON object in the following format, with no markdown formatting or extra text:
+${taxonomyHint}
+
+Return ONLY a valid JSON object in this exact format, with no markdown, no comments, and no explanation.
 {
-  "description": "Your detailed description here...",
-  "keywords": ["keyword1", "keyword2", "keyword3"]
+  "description": "A very detailed, physical and visual description of the design...",
+  "keywords": ["tag1", "tag2", "tag3"],
+  "productType": "T-shirt",
+  "userNotes": "Any text found on the design",
+  "primarySubject": "The main subject (e.g. rabbit, skull, flower)",
+  "primaryAesthetic": "The core aesthetic (e.g. cottagecore, goth, minimalist)",
+  "taxonomyId": 482
 }`;
 
     let content = '';
