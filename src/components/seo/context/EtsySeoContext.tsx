@@ -750,8 +750,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         ];
       }
 
-      // We now receive taxonomyId directly from the analyze step
-      let predictedTaxonomyId = analyzeData.taxonomyId || 482;
+      // We now receive taxonomyId directly from the analyze step (saved in selectedDesign.analysis)
+      let predictedTaxonomyId = selectedDesign.analysis?.taxonomyId || 482;
 
       let fetchedTaxonomyProperties = [];
       try {
