@@ -175,7 +175,7 @@ export async function POST(req: Request) {
             products: productsPayload,
             price_on_property: [513, 514],
             quantity_on_property: [513, 514],
-            sku_on_property: [513, 514]
+            sku_on_property: [] // Empty array means SKU is at the listing level, not per variation
           })
         });
 
