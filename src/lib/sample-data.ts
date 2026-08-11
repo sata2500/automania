@@ -277,30 +277,9 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1785844410612-p87t",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352766376.webp",
-    "name": "9.BellaCanvas3001 Black FlatLay Mockups",
-    "width": 1500,
-    "height": 1500,
-    "opacity": 1,
-    "folderId": "folder-1785843819101",
-    "printAreas": [
-      {
-        "x": 24.3,
-        "y": 27.8,
-        "id": "area-1",
-        "name": "Ana Baskı Alanı",
-        "width": 46.6,
-        "height": 45.6,
-        "rotation": 0
-      }
-    ],
-    "apparelType": "dark"
-  },
-  {
-    "id": "mockup-1786396876947-4h0n",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786396883567.webp",
-    "name": "5.BellaCanvas3001 Atlantic FlatLay Mockups.jfif",
+    "id": "mockup-1786441853728-ar81",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786441858569.webp",
+    "name": "6.BellaCanvas3001 BabyBlue FlatLay Mockups",
     "width": 2000,
     "height": 1600,
     "isVideo": false,
@@ -309,16 +288,16 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "mimeType": "image/webp",
     "printAreas": [
       {
-        "x": 24.5,
-        "y": 26.9,
+        "x": 25.2,
+        "y": 26.5,
         "id": "area-1",
         "name": "Ana Baskı Alanı",
-        "width": 48.5,
-        "height": 44.9,
-        "rotation": -1
+        "width": 44.5,
+        "height": 46.2,
+        "rotation": 0
       }
     ],
-    "apparelType": "dark",
+    "apparelType": "light",
     "hasPrintArea": true
   },
   {
@@ -341,6 +320,27 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
       }
     ],
     "apparelType": "light"
+  },
+  {
+    "id": "mockup-1785844410612-p87t",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352766376.webp",
+    "name": "9.BellaCanvas3001 Black FlatLay Mockups",
+    "width": 1500,
+    "height": 1500,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "printAreas": [
+      {
+        "x": 24.3,
+        "y": 27.8,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 46.6,
+        "height": 45.6,
+        "rotation": 0
+      }
+    ],
+    "apparelType": "dark"
   },
   {
     "id": "mockup-1785930123208-3t5k",
@@ -367,51 +367,6 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1785844454741-0px4",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352771695.webp",
-    "name": "Black-2",
-    "width": 1500,
-    "height": 1500,
-    "opacity": 1,
-    "folderId": "folder-1785843819101",
-    "printAreas": [
-      {
-        "x": 28.5,
-        "y": 18.8,
-        "id": "area-1",
-        "name": "Ana Baskı Alanı",
-        "width": 44.2,
-        "height": 53,
-        "rotation": 0
-      }
-    ],
-    "apparelType": "dark"
-  },
-  {
-    "id": "mockup-1786396980748-ys1p",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786396991420.webp",
-    "name": "Dark Grey Heather-2",
-    "width": 1000,
-    "height": 1250,
-    "isVideo": false,
-    "opacity": 1,
-    "folderId": "folder-1785843819101",
-    "mimeType": "image/webp",
-    "printAreas": [
-      {
-        "x": 27.3,
-        "y": 17.3,
-        "id": "area-1",
-        "name": "Ana Baskı Alanı",
-        "width": 43.7,
-        "height": 45.7,
-        "rotation": -1
-      }
-    ],
-    "apparelType": "dark",
-    "hasPrintArea": true
-  },
-  {
     "id": "mockup-1785844454893-yvsp",
     "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352772633.webp",
     "name": "Natural-2",
@@ -431,6 +386,51 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
       }
     ],
     "apparelType": "light"
+  },
+  {
+    "id": "mockup-1786441820992-v9bl",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786441872751.webp",
+    "name": "Dark Grey Heather-2",
+    "width": 1000,
+    "height": 1250,
+    "isVideo": false,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "mimeType": "image/webp",
+    "printAreas": [
+      {
+        "x": 26.8,
+        "y": 16.9,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 45,
+        "height": 55.6,
+        "rotation": 0
+      }
+    ],
+    "apparelType": "dark",
+    "hasPrintArea": true
+  },
+  {
+    "id": "mockup-1785844454741-0px4",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/mockup-optimized-1786352771695.webp",
+    "name": "Black-2",
+    "width": 1500,
+    "height": 1500,
+    "opacity": 1,
+    "folderId": "folder-1785843819101",
+    "printAreas": [
+      {
+        "x": 28.5,
+        "y": 18.8,
+        "id": "area-1",
+        "name": "Ana Baskı Alanı",
+        "width": 44.2,
+        "height": 53,
+        "rotation": 0
+      }
+    ],
+    "apparelType": "dark"
   },
   {
     "id": "mockup-1785844518135-iq1n",
@@ -671,10 +671,10 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
-    "id": "mockup-1786439528809-5tmz",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439567614.webp",
-    "name": "BayCC1717_1688_",
-    "width": 1429,
+    "id": "mockup-1786442008430-uapk",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786442018955.webp",
+    "name": "ChambrayCC1717_1653",
+    "width": 1423,
     "height": 2000,
     "isVideo": false,
     "opacity": 1,
@@ -682,12 +682,12 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "mimeType": "image/webp",
     "printAreas": [
       {
-        "x": 30.1,
-        "y": 28.2,
+        "x": 27.3,
+        "y": 20,
         "id": "area-1",
         "name": "Ana Baskı Alanı",
-        "width": 41,
-        "height": 53.8,
+        "width": 48.7,
+        "height": 58.4,
         "rotation": 0
       }
     ],
@@ -695,8 +695,8 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
-    "id": "mockup-1786439530851-jn19",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439540666.webp",
+    "id": "mockup-1786442006518-u427",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786442005031.webp",
     "name": "BerryCC1717_1704",
     "width": 1467,
     "height": 2000,
@@ -706,12 +706,12 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "mimeType": "image/webp",
     "printAreas": [
       {
-        "x": 30.1,
-        "y": 26.6,
+        "x": 30,
+        "y": 33.2,
         "id": "area-1",
         "name": "Ana Baskı Alanı",
-        "width": 41.6,
-        "height": 52.9,
+        "width": 43.4,
+        "height": 42.7,
         "rotation": 2
       }
     ],
@@ -1127,8 +1127,8 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
-    "id": "mockup-1786439823047-c1ux",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439899400.webp",
+    "id": "mockup-1786442146274-ot0k",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786442157316.webp",
     "name": "BayCC1717_1688_",
     "width": 1429,
     "height": 2000,
@@ -1138,13 +1138,13 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "mimeType": "image/webp",
     "printAreas": [
       {
-        "x": 29.4,
-        "y": 25.4,
+        "x": 29.9,
+        "y": 25.7,
         "id": "area-1",
         "name": "Ana Baskı Alanı",
-        "width": 42.7,
-        "height": 52.8,
-        "rotation": 0
+        "width": 42.5,
+        "height": 49.9,
+        "rotation": 1
       }
     ],
     "apparelType": "light",
@@ -1199,8 +1199,8 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": true
   },
   {
-    "id": "mockup-1786439824886-j59z",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439837903.webp",
+    "id": "mockup-1786442148540-1gkb",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786442146793.webp",
     "name": "Man Comfort Colors 1717 Mockup (14)_result",
     "width": 2000,
     "height": 1500,
@@ -1210,12 +1210,12 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "mimeType": "image/webp",
     "printAreas": [
       {
-        "x": 26.9,
-        "y": 32.2,
+        "x": 33.3,
+        "y": 31.2,
         "id": "area-1",
         "name": "Ana Baskı Alanı",
-        "width": 43.6,
-        "height": 51.7,
+        "width": 32.8,
+        "height": 54.7,
         "rotation": -1
       }
     ],
@@ -1415,43 +1415,43 @@ export const SAMPLE_MOCKUPS: MockupItem[] = [
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1786439448963-8l35",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439444635.mp4",
+    "id": "mockup-1786441724165-2sdk",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786441719486.mp4",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
     "width": 2000,
     "height": 2000,
     "isVideo": true,
     "opacity": 1,
     "folderId": "folder-1785843819101",
-    "mimeType": "webm",
+    "mimeType": "video/webm",
     "printAreas": [],
     "apparelType": "light",
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1786439700537-i2zx",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439694912.mp4",
+    "id": "mockup-1786441755780-2tbu",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786441751122.mp4",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
     "width": 2000,
     "height": 2000,
     "isVideo": true,
     "opacity": 1,
     "folderId": "folder-1785843837086",
-    "mimeType": "webm",
+    "mimeType": "video/webm",
     "printAreas": [],
     "apparelType": "light",
     "hasPrintArea": false
   },
   {
-    "id": "mockup-1786439976898-sa8j",
-    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786439972743.mp4",
+    "id": "mockup-1786441786380-ubm7",
+    "src": "https://t6kuamfgnlzdrbc4.public.blob.vercel-storage.com/upload-1786441781740.mp4",
     "name": "copy_C9EF0A07-F0E9-4A5F-ABE1-1190C4E662BA",
     "width": 2000,
     "height": 2000,
     "isVideo": true,
     "opacity": 1,
     "folderId": "folder-1785843860082",
-    "mimeType": "webm",
+    "mimeType": "video/webm",
     "printAreas": [],
     "apparelType": "light",
     "hasPrintArea": false
