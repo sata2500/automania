@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     const settingsRows = await sql`
       SELECT setting_key, setting_value 
       FROM app_settings 
-      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning')
+      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing')
     `;
     
     let activeAiProvider = 'openrouter';
@@ -31,14 +31,16 @@ export async function POST(req: Request) {
     let dbReasoningModel = null;
     let geminiApiKey = null;
     let dbGeminiReasoningModel = null;
+    let customPrompt: string | null = null;
     
-    settingsRows.forEach(row => {
+    for (const row of settingsRows) {
       if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
       if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
       if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
-    });
+      if (row.setting_key === 'ai_prompt_generate_listing') customPrompt = row.setting_value;
+    }
 
     const apiKey = activeAiProvider === 'gemini' 
       ? (geminiApiKey || process.env.GEMINI_API_KEY)
@@ -72,29 +74,29 @@ export async function POST(req: Request) {
     }
 
     // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
-    const prompt = `You are an Elite Etsy SEO Specialist and POD Listing Copywriter for the US market.
+    let prompt = `You are an Elite Etsy SEO Specialist and POD Listing Copywriter for the US market.
 We have an apparel design with the following details:
 
 DESIGN CONCEPT / DESCRIPTION:
-${designDescription || 'Apparel design for US market.'}
+{{designDescription}}
 
 PRIMARY SUBJECT / THEME DETECTED:
-${primarySubject || 'Extracted from design concept'}
+{{primarySubject}}
 
 PRIMARY AESTHETIC / STYLE DETECTED:
-${primaryAesthetic || 'Extracted from design concept'}
+{{primaryAesthetic}}
 
 APPAREL BRANDS / GARMENT TYPES IN LISTING:
-${productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee'}
+{{productType}}
 
 USER CUSTOM NOTES:
-${userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.'}
+{{userNotes}}
 
 CANDIDATE KEYWORDS & METRICS:
-${keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Score: ${k.opportunity_score ?? k.etsy_score ?? 0}/100)`).join('\n')}
+{{keywords}}
 
 CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
-1. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject (${primarySubject || 'design subject'}) and aesthetic (${primaryAesthetic || 'aesthetic'}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
+1. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
 2. 13 TAG DISTRIBUTION: Select EXACTLY 13 tags. EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Distribute tags across:
    - Subject + Product (e.g., cottagecore rabbit, bunny lover gift)
    - Quote / Message (e.g., grow through quote, inspirational tee)
@@ -104,7 +106,7 @@ CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
 3. ETSY SEO TITLE: Max 140 characters. Structure: Primary Message -> Subject/Animal -> Aesthetic -> Botanical -> Buyer Intent. Example: "Grow Through What You Go Through Shirt, Cottagecore Rabbit Tee, Wildflower Botanical Shirt, Inspirational Gift".
 4. ETSY DESCRIPTION: Balanced, high-converting description. Broaden buyer intent beyond just mental health to include nature lovers, rabbit lovers, cottagecore fans, self-care gifts, and everyday botanical apparel. Include PRODUCT HIGHLIGHTS, GARMENT OPTIONS, SIZING, CARE, SHIPPING.
 5. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
-   - taxonomy_id: Always return ${taxonomyId || 482}.
+   - taxonomy_id: Always return {{taxonomyId}}.
    - who_made: Always use "i_did".
    - when_made: Always use "2020_2026" or "made_to_order". Use "made_to_order" if applicable.
    - materials: Provide up to 5 simple material names from this list if applicable: "Cotton", "Polyester", "Ceramic", "Glass", "Wood", "Metal", "Paper", "Canvas". Do not use special characters or %.
@@ -112,12 +114,10 @@ CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
    - is_supply: false.
    - shop_section_id: Based on the provided shop sections, select the most appropriate ID. If none fit, use null.
    Available Shop Sections:
-   ${shopSections && Array.isArray(shopSections) ? shopSections.map((s: any) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None'}
-   - taxonomy_properties_values: Select appropriate value_ids for the following properties based on the design. If none fit perfectly, omit the property.
+   {{shopSections}}
+   - taxonomy_properties_values: Select appropriate value_ids for the following properties based on the design. If none fit perfectly, omit the property. IMPORTANT: DO NOT select or provide any values for variation-related properties like "Size", "Color", "Unisex shirt size", "Clothing size", "Primary color", or "Secondary color". These are handled dynamically via variations matrix. Omit them entirely from the JSON.
    Available Properties and Values:
-   ${taxonomyProperties && Array.isArray(taxonomyProperties) ? taxonomyProperties.map((p: any) => 
-     `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${p.possible_values.map((v: any) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
-   ).join('\n   ') : 'None'}
+   {{taxonomyProperties}}
 
 Return ONLY a valid JSON object in the following format:
 {
@@ -139,6 +139,37 @@ Return ONLY a valid JSON object in the following format:
     { "property_id": 469, "value_ids": [67890] }
   ]
 }`;
+
+    if (customPrompt && customPrompt.trim().length > 10) {
+      prompt = customPrompt;
+    }
+
+    // Prepare dynamic values for placeholders
+    const dynamicValues = {
+      designDescription: designDescription || 'Apparel design for US market.',
+      primarySubject: primarySubject || 'Extracted from design concept',
+      primaryAesthetic: primaryAesthetic || 'Extracted from design concept',
+      productType: productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee',
+      userNotes: userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.',
+      keywords: keywords.map((k: any) => `- "${k.keyword}" (Len: ${k.keyword?.length || 0}, Score: ${k.opportunity_score ?? k.etsy_score ?? 0}/100)`).join('\n'),
+      taxonomyId: String(taxonomyId || 482),
+      shopSections: shopSections && Array.isArray(shopSections) ? shopSections.map((s: any) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
+      taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? taxonomyProperties.map((p: any) => 
+        `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${p.possible_values.map((v: any) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
+      ).join('\n   ') : 'None'
+    };
+
+    // Replace all placeholders
+    prompt = prompt
+      .replace(/\{\{designDescription\}\}/g, dynamicValues.designDescription)
+      .replace(/\{\{primarySubject\}\}/g, dynamicValues.primarySubject)
+      .replace(/\{\{primaryAesthetic\}\}/g, dynamicValues.primaryAesthetic)
+      .replace(/\{\{productType\}\}/g, dynamicValues.productType)
+      .replace(/\{\{userNotes\}\}/g, dynamicValues.userNotes)
+      .replace(/\{\{keywords\}\}/g, dynamicValues.keywords)
+      .replace(/\{\{taxonomyId\}\}/g, dynamicValues.taxonomyId)
+      .replace(/\{\{shopSections\}\}/g, dynamicValues.shopSections)
+      .replace(/\{\{taxonomyProperties\}\}/g, dynamicValues.taxonomyProperties);
 
     let content = '';
 

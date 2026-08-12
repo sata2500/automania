@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const settingsRows = await sql`
       SELECT setting_key, setting_value 
       FROM app_settings 
-      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision')
+      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision', 'ai_prompt_analyze_design')
     `;
     
     let activeAiProvider = 'openrouter';
@@ -35,14 +35,16 @@ export async function POST(request: Request) {
     let dbVisionModel = null;
     let geminiApiKey = null;
     let dbGeminiVisionModel = null;
+    let customPrompt: string | null = null;
     
-    settingsRows.forEach(row => {
+    for (const row of settingsRows) {
       if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
       if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
       if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
-    });
+      if (row.setting_key === 'ai_prompt_analyze_design') customPrompt = row.setting_value;
+    }
 
     const apiKey = activeAiProvider === 'gemini' 
       ? (geminiApiKey || process.env.GEMINI_API_KEY)
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
     }
 
     // Prepare OpenRouter Prompt for Vision Analysis
-    const prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
+    let prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
 
 CRITICAL RULES FOR KEYWORDS (Etsy SEO):
 1. READ THE TEXT: Your keywords MUST strongly reflect the actual text/typography written on the design.
@@ -94,7 +96,7 @@ CRITICAL RULES FOR KEYWORDS (Etsy SEO):
 3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
 4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces)
 
-${taxonomyHint}
+{{taxonomyHint}}
 
 Return ONLY a valid JSON object in this exact format, with no markdown, no comments, and no explanation.
 {
@@ -106,6 +108,13 @@ Return ONLY a valid JSON object in this exact format, with no markdown, no comme
   "primaryAesthetic": "The core aesthetic (e.g. cottagecore, goth, minimalist)",
   "taxonomyId": 482
 }`;
+
+    if (customPrompt && customPrompt.trim().length > 10) {
+      prompt = customPrompt;
+    }
+
+    // Replace dynamic placeholders
+    prompt = prompt.replace('{{taxonomyHint}}', taxonomyHint);
 
     let content = '';
 

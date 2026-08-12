@@ -113,6 +113,10 @@ export const AdminDashboard: React.FC = () => {
   const [geminiModelReasoning, setGeminiModelReasoning] = useState('');
   const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
 
+  // AI Prompts State
+  const [promptAnalyzeDesign, setPromptAnalyzeDesign] = useState('');
+  const [promptGenerateListing, setPromptGenerateListing] = useState('');
+
   // OpenRouter Dynamic Models State
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -210,6 +214,9 @@ export const AdminDashboard: React.FC = () => {
             if (data.settings.gemini_model_vision) setGeminiModelVision(data.settings.gemini_model_vision);
             if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
+            
+            if (data.settings.ai_prompt_analyze_design) setPromptAnalyzeDesign(data.settings.ai_prompt_analyze_design);
+            if (data.settings.ai_prompt_generate_listing) setPromptGenerateListing(data.settings.ai_prompt_generate_listing);
           }
         })
         .catch(e => console.error("Could not fetch global settings", e));
@@ -238,6 +245,9 @@ export const AdminDashboard: React.FC = () => {
       if (geminiModelVision) settingsToSave.gemini_model_vision = geminiModelVision;
       if (geminiModelReasoning) settingsToSave.gemini_model_reasoning = geminiModelReasoning;
       if (geminiModelGeneration) settingsToSave.gemini_model_generation = geminiModelGeneration;
+
+      if (promptAnalyzeDesign !== undefined) settingsToSave.ai_prompt_analyze_design = promptAnalyzeDesign;
+      if (promptGenerateListing !== undefined) settingsToSave.ai_prompt_generate_listing = promptGenerateListing;
 
       if (Object.keys(settingsToSave).length > 0) {
         await fetch('/api/admin/settings', {
@@ -1065,6 +1075,50 @@ export const AdminDashboard: React.FC = () => {
                     )}
                   </div>
                 </div>
+            </div>
+
+            {/* Sistem Promptları */}
+            <div className="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-500" />
+                Sistem Promptları Yönetimi
+              </label>
+
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+                  <div className="mb-3">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      Görsel Analizi Promptu (Vision)
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Desteklenen değişkenler: <code>{"{{taxonomyHint}}"}</code>
+                    </p>
+                  </div>
+                  <textarea
+                    value={promptAnalyzeDesign}
+                    onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
+                    placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                    className="w-full h-32 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 font-mono custom-scrollbar"
+                  />
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+                  <div className="mb-3">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      İlan İçeriği Üretme Promptu (SEO/Copywriting)
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                      Desteklenen değişkenler: <code>{"{{designDescription}}"}</code>, <code>{"{{primarySubject}}"}</code>, <code>{"{{primaryAesthetic}}"}</code>, <code>{"{{productType}}"}</code>, <code>{"{{userNotes}}"}</code>, <code>{"{{keywords}}"}</code>, <code>{"{{taxonomyId}}"}</code>, <code>{"{{shopSections}}"}</code>, <code>{"{{taxonomyProperties}}"}</code>
+                    </p>
+                  </div>
+                  <textarea
+                    value={promptGenerateListing}
+                    onChange={(e) => setPromptGenerateListing(e.target.value)}
+                    placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                    className="w-full h-64 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 font-mono custom-scrollbar"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Save & Test Buttons */}
