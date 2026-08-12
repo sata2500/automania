@@ -47,6 +47,7 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
+import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
 
@@ -215,13 +216,43 @@ export const AdminDashboard: React.FC = () => {
             if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
             
-            if (data.settings.ai_prompt_analyze_design) setPromptAnalyzeDesign(data.settings.ai_prompt_analyze_design);
-            if (data.settings.ai_prompt_generate_listing) setPromptGenerateListing(data.settings.ai_prompt_generate_listing);
+            if (data.settings.ai_prompt_analyze_design) {
+              setPromptAnalyzeDesign(data.settings.ai_prompt_analyze_design);
+            } else {
+              setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT);
+            }
+            if (data.settings.ai_prompt_generate_listing) {
+              setPromptGenerateListing(data.settings.ai_prompt_generate_listing);
+            } else {
+              setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT);
+            }
           }
         })
         .catch(e => console.error("Could not fetch global settings", e));
     }
   }, [activeSubTab]);
+
+  const insertVariable = (
+    setter: React.Dispatch<React.SetStateAction<string>>,
+    currentValue: string,
+    variable: string,
+    textareaId: string
+  ) => {
+    const textarea = document.getElementById(textareaId) as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end);
+      setter(newValue);
+      
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + variable.length, start + variable.length);
+      }, 0);
+    } else {
+      setter(currentValue + variable);
+    }
+  };
 
   const handleSaveApiSettings = async () => {
     try {
@@ -1086,37 +1117,67 @@ export const AdminDashboard: React.FC = () => {
 
               <div className="space-y-6">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-                  <div className="mb-3">
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      Görsel Analizi Promptu (Vision)
-                    </h4>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Desteklenen değişkenler: <code>{"{{taxonomyHint}}"}</code>
-                    </p>
+                  <div className="mb-3 flex justify-between items-start">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        Görsel Analizi Promptu (Vision)
+                      </h4>
+                      <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-1">
+                        Desteklenen değişkenler (Tıklayıp ekleyebilirsiniz): 
+                        <button onClick={() => insertVariable(setPromptAnalyzeDesign, promptAnalyzeDesign, '{{taxonomyHint}}', 'vision_prompt_textarea')} className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-mono rounded cursor-pointer transition-colors border border-indigo-100 dark:border-indigo-800/50">
+                          {"{{taxonomyHint}}"}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT)}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                    </button>
                   </div>
-                  <textarea
-                    value={promptAnalyzeDesign}
-                    onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
-                    placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                    className="w-full h-32 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 font-mono custom-scrollbar"
-                  />
+                  <div className="relative">
+                    <textarea
+                      id="vision_prompt_textarea"
+                      value={promptAnalyzeDesign}
+                      onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
+                      placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                      className="w-full h-48 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                    />
+                  </div>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-                  <div className="mb-3">
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      İlan İçeriği Üretme Promptu (SEO/Copywriting)
-                    </h4>
-                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                      Desteklenen değişkenler: <code>{"{{designDescription}}"}</code>, <code>{"{{primarySubject}}"}</code>, <code>{"{{primaryAesthetic}}"}</code>, <code>{"{{productType}}"}</code>, <code>{"{{userNotes}}"}</code>, <code>{"{{keywords}}"}</code>, <code>{"{{taxonomyId}}"}</code>, <code>{"{{shopSections}}"}</code>, <code>{"{{taxonomyProperties}}"}</code>
-                    </p>
+                  <div className="mb-3 flex justify-between items-start">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        İlan İçeriği Üretme Promptu (SEO/Copywriting)
+                      </h4>
+                      <div className="text-[10px] text-slate-500 mt-1 leading-relaxed flex flex-wrap items-center gap-1">
+                        Desteklenen değişkenler (Tıklayıp ekleyebilirsiniz): 
+                        {["{{designDescription}}", "{{primarySubject}}", "{{primaryAesthetic}}", "{{productType}}", "{{userNotes}}", "{{keywords}}", "{{taxonomyId}}", "{{shopSections}}", "{{taxonomyProperties}}"].map(variable => (
+                          <button key={variable} onClick={() => insertVariable(setPromptGenerateListing, promptGenerateListing, variable, 'listing_prompt_textarea')} className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-mono rounded cursor-pointer transition-colors border border-indigo-100 dark:border-indigo-800/50">
+                            {variable}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT)}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                    </button>
                   </div>
-                  <textarea
-                    value={promptGenerateListing}
-                    onChange={(e) => setPromptGenerateListing(e.target.value)}
-                    placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                    className="w-full h-64 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 font-mono custom-scrollbar"
-                  />
+                  <div className="relative">
+                    <textarea
+                      id="listing_prompt_textarea"
+                      value={promptGenerateListing}
+                      onChange={(e) => setPromptGenerateListing(e.target.value)}
+                      placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                      className="w-full h-80 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

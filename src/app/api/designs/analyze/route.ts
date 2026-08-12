@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sql, { db, ensureKeywordPoolColumns } from '@/lib/db';
 import { etsyTaxonomyCache } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -88,26 +89,7 @@ export async function POST(request: Request) {
     }
 
     // Prepare OpenRouter Prompt for Vision Analysis
-    let prompt = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
-
-CRITICAL RULES FOR KEYWORDS (Etsy SEO):
-1. READ THE TEXT: Your keywords MUST strongly reflect the actual text/typography written on the design.
-2. PRIORITIZE THE MAIN THEME: Focus on the primary message over background details. Do not generate overly broad tags (like "van life" or "camping") unless they are the central focus of the text/design.
-3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
-4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces)
-
-{{taxonomyHint}}
-
-Return ONLY a valid JSON object in this exact format, with no markdown, no comments, and no explanation.
-{
-  "description": "A very detailed, physical and visual description of the design...",
-  "keywords": ["tag1", "tag2", "tag3"],
-  "productType": "T-shirt",
-  "userNotes": "Any text found on the design",
-  "primarySubject": "The main subject (e.g. rabbit, skull, flower)",
-  "primaryAesthetic": "The core aesthetic (e.g. cottagecore, goth, minimalist)",
-  "taxonomyId": 482
-}`;
+    let prompt = DEFAULT_ANALYZE_DESIGN_PROMPT;
 
     if (customPrompt && customPrompt.trim().length > 10) {
       prompt = customPrompt;

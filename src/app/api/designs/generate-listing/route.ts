@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import sql, { db } from '@/lib/db';
+import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
@@ -74,71 +75,8 @@ export async function POST(req: Request) {
     }
 
     // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
-    let prompt = `You are an Elite Etsy SEO Specialist and POD Listing Copywriter for the US market.
-We have an apparel design with the following details:
+    let prompt = DEFAULT_GENERATE_LISTING_PROMPT;
 
-DESIGN CONCEPT / DESCRIPTION:
-{{designDescription}}
-
-PRIMARY SUBJECT / THEME DETECTED:
-{{primarySubject}}
-
-PRIMARY AESTHETIC / STYLE DETECTED:
-{{primaryAesthetic}}
-
-APPAREL BRANDS / GARMENT TYPES IN LISTING:
-{{productType}}
-
-USER CUSTOM NOTES:
-{{userNotes}}
-
-CANDIDATE KEYWORDS & METRICS:
-{{keywords}}
-
-CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
-1. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
-2. 13 TAG DISTRIBUTION: Select EXACTLY 13 tags. EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Distribute tags across:
-   - Subject + Product (e.g., cottagecore rabbit, bunny lover gift)
-   - Quote / Message (e.g., grow through quote, inspirational tee)
-   - Aesthetic / Style (e.g., wildflower shirt, botanical shirt)
-   - Buyer Intent / Gifting (e.g., self care gift, nature lover gift)
-   - Micro-Niche & Mindset (e.g., growth mindset, cottagecore shirt)
-3. ETSY SEO TITLE: Max 140 characters. Structure: Primary Message -> Subject/Animal -> Aesthetic -> Botanical -> Buyer Intent. Example: "Grow Through What You Go Through Shirt, Cottagecore Rabbit Tee, Wildflower Botanical Shirt, Inspirational Gift".
-4. ETSY DESCRIPTION: Balanced, high-converting description. Broaden buyer intent beyond just mental health to include nature lovers, rabbit lovers, cottagecore fans, self-care gifts, and everyday botanical apparel. Include PRODUCT HIGHLIGHTS, GARMENT OPTIONS, SIZING, CARE, SHIPPING.
-5. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
-   - taxonomy_id: Always return {{taxonomyId}}.
-   - who_made: Always use "i_did".
-   - when_made: Always use "2020_2026" or "made_to_order". Use "made_to_order" if applicable.
-   - materials: Provide up to 5 simple material names from this list if applicable: "Cotton", "Polyester", "Ceramic", "Glass", "Wood", "Metal", "Paper", "Canvas". Do not use special characters or %.
-   - styles: Provide up to 2 style names (e.g., "Boho & Hippie", "Minimalist").
-   - is_supply: false.
-   - shop_section_id: Based on the provided shop sections, select the most appropriate ID. If none fit, use null.
-   Available Shop Sections:
-   {{shopSections}}
-   - taxonomy_properties_values: Select appropriate value_ids for the following properties based on the design. If none fit perfectly, omit the property. IMPORTANT: DO NOT select or provide any values for variation-related properties like "Size", "Color", "Unisex shirt size", "Clothing size", "Primary color", or "Secondary color". These are handled dynamically via variations matrix. Omit them entirely from the JSON.
-   Available Properties and Values:
-   {{taxonomyProperties}}
-
-Return ONLY a valid JSON object in the following format:
-{
-  "title": "Your 140-char SEO Title Here",
-  "description": "Your structured Etsy description here...",
-  "selectedTags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10", "tag11", "tag12", "tag13"],
-  "suggestedBasePrice": 24.99,
-  "detectedSubject": "rabbit",
-  "detectedAesthetic": "cottagecore botanical",
-  "taxonomy_id": 1081,
-  "who_made": "i_did",
-  "when_made": "made_to_order",
-  "materials": ["100% Cotton", "Polyester"],
-  "styles": ["Boho & Hippie", "Cottagecore"],
-  "is_supply": false,
-  "shop_section_id": 12345678,
-  "taxonomy_properties_values": [
-    { "property_id": 468, "value_ids": [12345] },
-    { "property_id": 469, "value_ids": [67890] }
-  ]
-}`;
 
     if (customPrompt && customPrompt.trim().length > 10) {
       prompt = customPrompt;
