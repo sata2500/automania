@@ -111,6 +111,7 @@ export async function GET(req: Request) {
       }
 
       if (!isNaN(parsedCount) && parsedCount > 0) {
+        parsedCount = Math.min(parsedCount, 10000000);
         const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
         const bestsellerCount = Math.min(15, bestsellerMatches);
         

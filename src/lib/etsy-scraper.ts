@@ -232,9 +232,9 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           }
         }
         if (!isNaN(parsedCount) && parsedCount > 0) {
-          totalListings = parsedCount;
+          totalListings = Math.min(parsedCount, 10000000);
           rawMetrics.method = 'bing_etsy_index';
-          rawMetrics.bingRawText = `${parsedCount.toLocaleString()} listings`;
+          rawMetrics.bingRawText = `${totalListings.toLocaleString()} listings`;
         }
 
         const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
