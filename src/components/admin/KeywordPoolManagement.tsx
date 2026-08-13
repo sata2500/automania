@@ -482,19 +482,26 @@ export default function KeywordPoolManagement() {
                        </td>
                        <td className="px-2 py-3 sm:p-4 text-center font-mono">{kw.usage_count}</td>
                        <td className="px-2 py-3 sm:p-4">
-                         {kw.total_listings ? (
-                           <div>
-                             <div className="font-bold text-slate-800 dark:text-slate-200 font-mono">
-                               {kw.total_listings.toLocaleString()} ilan
-                             </div>
-                             <div className="text-[11px] text-slate-500">
-                               {kw.competition_level}
-                             </div>
-                           </div>
-                         ) : (
-                           <span className="text-slate-400 text-xs">Taranmadı</span>
-                         )}
-                       </td>
+                          {kw.total_listings && kw.total_listings > 0 ? (
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                                {kw.total_listings.toLocaleString()} ilan
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {kw.competition_level}
+                              </div>
+                            </div>
+                          ) : kw.last_scrape_error ? (
+                            <div>
+                              <span className="text-rose-500 font-semibold text-xs flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0" />
+                                Taranamadı (Bot Engeli)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs">Taranmadı</span>
+                          )}
+                        </td>
                        <td className="px-2 py-3 sm:p-4 text-center">
                          {kw.is_etsy_suggested ? (
                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-xs font-semibold inline-flex items-center gap-1">

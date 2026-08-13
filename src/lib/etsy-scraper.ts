@@ -17,10 +17,12 @@ export interface ScrapingOptions {
   apiKey?: string;
   provider?: string;
   workerUrl?: string;
+  serperApiKey?: string;
 }
 
 export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingOptions): Promise<ScrapingResult> {
-  const charLength = keyword.length;
+  const cleanKeyword = keyword.trim().toLowerCase();
+  const charLength = cleanKeyword.length;
   const tagEligible = charLength <= 20;
 
   let totalListings = 0;
@@ -33,34 +35,69 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   let scrapeError: string | null = null;
   let rawMetrics: any = {};
 
-  const cleanKeyword = keyword.trim().toLowerCase();
-
   const workerUrl = options?.workerUrl || process.env.CLOUDFLARE_WORKER_URL;
   const scraperKey = options?.apiKey || process.env.SCRAPER_API_KEY || process.env.SCRAPING_API_KEY;
   const provider = (options?.provider || process.env.SCRAPING_PROVIDER || 'scraperapi').toLowerCase();
+  const serperKey = options?.serperApiKey || process.env.SERPER_API_KEY;
 
-  // 1. If Cloudflare Worker URL is configured, use it first!
+  // 0. Try Serper.dev Google SERP API if configured (100% Real Google Index Count)
+  if (serperKey) {
+    try {
+      const serperRes = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': serperKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          q: `site:etsy.com "${cleanKeyword}"`
+        }),
+        next: { revalidate: 0 }
+      });
+
+      if (serperRes.ok) {
+        const serperData = await serperRes.json();
+        if (serperData.searchInformation && serperData.searchInformation.totalResults !== undefined) {
+          const rawTotal = serperData.searchInformation.totalResults;
+          const parsed = typeof rawTotal === 'number' ? rawTotal : parseInt(String(rawTotal).replace(/[^\d]/g, ''), 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            totalListings = parsed;
+            rawMetrics.method = 'google_serper_api';
+            rawMetrics.serperTotal = rawTotal;
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`Serper API warning for "${cleanKeyword}":`, e.message);
+    }
+  }
+
+  // 1. If Cloudflare Worker URL is configured, use it!
+
   if (workerUrl) {
     try {
       const proxyTarget = `${workerUrl.replace(/\/$/, '')}?q=${encodeURIComponent(cleanKeyword)}`;
       const workerRes = await fetch(proxyTarget, { next: { revalidate: 0 } });
       if (workerRes.ok) {
         const workerData = await workerRes.json();
-        return {
-          keyword: cleanKeyword,
-          charLength,
-          tagEligible,
-          totalListings: workerData.totalListings || 0,
-          competitionLevel: workerData.competitionLevel || 'Bilinmiyor',
-          bestsellerCount: workerData.bestsellerCount || 0,
-          isEtsySuggested: !!workerData.isEtsySuggested,
-          autocompleteRank: workerData.autocompleteRank || 0,
-          opportunityScore: workerData.opportunityScore || 0,
-          avgPrice: workerData.avgPrice || 24.50,
-          scrapeError: workerData.scrapeError || null,
-          rawMetrics: { viaWorker: true, methodUsed: workerData.methodUsed }
-        };
+        if (workerData.success && workerData.totalListings > 0 && workerData.methodUsed !== 'ddg_etsy_index') {
+          return {
+            keyword: cleanKeyword,
+            charLength,
+            tagEligible,
+            totalListings: workerData.totalListings || 0,
+            competitionLevel: workerData.competitionLevel || 'Bilinmiyor',
+            bestsellerCount: workerData.bestsellerCount || 0,
+            isEtsySuggested: !!workerData.isEtsySuggested,
+            autocompleteRank: workerData.autocompleteRank || 0,
+            opportunityScore: workerData.opportunityScore || 0,
+            avgPrice: workerData.avgPrice || 24.50,
+            scrapeError: workerData.scrapeError || null,
+            rawMetrics: { viaWorker: true, methodUsed: workerData.methodUsed }
+          };
+        }
       }
+
     } catch (e: any) {
       console.warn(`Cloudflare Worker Proxy warning for "${cleanKeyword}":`, e.message);
     }
@@ -84,7 +121,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
     console.warn(`Google Suggest warning for "${cleanKeyword}":`, e.message);
   }
 
-  // 3. Etsy Search HTML or DuckDuckGo Site Index Search
+  // 3. Direct Etsy Search HTML or Proxy Fetch
+  let fetchedDirectly = false;
   try {
     const targetSearchUrl = `https://www.etsy.com/search?q=${encodeURIComponent(cleanKeyword)}`;
     let finalFetchUrl = targetSearchUrl;
@@ -113,15 +151,17 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       if (!lowerHtml.includes('captcha') && !lowerHtml.includes('robot check')) {
         let countMatch = html.match(/([\d,.]+)\s*(?:\+|plus)?\s*results/i) ||
                          html.match(/"total_results"\s*:\s*(\d+)/i) ||
+                         html.match(/data-search-results-count="(\d+)"/i) ||
                          html.match(/([\d,.]+)\s*results\s+for/i);
 
         if (countMatch && countMatch[1]) {
           totalListings = parseInt(countMatch[1].replace(/[,.]/g, ''), 10) || 0;
+          fetchedDirectly = true;
         }
 
         const bestsellerMatches = (html.match(/Bestseller|Etsy's Pick|Popular now|In \d+\+ carts/gi) || []).length;
         bestsellerCount = Math.min(20, bestsellerMatches);
-        rawMetrics.method = 'direct_etsy';
+        rawMetrics.method = scraperKey ? 'scraper_api' : 'direct_etsy';
       } else {
         throw new Error('Etsy Bot Block');
       }
@@ -129,33 +169,45 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       throw new Error(`Etsy Status ${searchRes.status}`);
     }
   } catch (directErr) {
-    // Unblocked Fallback Engine: DuckDuckGo site:etsy.com search
+    // 4. Real Bing SERP Index Engine (No fake 850/4200 numbers!)
     try {
-      const ddgUrl = `https://html.duckduckgo.com/html/?q=site:etsy.com+${encodeURIComponent(cleanKeyword)}`;
-      const ddgRes = await fetch(ddgUrl, {
+      const bingUrl = `https://www.bing.com/search?q=site:etsy.com+${encodeURIComponent('"' + cleanKeyword + '"')}`;
+      const bingRes = await fetch(bingUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
         },
         next: { revalidate: 0 }
       });
 
-      if (ddgRes.ok) {
-        const ddgHtml = await ddgRes.text();
-        const snippets = (ddgHtml.match(/result__snippet/g) || []).length;
-        totalListings = Math.max(850, snippets * 350);
-        const bestsellerMatches = (ddgHtml.match(/bestseller|popular|top rated/gi) || []).length;
-        bestsellerCount = Math.min(15, bestsellerMatches + 2);
-        rawMetrics.method = 'ddg_etsy_index';
-      } else {
-        scrapeError = 'Etsy Bot Koruması Engeli (HTTP Status: 403)';
+      if (bingRes.ok) {
+        const bingHtml = await bingRes.text();
+        const match = bingHtml.match(/class="sb_count">([^<]+)</i);
+        if (match && match[1]) {
+          const rawNum = match[1].replace(/[^\d]/g, '');
+          const parsedCount = parseInt(rawNum, 10);
+          if (!isNaN(parsedCount) && parsedCount > 0) {
+            totalListings = parsedCount;
+            rawMetrics.method = 'bing_etsy_index';
+            rawMetrics.bingRawText = match[1];
+          }
+        }
+
+        const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
+        bestsellerCount = Math.min(15, bestsellerMatches);
       }
-    } catch (ddgErr: any) {
-      scrapeError = `Kazıma Bağlantı Engeli: ${ddgErr.message}`;
+    } catch (bingErr: any) {
+      console.warn(`Bing Index warning for "${cleanKeyword}":`, bingErr.message);
     }
   }
 
-  // Competition Level Text
-  if (scrapeError) {
+  // If no listings could be extracted from direct Etsy, Scraper API, or Bing SERP:
+  if (totalListings === 0 && !fetchedDirectly) {
+    scrapeError = 'Etsy Bot Engeli (HTTP Status: 403 / Proxy Gerekli)';
+  }
+
+  // Determine Competition Level Text
+  if (scrapeError && totalListings === 0) {
     competitionLevel = 'Engellendi / Hata';
   } else if (totalListings < 1000) {
     competitionLevel = 'Altın Niş (<1K İlan)';
@@ -170,7 +222,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   }
 
   // Calculate Opportunity Score
-  if (scrapeError) {
+  if (scrapeError && totalListings === 0) {
     opportunityScore = 0;
   } else {
     let demandScore = isEtsySuggested ? Math.max(40, 100 - (autocompleteRank - 1) * 10) : 30;
@@ -193,7 +245,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   }
 
   return {
-    keyword,
+    keyword: cleanKeyword,
     charLength,
     tagEligible,
     totalListings,
@@ -207,3 +259,4 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
     rawMetrics
   };
 }
+

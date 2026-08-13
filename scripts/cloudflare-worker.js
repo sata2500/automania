@@ -87,29 +87,37 @@ export default {
         throw new Error(`Etsy Direct Status ${searchRes.status}`);
       }
     } catch (directErr) {
-      // Fallback Engine: Unblocked DuckDuckGo site:etsy.com search
-      methodUsed = 'ddg_etsy_index';
+      // Fallback Engine: Bing site:etsy.com search (No synthetic 850/4200 numbers!)
+      methodUsed = 'bing_etsy_index';
       try {
-        const ddgUrl = `https://html.duckduckgo.com/html/?q=site:etsy.com+${encodeURIComponent(cleanKeyword)}`;
-        const ddgRes = await fetch(ddgUrl, {
+        const bingUrl = `https://www.bing.com/search?q=site:etsy.com+${encodeURIComponent('"' + cleanKeyword + '"')}`;
+        const bingRes = await fetch(bingUrl, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
           }
         });
 
-        if (ddgRes.ok) {
-          const ddgHtml = await ddgRes.text();
-          const snippets = (ddgHtml.match(/result__snippet/g) || []).length;
-          totalListings = Math.max(850, snippets * 350); // Calculate indexed listing volume
-          const bestsellerMatches = (ddgHtml.match(/bestseller|popular|top rated/gi) || []).length;
-          bestsellerCount = Math.min(15, bestsellerMatches + 2);
+        if (bingRes.ok) {
+          const bingHtml = await bingRes.text();
+          const match = bingHtml.match(/class="sb_count">([^<]+)</i);
+          if (match && match[1]) {
+            const rawNum = match[1].replace(/[^\d]/g, '');
+            const parsedCount = parseInt(rawNum, 10);
+            if (!isNaN(parsedCount) && parsedCount > 0) {
+              totalListings = parsedCount;
+            }
+          }
+          const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
+          bestsellerCount = Math.min(15, bestsellerMatches);
         } else {
-          scrapeError = 'DuckDuckGo Index Fallback Blocked';
+          scrapeError = 'Bing Index Fallback Blocked';
         }
-      } catch (ddgErr) {
+      } catch (bingErr) {
         scrapeError = 'Kazıma Bağlantı Engeli';
       }
     }
+
 
     // Determine Competition Level Text
     let competitionLevel = 'Bilinmiyor';

@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     let { ids, limit = 20 } = body;
 
-    // Fetch Admin Scraping API Key settings
+    // Fetch Admin Scraping & SERP API Key settings from user_workspaces or app_settings
     const settingsRows = await sql`
       SELECT scraping_api_key, scraping_provider 
       FROM user_workspaces 
@@ -16,8 +16,21 @@ export async function POST(req: Request) {
       ORDER BY updated_at DESC
       LIMIT 1
     `;
-    const scrapingApiKey = settingsRows[0]?.scraping_api_key;
-    const scrapingProvider = settingsRows[0]?.scraping_provider || 'scraperapi';
+    const appSettingRows = await sql`
+      SELECT setting_key, setting_value 
+      FROM app_settings 
+      WHERE setting_key IN ('serper_api_key', 'scraping_api_key')
+    `;
+    
+    let serperApiKey = process.env.SERPER_API_KEY || '';
+    let scrapingApiKey = settingsRows[0]?.scraping_api_key || '';
+    let scrapingProvider = settingsRows[0]?.scraping_provider || 'scraperapi';
+
+    for (const r of appSettingRows) {
+      if (r.setting_key === 'serper_api_key' && r.setting_value) serperApiKey = r.setting_value;
+      if (r.setting_key === 'scraping_api_key' && r.setting_value && !scrapingApiKey) scrapingApiKey = r.setting_value;
+    }
+
 
     let targetKeywords: { id: string, keyword: string }[] = [];
 
@@ -48,7 +61,12 @@ export async function POST(req: Request) {
 
     for (const item of targetKeywords) {
       try {
-        const scraped = await scrapeEtsyKeywordData(item.keyword, { apiKey: scrapingApiKey, provider: scrapingProvider });
+        const scraped = await scrapeEtsyKeywordData(item.keyword, { 
+          apiKey: scrapingApiKey, 
+          provider: scrapingProvider,
+          serperApiKey
+        });
+
 
         if (scraped.scrapeError) {
           botBlockedCount++;
