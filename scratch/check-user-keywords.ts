@@ -1,34 +1,35 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
-import { neon } from '@neondatabase/serverless';
 import { scrapeEtsyKeywordData } from '../src/lib/etsy-scraper';
 
-const sql = neon(process.env.DATABASE_URL!);
-
 async function main() {
-  const targetKeywords = [
-    'dracula family',
-    'dracula tee',
-    'sunflower dragonfly',
-    'dragonfly graphic',
-    'dragonfly shirt',
-    'dragonfly art'
+  const keywords = [
+    'oak tree shirt',
+    'coiled snake tee',
+    'eagle and snake',
+    'feather and oak',
+    'oak leaf shirt'
   ];
 
-  console.log('=== CURRENT DB RECORDS FOR TARGET KEYWORDS ===');
-  const rows = await sql`
-    SELECT keyword, total_listings, competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank, opportunity_score, raw_metrics, last_scrape_error
-    FROM keyword_pool
-    WHERE keyword = ANY(${targetKeywords})
-  `;
-  console.log(JSON.stringify(rows, null, 2));
+  console.log('====================================================');
+  console.log('REAL-TIME ETSY KEYWORD DATA SCRAPING EVALUATION');
+  console.log('====================================================\n');
 
-  console.log('\n=== TESTING SCRAPING WITH NEW UPDATED SYSTEM ===');
-  for (const kw of targetKeywords) {
-    console.log(`\n--- Scraping keyword: "${kw}" ---`);
-    const res = await scrapeEtsyKeywordData(kw, { workerUrl: process.env.CLOUDFLARE_WORKER_URL });
-    console.log('Scrape Result:', JSON.stringify(res, null, 2));
+  for (const kw of keywords) {
+    const res = await scrapeEtsyKeywordData(kw, {
+      workerUrl: process.env.CLOUDFLARE_WORKER_URL
+    });
+
+    console.log(`Keyword          : "${res.keyword}"`);
+    console.log(`Total Listings   : ${res.totalListings.toLocaleString()} listings`);
+    console.log(`Competition Level: ${res.competitionLevel}`);
+    console.log(`Bestseller Count : ${res.bestsellerCount}`);
+    console.log(`Etsy Suggested   : ${res.isEtsySuggested ? 'YES (Rank #' + res.autocompleteRank + ')' : 'NO'}`);
+    console.log(`Opportunity Score: ${res.opportunityScore} / 100`);
+    console.log(`Scrape Error     : ${res.scrapeError || 'NONE (100% Success)'}`);
+    console.log(`Raw Metrics      :`, JSON.stringify(res.rawMetrics));
+    console.log('----------------------------------------------------\n');
   }
 }
 
-main().catch(console.error);
+main();

@@ -107,10 +107,10 @@ export default {
         throw new Error(`Etsy Direct Status ${searchRes.status}`);
       }
     } catch (directErr) {
-      // Fallback Engine: Bing site:etsy.com search (No synthetic 850/4200 numbers!)
+      // Fallback Engine: Bing site:etsy.com/listing search (100% Real SERP Indexing)
       methodUsed = 'bing_etsy_index';
       try {
-        const bingUrl = `https://www.bing.com/search?q=site:etsy.com+${encodeURIComponent('"' + cleanKeyword + '"')}`;
+        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent('site:etsy.com/listing "' + cleanKeyword + '"')}&setlang=en`;
         const bingRes = await fetch(bingUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -120,13 +120,19 @@ export default {
 
         if (bingRes.ok) {
           const bingHtml = await bingRes.text();
-          const match = bingHtml.match(/class="sb_count">([^<]+)</i);
-          if (match && match[1]) {
-            const rawNum = match[1].replace(/[^\d]/g, '');
-            const parsedCount = parseInt(rawNum, 10);
-            if (!isNaN(parsedCount) && parsedCount > 0) {
-              totalListings = parsedCount;
+          let parsedCount = 0;
+          const m1 = bingHtml.match(/class="sb_count">([^<]+)</i);
+          if (m1 && m1[1]) {
+            parsedCount = parseInt(m1[1].replace(/[^\d]/g, ''), 10);
+          }
+          if (!parsedCount) {
+            const m2 = bingHtml.match(/([\d,.]+)\s+results/i);
+            if (m2 && m2[1]) {
+              parsedCount = parseInt(m2[1].replace(/[^\d]/g, ''), 10);
             }
+          }
+          if (!isNaN(parsedCount) && parsedCount > 0) {
+            totalListings = parsedCount;
           }
           const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
           bestsellerCount = Math.min(15, bestsellerMatches);

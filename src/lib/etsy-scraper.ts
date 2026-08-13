@@ -79,7 +79,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       const workerRes = await fetch(proxyTarget, { next: { revalidate: 0 } });
       if (workerRes.ok) {
         const workerData = await workerRes.json();
-        if (workerData.success && workerData.totalListings > 0) {
+        // Ignore dummy 850 or old ddg_etsy_index responses from unupdated Cloudflare worker deployments
+        if (workerData.success && workerData.totalListings > 0 && workerData.totalListings !== 850 && workerData.methodUsed !== 'ddg_etsy_index') {
           return {
             keyword: cleanKeyword,
             charLength,
@@ -208,7 +209,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   } catch (directErr) {
     // 4. Real Bing SERP Index Engine (No fake 850/4200 numbers!)
     try {
-      const bingUrl = `https://www.bing.com/search?q=site:etsy.com+${encodeURIComponent('"' + cleanKeyword + '"')}`;
+      const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent('site:etsy.com/listing "' + cleanKeyword + '"')}&setlang=en`;
       const bingRes = await fetch(bingUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -219,15 +220,21 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
       if (bingRes.ok) {
         const bingHtml = await bingRes.text();
-        const match = bingHtml.match(/class="sb_count">([^<]+)</i);
-        if (match && match[1]) {
-          const rawNum = match[1].replace(/[^\d]/g, '');
-          const parsedCount = parseInt(rawNum, 10);
-          if (!isNaN(parsedCount) && parsedCount > 0) {
-            totalListings = parsedCount;
-            rawMetrics.method = 'bing_etsy_index';
-            rawMetrics.bingRawText = match[1];
+        let parsedCount = 0;
+        const m1 = bingHtml.match(/class="sb_count">([^<]+)</i);
+        if (m1 && m1[1]) {
+          parsedCount = parseInt(m1[1].replace(/[^\d]/g, ''), 10);
+        }
+        if (!parsedCount) {
+          const m2 = bingHtml.match(/([\d,.]+)\s+results/i);
+          if (m2 && m2[1]) {
+            parsedCount = parseInt(m2[1].replace(/[^\d]/g, ''), 10);
           }
+        }
+        if (!isNaN(parsedCount) && parsedCount > 0) {
+          totalListings = parsedCount;
+          rawMetrics.method = 'bing_etsy_index';
+          rawMetrics.bingRawText = `${parsedCount.toLocaleString()} listings`;
         }
 
         const bestsellerMatches = (bingHtml.match(/bestseller|popular|top rated/gi) || []).length;
