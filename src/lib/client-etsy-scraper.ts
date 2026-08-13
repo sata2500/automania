@@ -25,15 +25,15 @@ export async function scrapeEtsyFromBrowser(id: string, keyword: string): Promis
   let avgPrice = 0;
   let scrapeError: string | null = null;
 
-  // 1. Etsy Autocomplete Check (Direct Client Fetch - No CORS issue on Autocomplete API!)
+  // 1. Etsy Autocomplete Check (Direct Client Fetch - No CORS issue on Public Suggestions API!)
   try {
-    const suggestUrl = `https://www.etsy.com/api/v3/ajax/bes/suggest?q=${encodeURIComponent(cleanKeyword)}&sub_type=tag`;
+    const suggestUrl = `https://www.etsy.com/api/v3/ajax/public/search/suggestions?query=${encodeURIComponent(cleanKeyword)}`;
     const suggestRes = await fetch(suggestUrl);
     if (suggestRes.ok) {
       const suggestData = await suggestRes.json();
-      const results: any[] = suggestData.results || suggestData.queries || [];
+      const results: any[] = suggestData.results || [];
       const foundIdx = results.findIndex((item: any) => {
-        const queryText = (item.query || item.search_query || item.term || '').toLowerCase();
+        const queryText = (item.query || item.term || '').toLowerCase();
         return queryText === cleanKeyword || queryText.includes(cleanKeyword);
       });
       if (foundIdx !== -1) {

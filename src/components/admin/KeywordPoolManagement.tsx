@@ -17,6 +17,7 @@ interface Keyword {
   tag_eligible: boolean | null;
   avg_price: number | null;
   last_scrape_error: string | null;
+  raw_metrics?: any;
   created_at: string;
   last_evaluated_at: string | null;
 }
@@ -191,6 +192,29 @@ export default function KeywordPoolManagement() {
     } catch (e) {
       toast.error('CSV dışa aktarılırken bir hata oluştu.');
     }
+  };
+
+  const renderSourceBadge = (kw: Keyword) => {
+    if (kw.last_scrape_error) {
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">⚠️ Engellendi</span>;
+    }
+    const method = kw.raw_metrics?.method || kw.raw_metrics?.methodUsed;
+    const viaWorker = kw.raw_metrics?.viaWorker;
+    const autoSource = kw.raw_metrics?.autocomplete?.source;
+
+    if (method === 'direct_etsy' || autoSource === 'etsy_native_api') {
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">🌐 Etsy Canlı</span>;
+    }
+    if (viaWorker || method === 'cloudflare_worker') {
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">⚡ Proxy Worker</span>;
+    }
+    if (method === 'scraper_api' || method === 'google_serper_api') {
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">🔑 Scraper API</span>;
+    }
+    if (method === 'bing_etsy_index' || method === 'ddg_etsy_index') {
+      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">🔍 SERP Index</span>;
+    }
+    return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Tamamlandı</span>;
   };
 
   const getScoreBadge = (score: number | null) => {
@@ -520,14 +544,18 @@ export default function KeywordPoolManagement() {
                        </td>
                        <td className="px-2 py-3 sm:p-4 text-[11px] text-slate-500 whitespace-nowrap">
                          {kw.last_scrape_error ? (
-                           <div className="flex items-center gap-1 text-rose-600 font-bold" title={kw.last_scrape_error}>
-                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                             <span className="truncate max-w-[120px]">Bot Engeli / Hata</span>
+                           <div className="flex items-center gap-1.5" title={kw.last_scrape_error}>
+                             {renderSourceBadge(kw)}
                            </div>
                          ) : kw.last_evaluated_at ? (
-                           new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR')
+                           <div className="flex flex-col gap-0.5 items-start">
+                             {renderSourceBadge(kw)}
+                             <span className="text-[10px] text-slate-400 font-mono">
+                               {new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR')}
+                             </span>
+                           </div>
                          ) : (
-                           'Hiç'
+                           <span className="text-slate-400 text-xs">Hiç</span>
                          )}
                        </td>
                      </tr>

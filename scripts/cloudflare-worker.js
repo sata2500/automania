@@ -38,21 +38,41 @@ export default {
     let scrapeError = null;
     let methodUsed = 'direct_etsy';
 
-    // 1. Google Suggest API for Etsy Tag Popularity & Autocomplete Verification (100% Unblocked)
+    // 1. Etsy Native Autocomplete API (100% Real Etsy Data, Unblocked)
     try {
-      const suggestUrl = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent('etsy ' + cleanKeyword)}`;
-      const suggestRes = await fetch(suggestUrl);
+      const suggestUrl = `https://www.etsy.com/api/v3/ajax/public/search/suggestions?query=${encodeURIComponent(cleanKeyword)}`;
+      const suggestRes = await fetch(suggestUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*'
+        }
+      });
       if (suggestRes.ok) {
         const suggestData = await suggestRes.json();
-        const suggestions = (suggestData[1] || []).map((s) => s.toLowerCase());
-        const foundIdx = suggestions.findIndex(s => s.includes(cleanKeyword));
+        const suggestions = (suggestData.results || []).map((r) => (r.query || '').toLowerCase()).filter(Boolean);
+        const foundIdx = suggestions.findIndex(s => s === cleanKeyword || s.includes(cleanKeyword));
         if (foundIdx !== -1) {
           isEtsySuggested = true;
           autocompleteRank = foundIdx + 1;
         }
       }
-    } catch (e) {
-      console.warn('Suggest API warning:', e);
+    } catch (nativeErr) {
+      // Fallback to Google Suggest
+      try {
+        const suggestUrl = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent('etsy ' + cleanKeyword)}`;
+        const suggestRes = await fetch(suggestUrl);
+        if (suggestRes.ok) {
+          const suggestData = await suggestRes.json();
+          const suggestions = (suggestData[1] || []).map((s) => s.toLowerCase());
+          const foundIdx = suggestions.findIndex(s => s.includes(cleanKeyword));
+          if (foundIdx !== -1) {
+            isEtsySuggested = true;
+            autocompleteRank = foundIdx + 1;
+          }
+        }
+      } catch (e) {
+        console.warn('Suggest API warning:', e);
+      }
     }
 
     // 2. Etsy Search HTML or DuckDuckGo Site Index Search

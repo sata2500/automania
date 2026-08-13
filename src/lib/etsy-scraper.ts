@@ -73,14 +73,13 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   }
 
   // 1. If Cloudflare Worker URL is configured, use it!
-
   if (workerUrl) {
     try {
       const proxyTarget = `${workerUrl.replace(/\/$/, '')}?q=${encodeURIComponent(cleanKeyword)}`;
       const workerRes = await fetch(proxyTarget, { next: { revalidate: 0 } });
       if (workerRes.ok) {
         const workerData = await workerRes.json();
-        if (workerData.success && workerData.totalListings > 0 && workerData.methodUsed !== 'ddg_etsy_index') {
+        if (workerData.success && workerData.totalListings > 0) {
           return {
             keyword: cleanKeyword,
             charLength,
@@ -93,32 +92,70 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
             opportunityScore: workerData.opportunityScore || 0,
             avgPrice: workerData.avgPrice || 24.50,
             scrapeError: workerData.scrapeError || null,
-            rawMetrics: { viaWorker: true, methodUsed: workerData.methodUsed }
+            rawMetrics: { viaWorker: true, methodUsed: workerData.methodUsed || 'cloudflare_worker' }
           };
         }
       }
-
     } catch (e: any) {
       console.warn(`Cloudflare Worker Proxy warning for "${cleanKeyword}":`, e.message);
     }
   }
 
-  // 2. Google Suggest API for Etsy Tag Popularity (100% Unblocked)
+  // 2. Etsy Native Autocomplete API (100% Real Etsy Data, Unblocked)
   try {
-    const suggestUrl = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent('etsy ' + cleanKeyword)}`;
-    const suggestRes = await fetch(suggestUrl, { next: { revalidate: 0 } });
+    const suggestUrl = `https://www.etsy.com/api/v3/ajax/public/search/suggestions?query=${encodeURIComponent(cleanKeyword)}`;
+    const suggestRes = await fetch(suggestUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*'
+      },
+      next: { revalidate: 0 }
+    });
+
     if (suggestRes.ok) {
       const suggestData = await suggestRes.json();
-      const suggestions: string[] = (suggestData[1] || []).map((s: string) => s.toLowerCase());
-      const foundIdx = suggestions.findIndex(s => s.includes(cleanKeyword));
+      const suggestions: string[] = (suggestData.results || [])
+        .map((r: any) => (r.query || '').toLowerCase())
+        .filter(Boolean);
+
+      const foundIdx = suggestions.findIndex(s => s === cleanKeyword || s.includes(cleanKeyword));
       if (foundIdx !== -1) {
         isEtsySuggested = true;
         autocompleteRank = foundIdx + 1;
       }
-      rawMetrics.autocomplete = { found: isEtsySuggested, rank: autocompleteRank, suggestionsCount: suggestions.length };
+      rawMetrics.autocomplete = { 
+        found: isEtsySuggested, 
+        rank: autocompleteRank, 
+        suggestionsCount: suggestions.length,
+        source: 'etsy_native_api',
+        topSuggestions: suggestions.slice(0, 5)
+      };
+    } else {
+      throw new Error(`Etsy Native Suggest status ${suggestRes.status}`);
     }
-  } catch (e: any) {
-    console.warn(`Google Suggest warning for "${cleanKeyword}":`, e.message);
+  } catch (nativeSuggestErr: any) {
+    // Fallback to Google Suggest if Etsy Native Suggest is unreachable
+    try {
+      const suggestUrl = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent('etsy ' + cleanKeyword)}`;
+      const suggestRes = await fetch(suggestUrl, { next: { revalidate: 0 } });
+      if (suggestRes.ok) {
+        const suggestData = await suggestRes.json();
+        const suggestions: string[] = (suggestData[1] || []).map((s: string) => s.toLowerCase());
+        const foundIdx = suggestions.findIndex(s => s.includes(cleanKeyword));
+        if (foundIdx !== -1) {
+          isEtsySuggested = true;
+          autocompleteRank = foundIdx + 1;
+        }
+        rawMetrics.autocomplete = { 
+          found: isEtsySuggested, 
+          rank: autocompleteRank, 
+          suggestionsCount: suggestions.length,
+          source: 'google_suggest_fallback' 
+        };
+      }
+    } catch (e: any) {
+      console.warn(`Google Suggest warning for "${cleanKeyword}":`, e.message);
+    }
   }
 
   // 3. Direct Etsy Search HTML or Proxy Fetch
