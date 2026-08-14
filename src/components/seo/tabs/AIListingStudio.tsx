@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, 
-  Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, 
+  Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, ChevronLeft,
   MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download, 
   TrendingUp, Hash, Plus, ChevronDown, Settings, Info, Save, ShieldCheck, Rocket, CheckCircle2
 } from 'lucide-react';
@@ -32,7 +32,7 @@ const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { prop
       <button 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-left flex justify-between items-center"
+        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-left flex justify-between items-center"
       >
         <span className="truncate">
           {selectedValues.length > 0 ? `${selectedValues.length} seçenek işaretlendi` : 'Seçim Yapılmadı (Boş)'}
@@ -40,7 +40,7 @@ const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { prop
         <ChevronDown className="w-4 h-4 text-slate-400" />
       </button>
       {isOpen && (
-        <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg shadow-xl">
+        <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-xl">
           {propItem.possible_values?.map((v: any) => (
             <label key={v.value_id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
               <input 
@@ -73,7 +73,7 @@ export const AIListingStudio = () => {
     handleFolderDragStart, handleFolderDragOver, handleFolderDrop, handleSelectFolder,
     editingFolderId, editingFolderName, setEditingFolderName, handleRenameFolder, setEditingFolderId,
     deletingFolderId, handleDeleteFolder, setDeletingFolderId, draggedFolderId,
-    draggedMockupId, handleMockupDragStart, handleMockupDragOver, handleMockupDrop,
+    draggedMockupId, setDraggedMockupId, handleMockupDragStart, handleMockupDragOver, handleMockupDrop, handleMoveMockupStep,
     handleDeleteMockup, 
     selectedDesign, niche, setNiche, productType, setProductType,
     userNotes, setUserNotes, isSavingSettings, handleSaveEtsySettings,
@@ -87,6 +87,7 @@ export const AIListingStudio = () => {
     basePrice, variations, setVariations,
     taxonomyId, whoMade, setWhoMade, whenMade, setWhenMade, isSupply, setIsSupply, materials, styles,
     productionPartnerId, setProductionPartnerId, isCustomizable, setIsCustomizable, sku, setSku,
+    handleRegenerateSku,
     shopSections, selectedShopSectionId, setSelectedShopSectionId,
     returnPolicies, selectedReturnPolicyId, setSelectedReturnPolicyId,
     shouldAutoRenew, setShouldAutoRenew,
@@ -95,7 +96,6 @@ export const AIListingStudio = () => {
   } = useEtsySeo();
   const toast = useToast();
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedTemplateForDefault, setSelectedTemplateForDefault] = useState<string>('');
 
   const handleSetDefaultTemplate = async (templateId: string) => {
@@ -119,6 +119,9 @@ export const AIListingStudio = () => {
       console.error(e);
     }
   };
+
+  // Has AI generated or analyzed content yet?
+  const hasAiAnalyzed = Boolean(generatedTitle || generatedDescription || (selectedTags && selectedTags.length > 0) || (availableTaxonomyProperties && availableTaxonomyProperties.length > 0));
 
   if (activeTab !== 'studio' && activeTab !== 'publish') return null;
 
@@ -159,97 +162,84 @@ export const AIListingStudio = () => {
                   onDragOver={handleFolderDragOver}
                   onDrop={(e) => handleFolderDrop(e, folder.id)}
                   onClick={() => handleSelectFolder(folder.id)}
-                  className={`relative shrink-0 w-24 h-24 rounded-xl border-2 cursor-pointer overflow-hidden transition-all group ${isSelected ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/30' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'} ${draggedFolderId === folder.id ? 'opacity-50' : ''}`}
+                  className={`group relative shrink-0 w-32 rounded-xl border-2 p-2 cursor-pointer transition-all flex flex-col items-center gap-1.5 ${
+                    isSelected 
+                      ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 shadow-sm' 
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 hover:border-slate-300 dark:hover:border-slate-700'
+                  } ${draggedFolderId === folder.id ? 'opacity-50 scale-95' : ''}`}
                 >
-                  {thumbnailMockup ? (
-                    <img 
-                      src={thumbnailMockup.previewUrl} 
-                      alt={folder.name} 
-                      className="w-full h-full object-cover p-0.5 bg-slate-50 dark:bg-slate-950" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400">
-                      <Folder className="w-8 h-8 mb-1" />
-                    </div>
-                  )}
-                  
-                  {editingFolderId === folder.id ? (
-                    <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 p-2 flex flex-col justify-center items-center gap-2 z-10" onClick={(e) => e.stopPropagation()}>
-                      <input 
+                  <div className="w-full h-20 rounded-lg bg-slate-200 dark:bg-slate-800 overflow-hidden relative border border-slate-100 dark:border-slate-800 flex items-center justify-center">
+                    {thumbnailMockup?.previewUrl ? (
+                      <img 
+                        src={thumbnailMockup.previewUrl} 
+                        alt={folder.name}
+                        draggable={false} 
+                        className="w-full h-full object-cover pointer-events-none select-none" 
+                      />
+                    ) : (
+                      <Folder className="w-8 h-8 text-slate-400" />
+                    )}
+                    <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">
+                      {folder.count} dosya
+                    </span>
+                  </div>
+
+                  {/* Folder Rename / Name */}
+                  <div className="w-full text-center px-1">
+                    {editingFolderId === folder.id ? (
+                      <input
                         type="text"
                         autoFocus
-                        className="w-full text-[11px] px-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-md outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                         value={editingFolderName}
                         onChange={(e) => setEditingFolderName(e.target.value)}
+                        onBlur={() => handleRenameFolder(folder.id, editingFolderName)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleRenameFolder(folder.id, editingFolderName);
                           if (e.key === 'Escape') setEditingFolderId(null);
                         }}
+                        className="w-full bg-white dark:bg-slate-900 border border-emerald-500 text-[10px] rounded px-1 py-0.5 outline-none font-bold text-center"
+                        onClick={(e) => e.stopPropagation()}
                       />
-                      <div className="flex gap-1 w-full mt-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder.id, editingFolderName); }}
-                          className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white p-1 rounded-md flex items-center justify-center transition-colors"
-                          title="Kaydet"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingFolderId(null); }}
-                          className="flex-1 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 p-1 rounded-md flex items-center justify-center transition-colors"
-                          title="İptal"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                    ) : (
+                      <div className="flex items-center justify-center gap-1 group/btn">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[80px]" title={folder.name}>
+                          {folder.name}
+                        </span>
+                        <Edit2 
+                          className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover/btn:opacity-100 hover:text-emerald-500 transition-opacity" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingFolderId(folder.id);
+                            setEditingFolderName(folder.name);
+                          }}
+                        />
                       </div>
-                    </div>
-                  ) : deletingFolderId === folder.id ? (
-                    <div className="absolute inset-0 bg-red-500/95 p-2 flex flex-col justify-center items-center gap-1 z-10" onClick={(e) => e.stopPropagation()}>
-                      <span className="text-[10px] text-white font-bold text-center leading-tight">Klasörü Sil?</span>
-                      <div className="flex gap-1 w-full mt-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
-                          className="flex-1 bg-white text-red-600 hover:bg-red-50 p-1 rounded-md flex items-center justify-center font-bold text-[10px]"
+                    )}
+                  </div>
+
+                  {/* Delete folder button */}
+                  {deletingFolderId === folder.id ? (
+                    <div className="absolute inset-0 bg-slate-900/90 rounded-xl p-2 flex flex-col items-center justify-center gap-1 z-10 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[9px] text-white font-bold text-center">Klasörü sil?</span>
+                      <div className="flex gap-1">
+                        <button 
+                          className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white text-[8px] font-bold rounded"
+                          onClick={() => handleDeleteFolder(folder.id)}
                         >
-                          Evet
+                          Sil
                         </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeletingFolderId(null); }}
-                          className="flex-1 bg-red-700 text-white hover:bg-red-800 p-1 rounded-md flex items-center justify-center font-bold text-[10px]"
+                        <button 
+                          className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white text-[8px] rounded"
+                          onClick={() => setDeletingFolderId(null)}
                         >
-                          Hayır
+                          İptal
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="absolute inset-x-0 bottom-0 bg-black/75 backdrop-blur-xs text-[10px] text-white p-1 truncate font-semibold text-center leading-tight">
-                      {folder.name}<br/>
-                      <span className="text-[8px] text-slate-300">({folder.count} Görsel)</span>
-                    </div>
-                  )}
-
-                  {isSelected && !editingFolderId && !deletingFolderId && (
-                    <div className="absolute top-1 right-1 bg-emerald-500 text-white rounded-full p-0.5 shadow">
-                      <Check className="w-3 h-3" />
-                    </div>
-                  )}
-
-                  {!editingFolderId && !deletingFolderId && (
                     <div 
-                      className="absolute top-1 left-1 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingFolderId(folder.id);
-                        setEditingFolderName(folder.name);
-                      }}
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </div>
-                  )}
-                  
-                  {!editingFolderId && !deletingFolderId && (
-                    <div 
-                      className="absolute top-1 right-1 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
+                      className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                      title="Klasörü Sil"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeletingFolderId(folder.id);
@@ -258,66 +248,114 @@ export const AIListingStudio = () => {
                       <Trash2 className="w-3 h-3" />
                     </div>
                   )}
-                  <div className="absolute top-1 right-1/2 translate-x-1/2 opacity-0 group-hover:opacity-50 text-white cursor-grab active:cursor-grabbing">
-                    <GripVertical className="w-4 h-4 drop-shadow-md" />
-                  </div>
                 </div>
               );
             })}
           </div>
 
+          {/* Sürükle Bırak ve Oklarla Sıralama Alanı */}
           {selectedFolderId && dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                 <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                   <GripVertical className="w-3.5 h-3.5 text-emerald-500" />
-                  Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length} Adet) - Sürükleyip Sıralayabilirsiniz:
+                  Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length} Adet) - Sürükleyip veya Oklarla Sıralayabilirsiniz:
                 </label>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx) => {
+              <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
+                {dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).map((mockup, idx, arr) => {
                   const isDragged = draggedMockupId === mockup.id;
                   return (
-                  <div 
-                    key={mockup.id} 
-                    draggable
-                    onDragStart={(e) => handleMockupDragStart(e, mockup.id)}
-                    onDragOver={handleMockupDragOver}
-                    onDrop={(e) => handleMockupDrop(e, mockup.id)}
-                    className={`group relative shrink-0 w-16 h-16 rounded-lg border-2 cursor-grab active:cursor-grabbing overflow-hidden bg-slate-50 dark:bg-slate-950 transition-all ${
-                      isDragged ? 'opacity-50 border-emerald-500 scale-95' : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500'
-                    }`}
-                  >
-                    {mockup.isVideo ? (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-800">
-                        <span className="text-[8px] font-bold text-white uppercase">VİDEO</span>
-                      </div>
-                    ) : (
-                      <img src={mockup.previewUrl} alt={mockup.mockupName} className="w-full h-full object-cover" />
-                    )}
-                    <div className="absolute top-0 left-0 bg-black/60 text-white text-[8px] px-1 font-bold rounded-br-md">
-                      #{idx + 1}
-                    </div>
-                    <a 
-                      href={mockup.previewUrl} 
-                      download={mockup.exportFileName || mockup.mockupName || "mockup"} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="absolute top-1 left-1 bg-emerald-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-emerald-600 cursor-pointer flex items-center justify-center"
-                      title="İndir"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Download className="w-3 h-3" />
-                    </a>
                     <div 
-                      className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer flex items-center justify-center"
-                      onClick={() => handleDeleteMockup(mockup.id)}
-                      title="Kaldır"
+                      key={mockup.id} 
+                      draggable
+                      onDragStart={(e) => handleMockupDragStart(e, mockup.id)}
+                      onDragOver={handleMockupDragOver}
+                      onDragEnter={(e) => e.preventDefault()}
+                      onDragEnd={() => setDraggedMockupId(null)}
+                      onDrop={(e) => handleMockupDrop(e, mockup.id)}
+                      className={`group relative shrink-0 w-20 h-20 rounded-xl border-2 cursor-grab active:cursor-grabbing overflow-hidden bg-slate-50 dark:bg-slate-950 transition-all select-none ${
+                        isDragged ? 'opacity-40 border-emerald-500 scale-95 ring-2 ring-emerald-400' : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500'
+                      }`}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      {mockup.isVideo ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 pointer-events-none select-none">
+                          <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">VİDEO</span>
+                          <span className="text-[8px] text-slate-400">MP4</span>
+                        </div>
+                      ) : (
+                        <img 
+                          src={mockup.previewUrl} 
+                          alt={mockup.mockupName} 
+                          draggable={false}
+                          className="w-full h-full object-cover pointer-events-none select-none" 
+                        />
+                      )}
+
+                      {/* Number Badge */}
+                      <div className="absolute top-0 left-0 bg-black/70 text-white text-[9px] px-1.5 py-0.5 font-bold rounded-br-lg pointer-events-none select-none">
+                        #{idx + 1}
+                      </div>
+
+                      {/* Hover Action Controls */}
+                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1">
+                        <div className="flex justify-between items-center">
+                          <a 
+                            href={mockup.previewUrl} 
+                            download={mockup.exportFileName || mockup.mockupName || "mockup"} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="bg-emerald-500 text-white rounded p-1 hover:bg-emerald-600 cursor-pointer shadow-xs"
+                            title="İndir"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Download className="w-3 h-3" />
+                          </a>
+                          <button 
+                            type="button"
+                            className="bg-rose-500 text-white rounded p-1 hover:bg-rose-600 cursor-pointer shadow-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMockup(mockup.id);
+                            }}
+                            title="Kaldır"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Move Left / Right Step Buttons */}
+                        <div className="flex justify-between items-center gap-1 bg-black/70 rounded p-0.5">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveMockupStep(mockup.id, 'left');
+                            }}
+                            className="text-white hover:text-emerald-400 disabled:opacity-30 disabled:hover:text-white p-0.5 transition-colors"
+                            title="Sola Taşı"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-[8px] font-bold text-slate-300 select-none">Sırala</span>
+                          <button
+                            type="button"
+                            disabled={idx === arr.length - 1}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveMockupStep(mockup.id, 'right');
+                            }}
+                            className="text-white hover:text-emerald-400 disabled:opacity-30 disabled:hover:text-white p-0.5 transition-colors"
+                            title="Sağa Taşı"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )})}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -325,7 +363,7 @@ export const AIListingStudio = () => {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* 1. ADIM: TASARIM & ÜRÜN YAPILANDIRMASI (UNIFIED SETTINGS CARD) */}
+      {/* 1. ADIM: TASARIM & ÜRÜN YAPILANDIRMASI */}
       {/* ------------------------------------------------------------- */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -413,16 +451,21 @@ export const AIListingStudio = () => {
       {/* ------------------------------------------------------------- */}
       {/* 2. ADIM: YAPAY ZEKA SEO METİNLERİ & 13 ALTIN ETİKET */}
       {/* ------------------------------------------------------------- */}
-      <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">2</span>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Yapay Zeka SEO Metinleri & 13 Altın Etiket
-          </h3>
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">2</span>
+              AI SEO Başlık, Açıklama ve 13 Altın Etiket
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Etsy algoritması için optimize edilmiş başlık, açıklama ve yüksek fırsat puanlı 13 etiketi yönetin.
+            </p>
+          </div>
         </div>
 
         {/* Title Editor */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
+        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
               <Tag className="w-4 h-4" />
@@ -430,7 +473,7 @@ export const AIListingStudio = () => {
             </label>
             <button
               onClick={() => copyToClipboard(generatedTitle, 'title')}
-              className="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-colors font-medium"
+              className="text-xs bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-colors font-medium border border-slate-200 dark:border-slate-800"
             >
               {copiedKey === 'title' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
               Başlığı Kopyala
@@ -441,12 +484,12 @@ export const AIListingStudio = () => {
             value={generatedTitle}
             maxLength={140}
             onChange={(e) => setGeneratedTitle(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 
         {/* Description Editor */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
+        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
               <FileText className="w-4 h-4" />
@@ -454,7 +497,7 @@ export const AIListingStudio = () => {
             </label>
             <button
               onClick={() => copyToClipboard(generatedDescription, 'desc')}
-              className="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-colors font-medium"
+              className="text-xs bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-lg flex items-center gap-1.5 transition-colors font-medium border border-slate-200 dark:border-slate-800"
             >
               {copiedKey === 'desc' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
               Açıklamayı Kopyala
@@ -464,12 +507,12 @@ export const AIListingStudio = () => {
             rows={8}
             value={generatedDescription}
             onChange={(e) => setGeneratedDescription(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
           />
         </div>
 
-        {/* 13 Selected Tags Display (Moved right after Description) */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+        {/* 13 Selected Tags Display */}
+        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -493,7 +536,7 @@ export const AIListingStudio = () => {
               const len = tag.length;
               const isOk = len <= 20;
               return (
-                <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs">
+                <div key={idx} className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs shadow-xs">
                   <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">
                     {idx + 1}. {tag}
                   </span>
@@ -517,15 +560,15 @@ export const AIListingStudio = () => {
 
         {/* Candidate Keywords & Co-Occurring Competitor Tags Panel */}
         {((enrichedKeywords && enrichedKeywords.length > 0) || (coOccurringTags && coOccurringTags.length > 0)) && (
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+          <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-emerald-500" />
-                  Kelime Havuzu & Birlikte Kullanılan Popüler Rakip Etiketler (Co-occurring Tags)
+                  Kelime Havuzu & Birlikte Kullanılan Popüler Rakip Etiketler
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Aşağıdaki gerçek Etsy veritabanı puanları ve rakip etiketleri arasından listeye etiket ekleyebilirsiniz.
+                  Aşağıdaki gerçek Etsy arama puanları, ilan sayıları ve rakip etiketleri arasından listenize kolayca etiket ekleyebilirsiniz.
                 </p>
               </div>
             </div>
@@ -533,87 +576,138 @@ export const AIListingStudio = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* 1. Candidate Keywords */}
               {enrichedKeywords && enrichedKeywords.length > 0 && (
-                <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-2">
                     <span className="flex items-center gap-1.5">
                       <Hash className="w-3.5 h-3.5 text-emerald-500" />
-                      Tasarım Anahtar Kelimeleri & Fırsat Puanları ({enrichedKeywords.length})
+                      Tasarım Anahtar Kelimeleri & Puanları ({enrichedKeywords.length})
                     </span>
                   </div>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {enrichedKeywords.map((kw: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">
-                          {kw.keyword}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {kw.total_listings > 0 && (
-                            <span className="text-[10px] text-slate-400">
-                              {kw.total_listings.toLocaleString('en-US')} İlan
-                            </span>
-                          )}
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
-                            kw.opportunity_score >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
-                            kw.opportunity_score >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
-                            'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                          }`}>
-                            {kw.opportunity_score}/100
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                    {enrichedKeywords.map((kw: any, i: number) => {
+                      const isSelected = selectedTags.includes(kw.keyword);
+                      return (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">
+                            {kw.keyword}
                           </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {kw.total_listings > 0 && (
+                              <span className="text-[10px] text-slate-500">
+                                {kw.total_listings.toLocaleString('tr-TR')} İlan
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                              kw.opportunity_score >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
+                              kw.opportunity_score >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
+                              'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}>
+                              {kw.opportunity_score}/100
+                            </span>
+                            <button
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedTags(prev => prev.filter(t => t !== kw.keyword));
+                                } else if (selectedTags.length < 13) {
+                                  setSelectedTags(prev => [...prev, kw.keyword]);
+                                }
+                              }}
+                              disabled={!isSelected && selectedTags.length >= 13}
+                              className={`p-1 rounded-md text-xs font-bold transition-all ${
+                                isSelected 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : selectedTags.length >= 13 
+                                  ? 'opacity-40 bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                  : 'bg-slate-200 hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-950 text-slate-700 dark:text-slate-300 hover:text-emerald-600'
+                              }`}
+                              title={isSelected ? 'Kaldır' : '13 Etikete Ekle'}
+                            >
+                              {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* 2. Co-Occurring Competitor Tags */}
+              {/* 2. Co-Occurring Competitor Tags with Opportunity Score & Total Listings */}
               {coOccurringTags && coOccurringTags.length > 0 && (
-                <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800 pb-2">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                       Birlikte Kullanılan Popüler Rakip Etiketler ({coOccurringTags.length})
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 max-h-60 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                     {coOccurringTags.map((item: any, i: number) => {
                       const tagStr = typeof item === 'string' ? item : (item?.keyword || '');
-                      const tagScore = typeof item === 'object' ? item.opportunity_score : null;
+                      const tagScore = typeof item === 'object' ? item.opportunity_score : (enrichedKeywords?.find(k => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.opportunity_score || null);
+                      const tagListings = typeof item === 'object' ? item.total_listings : (enrichedKeywords?.find(k => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.total_listings || null);
                       const isAlreadySelected = selectedTags.includes(tagStr);
+                      const isEligible = tagStr.length <= 20;
+
                       return (
-                        <button
+                        <div
                           key={i}
-                          onClick={() => {
-                            if (isAlreadySelected) {
-                              setSelectedTags((prev: string[]) => prev.filter((t: string) => t !== tagStr));
-                            } else if (selectedTags.length < 13) {
-                              setSelectedTags((prev: string[]) => [...prev, tagStr]);
-                            }
-                          }}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                          className={`flex items-center justify-between p-2 rounded-lg text-xs font-medium border transition-all ${
                             isAlreadySelected
-                              ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
-                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500/50 shadow-xs'
+                              : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
                           }`}
-                          title={isAlreadySelected ? 'Etiketi Kaldır' : selectedTags.length >= 13 ? 'Maksimum 13 etiket seçilebilir' : '13 Etikete Ekle'}
                         >
-                          <span>{tagStr}</span>
-                          <span className="text-[9px] opacity-75 font-mono">({tagStr.length}/20)</span>
-                          {tagScore && tagScore > 0 && (
-                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded font-mono ${
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate" title={tagStr}>
+                                {tagStr}
+                              </span>
+                              <span className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold ${
+                                isEligible ? 'text-slate-500 dark:text-slate-400' : 'text-rose-600 bg-rose-100 dark:bg-rose-950'
+                              }`}>
+                                {tagStr.length}/20
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                              {tagListings !== null && tagListings !== undefined && Number(tagListings) > 0 && (
+                                <span>
+                                  {Number(tagListings).toLocaleString('tr-TR')} İlan
+                                </span>
+                              )}
+                              {tagScore && tagScore > 0 && (
+                                <span className={`font-bold px-1 rounded font-mono ${
+                                  tagScore >= 85 
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300' 
+                                    : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                                }`}>
+                                  {tagScore}p
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (isAlreadySelected) {
+                                setSelectedTags((prev: string[]) => prev.filter((t: string) => t !== tagStr));
+                              } else if (selectedTags.length < 13) {
+                                setSelectedTags((prev: string[]) => [...prev, tagStr]);
+                              }
+                            }}
+                            disabled={!isAlreadySelected && selectedTags.length >= 13}
+                            className={`shrink-0 p-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
                               isAlreadySelected
-                                ? 'bg-emerald-600 text-white'
-                                : tagScore >= 85 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                            }`}>
-                              {tagScore}p
-                            </span>
-                          )}
-                          {isAlreadySelected ? (
-                            <Check className="w-3 h-3 text-white ml-0.5" />
-                          ) : (
-                            <Plus className="w-3 h-3 text-emerald-500 ml-0.5" />
-                          )}
-                        </button>
+                                ? 'bg-emerald-500 text-white shadow-xs'
+                                : selectedTags.length >= 13
+                                ? 'opacity-40 bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-100 hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-950 text-slate-700 dark:text-slate-300 hover:text-emerald-600'
+                            }`}
+                            title={isAlreadySelected ? 'Etiketi Kaldır' : selectedTags.length >= 13 ? 'Maksimum 13 etiket seçilebilir' : '13 Etikete Ekle'}
+                          >
+                            {isAlreadySelected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -635,26 +729,10 @@ export const AIListingStudio = () => {
               Etsy Mağaza & Kategori Parametreleri
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Etsy API v3 uyumlu kargo profili, kategori nitelikleri, iade ve mağaza bölümlerinizi yapılandırın.
+              Etsy API v3 uyumlu kargo profili, üretim nitelikleri, iade ve mağaza bölümlerinizi yapılandırın.
             </p>
           </div>
         </div>
-
-        {/* AI Detected Attributes Box (Only if taxonomy or analysis is present) */}
-        {taxonomyId && (
-          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50">
-            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-purple-500" />
-              AI Tarafından Tespit Edilen Kategori & Üretim Nitelikleri
-            </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-600 dark:text-slate-400">
-              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kategori ID:</span> {taxonomyId}</div>
-              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kim Yaptı:</span> {whoMade === 'someone_else' ? 'Üretim Ortağı' : whoMade}</div>
-              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Üretim Zamanı:</span> {whenMade}</div>
-              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Materyal:</span> {materials?.length > 0 ? materials.join(', ') : 'Pamuk'}</div>
-            </div>
-          </div>
-        )}
 
         {/* Core Dropdowns Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -777,78 +855,55 @@ export const AIListingStudio = () => {
             </div>
           </div>
 
-          {/* Dynamic Taxonomy Properties (Only render if available) */}
-          {availableTaxonomyProperties && availableTaxonomyProperties.length > 0 && availableTaxonomyProperties.map((prop: any) => (
-            <div key={prop.property_id}>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-purple-500" />
-                {prop.name}
-              </label>
-              {prop.is_multivalued ? (
-                <MultiSelectDropdown 
-                  propItem={prop} 
-                  selectedValues={selectedTaxonomyProperties[prop.property_id] || []}
-                  onChange={(vals) => {
-                    setSelectedTaxonomyProperties((prev: any) => ({
-                      ...prev,
-                      [prop.property_id]: vals
-                    }));
-                  }}
-                />
-              ) : (
-                <select 
-                  value={selectedTaxonomyProperties[prop.property_id]?.[0]?.toString() || ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedTaxonomyProperties((prev: any) => ({
-                      ...prev,
-                      [prop.property_id]: val ? [parseInt(val, 10)] : []
-                    }));
-                  }}
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Seçim Yapılmadı (Boş)</option>
-                  {prop.possible_values?.map((v: any) => (
-                    <option key={v.value_id} value={v.value_id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          ))}
+          {/* Dynamic Taxonomy Properties & Integrated Production Metadata (Only when AI analyzed / available) */}
+          {hasAiAnalyzed && (
+            <>
+              {/* Dynamic Taxonomy Properties */}
+              {availableTaxonomyProperties && availableTaxonomyProperties.length > 0 && availableTaxonomyProperties.map((prop: any) => (
+                <div key={prop.property_id}>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    {prop.name}
+                  </label>
+                  {prop.is_multivalued ? (
+                    <MultiSelectDropdown 
+                      propItem={prop} 
+                      selectedValues={selectedTaxonomyProperties[prop.property_id] || []}
+                      onChange={(vals) => {
+                        setSelectedTaxonomyProperties((prev: any) => ({
+                          ...prev,
+                          [prop.property_id]: vals
+                        }));
+                      }}
+                    />
+                  ) : (
+                    <select 
+                      value={selectedTaxonomyProperties[prop.property_id]?.[0]?.toString() || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedTaxonomyProperties((prev: any) => ({
+                          ...prev,
+                          [prop.property_id]: val ? [parseInt(val, 10)] : []
+                        }));
+                      }}
+                      className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value="">Seçim Yapılmadı (Boş)</option>
+                      {prop.possible_values?.map((v: any) => (
+                        <option key={v.value_id} value={v.value_id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ))}
 
-          {/* Auto-renew switch */}
-          <div className="md:col-span-2">
-            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={shouldAutoRenew}
-                onChange={(e) => setShouldAutoRenew(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              Otomatik Yenileme (Automatic Renewal) - Kapatmanız önerilir
-            </label>
-          </div>
-        </div>
-
-        {/* ADVANCED SETTINGS ACCORDION (Cleaned without duplicate default template selector) */}
-        <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center justify-between w-full text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 py-1"
-          >
-            <span className="flex items-center gap-2"><Settings className="w-4 h-4" /> Gelişmiş Etsy Ayarları (Who Made, When Made, SKU, vb.)</span>
-            <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-          </button>
-          
-          {showAdvanced && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-slate-50/70 dark:bg-slate-950/70 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+              {/* INTEGRATED PRODUCTION METADATA */}
               {/* WHO MADE */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Who Made?</label>
-                <select value={whoMade} onChange={(e) => setWhoMade(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                <select value={whoMade} onChange={(e) => setWhoMade(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold">
                   <option value="i_did">I did (Ben yaptım)</option>
                   <option value="someone_else">Someone else (Başkası/Üretim Ortağı)</option>
                   <option value="collective">A collective (Kolektif)</option>
@@ -858,7 +913,7 @@ export const AIListingStudio = () => {
               {/* WHEN MADE */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">When Made?</label>
-                <select value={whenMade} onChange={(e) => setWhenMade(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                <select value={whenMade} onChange={(e) => setWhenMade(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold">
                   <option value="made_to_order">Made to order (Siparişe göre)</option>
                   <option value="2020_2026">2020-2026</option>
                   <option value="2010_2019">2010-2019</option>
@@ -868,7 +923,7 @@ export const AIListingStudio = () => {
               {/* IS SUPPLY */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Is Supply? (Tedarik Malzemesi mi?)</label>
-                <select value={isSupply ? "true" : "false"} onChange={(e) => setIsSupply(e.target.value === "true")} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                <select value={isSupply ? "true" : "false"} onChange={(e) => setIsSupply(e.target.value === "true")} className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold">
                   <option value="false">Hayır, Bitmiş Ürün</option>
                   <option value="true">Evet, Tedarik Malzemesi</option>
                 </select>
@@ -877,7 +932,7 @@ export const AIListingStudio = () => {
               {/* IS CUSTOMIZABLE */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Kişiselleştirilebilir mi?</label>
-                <select value={isCustomizable ? "true" : "false"} onChange={(e) => setIsCustomizable(e.target.value === "true")} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs">
+                <select value={isCustomizable ? "true" : "false"} onChange={(e) => setIsCustomizable(e.target.value === "true")} className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold">
                   <option value="false">Hayır</option>
                   <option value="true">Evet</option>
                 </select>
@@ -891,35 +946,71 @@ export const AIListingStudio = () => {
                   placeholder="Boş bırakılabilir"
                   value={productionPartnerId}
                   onChange={(e) => setProductionPartnerId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold"
                 />
               </div>
 
-              {/* SKU */}
+              {/* DYNAMIC SMART SKU */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">İlan Ana SKU Kodu</label>
-                <input 
-                  type="text" 
-                  placeholder="Örn: TSHIRT-001"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
-                />
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5 text-emerald-500" />
+                    İlan Ana SKU Kodu:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRegenerateSku}
+                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold flex items-center gap-1"
+                    title="Kategori ve Sıraya Göre Yeniden Oluştur"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" /> Yeniden Üret
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Örn: TSHIRT_001"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono font-bold tracking-wider text-emerald-700 dark:text-emerald-400"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Kategori adı ve yayınlanmış ilan sırasına göre otomatik oluşturulur (Örn: TSHIRT_001).
+                </p>
               </div>
-            </div>
+            </>
           )}
+
+          {/* Auto-renew switch */}
+          <div className="md:col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={shouldAutoRenew}
+                onChange={(e) => setShouldAutoRenew(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Otomatik Yenileme (Automatic Renewal) - Kapatmanız önerilir
+            </label>
+          </div>
         </div>
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 4. ADIM: ETİKET SAĞLIK MATRİSİ & ÇEŞİTLİLİK DENETİMİ (MOVED) */}
+      {/* 4. ADIM: ETİKET SAĞLIK MATRİSİ & ÇEŞİTLİLİK DENETİMİ */}
       {/* ------------------------------------------------------------- */}
-      <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">4</span>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Etiket Sağlık Matrisi & Çeşitlilik Denetimi
-          </h3>
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">4</span>
+              13 Etiket Sağlık & Çeşitlilik Matrisi
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Seçilen 13 etiketin karakter limitleri, benzersizlik, arama hacmi ve mevsimsellik denetimi.
+            </p>
+          </div>
         </div>
 
         {/* Real-time Tag Health Matrix & Intent Distribution Score */}
@@ -932,12 +1023,17 @@ export const AIListingStudio = () => {
       {/* ------------------------------------------------------------- */}
       {/* 5. ADIM: CANLI SERP ÖNİZLEME & ETSY'YE AKTARMA İSTASYONU */}
       {/* ------------------------------------------------------------- */}
-      <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">5</span>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Canlı SERP Önizleme & Etsy'ye Aktarma İstasyonu
-          </h3>
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">5</span>
+              Etsy SERP Arama Önizlemesi & Taslak Yayınlama
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              İlanınızın Etsy masaüstü ve mobil arama sonuçlarında nasıl görüneceğini test edin ve tek tıkla mağazanıza taslak olarak gönderin.
+            </p>
+          </div>
         </div>
 
         {/* Live Etsy SERP Search Preview Card (Mobile/Desktop) */}
@@ -948,7 +1044,7 @@ export const AIListingStudio = () => {
         />
 
         {/* Publishing Actions Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
           {!etsyConnected ? (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div className="space-y-1">

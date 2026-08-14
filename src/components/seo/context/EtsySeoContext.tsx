@@ -352,22 +352,26 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const handleMockupDragStart = (e: React.DragEvent, id: string) => {
     setDraggedMockupId(id);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
   };
 
   const handleMockupDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleMockupDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    if (!draggedMockupId || draggedMockupId === targetId) {
+    e.stopPropagation();
+    const sourceId = draggedMockupId || e.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) {
       setDraggedMockupId(null);
       return;
     }
 
     const currentMockups = [...dbGeneratedMockups];
-    const draggedItem = currentMockups.find(m => m.id === draggedMockupId);
+    const draggedItem = currentMockups.find(m => m.id === sourceId);
     const targetItem = currentMockups.find(m => m.id === targetId);
 
     if (!draggedItem || !targetItem) {
@@ -378,7 +382,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     const folderId = draggedItem.folderId;
     if (folderId && folderId === targetItem.folderId) {
       const folderItems = currentMockups.filter(m => m.folderId === folderId);
-      const fDraggedIdx = folderItems.findIndex(m => m.id === draggedMockupId);
+      const fDraggedIdx = folderItems.findIndex(m => m.id === sourceId);
       const fTargetIdx = folderItems.findIndex(m => m.id === targetId);
 
       if (fDraggedIdx !== -1 && fTargetIdx !== -1) {
@@ -404,7 +408,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         }
       }
     } else {
-      const draggedIdx = currentMockups.findIndex(m => m.id === draggedMockupId);
+      const draggedIdx = currentMockups.findIndex(m => m.id === sourceId);
       const targetIdx = currentMockups.findIndex(m => m.id === targetId);
       if (draggedIdx !== -1 && targetIdx !== -1) {
         const [dragged] = currentMockups.splice(draggedIdx, 1);
@@ -421,6 +425,78 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       }
     }
     setDraggedMockupId(null);
+  };
+
+  // Helper for 1-click step-wise reordering (left/right)
+  const handleMoveMockupStep = async (mockupId: string, direction: 'left' | 'right') => {
+    const currentMockups = [...dbGeneratedMockups];
+    const item = currentMockups.find(m => m.id === mockupId);
+    if (!item) return;
+
+    const folderId = item.folderId;
+    const folderItems = currentMockups.filter(m => m.folderId === folderId);
+    const idx = folderItems.findIndex(m => m.id === mockupId);
+    if (idx === -1) return;
+
+    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= folderItems.length) return;
+
+    const [moved] = folderItems.splice(idx, 1);
+    folderItems.splice(targetIdx, 0, moved);
+
+    let fIdx = 0;
+    const newMockups = currentMockups.map(m => {
+      if (m.folderId === folderId) {
+        return folderItems[fIdx++];
+      }
+      return m;
+    });
+
+    setDbGeneratedMockups(newMockups);
+    try {
+      const data = await loadAppData();
+      data.etsyGeneratedMockups = newMockups;
+      await saveAppData(data);
+      toast.success('Görsel sıralaması güncellendi.');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Smart SKU Generator: {CATEGORY_SLUG}_{3_DIGIT_LISTING_INDEX}
+  const generateSmartSku = useCallback((catId: number, currentListingsCount: number, customPrefix?: string) => {
+    let prefix = 'TSHIRT';
+    if (customPrefix && customPrefix.trim()) {
+      const lower = customPrefix.toLowerCase();
+      if (lower.includes('sweatshirt')) prefix = 'SWEATSHIRT';
+      else if (lower.includes('hoodie')) prefix = 'HOODIE';
+      else if (lower.includes('tank')) prefix = 'TANKTOP';
+      else if (lower.includes('long sleeve') || lower.includes('longsleeve')) prefix = 'LONGSLEEVE';
+      else if (lower.includes('mug') || lower.includes('kupa')) prefix = 'MUG';
+      else if (lower.includes('tote') || lower.includes('çanta')) prefix = 'TOTEBAG';
+      else if (lower.includes('shirt') || lower.includes('t-shirt') || lower.includes('tshirt')) prefix = 'TSHIRT';
+      else {
+        const clean = customPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (clean.length > 0) prefix = clean.slice(0, 10);
+      }
+    } else {
+      if (catId === 1081) prefix = 'TSHIRT';
+      else if (catId === 1082) prefix = 'SWEATSHIRT';
+      else if (catId === 1083) prefix = 'HOODIE';
+      else if (catId === 1084) prefix = 'TANKTOP';
+      else if (catId === 1085) prefix = 'LONGSLEEVE';
+      else if (catId === 69151443) prefix = 'MUG';
+      else if (catId === 69151447) prefix = 'TOTEBAG';
+    }
+    const nextNum = Math.max(1, (currentListingsCount || 0) + 1);
+    const formattedNum = String(nextNum).padStart(3, '0');
+    return `${prefix}_${formattedNum}`;
+  }, []);
+
+  const handleRegenerateSku = () => {
+    const newSku = generateSmartSku(taxonomyId, etsyListings?.length || 0, productType || niche);
+    setSku(newSku);
+    toast.info(`Yeni İlan SKU Kodu oluşturuldu: ${newSku}`);
   };
 
   // Save Product Types & User Notes to Database and IndexedDB
@@ -697,6 +773,15 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
             }
           })
           .catch(() => {});
+        // Fetch listings in background for total count
+        fetch('/api/etsy/listings')
+          .then(l => l.json())
+          .then(lData => {
+            if (lData.success && lData.listings) {
+              setEtsyListings(lData.listings);
+            }
+          })
+          .catch(() => {});
       } else {
         setEtsyConnected(false);
       }
@@ -889,6 +974,10 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         if (data.listing.materials && Array.isArray(data.listing.materials)) setMaterials(data.listing.materials);
         if (data.listing.styles && Array.isArray(data.listing.styles)) setStyles(data.listing.styles);
         if (data.listing.shop_section_id) setSelectedShopSectionId(data.listing.shop_section_id.toString());
+        
+        // Auto-generate dynamic category-based SKU: {CATEGORY}_{COUNT}
+        const autoSku = generateSmartSku(data.listing.taxonomy_id || taxonomyId, etsyListings?.length || 0, productType || niche);
+        setSku(autoSku);
         
         if (data.listing.taxonomy_properties_values) {
           const formattedProps: Record<number, number[]> = {};
@@ -1346,6 +1435,9 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     foldersWithMockups,
     handleSelectFolder, handleRenameFolder, handleDeleteMockup, handleDeleteFolder,
     handleFolderDragStart, handleFolderDragOver, handleFolderDrop,
+    handleMockupDragStart, handleMockupDragOver, handleMockupDrop, handleMoveMockupStep,
+    draggedMockupId, setDraggedMockupId,
+    generateSmartSku, handleRegenerateSku,
     handleSaveEtsySettings,
     statusFilter, setStatusFilter,
     colorFilter, setColorFilter,
