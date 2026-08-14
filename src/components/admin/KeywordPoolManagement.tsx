@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Trash2, Search, Download, CheckSquare, Square, ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Tag, Trophy } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  RefreshCw, Trash2, Search, Download, CheckSquare, Square, 
+  ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Tag, 
+  Trophy, Sparkles, ShieldAlert, Globe, Info, Zap, DollarSign
+} from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
 interface Keyword {
@@ -22,10 +26,16 @@ interface Keyword {
   last_evaluated_at: string | null;
 }
 
+interface EtsyStatus {
+  connected: boolean;
+  shopId?: string | null;
+}
+
 export default function KeywordPoolManagement() {
   const toast = useToast();
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [total, setTotal] = useState(0);
+  const [etsyStatus, setEtsyStatus] = useState<EtsyStatus>({ connected: false, shopId: null });
   const [isLoading, setIsLoading] = useState(true);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [search, setSearch] = useState('');
@@ -36,12 +46,27 @@ export default function KeywordPoolManagement() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Bulk Progress State
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, updated: 0, blocked: 0 });
+  const cancelBulkRef = useRef(false);
+
+  // Expanded details modal/popover
+  const [activeDetailsKeyword, setActiveDetailsKeyword] = useState<Keyword | null>(null);
+
+  // Test Modal
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testKeyword, setTestKeyword] = useState('vintage shirt');
+  const [testResult, setTestResult] = useState<any>(null);
+  const [isTestingScraper, setIsTestingScraper] = useState(false);
+  const [testMode, setTestMode] = useState<'server' | 'browser'>('server');
+
   const limit = 50;
 
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch(search);
-    }, 500);
+    }, 400);
     return () => clearTimeout(handler);
   }, [search]);
 
@@ -65,8 +90,11 @@ export default function KeywordPoolManagement() {
       const res = await fetch(`/api/admin/keywords?${query}`);
       const data = await res.json();
       if (data.success) {
-        setKeywords(data.keywords);
-        setTotal(data.total);
+        setKeywords(data.keywords || []);
+        setTotal(data.total || 0);
+        if (data.etsyStatus) {
+          setEtsyStatus(data.etsyStatus);
+        }
       }
     } catch (e) {
       toast.error('Kelimeler yüklenirken hata oluştu.');
@@ -116,8 +144,9 @@ export default function KeywordPoolManagement() {
     }
   };
 
+  // Evaluate selected or 20 single batch
   const handleEvaluateBatch = async () => {
-    if (isEvaluating) return;
+    if (isEvaluating || isBulkRunning) return;
     setIsEvaluating(true);
     try {
       const payload = selectedIds.size > 0 
@@ -133,23 +162,83 @@ export default function KeywordPoolManagement() {
       
       if (data.success) {
         if (data.evaluatedCount > 0) {
-          toast.success(`${data.evaluatedCount} kelime canlı Etsy verisi ile taranıp puanlandı!`);
+          toast.success(`${data.evaluatedCount} kelime %100 gerçek Etsy verisi ile güncellendi!`);
           if (data.warning) {
             toast.error(data.warning);
           }
           setSelectedIds(new Set());
           fetchKeywords();
         } else {
-          toast.info('Değerlendirilecek eskimiş kelime bulunamadı.');
+          toast.info('Değerlendirilecek kelime bulunamadı.');
         }
       } else {
         toast.error(data.error || 'Değerlendirme başarısız.');
       }
     } catch (e) {
-      toast.error('Canlı Etsy verisi çekilirken hata oluştu.');
+      toast.error('Etsy verisi çekilirken hata oluştu.');
     } finally {
       setIsEvaluating(false);
     }
+  };
+
+  // Full Pool Bulk Runner (loops batches of 25 until complete)
+  const handleRunFullPoolEvaluation = async () => {
+    if (isBulkRunning || isEvaluating) return;
+    if (!confirm(`Kelime havuzundaki tüm kelimeler (%100 Gerçek Etsy API) taranıp güncellenecek. Başlatmak istiyor musunuz?`)) return;
+
+    setIsBulkRunning(true);
+    cancelBulkRef.current = false;
+    let processedTotal = 0;
+    let totalBlocked = 0;
+    const batchSize = 25;
+
+    setBulkProgress({ current: 0, total, updated: 0, blocked: 0 });
+
+    try {
+      while (!cancelBulkRef.current) {
+        const res = await fetch('/api/admin/keywords/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: batchSize })
+        });
+        const data = await res.json();
+
+        if (!data.success || data.evaluatedCount === 0) {
+          break;
+        }
+
+        processedTotal += data.evaluatedCount;
+        if (data.botBlockedCount) totalBlocked += data.botBlockedCount;
+
+        setBulkProgress({
+          current: processedTotal,
+          total: Math.max(total, processedTotal),
+          updated: processedTotal - totalBlocked,
+          blocked: totalBlocked
+        });
+
+        // If returned fewer than batchSize, we've reached the end
+        if (data.evaluatedCount < batchSize) {
+          break;
+        }
+
+        // Throttle 400ms between batches
+        await new Promise(r => setTimeout(r, 400));
+      }
+
+      toast.success(`Toplu tarama tamamlandı: ${processedTotal} kelime işlendi!`);
+      fetchKeywords();
+    } catch (e: any) {
+      toast.error('Toplu tarama sırasında bir hata oluştu: ' + e.message);
+    } finally {
+      setIsBulkRunning(false);
+    }
+  };
+
+  const handleCancelBulk = () => {
+    cancelBulkRef.current = true;
+    setIsBulkRunning(false);
+    toast.info('Toplu tarama durduruldu.');
   };
 
   const handleExportCSV = async () => {
@@ -163,7 +252,7 @@ export default function KeywordPoolManagement() {
       
       const allKeywords = data.keywords;
       
-      const headers = ['Keyword', 'Length', 'Tag Eligible (<=20)', 'Usage Count', 'Opportunity Score', 'Total Listings', 'Competition Level', 'Bestseller Count', 'Etsy Suggested', 'Avg Price', 'Bot Error', 'Last Evaluated'];
+      const headers = ['Keyword', 'Length', 'Tag Eligible (<=20)', 'Usage Count', 'Opportunity Score', 'Total Listings', 'Competition Level', 'Bestseller Count', 'Etsy Suggested', 'Avg Price', 'Scrape Source', 'Bot Error', 'Last Evaluated'];
       const rows = allKeywords.map((k: Keyword) => [
         `"${k.keyword.replace(/"/g, '""')}"`,
         k.keyword.length,
@@ -175,6 +264,7 @@ export default function KeywordPoolManagement() {
         k.bestseller_count || 0,
         k.is_etsy_suggested ? 'EVET' : 'HAYIR',
         k.avg_price || 0,
+        `"${k.raw_metrics?.method || 'N/A'}"`,
         `"${(k.last_scrape_error || '').replace(/"/g, '""')}"`,
         k.last_evaluated_at ? new Date(k.last_evaluated_at).toISOString() : ''
       ]);
@@ -184,7 +274,7 @@ export default function KeywordPoolManagement() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `etsy_keyword_pool_${new Date().toISOString().slice(0,10)}.csv`;
+      link.download = `etsy_real_keyword_pool_${new Date().toISOString().slice(0,10)}.csv`;
       link.click();
       URL.revokeObjectURL(url);
       
@@ -196,34 +286,59 @@ export default function KeywordPoolManagement() {
 
   const renderSourceBadge = (kw: Keyword) => {
     if (kw.last_scrape_error) {
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">⚠️ Engellendi</span>;
+      return (
+        <span 
+          title={kw.last_scrape_error}
+          className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shrink-0"
+        >
+          <ShieldAlert className="w-3 h-3" />
+          Engellendi
+        </span>
+      );
     }
     const method = kw.raw_metrics?.method || kw.raw_metrics?.methodUsed;
-    const viaWorker = kw.raw_metrics?.viaWorker;
-    const autoSource = kw.raw_metrics?.autocomplete?.source;
 
-    if (method === 'direct_etsy' || autoSource === 'etsy_native_api') {
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">🌐 Etsy Canlı</span>;
+    if (method === 'etsy_official_api') {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shrink-0">
+          <CheckCircle2 className="w-3 h-3" />
+          Etsy Resmi API
+        </span>
+      );
     }
-    if (viaWorker || method === 'cloudflare_worker') {
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">⚡ Proxy Worker</span>;
+    if (method === 'scraper_api') {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 flex items-center gap-1 shrink-0">
+          <Zap className="w-3 h-3" />
+          Scraper API
+        </span>
+      );
     }
-    if (method === 'scraper_api' || method === 'google_serper_api') {
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">🔑 Scraper API</span>;
+    if (method === 'cloudflare_worker' || method === 'direct_etsy') {
+      return (
+        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 flex items-center gap-1 shrink-0">
+          <Globe className="w-3 h-3" />
+          Canlı Kazıma
+        </span>
+      );
     }
-    if (method === 'bing_etsy_index' || method === 'ddg_etsy_index') {
-      return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">🔍 SERP Index</span>;
-    }
-    return <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">Tamamlandı</span>;
+    return (
+      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+        Hazır
+      </span>
+    );
   };
 
-  const getScoreBadge = (score: number | null) => {
-    if (score === null || score === 0) {
-      return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">Henüz Yok</span>;
+  const getScoreBadge = (score: number | null, isError: boolean) => {
+    if (isError) {
+      return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">0 (Hata)</span>;
     }
-    if (score >= 80) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">🔥 {score}</span>;
-    if (score >= 50) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">{score}</span>;
-    return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-300">{score}</span>;
+    if (score === null || score === 0) {
+      return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">Puan Yok</span>;
+    }
+    if (score >= 80) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300">🔥 {score}</span>;
+    if (score >= 50) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300">{score}</span>;
+    return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300">{score}</span>;
   };
 
   const handleSort = (col: string) => {
@@ -235,71 +350,6 @@ export default function KeywordPoolManagement() {
     }
   };
 
-  const [isBrowserScraping, setIsBrowserScraping] = useState(false);
-  const [scrapeProgress, setScrapeProgress] = useState({ current: 0, total: 0 });
-  const [testKeyword, setTestKeyword] = useState('vintage shirt');
-  const [testResult, setTestResult] = useState<any>(null);
-  const [isTestingScraper, setIsTestingScraper] = useState(false);
-  const [showTestModal, setShowTestModal] = useState(false);
-
-  const handleBrowserScrape = async () => {
-    if (isBrowserScraping) return;
-    const targetList = selectedIds.size > 0 
-      ? keywords.filter(k => selectedIds.has(k.id)) 
-      : keywords.slice(0, 20);
-
-    if (targetList.length === 0) {
-      toast.info('Kazınacak kelime bulunamadı.');
-      return;
-    }
-
-    setIsBrowserScraping(true);
-    setScrapeProgress({ current: 0, total: targetList.length });
-    const scrapedResults = [];
-
-    try {
-      const { scrapeEtsyFromBrowser } = await import('@/lib/client-etsy-scraper');
-
-      for (let i = 0; i < targetList.length; i++) {
-        const item = targetList[i];
-        setScrapeProgress({ current: i + 1, total: targetList.length });
-        try {
-          let res = await scrapeEtsyFromBrowser(item.id, item.keyword);
-          // Auto-retry once if initial browser fetch got rate limited
-          if (res.scrapeError) {
-            await new Promise(resolve => setTimeout(resolve, 1200));
-            res = await scrapeEtsyFromBrowser(item.id, item.keyword);
-          }
-          scrapedResults.push(res);
-          // Human-like jitter delay (600ms - 1000ms) to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
-        } catch (e) {
-          console.warn(`Browser scrape error for ${item.keyword}:`, e);
-        }
-      }
-
-      if (scrapedResults.length > 0) {
-        const res = await fetch('/api/admin/keywords/bulk-update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ results: scrapedResults })
-        });
-        const data = await res.json();
-        if (data.success) {
-          toast.success(`Tarayıcınız üzerinden ${data.updatedCount} kelime canlı verilerle güncellendi!`);
-          setSelectedIds(new Set());
-          fetchKeywords();
-        }
-      }
-    } catch (e) {
-      toast.error('İstemci kazıma işlemi sırasında hata oluştu.');
-    } finally {
-      setIsBrowserScraping(false);
-    }
-  };
-
-  const [testMode, setTestMode] = useState<'browser' | 'server'>('browser');
-
   const handleTestScraper = async () => {
     if (!testKeyword) return;
     setIsTestingScraper(true);
@@ -307,10 +357,9 @@ export default function KeywordPoolManagement() {
     try {
       if (testMode === 'browser') {
         const { scrapeEtsyFromBrowser } = await import('@/lib/client-etsy-scraper');
-        const res = await scrapeEtsyFromBrowser('test-browser-id', testKeyword);
+        const res = await scrapeEtsyFromBrowser('test-id', testKeyword);
         setTestResult({
           success: !res.scrapeError,
-          mode: 'İstemci Tarayıcı Kazıması (Client-Side Chrome)',
           result: res,
           diagnostics: {
             testedKeyword: testKeyword,
@@ -320,7 +369,7 @@ export default function KeywordPoolManagement() {
         if (!res.scrapeError) {
           toast.success(`Tarayıcı modunda "${testKeyword}" testi tamamlandı!`);
         } else {
-          toast.error(res.scrapeError || 'Tarayıcı testinde hata alındı.');
+          toast.error(res.scrapeError || 'Tarayıcı testinde hata/engelleme.');
         }
       } else {
         const res = await fetch('/api/admin/keywords/test-scraper', {
@@ -331,9 +380,9 @@ export default function KeywordPoolManagement() {
         const data = await res.json();
         setTestResult(data);
         if (data.success) {
-          toast.success(`Sunucu modunda "${testKeyword}" testi tamamlandı!`);
+          toast.success(`Etsy Resmi API ile "${testKeyword}" başarıyla test edildi!`);
         } else {
-          toast.error(data.result?.scrapeError || 'Sunucu testinde engellendi/hata alındı.');
+          toast.error(data.result?.scrapeError || 'Sunucu testinde hata alındı.');
         }
       }
     } catch (e: any) {
@@ -345,47 +394,61 @@ export default function KeywordPoolManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Header & Status Card */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-            Kelime Havuzu & Gerçek Zamanlı Etsy Analizi
-          </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Tasarım analizlerinden çekilen kelimelerin canlı Etsy verileriyle (İlan Sayısı, Autocomplete, Bestseller) puanlaması.
-          </p>
-          <div className="mt-2 text-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 p-2.5 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center justify-between gap-2 flex-wrap">
-            <span>💡 <strong>Ücretsiz Hibrit Kazıma:</strong> Admin paneli üzerinden kendi Chrome tarayıcınızla sınırsız veri kazıyabilir veya Cloudflare Worker Proxy kullanabilirsiniz.</span>
-            <button 
-              onClick={() => setShowTestModal(true)}
-              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[11px] flex items-center gap-1 transition-colors"
-            >
-              🧪 Kazıyıcıyı Test Et
-            </button>
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              Kelime Havuzu & Gerçek Etsy Metrikleri
+            </h3>
+            {etsyStatus.connected ? (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                🟢 Etsy Resmi API Aktif (Mağaza ID: {etsyStatus.shopId || 'Bağlı'})
+              </span>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 flex items-center gap-1.5 shadow-sm">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Etsy API Bağlantısı Yok
+              </span>
+            )}
           </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Tasarım etiketlerinin ve anahtar kelimelerin %100 gerçek Etsy ilan sayısı, fiyatı, autocomplete sırası ve rekabet analizi.
+          </p>
         </div>
         
+        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           <button 
-            onClick={handleBrowserScrape}
-            disabled={isBrowserScraping || isEvaluating}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+            onClick={handleRunFullPoolEvaluation}
+            disabled={isBulkRunning || isEvaluating}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isBrowserScraping ? 'animate-spin' : ''}`} />
-            {isBrowserScraping ? `Tarayıcı Kazıyor (${scrapeProgress.current}/${scrapeProgress.total})` : selectedIds.size > 0 ? `🌐 Tarayıcımdan Kazı (${selectedIds.size})` : '🌐 Tarayıcımdan Kazı (20)'}
+            <RefreshCw className={`w-4 h-4 ${isBulkRunning ? 'animate-spin' : ''}`} />
+            {isBulkRunning ? 'Tüm Havuz Taranıyor...' : '⚡ Tüm Havuzu Güncelle (Gerçek Etsy API)'}
           </button>
 
           <button 
             onClick={handleEvaluateBatch}
-            disabled={isEvaluating || isBrowserScraping}
-            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-sm"
+            disabled={isEvaluating || isBulkRunning}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isEvaluating ? 'animate-spin' : ''}`} />
-            {selectedIds.size > 0 ? `Sunucudan Kazı (${selectedIds.size})` : 'Sunucudan Kazı (20)'}
+            {selectedIds.size > 0 ? `Seçilenleri Güncelle (${selectedIds.size})` : 'Eskimişleri Tara (20)'}
           </button>
           
           <button 
+            onClick={() => setShowTestModal(true)}
+            className="px-3.5 py-2 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-sm font-semibold rounded-xl border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-1.5"
+          >
+            🧪 Test Et
+          </button>
+
+          <button 
             onClick={handleExportCSV}
-            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
+            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
           >
             <Download className="w-4 h-4" />
             CSV İndir
@@ -394,7 +457,7 @@ export default function KeywordPoolManagement() {
           {selectedIds.size > 0 && (
             <button 
               onClick={handleDelete}
-              className="px-4 py-2 bg-rose-100 text-rose-600 text-sm font-medium rounded-lg hover:bg-rose-200 transition-colors flex items-center gap-2"
+              className="px-3.5 py-2 bg-rose-100 text-rose-700 text-sm font-semibold rounded-xl hover:bg-rose-200 transition-colors flex items-center gap-1.5"
             >
               <Trash2 className="w-4 h-4" />
               Sil ({selectedIds.size})
@@ -403,19 +466,53 @@ export default function KeywordPoolManagement() {
         </div>
       </div>
 
+      {/* Bulk Progress Bar */}
+      {isBulkRunning && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-2">
+          <div className="flex justify-between items-center text-sm font-bold text-emerald-900 dark:text-emerald-200">
+            <span className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
+              Etsy API Toplu Tarama İlerleyişi: {bulkProgress.current} / {bulkProgress.total} kelime
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                %{Math.round((bulkProgress.current / Math.max(1, bulkProgress.total)) * 100)}
+              </span>
+              <button
+                onClick={handleCancelBulk}
+                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold"
+              >
+                Durdur
+              </button>
+            </div>
+          </div>
+          <div className="w-full h-3 bg-emerald-200 dark:bg-emerald-900 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-emerald-600 transition-all duration-300 rounded-full"
+              style={{ width: `${Math.min(100, (bulkProgress.current / Math.max(1, bulkProgress.total)) * 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+            <span>✅ Güncellenen: {bulkProgress.updated}</span>
+            {bulkProgress.blocked > 0 && <span className="text-rose-600 font-bold">⚠️ Engellenen/Hata: {bulkProgress.blocked}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2 items-center bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs">
         <button
           onClick={() => { setFilter('all'); setPage(0); }}
           className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${filter === 'all' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
         >
-          Tüm Kelimeler
+          Tüm Kelimeler ({total})
         </button>
         <button
           onClick={() => { setFilter('tag_eligible'); setPage(0); }}
           className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'tag_eligible' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'}`}
         >
           <Tag className="w-3.5 h-3.5" />
-          Sadece ≤20 Karakter (Etsy Etiketi Uyumlu)
+          Sadece ≤20 Karakter (Etiket Uyumlu)
         </button>
         <button
           onClick={() => { setFilter('gold'); setPage(0); }}
@@ -429,134 +526,153 @@ export default function KeywordPoolManagement() {
           className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'error' ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'}`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          ⚠️ Anti-Bot Engeline Takılanlar
+          ⚠️ Engellenen / Hatalı Olanlar
         </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      {/* Main Data Table Card */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
-          <div className="relative w-72">
+          <div className="relative w-80">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Kelime ara..." 
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-700 dark:text-slate-200"
+              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-700 dark:text-slate-200"
             />
           </div>
           
-          <div className="text-sm text-slate-500">
-            Filtreye uygun <strong>{total}</strong> kelime
+          <div className="text-xs text-slate-500">
+            Filtreye uygun <strong>{total}</strong> kelime listeleniyor
           </div>
         </div>
 
-        {/* Full Data Table (Responsive with overflow-x-auto) */}
+        {/* Data Table */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[800px] text-left text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+          <table className="w-full min-w-[900px] text-left text-xs sm:text-sm text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                <tr>
-                 <th className="px-2 py-3 sm:p-4 w-8 sm:w-12 text-center cursor-pointer" onClick={handleSelectAll}>
+                 <th className="px-3 py-3.5 w-10 text-center cursor-pointer" onClick={handleSelectAll}>
                    {selectedIds.size > 0 && selectedIds.size === keywords.length ? (
                      <CheckSquare className="w-4 h-4 text-emerald-600 mx-auto" />
                    ) : (
                      <Square className="w-4 h-4 mx-auto" />
                    )}
                  </th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('keyword')}>Kelime</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('usage_count')}>Kull.</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('total_listings')}>Etsy İlan Sayısı</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium text-center">Autocomplete</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('bestseller_count')}>Bestsellers</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('opportunity_score')}>Fırsat Skoru</th>
-                 <th className="px-2 py-3 sm:p-4 font-medium cursor-pointer hover:text-slate-700" onClick={() => handleSort('last_evaluated_at')}>Tarama / Durum</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700" onClick={() => handleSort('keyword')}>Kelime &amp; Uzunluk</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('usage_count')}>Kull.</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700" onClick={() => handleSort('total_listings')}>Gerçek Etsy İlanı</th>
+                 <th className="px-3 py-3.5 font-semibold text-center">Autocomplete</th>
+                 <th className="px-3 py-3.5 font-semibold text-center">Ort. Fiyat</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('bestseller_count')}>İlgi / Bestseller</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('opportunity_score')}>Fırsat Skoru</th>
+                 <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700" onClick={() => handleSort('last_evaluated_at')}>Kaynak / Tarih</th>
                </tr>
              </thead>
              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                {isLoading ? (
                  <tr>
-                   <td colSpan={8} className="p-8 text-center text-slate-500">Yükleniyor...</td>
+                   <td colSpan={9} className="p-8 text-center text-slate-500">Yükleniyor...</td>
                  </tr>
                ) : keywords.length === 0 ? (
                  <tr>
-                   <td colSpan={8} className="p-8 text-center text-slate-500">Aranan kriterlere uygun kelime bulunamadı.</td>
+                   <td colSpan={9} className="p-8 text-center text-slate-500">Aranan kriterlere uygun kelime bulunamadı.</td>
                  </tr>
                ) : (
                  keywords.map((kw) => {
                    const charLen = kw.keyword.length;
                    const isTagOk = charLen <= 20;
                    const oppScore = kw.opportunity_score ?? kw.etsy_score;
+                   const isBlocked = !!kw.last_scrape_error || kw.competition_level === 'Engellendi / Hata';
+                   const hasTopTags = kw.raw_metrics?.topTags && kw.raw_metrics.topTags.length > 0;
 
                    return (
-                     <tr key={kw.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                       <td className="px-2 py-3 sm:p-4 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
+                     <tr key={kw.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                       <td className="px-3 py-3.5 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
                          {selectedIds.has(kw.id) ? (
                            <CheckSquare className="w-4 h-4 text-emerald-600 mx-auto" />
                          ) : (
                            <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
                          )}
                        </td>
-                       <td className="px-2 py-3 sm:p-4 font-medium text-slate-800 dark:text-slate-200">
+                       <td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">
                          <div className="flex items-center gap-2">
-                           <span className="font-semibold">{kw.keyword}</span>
-                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isTagOk ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                           <span className="font-bold text-slate-900 dark:text-white">{kw.keyword}</span>
+                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isTagOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
                              {charLen}/20
                            </span>
+                           {hasTopTags && (
+                             <button 
+                               onClick={() => setActiveDetailsKeyword(kw)}
+                               title="Birlikte kullanılan popüler etiketleri gör"
+                               className="text-slate-400 hover:text-indigo-600 transition-colors"
+                             >
+                               <Info className="w-3.5 h-3.5" />
+                             </button>
+                           )}
                          </div>
                        </td>
-                       <td className="px-2 py-3 sm:p-4 text-center font-mono">{kw.usage_count}</td>
-                       <td className="px-2 py-3 sm:p-4">
+                       <td className="px-3 py-3.5 text-center font-mono">{kw.usage_count}</td>
+                       <td className="px-3 py-3.5">
                           {kw.total_listings && kw.total_listings > 0 ? (
                             <div>
-                              <div className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                              <div className="font-bold text-slate-900 dark:text-white font-mono">
                                 {kw.total_listings.toLocaleString()} ilan
                               </div>
-                              <div className="text-[11px] text-slate-500">
+                              <div className="text-[11px] text-slate-500 font-medium">
                                 {kw.competition_level}
                               </div>
                             </div>
-                          ) : kw.last_scrape_error ? (
+                          ) : isBlocked ? (
                             <div>
-                              <span className="text-rose-500 font-semibold text-xs flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3 shrink-0" />
-                                Taranamadı (Bot Engeli)
+                              <span className="text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center gap-1">
+                                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                                Engellendi / Hata
+                              </span>
+                              <span className="text-[10px] text-rose-500 block truncate max-w-[140px]" title={kw.last_scrape_error || ''}>
+                                {kw.last_scrape_error || 'Etsy Bot Koruması'}
                               </span>
                             </div>
                           ) : (
                             <span className="text-slate-400 text-xs">Taranmadı</span>
                           )}
                         </td>
-                       <td className="px-2 py-3 sm:p-4 text-center">
+                       <td className="px-3 py-3.5 text-center">
                          {kw.is_etsy_suggested ? (
-                           <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-xs font-semibold inline-flex items-center gap-1">
-                             <CheckCircle className="w-3 h-3" />
-                             # {kw.autocomplete_rank || 1}
+                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                             <CheckCircle2 className="w-3 h-3" />
+                             #{kw.autocomplete_rank || 1}
                            </span>
                          ) : (
                            <span className="text-slate-400 text-xs">-</span>
                          )}
                        </td>
-                       <td className="px-2 py-3 sm:p-4 text-center font-mono font-bold text-amber-600">
-                         {kw.bestseller_count ? `${kw.bestseller_count} adet` : '-'}
+                       <td className="px-3 py-3.5 text-center font-mono font-medium">
+                         {kw.avg_price && kw.avg_price > 0 ? (
+                           <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                             ${kw.avg_price.toFixed(2)}
+                           </span>
+                         ) : (
+                           <span className="text-slate-400 text-xs">-</span>
+                         )}
                        </td>
-                       <td className="px-2 py-3 sm:p-4 text-center">
-                         {getScoreBadge(oppScore)}
+                       <td className="px-3 py-3.5 text-center font-mono font-bold text-amber-600 dark:text-amber-400">
+                         {kw.bestseller_count && kw.bestseller_count > 0 ? `${kw.bestseller_count} adet` : '-'}
                        </td>
-                       <td className="px-2 py-3 sm:p-4 text-[11px] text-slate-500 whitespace-nowrap">
-                         {kw.last_scrape_error ? (
-                           <div className="flex items-center gap-1.5" title={kw.last_scrape_error}>
-                             {renderSourceBadge(kw)}
-                           </div>
-                         ) : kw.last_evaluated_at ? (
-                           <div className="flex flex-col gap-0.5 items-start">
-                             {renderSourceBadge(kw)}
+                       <td className="px-3 py-3.5 text-center">
+                         {getScoreBadge(oppScore, isBlocked)}
+                       </td>
+                       <td className="px-3 py-3.5 text-[11px] text-slate-500 whitespace-nowrap">
+                         <div className="flex flex-col gap-1 items-start">
+                           {renderSourceBadge(kw)}
+                           {kw.last_evaluated_at && (
                              <span className="text-[10px] text-slate-400 font-mono">
                                {new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR')}
                              </span>
-                           </div>
-                         ) : (
-                           <span className="text-slate-400 text-xs">Hiç</span>
-                         )}
+                           )}
+                         </div>
                        </td>
                      </tr>
                    );
@@ -566,6 +682,7 @@ export default function KeywordPoolManagement() {
            </table>
          </div>
 
+         {/* Pagination */}
          <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
            <div className="text-xs text-slate-500">
              Sayfa {page + 1} / {Math.max(1, Math.ceil(total / limit))}
@@ -574,14 +691,14 @@ export default function KeywordPoolManagement() {
              <button 
                onClick={() => setPage(Math.max(0, page - 1))}
                disabled={page === 0}
-               className="p-1.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 disabled:opacity-50"
+               className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100"
              >
                <ChevronLeft className="w-4 h-4" />
              </button>
              <button 
                onClick={() => setPage(page + 1)}
                disabled={(page + 1) * limit >= total}
-               className="p-1.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 disabled:opacity-50"
+               className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100"
              >
                <ChevronRight className="w-4 h-4" />
              </button>
@@ -589,13 +706,95 @@ export default function KeywordPoolManagement() {
          </div>
        </div>
 
-       {/* Test Diagnostics Modal */}
+       {/* Top Co-Occurring Tags Details Modal */}
+       {activeDetailsKeyword && (
+         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+               <div>
+                 <h4 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                   🏷️ "{activeDetailsKeyword.keyword}" Analiz Detayları
+                 </h4>
+                 <p className="text-xs text-slate-500">Etsy'de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
+               </div>
+               <button 
+                 onClick={() => setActiveDetailsKeyword(null)}
+                 className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+               >
+                 ✕
+               </button>
+             </div>
+
+             <div className="space-y-3">
+               <div>
+                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                   Birlikte Kullanılan En Popüler Etiketler (Etsy Sample):
+                 </label>
+                 <div className="flex flex-wrap gap-1.5">
+                   {(activeDetailsKeyword.raw_metrics?.topTags || []).map((tag: string, idx: number) => (
+                     <span 
+                       key={idx}
+                       className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800"
+                     >
+                       #{tag}
+                     </span>
+                   ))}
+                 </div>
+               </div>
+
+               {activeDetailsKeyword.raw_metrics?.autocomplete?.topSuggestions && (
+                 <div>
+                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                     Etsy Arama Çubuğu Tamamlamaları:
+                   </label>
+                   <div className="flex flex-wrap gap-1.5">
+                     {activeDetailsKeyword.raw_metrics.autocomplete.topSuggestions.map((sug: string, idx: number) => (
+                       <span 
+                         key={idx}
+                         className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg border border-emerald-200 dark:border-emerald-800"
+                       >
+                         {sug}
+                       </span>
+                     ))}
+                   </div>
+                 </div>
+               )}
+
+               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                   <span className="text-slate-400 block text-[10px]">Ort. Fiyat</span>
+                   <span className="font-bold text-slate-800 dark:text-slate-200">${activeDetailsKeyword.avg_price || 0}</span>
+                 </div>
+                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                   <span className="text-slate-400 block text-[10px]">Ort. Favori</span>
+                   <span className="font-bold text-slate-800 dark:text-slate-200">{activeDetailsKeyword.raw_metrics?.avgFavorites || 0}</span>
+                 </div>
+                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                   <span className="text-slate-400 block text-[10px]">Ort. Görüntülenme</span>
+                   <span className="font-bold text-slate-800 dark:text-slate-200">{activeDetailsKeyword.raw_metrics?.avgViews || 0}</span>
+                 </div>
+               </div>
+             </div>
+
+             <div className="flex justify-end pt-2">
+               <button 
+                 onClick={() => setActiveDetailsKeyword(null)}
+                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
+               >
+                 Kapat
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+
+       {/* Diagnostics / Test Modal */}
        {showTestModal && (
          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
              <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
                <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                 🧪 Etsy Kazıyıcı & Proxy Testi
+                 🧪 Etsy Kazıyıcı &amp; Canlı API Testi
                </h3>
                <button 
                  onClick={() => setShowTestModal(false)}
@@ -606,19 +805,18 @@ export default function KeywordPoolManagement() {
              </div>
 
              <div className="space-y-4">
-                {/* Test Mode Selector Tabs */}
                 <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl text-xs font-semibold">
-                  <button
-                    onClick={() => setTestMode('browser')}
-                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'browser' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    🌐 İstemci Tarayıcı Testi (Chrome/Edge)
-                  </button>
                   <button
                     onClick={() => setTestMode('server')}
                     className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'server' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
                   >
-                    ☁️ Sunucu / Cloudflare Proxy Testi
+                    🌐 Etsy Resmi API / Sunucu Testi
+                  </button>
+                  <button
+                    onClick={() => setTestMode('browser')}
+                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'browser' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    ⚡ İstemci Tarayıcı Modu
                   </button>
                 </div>
 
@@ -631,23 +829,23 @@ export default function KeywordPoolManagement() {
                       type="text" 
                       value={testKeyword}
                       onChange={(e) => setTestKeyword(e.target.value)}
-                      placeholder="Örn: vintage shirt, cat mom gift"
-                      className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Örn: vintage shirt, golden retriever"
+                      className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                     <button 
                       onClick={handleTestScraper}
                       disabled={isTestingScraper}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isTestingScraper ? 'animate-spin' : ''}`} />
-                      {testMode === 'browser' ? 'Tarayıcıda Test Et' : 'Sunucuda Test Et'}
+                      {testMode === 'server' ? 'Etsy API ile Test Et' : 'Tarayıcıda Test Et'}
                     </button>
                   </div>
                 </div>
 
                {testResult && (
                  <div className="mt-4 bg-slate-950 text-slate-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-80 space-y-2">
-                   <div className="text-emerald-400 font-bold">--- DIAGNOSTICS & RESULT ---</div>
+                   <div className="text-emerald-400 font-bold">--- CANLI ETSY TEST RAPORU ---</div>
                    <pre>{JSON.stringify(testResult, null, 2)}</pre>
                  </div>
                )}

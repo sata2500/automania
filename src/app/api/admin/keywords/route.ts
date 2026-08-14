@@ -85,10 +85,21 @@ export async function GET(req: Request) {
     `;
     count = parseInt(countRes[0].total, 10);
 
+    const etsyWorkspace = await sql`
+      SELECT etsy_shop_id 
+      FROM user_workspaces 
+      WHERE etsy_access_token IS NOT NULL 
+      LIMIT 1
+    `;
+
     return NextResponse.json({
       success: true,
       keywords: data,
       total: count,
+      etsyStatus: {
+        connected: etsyWorkspace.length > 0,
+        shopId: etsyWorkspace[0]?.etsy_shop_id || null
+      }
     });
   } catch (error: any) {
     console.error('Keywords API GET Error:', error);

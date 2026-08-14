@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
+import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
 export async function POST(req: Request) {
   try {
@@ -8,33 +9,47 @@ export async function POST(req: Request) {
     const body = await req.json();
     let { ids, limit = 20 } = body;
 
-    // Fetch Admin Scraping & SERP API Key settings from user_workspaces or app_settings
-    const settingsRows = await sql`
-      SELECT scraping_api_key, scraping_provider 
+    // 1. Fetch Etsy OAuth Token & Shop credentials from user_workspaces
+    const workspaceRows = await sql`
+      SELECT user_id, etsy_shop_id, scraping_api_key, scraping_provider, cloudflare_worker_url 
       FROM user_workspaces 
-      WHERE scraping_api_key IS NOT NULL AND scraping_api_key != ''
+      WHERE etsy_access_token IS NOT NULL OR scraping_api_key IS NOT NULL
       ORDER BY updated_at DESC
       LIMIT 1
     `;
+
+    // 2. Fetch App Settings
     const appSettingRows = await sql`
       SELECT setting_key, setting_value 
       FROM app_settings 
-      WHERE setting_key IN ('serper_api_key', 'scraping_api_key')
+      WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret', 'scraping_api_key')
     `;
-    
-    let serperApiKey = process.env.SERPER_API_KEY || '';
-    let scrapingApiKey = settingsRows[0]?.scraping_api_key || '';
-    let scrapingProvider = settingsRows[0]?.scraping_provider || 'scraperapi';
+
+    let etsyApiKey = process.env.ETSY_API_KEY;
+    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
+    let scrapingApiKey = workspaceRows[0]?.scraping_api_key || process.env.SCRAPER_API_KEY || '';
+    let scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
+    let workerUrl = workspaceRows[0]?.cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
 
     for (const r of appSettingRows) {
-      if (r.setting_key === 'serper_api_key' && r.setting_value) serperApiKey = r.setting_value;
+      if (r.setting_key === 'etsy_keystring' && r.setting_value) etsyApiKey = r.setting_value;
+      if (r.setting_key === 'etsy_shared_secret' && r.setting_value) etsySharedSecret = r.setting_value;
       if (r.setting_key === 'scraping_api_key' && r.setting_value && !scrapingApiKey) scrapingApiKey = r.setting_value;
     }
 
+    let etsyAccessToken: string | undefined = undefined;
+    if (workspaceRows.length > 0 && workspaceRows[0].user_id) {
+      const tokenRes = await getValidEtsyToken(workspaceRows[0].user_id);
+      if (tokenRes.success && tokenRes.access_token) {
+        etsyAccessToken = tokenRes.access_token;
+        etsyApiKey = tokenRes.api_key || etsyApiKey;
+        etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
+      }
+    }
 
     let targetKeywords: { id: string, keyword: string }[] = [];
 
-    // If specific IDs are provided, use them. Otherwise, find oldest evaluated keywords (null or > 7 days)
+    // If specific IDs are provided, evaluate those. Otherwise pick oldest evaluated
     if (ids && Array.isArray(ids) && ids.length > 0) {
       const rows = await sql`
         SELECT id, keyword FROM keyword_pool WHERE id = ANY(${ids as any})
@@ -52,7 +67,12 @@ export async function POST(req: Request) {
     }
 
     if (targetKeywords.length === 0) {
-      return NextResponse.json({ success: true, message: 'Değerlendirilecek eskimiş kelime bulunamadı.', evaluatedCount: 0 });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Değerlendirilecek kelime bulunamadı.', 
+        evaluatedCount: 0,
+        hasEtsyApi: !!etsyAccessToken
+      });
     }
 
     let evaluatedCount = 0;
@@ -61,12 +81,14 @@ export async function POST(req: Request) {
 
     for (const item of targetKeywords) {
       try {
-        const scraped = await scrapeEtsyKeywordData(item.keyword, { 
-          apiKey: scrapingApiKey, 
+        const scraped = await scrapeEtsyKeywordData(item.keyword, {
+          etsyAccessToken,
+          etsyApiKey,
+          etsySharedSecret,
+          apiKey: scrapingApiKey,
           provider: scrapingProvider,
-          serperApiKey
+          workerUrl
         });
-
 
         if (scraped.scrapeError) {
           botBlockedCount++;
@@ -94,8 +116,8 @@ export async function POST(req: Request) {
 
         evaluatedCount++;
 
-        // Add 500ms delay between keywords to reduce risk of IP rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 300ms throttle to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 300));
       } catch (e: any) {
         console.error(`Error scraping keyword ${item.keyword}:`, e);
         errors.push(`"${item.keyword}": ${e.message}`);
@@ -104,7 +126,7 @@ export async function POST(req: Request) {
 
     let warning: string | undefined = undefined;
     if (botBlockedCount > 0) {
-      warning = `${botBlockedCount} adet kelimede Etsy Bot Koruması / CAPTCHA engeline takılındı. Hatalar veritabanına işlendi.`;
+      warning = `${botBlockedCount} adet kelimede Etsy Bot Koruması / API hatası oluştu. Gerçek veri alınamadığı için engellendi olarak işaretlendi.`;
     }
 
     return NextResponse.json({
@@ -112,6 +134,7 @@ export async function POST(req: Request) {
       evaluatedCount,
       botBlockedCount,
       totalRequested: targetKeywords.length,
+      hasEtsyApi: !!etsyAccessToken,
       errors: errors.length > 0 ? errors : undefined,
       warning
     });

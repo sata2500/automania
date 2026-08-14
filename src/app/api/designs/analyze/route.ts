@@ -58,6 +58,30 @@ export async function POST(request: Request) {
     const scrapingApiKey = rows.length > 0 ? rows[0].scraping_api_key : null;
     const scrapingProvider = rows.length > 0 && rows[0].scraping_provider ? rows[0].scraping_provider : 'scraperapi';
     const workerUrl = (rows.length > 0 ? rows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
+
+    // Resolve Etsy API OAuth token
+    let etsyAccessToken: string | undefined = undefined;
+    let etsyApiKey = process.env.ETSY_API_KEY;
+    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
+    for (const row of settingsRows) {
+      if (row.setting_key === 'etsy_keystring') etsyApiKey = row.setting_value;
+      if (row.setting_key === 'etsy_shared_secret') etsySharedSecret = row.setting_value;
+    }
+
+    const effectiveUserId = userId || (rows.length > 0 ? (rows[0] as any).user_id : null);
+    if (effectiveUserId) {
+      try {
+        const { getValidEtsyToken } = await import('@/lib/etsy-token-manager');
+        const tokenRes = await getValidEtsyToken(effectiveUserId);
+        if (tokenRes.success && tokenRes.access_token) {
+          etsyAccessToken = tokenRes.access_token;
+          etsyApiKey = tokenRes.api_key || etsyApiKey;
+          etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
+        }
+      } catch (e: any) {
+        console.warn('Could not resolve Etsy token for design analyze:', e.message);
+      }
+    }
     
     // Parse JSON models from workspace as fallback
     let visionModel = 'google/gemma-4-26b-a4b-it:free'; // fallback default
@@ -228,14 +252,14 @@ export async function POST(request: Request) {
           ON CONFLICT (keyword) DO NOTHING
         `;
 
-        // Trigger background scraping via Cloudflare Worker Proxy with workerUrl
-        scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl })
+        // Trigger background scraping via Etsy Open API & Scraper Engine
+        scrapeEtsyKeywordData(kw, { etsyAccessToken, etsyApiKey, etsySharedSecret, apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl })
           .then(async (scraped) => {
             // Auto-retry once if scrapeError occurred during burst
             let finalScraped = scraped;
             if (finalScraped.scrapeError) {
               await new Promise(resolve => setTimeout(resolve, 1000));
-              finalScraped = await scrapeEtsyKeywordData(kw, { apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl });
+              finalScraped = await scrapeEtsyKeywordData(kw, { etsyAccessToken, etsyApiKey, etsySharedSecret, apiKey: scrapingApiKey, provider: scrapingProvider, workerUrl });
             }
 
             await sql`
