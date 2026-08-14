@@ -17,32 +17,48 @@ interface VariationRow {
 
 function extractCleanNiche(design: DesignItem): string {
   if (!design) return '';
-  const rawName = design.name ? design.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim() : '';
-  const isNumericOrFileId = !rawName || /^\d+$/.test(rawName) || /^(img|dsc|photo|file|image|design|export|temp)[_-]?\d+$/i.test(rawName);
 
-  if (!isNumericOrFileId && rawName.length > 2) {
-    return rawName;
+  const analysis = (design.analysis || {}) as any;
+
+  // 1. Prioritize explicit primarySubject / niche from AI analysis
+  if (analysis.primarySubject) {
+    if (analysis.primaryAesthetic && !analysis.primarySubject.toLowerCase().includes(analysis.primaryAesthetic.toLowerCase())) {
+      return `${analysis.primarySubject} (${analysis.primaryAesthetic})`;
+    }
+    return analysis.primarySubject;
+  }
+  if (analysis.niche) {
+    return analysis.niche;
   }
 
-  // 1. Try extracting quote or primary subject from AI vision description
-  if (design.analysis?.description) {
-    const desc = design.analysis.description.trim();
+  // 2. Try extracting quote or clean phrase from AI vision description
+  if (analysis.description) {
+    const desc = analysis.description.trim();
     const quoteMatch = desc.match(/["']([^"']{3,35})["']/);
     if (quoteMatch && quoteMatch[1]) {
       return quoteMatch[1].trim();
     }
-    const words = desc.replace(/[^\w\s]/gi, ' ').split(/\s+/).filter(w => w.length > 2 && !['this', 'that', 'with', 'from', 'your', 'have', 'featuring', 'design', 'tshirt', 'shirt', 'apparel', 'market', 'etsy'].includes(w.toLowerCase()));
+    // Extract key subject words from description
+    const words = desc.replace(/[^\w\s]/gi, ' ').split(/\s+/).filter(w => w.length > 2 && !['this', 'that', 'with', 'from', 'your', 'have', 'featuring', 'design', 'tshirt', 'shirt', 'apparel', 'market', 'etsy', 'graphic', 'illustration', 'vector', 'image', 'photo', 'picture'].includes(w.toLowerCase()));
     if (words.length >= 2) {
-      return words.slice(0, 4).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      return words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
     }
   }
 
-  // 2. Try using top 2 keywords from AI vision analysis
-  if (design.analysis?.keywords && design.analysis.keywords.length > 0) {
-    return design.analysis.keywords.slice(0, 2).map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
+  // 3. Try using top 2 keywords from AI vision analysis
+  if (analysis.keywords && analysis.keywords.length > 0) {
+    return analysis.keywords.slice(0, 2).map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
   }
 
-  return 'Özel Tasarım Nişi';
+  // 4. Only fallback to raw name if it is NOT a generic camera / ChatGPT / AI export filename
+  const rawName = design.name ? design.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ').trim() : '';
+  const isGenericFileName = !rawName || /^\d+$/.test(rawName) || /^(chatgpt|midjourney|dalle|bing|img|dsc|photo|file|image|design|export|temp)[ _-]?/i.test(rawName);
+
+  if (!isGenericFileName && rawName.length > 2) {
+    return rawName;
+  }
+
+  return 'Özel Tasarım Teması';
 }
 
 
@@ -610,45 +626,63 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [availableTaxonomyProperties, setAvailableTaxonomyProperties] = useState<any[]>([]);
   const [selectedTaxonomyProperties, setSelectedTaxonomyProperties] = useState<Record<number, number[]>>({});
 
-  useEffect(() => {
-    if (activeTab === 'publish') {
-      fetch('/api/etsy/shipping-profiles')
-        .then(res => res.json())
-        .then(data => {
-          if (data.connected) {
-            setEtsyConnected(true);
-            if (data.profiles && data.profiles.length > 0) {
-              setShippingProfiles(data.profiles);
-              setSelectedShippingProfileId(data.profiles[0].shipping_profile_id.toString());
+  const fetchEtsyStoreData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/etsy/shipping-profiles');
+      const data = await res.json();
+      if (data.connected) {
+        setEtsyConnected(true);
+        if (data.profiles && data.profiles.length > 0) {
+          setShippingProfiles(data.profiles);
+          setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
+        }
+        if (data.readinessStates && data.readinessStates.length > 0) {
+          setReadinessStates(data.readinessStates);
+          setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
+        }
+        // Fetch shop sections
+        fetch('/api/etsy/shop-sections')
+          .then(s => s.json())
+          .then(sData => {
+            if (sData.success && sData.sections) {
+              setShopSections(sData.sections);
             }
-            if (data.readinessStates && data.readinessStates.length > 0) {
-              setReadinessStates(data.readinessStates);
-              setSelectedReadinessStateId(data.readinessStates[0].readiness_state_id.toString());
+          })
+          .catch(() => {});
+        // Fetch return policies
+        fetch('/api/etsy/return-policies')
+          .then(r => r.json())
+          .then(rData => {
+            if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
+              setReturnPolicies(rData.returnPolicies);
+              setSelectedReturnPolicyId(prev => prev || rData.returnPolicies[0].return_policy_id.toString());
             }
-            // Fetch shop sections
-            fetch('/api/etsy/shop-sections')
-              .then(s => s.json())
-              .then(sData => {
-                if (sData.success && sData.sections) {
-                  setShopSections(sData.sections);
-                }
-              });
-            // Fetch return policies
-            fetch('/api/etsy/return-policies')
-              .then(r => r.json())
-              .then(rData => {
-                if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
-                  setReturnPolicies(rData.returnPolicies);
-                  setSelectedReturnPolicyId(rData.returnPolicies[0].return_policy_id.toString());
-                }
-              });
-          } else {
-            setEtsyConnected(false);
-          }
-        })
-        .catch(err => console.error("Error fetching shipping profiles", err));
+          })
+          .catch(() => {});
+      } else {
+        setEtsyConnected(false);
+      }
+    } catch (err) {
+      console.warn('Error fetching Etsy store settings:', err);
     }
-  }, [activeTab]);
+  }, []);
+
+  useEffect(() => {
+    fetchEtsyStoreData();
+  }, [fetchEtsyStoreData, activeTab]);
+
+  // Fetch taxonomy properties when taxonomyId is available and etsy is connected
+  useEffect(() => {
+    if (!taxonomyId || !etsyConnected) return;
+    fetch(`/api/etsy/taxonomy-properties?taxonomy_id=${taxonomyId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.properties)) {
+          setAvailableTaxonomyProperties(data.properties);
+        }
+      })
+      .catch(err => console.warn('Error fetching taxonomy properties:', err));
+  }, [taxonomyId, etsyConnected]);
 
   // Generate Variations Matrix whenever sizes or colors change
   useEffect(() => {

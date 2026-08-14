@@ -326,7 +326,13 @@ export async function POST(request: Request) {
       analysis: {
         description,
         keywords: uniqueKeywords,
-        analyzedAt: Date.now()
+        analyzedAt: Date.now(),
+        primarySubject: parsedResult.primarySubject || '',
+        primaryAesthetic: parsedResult.primaryAesthetic || '',
+        niche: parsedResult.primarySubject ? (parsedResult.primaryAesthetic ? `${parsedResult.primarySubject} (${parsedResult.primaryAesthetic})` : parsedResult.primarySubject) : (parsedResult.niche || ''),
+        userNotes: parsedResult.userNotes || '',
+        productType: parsedResult.productType || '',
+        taxonomyId: parsedResult.taxonomyId || null
       }
     });
 
