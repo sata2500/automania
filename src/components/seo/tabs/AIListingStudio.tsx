@@ -3,6 +3,8 @@
 import React from 'react';
 import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download, TrendingUp, Hash, Plus } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { EtsySerpPreview } from '../components/EtsySerpPreview';
+import { TagMatrixScore } from '../components/TagMatrixScore';
 
 export const AIListingStudio = () => {
   const {
@@ -301,6 +303,13 @@ export const AIListingStudio = () => {
             />
           </div>
 
+          {/* Live Etsy SERP Search Preview Card (Mobile/Desktop) */}
+          <EtsySerpPreview
+            title={generatedTitle}
+            imageUrl={dbGeneratedMockups.find(m => m.folderId === selectedFolderId && !m.isVideo)?.previewUrl || null}
+            price={24.99}
+          />
+
           {/* Description Editor */}
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
             <div className="flex justify-between items-center">
@@ -323,6 +332,12 @@ export const AIListingStudio = () => {
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs leading-relaxed outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
             />
           </div>
+
+          {/* Real-time Tag Health Matrix & Intent Distribution Score */}
+          <TagMatrixScore
+            tags={selectedTags}
+            title={generatedTitle}
+          />
 
           {/* 13 Selected Tags Display */}
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">

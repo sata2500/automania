@@ -37,6 +37,9 @@ APPAREL BRANDS / GARMENT TYPES IN LISTING:
 USER CUSTOM NOTES:
 {{userNotes}}
 
+SEASONAL SHOPPING & TREND CONTEXT:
+{{seasonalityContext}}
+
 PRIMARY CANDIDATE KEYWORDS & REAL ETSY METRICS:
 {{keywords}}
 
@@ -44,8 +47,9 @@ PROVEN COMPETITOR CO-OCCURRING SUB-KEYWORDS & REAL ETSY METRICS (Extracted from 
 {{coOccurringTags}}
 
 CRITICAL VISUAL VALIDATION & SELECTION STRATEGY:
-1. FULL EVALUATION OF BOTH KEYWORD GROUPS: You are provided with two rich keyword sets: (1) Primary Candidate Keywords and (2) Proven Competitor Co-Occurring Sub-Keywords, both evaluated with real Etsy Opportunity Scores, listing counts, bestsellers, and autocomplete rankings. Evaluate BOTH groups together to select the most profitable, high-demand, low-competition tags.
-2. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
+1. TRADEMARK & IP SAFETY MANDATE: ABSOLUTELY FORBIDDEN to use any trademarked brand names, franchises, pop culture icons, or generic trademark traps (e.g. Disney, Marvel, Harry Potter, Barbie, Swiftie, Taylor Swift, Nike, Onesie, Velcro, Stanley Cup, etc.). All titles, descriptions, and tags MUST be 100% original and safe.
+2. FULL EVALUATION OF BOTH KEYWORD GROUPS: You are provided with two rich keyword sets: (1) Primary Candidate Keywords and (2) Proven Competitor Co-Occurring Sub-Keywords, both evaluated with real Etsy Opportunity Scores (including dynamic seasonal trend boosts), listing counts, bestsellers, and autocomplete rankings. Evaluate BOTH groups together to select the most profitable, high-demand, low-competition tags.
+3. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
 3. 13 TAG DIVERSIFICATION STRATEGY (AVOID KEYWORD CANNIBALIZATION):
    - Select EXACTLY 13 tags.
    - EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces).

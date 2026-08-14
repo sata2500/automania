@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import sql, { db } from '@/lib/db';
 import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
+import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +13,9 @@ export async function POST(req: Request) {
     if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
       return NextResponse.json({ success: false, error: 'İçerik oluşturmak için en az bir kelime gereklidir.' }, { status: 400 });
     }
+
+    // Seasonality Context & Current Active Shopping Wave
+    const currentSeason = getCurrentSeasonInfo();
 
     // Query Workspace settings for SEO Copywriter AI Model
     const rows = await sql`
@@ -81,11 +86,12 @@ export async function POST(req: Request) {
       prompt = customPrompt;
     }
 
-    // Extract input keyword strings
-    const inputKeywords: string[] = keywords
+    // Extract input keyword strings & apply Trademark Safety Shield
+    const rawInputKeywords: string[] = keywords
       .map((k: any) => (typeof k === 'string' ? k.trim() : (k?.keyword || '').trim()))
       .filter(Boolean);
-    const uniqueInputKeywords = Array.from(new Set(inputKeywords.map(k => k.toLowerCase())));
+    const { safe: safeInputKeywords, removed: trademarkRemovedKeywords } = filterSafeKeywords(rawInputKeywords);
+    const uniqueInputKeywords = Array.from(new Set(safeInputKeywords.map(k => k.toLowerCase())));
 
     // Direct Database Keyword Pool Enrichment (Real Etsy Metrics & Co-Occurring Competitor Tags)
     let dbKeywordsMap = new Map<string, any>();
@@ -119,9 +125,12 @@ export async function POST(req: Request) {
       }
     }
 
+    // Filter co-occurring tags with Trademark Shield
+    const { safe: safeCoOccurring } = filterSafeKeywords(coOccurringTagsList);
+
     // Rank competitor co-occurring tags by frequency of occurrence across listings
     const tagFrequency: Record<string, number> = {};
-    coOccurringTagsList.forEach(t => {
+    safeCoOccurring.forEach(t => {
       tagFrequency[t] = (tagFrequency[t] || 0) + 1;
     });
     const rankedCoOccurringTags = Object.entries(tagFrequency)
@@ -149,7 +158,8 @@ export async function POST(req: Request) {
 
     const enrichedCoOccurring = rankedCoOccurringTags.map(tagStr => {
       const dbData = dbCoOccurringMap.get(tagStr);
-      const score = dbData?.opportunity_score ?? dbData?.etsy_score ?? 80;
+      const baseScore = dbData?.opportunity_score ?? dbData?.etsy_score ?? 80;
+      const seasonal = applySeasonalBonus(tagStr, baseScore);
       const listings = dbData?.total_listings ?? 0;
       const bestsellers = dbData?.bestseller_count ?? 0;
       const autoRank = dbData?.autocomplete_rank ?? 0;
@@ -157,7 +167,10 @@ export async function POST(req: Request) {
 
       return {
         keyword: tagStr,
-        opportunity_score: score,
+        opportunity_score: seasonal.finalScore,
+        base_score: baseScore,
+        seasonal_bonus: seasonal.bonusApplied,
+        seasonal_reason: seasonal.seasonReason,
         total_listings: listings,
         bestseller_count: bestsellers,
         autocomplete_rank: autoRank,
@@ -165,10 +178,11 @@ export async function POST(req: Request) {
       };
     }).sort((a, b) => b.opportunity_score - a.opportunity_score);
 
-    // Build enriched candidate keywords list sorted by Opportunity Score
+    // Build enriched candidate keywords list sorted by Opportunity Score (with Seasonal Multiplier)
     const enrichedKeywords = uniqueInputKeywords.map(kStr => {
       const dbData = dbKeywordsMap.get(kStr);
-      const score = dbData?.opportunity_score ?? dbData?.etsy_score ?? 75;
+      const baseScore = dbData?.opportunity_score ?? dbData?.etsy_score ?? 75;
+      const seasonal = applySeasonalBonus(kStr, baseScore);
       const listings = dbData?.total_listings ?? 0;
       const bestsellers = dbData?.bestseller_count ?? 0;
       const autoRank = dbData?.autocomplete_rank ?? 0;
@@ -176,7 +190,10 @@ export async function POST(req: Request) {
 
       return {
         keyword: kStr,
-        opportunity_score: score,
+        opportunity_score: seasonal.finalScore,
+        base_score: baseScore,
+        seasonal_bonus: seasonal.bonusApplied,
+        seasonal_reason: seasonal.seasonReason,
         total_listings: listings,
         bestseller_count: bestsellers,
         autocomplete_rank: autoRank,
@@ -186,6 +203,7 @@ export async function POST(req: Request) {
 
     const formattedKeywords = enrichedKeywords.map(k => {
       let details = `Score: ${k.opportunity_score}/100`;
+      if (k.seasonal_bonus > 0) details += ` (Seasonal +${k.seasonal_bonus}: ${k.seasonal_reason})`;
       if (k.total_listings > 0) details += `, Listings: ${k.total_listings.toLocaleString('en-US')}`;
       if (k.bestseller_count > 0) details += `, Bestsellers: ${k.bestseller_count}`;
       if (k.autocomplete_rank > 0) details += `, Autocomplete: #${k.autocomplete_rank}`;
@@ -196,6 +214,7 @@ export async function POST(req: Request) {
     const formattedCoOccurring = enrichedCoOccurring.length > 0
       ? enrichedCoOccurring.map(t => {
           let details = `Score: ${t.opportunity_score}/100`;
+          if (t.seasonal_bonus > 0) details += ` (Seasonal +${t.seasonal_bonus}: ${t.seasonal_reason})`;
           if (t.total_listings > 0) details += `, Listings: ${t.total_listings.toLocaleString('en-US')}`;
           if (t.bestseller_count > 0) details += `, Bestsellers: ${t.bestseller_count}`;
           if (t.autocomplete_rank > 0) details += `, Autocomplete: #${t.autocomplete_rank}`;
@@ -211,6 +230,7 @@ export async function POST(req: Request) {
       primaryAesthetic: primaryAesthetic || 'Extracted from design concept',
       productType: productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee',
       userNotes: userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.',
+      seasonalityContext: currentSeason.promptGuidance,
       keywords: formattedKeywords || 'None provided',
       coOccurringTags: formattedCoOccurring,
       taxonomyId: String(taxonomyId || 482),
@@ -227,6 +247,7 @@ export async function POST(req: Request) {
       .replace(/\{\{primaryAesthetic\}\}/g, dynamicValues.primaryAesthetic)
       .replace(/\{\{productType\}\}/g, dynamicValues.productType)
       .replace(/\{\{userNotes\}\}/g, dynamicValues.userNotes)
+      .replace(/\{\{seasonalityContext\}\}/g, dynamicValues.seasonalityContext)
       .replace(/\{\{keywords\}\}/g, dynamicValues.keywords)
       .replace(/\{\{coOccurringTags\}\}/g, dynamicValues.coOccurringTags)
       .replace(/\{\{taxonomyId\}\}/g, dynamicValues.taxonomyId)
@@ -283,13 +304,21 @@ export async function POST(req: Request) {
       throw new Error('Yapay zeka eksik veri döndürdü.');
     }
 
-    // Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
+    // 1. Post-Processing Trademark Sanitization (Zero IP Infringement Guarantee)
+    const sanitizedTitleObj = sanitizeTrademarkText(parsedResult.title);
+    parsedResult.title = sanitizedTitleObj.cleanText;
+
+    const sanitizedDescObj = sanitizeTrademarkText(parsedResult.description);
+    parsedResult.description = sanitizedDescObj.cleanText;
+
+    const { cleanTags, violationsFound } = sanitizeEtsyTags(parsedResult.selectedTags);
+
+    // 2. Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
     const detectedSubj = (parsedResult.detectedSubject || primarySubject || '').toLowerCase();
     const forbiddenTerms = ['dog', 'cat', 'horse', 'nurse', 'teacher', 'halloween', 'christmas']
       .filter(term => !detectedSubj.includes(term) && !(designDescription || '').toLowerCase().includes(term));
 
-    parsedResult.selectedTags = parsedResult.selectedTags
-      .map((t: string) => t.trim())
+    parsedResult.selectedTags = cleanTags
       .filter((t: string) => {
         if (t.length === 0 || t.length > 20) return false;
         const lower = t.toLowerCase();
@@ -302,6 +331,12 @@ export async function POST(req: Request) {
       listing: parsedResult,
       keywordsEnriched: enrichedKeywords,
       coOccurringTags: enrichedCoOccurring,
+      seasonInfo: currentSeason,
+      trademarkSafeguard: {
+        cleanedInputKeywords: trademarkRemovedKeywords,
+        titleViolationsCleaned: sanitizedTitleObj.violations,
+        tagViolationsCleaned: violationsFound
+      },
       modelUsed: seoModel
     });
 
