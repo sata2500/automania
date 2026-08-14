@@ -99,16 +99,16 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
 
     // Grade
     let grade = 'A+';
-    let gradeColor = 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
+    let gradeColor = 'text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10';
     if (score < 75) {
       grade = 'C';
-      gradeColor = 'text-rose-400 border-rose-500/30 bg-rose-500/10';
+      gradeColor = 'text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10';
     } else if (score < 85) {
       grade = 'B';
-      gradeColor = 'text-amber-400 border-amber-500/30 bg-amber-500/10';
+      gradeColor = 'text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10';
     } else if (score < 95) {
       grade = 'A';
-      gradeColor = 'text-blue-400 border-blue-500/30 bg-blue-500/10';
+      gradeColor = 'text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10';
     }
 
     return {
@@ -126,101 +126,101 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
   }, [tags, title]);
 
   return (
-    <div className={`p-4 rounded-xl bg-neutral-900 border border-neutral-800 shadow-xl ${className}`}>
+    <div className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 ${className}`}>
       {/* Header with SEO Score */}
-      <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-800">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
             <Layers className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-neutral-200">Etiket Sağlık Matrisi & Çeşitlilik Denetimi</h4>
-            <p className="text-[10px] text-neutral-400">13 Etiketin arama niyetleri ve kelime yamyamlığı analizi</p>
+            <h4 className="text-xs font-bold text-slate-900 dark:text-white">Etiket Sağlık Matrisi & Çeşitlilik Denetimi</h4>
+            <p className="text-[10px] text-slate-500">13 Etiketin arama niyetleri ve kelime yamyamlığı analizi</p>
           </div>
         </div>
 
         {/* Health Score Badge */}
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-lg border font-bold text-xs ${analysis.gradeColor}`}>
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs ${analysis.gradeColor}`}>
           <Sparkles className="w-3.5 h-3.5" />
           <span>SEO Skoru: {analysis.score}/100 ({analysis.grade})</span>
         </div>
       </div>
 
       {/* 5-Bucket Distribution Badges */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
-        <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 text-center">
-          <span className="text-[10px] text-neutral-400 block mb-0.5">🏷️ Özne / Ürün</span>
-          <span className="text-xs font-bold text-neutral-200">{analysis.buckets.subject} Etiket</span>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🏷️ Özne / Ürün</span>
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.subject} Etiket</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 text-center">
-          <span className="text-[10px] text-neutral-400 block mb-0.5">💬 Tipografi / Mesaj</span>
-          <span className="text-xs font-bold text-neutral-200">{analysis.buckets.typography} Etiket</span>
+        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">💬 Tipografi / Mesaj</span>
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.typography} Etiket</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 text-center">
-          <span className="text-[10px] text-neutral-400 block mb-0.5">🎨 Estetik / Stil</span>
-          <span className="text-xs font-bold text-neutral-200">{analysis.buckets.aesthetic} Etiket</span>
+        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🎨 Estetik / Stil</span>
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.aesthetic} Etiket</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 text-center">
-          <span className="text-[10px] text-neutral-400 block mb-0.5">🎁 Hediye / Alıcı</span>
-          <span className="text-xs font-bold text-neutral-200">{analysis.buckets.gift} Etiket</span>
+        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🎁 Hediye / Alıcı</span>
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.gift} Etiket</span>
         </div>
 
-        <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 text-center col-span-2 sm:col-span-1">
-          <span className="text-[10px] text-neutral-400 block mb-0.5">🌟 Yaşam Tarzı / Trend</span>
-          <span className="text-xs font-bold text-neutral-200">{analysis.buckets.lifestyle} Etiket</span>
+        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center col-span-2 sm:col-span-1">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🌟 Yaşam Tarzı / Trend</span>
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.lifestyle} Etiket</span>
         </div>
       </div>
 
       {/* Health Checks & Feedback */}
-      <div className="space-y-1.5 text-[11px]">
+      <div className="space-y-2 text-[11px]">
         {/* Tag count check */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-950/60 border border-neutral-800/60">
-          <span className="text-neutral-400">13 Etiket Kotası:</span>
-          <span className={`font-semibold ${analysis.tagCount === 13 ? 'text-emerald-400' : 'text-amber-400'}`}>
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-500 dark:text-slate-400">13 Etiket Kotası:</span>
+          <span className={`font-bold ${analysis.tagCount === 13 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
             {analysis.tagCount} / 13 Seçili
           </span>
         </div>
 
         {/* 20 Char Limit Check */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-950/60 border border-neutral-800/60">
-          <span className="text-neutral-400">20 Karakter Kuralı:</span>
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-500 dark:text-slate-400">20 Karakter Kuralı:</span>
           {analysis.over20Chars.length === 0 ? (
-            <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
               <CheckCircle2 className="w-3.5 h-3.5" /> Tümü Uygun (≤20)
             </span>
           ) : (
-            <span className="text-rose-400 flex items-center gap-1 font-semibold">
+            <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1 font-bold">
               <AlertTriangle className="w-3.5 h-3.5" /> {analysis.over20Chars.length} Etiket 20 Karakteri Aşıyor!
             </span>
           )}
         </div>
 
         {/* Anti-Cannibalization Check */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-950/60 border border-neutral-800/60">
-          <span className="text-neutral-400">Kök Kelime Tekrarı (Shirt/Tee):</span>
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-500 dark:text-slate-400">Kök Kelime Tekrarı (Shirt/Tee):</span>
           {!analysis.isCannibalized ? (
-            <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
               <CheckCircle2 className="w-3.5 h-3.5" /> Dengeli ({analysis.shirtCount}/4 tekrar)
             </span>
           ) : (
-            <span className="text-amber-400 flex items-center gap-1 font-semibold">
+            <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-bold">
               <AlertTriangle className="w-3.5 h-3.5" /> Yüksek Tekrar ({analysis.shirtCount} kez "shirt/tee" geçiyor)
             </span>
           )}
         </div>
 
         {/* Trademark Shield Check */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-950/60 border border-neutral-800/60">
-          <span className="text-neutral-400">Telif / Marka (Trademark) Güvenliği:</span>
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+          <span className="text-slate-500 dark:text-slate-400">Telif / Marka (Trademark) Güvenliği:</span>
           {analysis.trademarkViolations.length === 0 ? (
-            <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-bold">
               <ShieldCheck className="w-3.5 h-3.5" /> %100 Güvenli (0 İhlal)
             </span>
           ) : (
-            <span className="text-rose-400 flex items-center gap-1 font-semibold">
+            <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1 font-bold">
               <AlertTriangle className="w-3.5 h-3.5" /> {analysis.trademarkViolations.join(', ')} (Riskli!)
             </span>
           )}

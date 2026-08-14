@@ -5,11 +5,12 @@ import {
   Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, 
   Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, 
   MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download, 
-  TrendingUp, Hash, Plus, ChevronDown, Settings, Info, Save, ShieldCheck, Rocket
+  TrendingUp, Hash, Plus, ChevronDown, Settings, Info, Save, ShieldCheck, Rocket, CheckCircle2
 } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { TagMatrixScore } from '../components/TagMatrixScore';
+import { useToast } from '@/components/common/ToastContext';
 
 // MultiSelect Dropdown component for Etsy Taxonomy properties
 const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: any, selectedValues: number[], onChange: (vals: number[]) => void }) => {
@@ -92,8 +93,10 @@ export const AIListingStudio = () => {
     availableTaxonomyProperties, selectedTaxonomyProperties, setSelectedTaxonomyProperties,
     savedTemplates, defaultTemplates, setDefaultTemplates
   } = useEtsySeo();
+  const toast = useToast();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedTemplateForDefault, setSelectedTemplateForDefault] = useState<string>('');
 
   const handleSetDefaultTemplate = async (templateId: string) => {
     if (!taxonomyId) {
@@ -111,7 +114,7 @@ export const AIListingStudio = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ etsyDefaultTemplates: newDefaults })
       });
-      alert(`Bu şablon geçerli kategori (${taxonomyId}) için varsayılan olarak ayarlandı!`);
+      toast?.success?.(`Seçilen şablon geçerli kategori (${taxonomyId}) için varsayılan olarak kaydedildi!`);
     } catch (e) {
       console.error(e);
     }
@@ -266,8 +269,9 @@ export const AIListingStudio = () => {
           {selectedFolderId && dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length} Adet):
+                <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <GripVertical className="w-3.5 h-3.5 text-emerald-500" />
+                  Etsy'ye Gönderilecek Görseller ({dbGeneratedMockups.filter(m => m.folderId === selectedFolderId).length} Adet) - Sürükleyip Sıralayabilirsiniz:
                 </label>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
@@ -280,7 +284,9 @@ export const AIListingStudio = () => {
                     onDragStart={(e) => handleMockupDragStart(e, mockup.id)}
                     onDragOver={handleMockupDragOver}
                     onDrop={(e) => handleMockupDrop(e, mockup.id)}
-                    className={`group relative shrink-0 w-16 h-16 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-950 cursor-grab active:cursor-grabbing ${isDragged ? 'opacity-50 border-emerald-500' : ''}`}
+                    className={`group relative shrink-0 w-16 h-16 rounded-lg border-2 cursor-grab active:cursor-grabbing overflow-hidden bg-slate-50 dark:bg-slate-950 transition-all ${
+                      isDragged ? 'opacity-50 border-emerald-500 scale-95' : 'border-slate-200 dark:border-slate-700 hover:border-emerald-500'
+                    }`}
                   >
                     {mockup.isVideo ? (
                       <div className="w-full h-full flex items-center justify-center bg-slate-800">
@@ -379,7 +385,7 @@ export const AIListingStudio = () => {
               type="text"
               value={productType}
               onChange={(e) => setProductType(e.target.value)}
-              placeholder="Örn: Comfort Colors 1717 Garment-Dyed Tee, Gildan 18000..."
+              placeholder="Örn: Comfort Colors 1717 Garment-Dyed Tee, Bella Canvas 3001..."
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
             />
             <p className="text-[10px] text-slate-500">
@@ -398,7 +404,7 @@ export const AIListingStudio = () => {
             rows={2}
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
-            placeholder="Örn: Beden tablosuna göre 1 beden büyük tercih ediniz. %100 pamuk, 1 iş gününde kargoya verilir."
+            placeholder="Örn: Beden tablosuna göre 1 beden büyük tercih ediniz. %100 pamuk, 1-2 iş gününde kargoya verilir."
             className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-medium"
           />
         </div>
@@ -462,19 +468,13 @@ export const AIListingStudio = () => {
           />
         </div>
 
-        {/* Real-time Tag Health Matrix & Intent Distribution Score */}
-        <TagMatrixScore
-          tags={selectedTags}
-          title={generatedTitle}
-        />
-
-        {/* 13 Selected Tags Display */}
+        {/* 13 Selected Tags Display (Moved right after Description) */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 🎯 Seçilmiş 13 Etsy Etiketi ({selectedTags.length}/13)
-                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">≤20 Char Uyumlu</span>
+                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">≤20 Karakter Uyumlu</span>
               </h3>
               <p className="text-xs text-slate-500">Canlı matematiksel fırsat puanları en yüksek olan 13 etiket seçilmiştir.</p>
             </div>
@@ -625,7 +625,7 @@ export const AIListingStudio = () => {
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 3. ADIM: ETSY MAĞAZA & KATEGORİ PARAMETRELERİ (INTEGRATED) */}
+      {/* 3. ADIM: ETSY MAĞAZA & KATEGORİ PARAMETRELERİ */}
       {/* ------------------------------------------------------------- */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -640,32 +640,34 @@ export const AIListingStudio = () => {
           </div>
         </div>
 
-        {/* AI Detected Attributes Box */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50">
-          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-purple-500" />
-            AI Tarafından Tespit Edilen Kategori & Üretim Nitelikleri
-          </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-600 dark:text-slate-400">
-            <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kategori ID:</span> {taxonomyId || 1081}</div>
-            <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kim Yaptı:</span> {whoMade === 'someone_else' ? 'Üretim Ortağı' : whoMade}</div>
-            <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Üretim Zamanı:</span> {whenMade}</div>
-            <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Materyal:</span> {materials?.length > 0 ? materials.join(', ') : 'Pamuk'}</div>
+        {/* AI Detected Attributes Box (Only if taxonomy or analysis is present) */}
+        {taxonomyId && (
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-purple-500" />
+              AI Tarafından Tespit Edilen Kategori & Üretim Nitelikleri
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-600 dark:text-slate-400">
+              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kategori ID:</span> {taxonomyId}</div>
+              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Kim Yaptı:</span> {whoMade === 'someone_else' ? 'Üretim Ortağı' : whoMade}</div>
+              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Üretim Zamanı:</span> {whenMade}</div>
+              <div><span className="font-semibold text-slate-800 dark:text-slate-200 block text-[11px]">Materyal:</span> {materials?.length > 0 ? materials.join(', ') : 'Pamuk'}</div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Core Dropdowns Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Shipping Profile */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               Kargo Profili (Zorunlu)
             </label>
             <select 
               value={selectedShippingProfileId}
               onChange={(e) => setSelectedShippingProfileId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               {shippingProfiles.map(p => (
                 <option key={p.shipping_profile_id} value={p.shipping_profile_id}>
@@ -679,13 +681,13 @@ export const AIListingStudio = () => {
           {/* Readiness State */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               Üretim/Hazırlık Süresi (Zorunlu)
             </label>
             <select 
               value={selectedReadinessStateId}
               onChange={(e) => setSelectedReadinessStateId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               {readinessStates.map(r => (
                 <option key={r.readiness_state_id} value={r.readiness_state_id}>
@@ -705,7 +707,7 @@ export const AIListingStudio = () => {
             <select 
               value={selectedShopSectionId}
               onChange={(e) => setSelectedShopSectionId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="">Seçim Yapılmadı (Boş)</option>
               {shopSections.map((s: any) => (
@@ -719,13 +721,13 @@ export const AIListingStudio = () => {
           {/* Return Policy */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               İade Politikası (İsteğe Bağlı)
             </label>
             <select 
               value={selectedReturnPolicyId}
               onChange={(e) => setSelectedReturnPolicyId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="">Seçim Yapılmadı (Boş)</option>
               {returnPolicies.map((r: any) => (
@@ -736,33 +738,47 @@ export const AIListingStudio = () => {
             </select>
           </div>
 
-          {/* Quick Variation Template Loader */}
-          <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+          {/* Quick Variation Template Loader with Default Setting */}
+          <div className="md:col-span-2 space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
               <Layers className="w-4 h-4 text-emerald-500" />
               Kayıtlı Varyasyon Şablonu Yükle
             </label>
-            <select 
-              onChange={(e) => {
-                const t = savedTemplates?.find((st: any) => st.id === e.target.value);
-                if (t) setVariations(t.variations || []);
-              }}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="">-- Kayıtlı Şablon Seçin --</option>
-              {savedTemplates?.map((t: any) => {
-                const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
-                return (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.variations?.length || 0} Varyasyon) {isDefault ? ' (VARSAYILAN)' : ''}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="flex gap-2">
+              <select 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedTemplateForDefault(val);
+                  const t = savedTemplates?.find((st: any) => st.id === val);
+                  if (t) setVariations(t.variations || []);
+                }}
+                className="flex-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">-- Kayıtlı Şablon Seçin --</option>
+                {savedTemplates?.map((t: any) => {
+                  const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.variations?.length || 0} Varyasyon) {isDefault ? ' ⭐ (VARSAYILAN)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {taxonomyId && selectedTemplateForDefault && (
+                <button
+                  type="button"
+                  onClick={() => handleSetDefaultTemplate(selectedTemplateForDefault)}
+                  className="px-3.5 py-2 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl transition-all shrink-0 flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-800"
+                >
+                  ⭐ Bu Kategoriye Varsayılan Yap
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Dynamic Taxonomy Properties */}
-          {availableTaxonomyProperties?.map((prop: any) => (
+          {/* Dynamic Taxonomy Properties (Only render if available) */}
+          {availableTaxonomyProperties && availableTaxonomyProperties.length > 0 && availableTaxonomyProperties.map((prop: any) => (
             <div key={prop.property_id}>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-purple-500" />
@@ -789,7 +805,7 @@ export const AIListingStudio = () => {
                       [prop.property_id]: val ? [parseInt(val, 10)] : []
                     }));
                   }}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                   <option value="">Seçim Yapılmadı (Boş)</option>
                   {prop.possible_values?.map((v: any) => (
@@ -816,7 +832,7 @@ export const AIListingStudio = () => {
           </div>
         </div>
 
-        {/* ADVANCED SETTINGS ACCORDION */}
+        {/* ADVANCED SETTINGS ACCORDION (Cleaned without duplicate default template selector) */}
         <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
           <button
             type="button"
@@ -828,33 +844,7 @@ export const AIListingStudio = () => {
           </button>
           
           {showAdvanced && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-slate-50/50 dark:bg-slate-950/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-              {/* DEFAULT TEMPLATE MAPPING */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Şu Anki Kategori (ID: {taxonomyId}) İçin Varsayılan Şablon Ata</label>
-                <div className="flex gap-2">
-                  <select 
-                    id="advanced-template-select"
-                    className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
-                  >
-                    <option value="">-- Şablon Seçin --</option>
-                    {savedTemplates?.map((t: any) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('advanced-template-select') as HTMLSelectElement;
-                      if (el && el.value) handleSetDefaultTemplate(el.value);
-                    }}
-                    className="px-4 py-2 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-lg hover:bg-emerald-200"
-                  >
-                    Varsayılan Yap
-                  </button>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 bg-slate-50/70 dark:bg-slate-950/70 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
               {/* WHO MADE */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Who Made?</label>
@@ -922,11 +912,29 @@ export const AIListingStudio = () => {
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 4. ADIM: CANLI SERP ÖNİZLEME & ETSY'YE YAYINLAMA (PUBLISH) */}
+      {/* 4. ADIM: ETİKET SAĞLIK MATRİSİ & ÇEŞİTLİLİK DENETİMİ (MOVED) */}
       {/* ------------------------------------------------------------- */}
       <div className="space-y-5">
         <div className="flex items-center gap-2">
           <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">4</span>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            Etiket Sağlık Matrisi & Çeşitlilik Denetimi
+          </h3>
+        </div>
+
+        {/* Real-time Tag Health Matrix & Intent Distribution Score */}
+        <TagMatrixScore
+          tags={selectedTags}
+          title={generatedTitle}
+        />
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 5. ADIM: CANLI SERP ÖNİZLEME & ETSY'YE AKTARMA İSTASYONU */}
+      {/* ------------------------------------------------------------- */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold">5</span>
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
             Canlı SERP Önizleme & Etsy'ye Aktarma İstasyonu
           </h3>
@@ -987,7 +995,7 @@ export const AIListingStudio = () => {
                   <button
                     onClick={() => handlePublishToEtsy('active')}
                     disabled={isPublishing || !selectedShippingProfileId}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                    className="px-5 py-2.5 bg-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
                   >
                     <Rocket className={`w-3.5 h-3.5 ${isPublishing ? 'animate-spin' : ''}`} />
                     🔥 Doğrudan Canlıya Al (Active)

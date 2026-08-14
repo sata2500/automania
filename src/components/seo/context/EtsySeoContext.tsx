@@ -361,26 +361,64 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
 
   const handleMockupDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-    if (!draggedMockupId || draggedMockupId === targetId) return;
+    if (!draggedMockupId || draggedMockupId === targetId) {
+      setDraggedMockupId(null);
+      return;
+    }
 
     const currentMockups = [...dbGeneratedMockups];
-    const draggedIdx = currentMockups.findIndex(m => m.id === draggedMockupId);
-    const targetIdx = currentMockups.findIndex(m => m.id === targetId);
+    const draggedItem = currentMockups.find(m => m.id === draggedMockupId);
+    const targetItem = currentMockups.find(m => m.id === targetId);
 
-    if (draggedIdx === -1 || targetIdx === -1) return;
+    if (!draggedItem || !targetItem) {
+      setDraggedMockupId(null);
+      return;
+    }
 
-    const [draggedItem] = currentMockups.splice(draggedIdx, 1);
-    currentMockups.splice(targetIdx, 0, draggedItem);
+    const folderId = draggedItem.folderId;
+    if (folderId && folderId === targetItem.folderId) {
+      const folderItems = currentMockups.filter(m => m.folderId === folderId);
+      const fDraggedIdx = folderItems.findIndex(m => m.id === draggedMockupId);
+      const fTargetIdx = folderItems.findIndex(m => m.id === targetId);
 
-    setDbGeneratedMockups(currentMockups);
-    
-    // Save to DB
-    try {
-      const data = await loadAppData();
-      data.etsyGeneratedMockups = currentMockups;
-      await saveAppData(data);
-    } catch (err) {
-      console.error(err);
+      if (fDraggedIdx !== -1 && fTargetIdx !== -1) {
+        const [moved] = folderItems.splice(fDraggedIdx, 1);
+        folderItems.splice(fTargetIdx, 0, moved);
+
+        let folderIdx = 0;
+        const newMockups = currentMockups.map(m => {
+          if (m.folderId === folderId) {
+            return folderItems[folderIdx++];
+          }
+          return m;
+        });
+
+        setDbGeneratedMockups(newMockups);
+        try {
+          const data = await loadAppData();
+          data.etsyGeneratedMockups = newMockups;
+          await saveAppData(data);
+          toast.success('Görsel sıralaması güncellendi.');
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    } else {
+      const draggedIdx = currentMockups.findIndex(m => m.id === draggedMockupId);
+      const targetIdx = currentMockups.findIndex(m => m.id === targetId);
+      if (draggedIdx !== -1 && targetIdx !== -1) {
+        const [dragged] = currentMockups.splice(draggedIdx, 1);
+        currentMockups.splice(targetIdx, 0, dragged);
+        setDbGeneratedMockups(currentMockups);
+        try {
+          const data = await loadAppData();
+          data.etsyGeneratedMockups = currentMockups;
+          await saveAppData(data);
+          toast.success('Görsel sıralaması güncellendi.');
+        } catch (err) {
+          console.error(err);
+        }
+      }
     }
     setDraggedMockupId(null);
   };
