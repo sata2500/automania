@@ -278,6 +278,37 @@ export async function POST(request: Request) {
                 last_evaluated_at = CURRENT_TIMESTAMP
               WHERE id = ${id}
             `;
+
+            // Ingest discovered competitor co-occurring tags (rawMetrics.topTags) into keyword pool
+            if (finalScraped.rawMetrics?.topTags && Array.isArray(finalScraped.rawMetrics.topTags)) {
+              for (const topTag of finalScraped.rawMetrics.topTags) {
+                const cleanTag = String(topTag).toLowerCase().trim();
+                if (cleanTag && cleanTag !== kw && cleanTag.length <= 20) {
+                  const tagId = crypto.randomUUID();
+                  try {
+                    await sql`
+                      INSERT INTO keyword_pool (
+                        id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+                        competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+                        char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+                        created_at
+                      )
+                      VALUES (
+                        ${tagId}, ${cleanTag}, 1, 0, 0, 0,
+                        'Taranacak', 0, false, 0,
+                        ${cleanTag.length}, true, 0, null,
+                        ${JSON.stringify({ source: 'competitor_co_occurring_tag', parent_keyword: kw })}::jsonb,
+                        CURRENT_TIMESTAMP
+                      )
+                      ON CONFLICT (keyword) DO UPDATE
+                      SET usage_count = keyword_pool.usage_count + 1
+                    `;
+                  } catch (tagInsertErr: any) {
+                    console.warn(`Failed to auto-ingest co-occurring tag "${cleanTag}":`, tagInsertErr.message);
+                  }
+                }
+              }
+            }
           })
           .catch((err) => console.warn(`Background scrape error for "${kw}":`, err.message));
       } else {

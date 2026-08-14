@@ -301,36 +301,68 @@ function finalizeKeywordMetrics(
     competitionLevel = 'Doymuş (>50K İlan)';
   }
 
-  // Calculate Opportunity Score (0 - 100)
+  // Calculate State-of-the-Art Etsy Print-On-Demand Opportunity Score (0 - 100)
   let opportunityScore = 0;
   if (!scrapeError && totalListings > 0) {
-    // Demand Score (35% weight): High rank in Etsy Autocomplete indicates strong buyer search volume
-    let demandScore = 30;
+    // 1. Demand & Sales Proof Score (40% Weight)
+    // Combines Etsy Autocomplete ranking and real Best Seller proof of transactions
+    let demandScore = 30; // Default floor
     if (isEtsySuggested) {
-      demandScore = Math.max(45, 100 - (autocompleteRank - 1) * 8);
+      if (autocompleteRank === 1) demandScore = 100;
+      else if (autocompleteRank === 2) demandScore = 92;
+      else if (autocompleteRank === 3) demandScore = 85;
+      else if (autocompleteRank === 4) demandScore = 78;
+      else if (autocompleteRank === 5) demandScore = 72;
+      else demandScore = Math.max(50, 70 - (autocompleteRank - 6) * 5);
     }
 
-    // Competition Score (45% weight): Fewer active competitors = higher opportunity
-    let competitionScore = 15;
-    if (totalListings < 500) competitionScore = 100;
-    else if (totalListings < 1000) competitionScore = 95;
-    else if (totalListings < 2500) competitionScore = 85;
-    else if (totalListings < 5000) competitionScore = 75;
-    else if (totalListings < 15000) competitionScore = 60;
-    else if (totalListings < 35000) competitionScore = 40;
-    else if (totalListings < 75000) competitionScore = 25;
+    // If keyword has proven Best Sellers, lift demand score even if not in top 10 autocomplete
+    // Having multiple bestsellers in a niche is direct mathematical proof of active buyer transactions!
+    if (bestsellerCount >= 3) {
+      demandScore = Math.max(demandScore, 90);
+    } else if (bestsellerCount === 2) {
+      demandScore = Math.max(demandScore, 75);
+    } else if (bestsellerCount === 1) {
+      demandScore = Math.max(demandScore, 60);
+    }
+
+    // 2. Competition Score (40% Weight) - Fewer competing active listings = higher organic rank velocity
+    let competitionScore = 10;
+    if (totalListings < 300) competitionScore = 100;
+    else if (totalListings < 750) competitionScore = 95;
+    else if (totalListings < 1500) competitionScore = 90;
+    else if (totalListings < 3000) competitionScore = 80;
+    else if (totalListings < 6000) competitionScore = 70;
+    else if (totalListings < 15000) competitionScore = 55;
+    else if (totalListings < 35000) competitionScore = 35;
+    else if (totalListings < 75000) competitionScore = 20;
     else competitionScore = 10;
 
-    // Commercial / Conversion Score (20% weight): Bestsellers, engagement & tag fit
-    let commercialScore = Math.min(90, (bestsellerCount * 15) + 30);
-    if (tagEligible) commercialScore += 10;
+    // 3. Commercial & Optimization Score (20% Weight) - Tag fit (<=20 chars), Bestsellers & Pricing
+    let commercialScore = 20; // Base
+    if (tagEligible) commercialScore += 30; // Etsy tag limit is 20 chars; directly usable as a tag
+    commercialScore += Math.min(40, bestsellerCount * 12); // Bestseller presence
+    if (avgPrice >= 15 && avgPrice <= 50) commercialScore += 10; // Healthy POD price range
+    commercialScore = Math.min(100, commercialScore);
 
-    opportunityScore = Math.round(
-      (demandScore * 0.35) +
-      (competitionScore * 0.45) +
+    // Weighted Base Calculation
+    let baseScore = Math.round(
+      (demandScore * 0.40) +
+      (competitionScore * 0.40) +
       (commercialScore * 0.20)
     );
-    opportunityScore = Math.max(1, Math.min(99, opportunityScore));
+
+    // 4. "Hidden Gem" / "Altın Maden" Bonus & Saturated Penalty
+    // If listings < 1500 AND bestsellers >= 2: This is a proven gold mine with almost no competition
+    if (totalListings < 1500 && bestsellerCount >= 2) {
+      baseScore += 5;
+    }
+    // Heavy saturation penalty for generic keywords with >100K listings
+    if (totalListings > 100000) {
+      baseScore -= 10;
+    }
+
+    opportunityScore = Math.max(1, Math.min(99, baseScore));
   }
 
   return {

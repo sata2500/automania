@@ -100,6 +100,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [generatedTitle, setGeneratedTitle] = useState('');
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [enrichedKeywords, setEnrichedKeywords] = useState<any[]>([]);
+  const [coOccurringTags, setCoOccurringTags] = useState<string[]>([]);
   const [taxonomyId, setTaxonomyId] = useState<number>(1081);
   const [whoMade, setWhoMade] = useState<string>('someone_else');
   const [whenMade, setWhenMade] = useState<string>('made_to_order');
@@ -799,6 +801,12 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         if (data.listing.selectedTags && Array.isArray(data.listing.selectedTags)) {
           setSelectedTags(data.listing.selectedTags);
         }
+        if (data.keywordsEnriched && Array.isArray(data.keywordsEnriched)) {
+          setEnrichedKeywords(data.keywordsEnriched);
+        }
+        if (data.coOccurringTags && Array.isArray(data.coOccurringTags)) {
+          setCoOccurringTags(data.coOccurringTags);
+        }
         if (data.listing.suggestedBasePrice) {
           setBasePrice(data.listing.suggestedBasePrice);
         }
@@ -1292,6 +1300,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     selectedShippingProfileId, setSelectedShippingProfileId,
     readinessStates, setReadinessStates,
     selectedReadinessStateId, setSelectedReadinessStateId,
+    enrichedKeywords, setEnrichedKeywords,
+    coOccurringTags, setCoOccurringTags,
     copyToClipboard, handleGenerateAI,
     showListingsModal, setShowListingsModal,
     etsyListings, setEtsyListings,

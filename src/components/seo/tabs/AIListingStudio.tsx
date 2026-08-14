@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 import React from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download } from 'lucide-react';
+import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, Download, TrendingUp, Hash, Plus } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 
 export const AIListingStudio = () => {
@@ -17,7 +17,8 @@ export const AIListingStudio = () => {
     handleDeleteMockup, niche, setNiche, productType, setProductType,
     userNotes, setUserNotes, isSavingSettings, handleSaveEtsySettings,
     generatedTitle, setGeneratedTitle, copyToClipboard, copiedKey,
-    generatedDescription, setGeneratedDescription, selectedTags, setSelectedTags
+    generatedDescription, setGeneratedDescription, selectedTags, setSelectedTags,
+    enrichedKeywords, coOccurringTags
   } = useEtsySeo();
 
   if (activeTab !== 'studio') return null;
@@ -152,7 +153,7 @@ export const AIListingStudio = () => {
                       
                       {!editingFolderId && !deletingFolderId && (
                         <div 
-                          className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
                           onClick={(e) => {
                             e.stopPropagation();
                             setDeletingFolderId(folder.id);
@@ -224,30 +225,31 @@ export const AIListingStudio = () => {
             </div>
           )}
 
+          {/* Core SEO Inputs Form */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                Tasarım Nişi / Teması (AI Tarafından Çıkarılır):
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                🎯 Odak Niş / Tasarım Teması:
               </label>
               <input
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
-                placeholder="Örn: Nature's Legacy Conservation"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold text-emerald-600 dark:text-emerald-400"
+                placeholder="Örn: Cottagecore Rabbit, Botanical Wildflower..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                İlandaki Ürün Tipleri / Markalar:
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                👕 Hedef Ürün / Kumaş / Kalıp Tipi:
               </label>
               <input
                 type="text"
                 value={productType}
                 onChange={(e) => setProductType(e.target.value)}
-                placeholder="Örn: Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee"
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
+                placeholder="Örn: Comfort Colors 1717 Garment Dyed Vintage Tee..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
               />
             </div>
           </div>
@@ -367,6 +369,115 @@ export const AIListingStudio = () => {
               })}
             </div>
           </div>
+
+          {/* Candidate Keywords & Co-Occurring Competitor Tags Intelligence Panel */}
+          {((enrichedKeywords && enrichedKeywords.length > 0) || (coOccurringTags && coOccurringTags.length > 0)) && (
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+              <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                    Kelime Havuzu & Birlikte Kullanılan Popüler Rakip Etiketler (Co-occurring Tags)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Yapay Zeka SEO modeli, aşağıdaki gerçek Etsy veritabanı puanları ve rakip etiketleri arasından en yüksek dönüşüm sağlayacak 13 etiketi seçmiştir.
+                  </p>
+                </div>
+              </div>
+
+              {/* Grid 2 Columns: Candidate Keywords vs Co-Occurring Tags */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* 1. Candidate Keywords */}
+                {enrichedKeywords && enrichedKeywords.length > 0 && (
+                  <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <Hash className="w-3.5 h-3.5 text-emerald-500" />
+                        Tasarım Anahtar Kelimeleri & Fırsat Puanları ({enrichedKeywords.length})
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                      {enrichedKeywords.map((kw: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">
+                            {kw.keyword}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {kw.total_listings > 0 && (
+                              <span className="text-[10px] text-slate-400">
+                                {kw.total_listings.toLocaleString('en-US')} İlan
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                              kw.opportunity_score >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
+                              kw.opportunity_score >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
+                              'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}>
+                              {kw.opportunity_score}/100
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Co-Occurring Competitor Tags */}
+                {coOccurringTags && coOccurringTags.length > 0 && (
+                  <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        Birlikte Kullanılan Popüler Rakip Etiketler ({coOccurringTags.length})
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-60 overflow-y-auto pr-1">
+                      {coOccurringTags.map((item: any, i: number) => {
+                        const tagStr = typeof item === 'string' ? item : (item?.keyword || '');
+                        const tagScore = typeof item === 'object' ? item.opportunity_score : null;
+                        const isAlreadySelected = selectedTags.includes(tagStr);
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (isAlreadySelected) {
+                                setSelectedTags((prev: string[]) => prev.filter((t: string) => t !== tagStr));
+                              } else if (selectedTags.length < 13) {
+                                setSelectedTags((prev: string[]) => [...prev, tagStr]);
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                              isAlreadySelected
+                                ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-emerald-400'
+                            }`}
+                            title={isAlreadySelected ? 'Etiketi Kaldır' : selectedTags.length >= 13 ? 'Maksimum 13 etiket seçilebilir' : '13 Etikete Ekle'}
+                          >
+                            <span>{tagStr}</span>
+                            <span className="text-[9px] opacity-75 font-mono">({tagStr.length}/20)</span>
+                            {tagScore && tagScore > 0 && (
+                              <span className={`text-[9px] font-bold px-1 py-0.2 rounded font-mono ${
+                                isAlreadySelected
+                                  ? 'bg-emerald-600 text-white'
+                                  : tagScore >= 85 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              }`}>
+                                {tagScore}p
+                              </span>
+                            )}
+                            {isAlreadySelected ? (
+                              <Check className="w-3 h-3 text-white ml-0.5" />
+                            ) : (
+                              <Plus className="w-3 h-3 text-emerald-500 ml-0.5" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
     </>
   );

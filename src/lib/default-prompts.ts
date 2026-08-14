@@ -37,20 +37,33 @@ APPAREL BRANDS / GARMENT TYPES IN LISTING:
 USER CUSTOM NOTES:
 {{userNotes}}
 
-CANDIDATE KEYWORDS & METRICS:
+PRIMARY CANDIDATE KEYWORDS & REAL ETSY METRICS:
 {{keywords}}
 
-CRITICAL VISUAL VALIDATION & ANTI-CONTAMINATION RULES:
-1. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
-2. 13 TAG DISTRIBUTION: Select EXACTLY 13 tags. EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces). Distribute tags across:
-   - Subject + Product (e.g., cottagecore rabbit, bunny lover gift)
-   - Quote / Message (e.g., grow through quote, inspirational tee)
-   - Aesthetic / Style (e.g., wildflower shirt, botanical shirt)
-   - Buyer Intent / Gifting (e.g., self care gift, nature lover gift)
-   - Micro-Niche & Mindset (e.g., growth mindset, cottagecore shirt)
-3. ETSY SEO TITLE: Max 140 characters. Structure: Primary Message -> Subject/Animal -> Aesthetic -> Botanical -> Buyer Intent. Example: "Grow Through What You Go Through Shirt, Cottagecore Rabbit Tee, Wildflower Botanical Shirt, Inspirational Gift".
-4. ETSY DESCRIPTION: Balanced, high-converting description. Broaden buyer intent beyond just mental health to include nature lovers, rabbit lovers, cottagecore fans, self-care gifts, and everyday botanical apparel. Include PRODUCT HIGHLIGHTS, GARMENT OPTIONS, SIZING, CARE, SHIPPING.
-5. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
+PROVEN COMPETITOR CO-OCCURRING SUB-KEYWORDS & REAL ETSY METRICS (Extracted from bestselling Etsy competitor listings):
+{{coOccurringTags}}
+
+CRITICAL VISUAL VALIDATION & SELECTION STRATEGY:
+1. FULL EVALUATION OF BOTH KEYWORD GROUPS: You are provided with two rich keyword sets: (1) Primary Candidate Keywords and (2) Proven Competitor Co-Occurring Sub-Keywords, both evaluated with real Etsy Opportunity Scores, listing counts, bestsellers, and autocomplete rankings. Evaluate BOTH groups together to select the most profitable, high-demand, low-competition tags.
+2. STRICT SUBJECT FILTERING: Only include keywords directly relevant to the actual design subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). ABSOLUTELY FORBID and ELIMINATE any unrelated subjects, animals, or themes (for example, if the subject is Rabbit, NEVER use 'dog', 'cat', 'horse', 'nurse', 'teacher', etc.).
+3. 13 TAG DIVERSIFICATION STRATEGY (AVOID KEYWORD CANNIBALIZATION):
+   - Select EXACTLY 13 tags.
+   - EVERY SINGLE TAG MUST BE AT MOST 20 CHARACTERS LONG (including spaces).
+   - Tag Diversity Rule: Do NOT repeat generic words like "shirt" or "tee" in more than 4 tags total. Use the remaining slots for rich long-tail intent:
+     * Subject + Product (Max 3 tags, e.g., cottagecore rabbit, bunny lover tee)
+     * Core Message / Quote (2 tags, e.g., grow through quote, inspirational top)
+     * Aesthetic & Vibe (3 tags, e.g., wildflower botanical, dark academia, vintage aesthetic)
+     * Gifting & Recipient (3 tags, e.g., self care gift, plant mom present, nature lover gift)
+     * Micro-Niche & Mindset (2 tags, e.g., growth mindset, whimsical style)
+   - PRIORITIZE high Opportunity Score (>= 80) keywords and verified competitor sub-keywords.
+4. ETSY SEO TITLE (MOBILE-FIRST FRONT-LOADING): Max 140 characters.
+   - FIRST 40 CHARACTERS: Must contain the absolute highest Opportunity Score phrase that describes the exact subject and aesthetic (because Etsy mobile truncates after 40 chars).
+   - Follow with natural, readable segments: [Front-Loaded High-Intent Phrase] -> [Subject/Animal/Theme] -> [Aesthetic/Style] -> [Garment/Gift Keyword].
+   - Avoid spammy comma stuffing; ensure it reads cleanly to human buyers while satisfying search algorithms.
+5. ETSY DESCRIPTION (FIRST 160 CHARACTERS SEO HOOK):
+   - Paragraph 1: Start with a captivating 2-sentence hook containing primary keywords and gift appeal (indexed by Etsy and Google Search snippets).
+   - Follow with structured sections: PRODUCT HIGHLIGHTS, PREMIUM FABRIC & FIT, SIZING GUIDE, CARE INSTRUCTIONS, SHIPPING & PROCESSING.
+6. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
    - taxonomy_id: Always return {{taxonomyId}}.
    - who_made: Always use "i_did".
    - when_made: Always use "2020_2026" or "made_to_order". Use "made_to_order" if applicable.
