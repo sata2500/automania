@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   RefreshCw, Trash2, Search, Download, CheckSquare, Square, 

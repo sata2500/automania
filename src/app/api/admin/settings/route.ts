@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       let val = row.setting_value || '';
       
       // Mask API keys for security even in admin panel
-      if (['openrouter_api_key', 'etsy_keystring', 'etsy_shared_secret'].includes(row.setting_key) && val) {
+      if (['openrouter_api_key', 'etsy_keystring', 'etsy_shared_secret', 'scraping_api_key'].includes(row.setting_key) && val) {
         if (val.length > 12) {
           val = val.substring(0, 8) + '•'.repeat(val.length - 12) + val.substring(val.length - 4);
         } else {
@@ -63,6 +63,17 @@ export async function POST(request: NextRequest) {
         ON CONFLICT (setting_key) 
         DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
       `;
+
+      // Synchronize workspace table if matching column
+      if (session.id) {
+        if (key === 'scraping_api_key') {
+          await sql`UPDATE user_workspaces SET scraping_api_key = ${value} WHERE user_id = ${session.id}`.catch(() => {});
+        } else if (key === 'scraping_provider') {
+          await sql`UPDATE user_workspaces SET scraping_provider = ${value} WHERE user_id = ${session.id}`.catch(() => {});
+        } else if (key === 'cloudflare_worker_url') {
+          await sql`UPDATE user_workspaces SET cloudflare_worker_url = ${value} WHERE user_id = ${session.id}`.catch(() => {});
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

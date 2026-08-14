@@ -1,9 +1,6 @@
 import { requireAdmin } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
-import { UserAuthProvider } from '@/components/common/UserAuthContext';
-import { ThemeProvider } from '@/components/common/ThemeProvider';
-import { ToastProvider } from '@/components/common/ToastContext';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 

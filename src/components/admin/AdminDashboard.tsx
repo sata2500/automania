@@ -105,6 +105,11 @@ export const AdminDashboard: React.FC = () => {
   
   const [etsyKeystring, setEtsyKeystring] = useState('');
   const [etsySharedSecret, setEtsySharedSecret] = useState('');
+
+  // Scraping & Proxy Settings
+  const [scrapingProvider, setScrapingProvider] = useState<'scraperapi' | 'scrapingbee' | 'zenrows'>('scraperapi');
+  const [scrapingApiKey, setScrapingApiKey] = useState('');
+  const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState('');
   
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
@@ -207,6 +212,10 @@ export const AdminDashboard: React.FC = () => {
             
             if (data.settings.etsy_keystring) setEtsyKeystring(data.settings.etsy_keystring);
             if (data.settings.etsy_shared_secret) setEtsySharedSecret(data.settings.etsy_shared_secret);
+
+            if (data.settings.scraping_provider) setScrapingProvider(data.settings.scraping_provider as any);
+            if (data.settings.scraping_api_key) setScrapingApiKey(data.settings.scraping_api_key);
+            if (data.settings.cloudflare_worker_url) setCloudflareWorkerUrl(data.settings.cloudflare_worker_url);
             
             if (data.settings.openrouter_model_vision) setModelVision(data.settings.openrouter_model_vision);
             if (data.settings.openrouter_model_reasoning) setModelReasoning(data.settings.openrouter_model_reasoning);
@@ -268,6 +277,10 @@ export const AdminDashboard: React.FC = () => {
       
       if (etsyKeystring) settingsToSave.etsy_keystring = etsyKeystring;
       if (etsySharedSecret) settingsToSave.etsy_shared_secret = etsySharedSecret;
+
+      if (scrapingProvider) settingsToSave.scraping_provider = scrapingProvider;
+      if (scrapingApiKey !== undefined) settingsToSave.scraping_api_key = scrapingApiKey;
+      if (cloudflareWorkerUrl !== undefined) settingsToSave.cloudflare_worker_url = cloudflareWorkerUrl;
       
       if (modelVision) settingsToSave.openrouter_model_vision = modelVision;
       if (modelReasoning) settingsToSave.openrouter_model_reasoning = modelReasoning;
@@ -793,6 +806,89 @@ export const AdminDashboard: React.FC = () => {
                     placeholder="Etsy Shared Secret"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
                   />
+                </div>
+              </div>
+
+              {/* Scraping & Proxy Provider Settings */}
+              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-emerald-500" />
+                    <span>Etsy Kazıma &amp; Proxy Servisleri (Yedek Hatlar)</span>
+                  </label>
+                  <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                    4 Kademeli Hibrit Motor
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1.5">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">📌 Kazıma Sıralaması &amp; Çalışma Mantığı:</p>
+                  <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                    <li><strong className="text-emerald-600 dark:text-emerald-400">1. Kademe (Birincil):</strong> Bağlı Etsy Mağazanızın Resmi API&apos;si (Sıfır bot engeli, anlık kesin ilan sayısı ve fiyatlar).</li>
+                    <li><strong className="text-sky-600 dark:text-sky-400">2. Kademe:</strong> Tarayıcınızdan Doğrudan Canlı Kazıma (Kelime Havuzu sekmesindeki &quot;Tarayıcımdan Kazı&quot; butonu).</li>
+                    <li><strong className="text-amber-600 dark:text-amber-400">3. Kademe (Proxy):</strong> Cloudflare Worker CORS Proxy (Ücretsiz kendi sunucu hattınız).</li>
+                    <li><strong className="text-indigo-600 dark:text-indigo-400">4. Kademe (Anti-Bot):</strong> Scraper API konut tipi proxy (Bot korumalarını aşmak için yedek hat).</li>
+                  </ul>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Provider Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span>Scraper API Sağlayıcısı</span>
+                    </label>
+                    <select
+                      value={scrapingProvider}
+                      onChange={(e) => setScrapingProvider(e.target.value as any)}
+                      className="w-full px-3.5 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
+                    >
+                      <option value="scraperapi">ScraperAPI (scraperapi.com - 5.000 İstek/Ay Ücretsiz)</option>
+                      <option value="scrapingbee">ScrapingBee (scrapingbee.com - 1.000 İstek Ücretsiz)</option>
+                      <option value="zenrows">ZenRows (zenrows.com - 1.000 İstek Ücretsiz)</option>
+                    </select>
+                  </div>
+
+                  {/* API Key */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5 text-emerald-500" />
+                        Scraper API Key
+                      </span>
+                      <a
+                        href={scrapingProvider === 'scrapingbee' ? 'https://www.scrapingbee.com' : scrapingProvider === 'zenrows' ? 'https://www.zenrows.com' : 'https://www.scraperapi.com/signup'}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
+                      >
+                        Ücretsiz Key Al ↗
+                      </a>
+                    </label>
+                    <input
+                      type="text"
+                      value={scrapingApiKey}
+                      onChange={(e) => setScrapingApiKey(e.target.value)}
+                      placeholder="Scraper API Key yapıştırın..."
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                    />
+                  </div>
+
+                  {/* Cloudflare Worker URL */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        Cloudflare Worker URL (İsteğe Bağlı)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={cloudflareWorkerUrl}
+                      onChange={(e) => setCloudflareWorkerUrl(e.target.value)}
+                      placeholder="https://automania-proxy.xxx.workers.dev"
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
