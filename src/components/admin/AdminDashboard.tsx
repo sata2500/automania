@@ -47,6 +47,7 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
@@ -1341,7 +1342,9 @@ export const AdminDashboard: React.FC = () => {
       {/* SUB TAB 3: KEYWORDS */}
       {activeSubTab === 'keywords' && (
         <div className="animate-fadeIn">
-          <KeywordPoolManagement />
+          <ErrorBoundary fallbackTitle="Kelime Havuzu Yüklenirken Bir Hata Oluştu">
+            <KeywordPoolManagement />
+          </ErrorBoundary>
         </div>
       )}
 

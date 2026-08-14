@@ -285,6 +285,32 @@ export default function KeywordPoolManagement() {
     }
   };
 
+  const parseRawMetrics = (rm: any) => {
+    if (!rm) return {};
+    if (typeof rm === 'string') {
+      try { return JSON.parse(rm); } catch { return {}; }
+    }
+    return rm;
+  };
+
+  const formatDateSafe = (d: string | null | undefined) => {
+    if (!d) return null;
+    try {
+      const parsed = new Date(d);
+      if (isNaN(parsed.getTime())) return null;
+      return parsed.toLocaleDateString('tr-TR');
+    } catch {
+      return null;
+    }
+  };
+
+  const toSafeNum = (val: any, fallback = 0): number => {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'number') return isNaN(val) ? fallback : val;
+    const parsed = parseFloat(String(val));
+    return isNaN(parsed) ? fallback : parsed;
+  };
+
   const renderSourceBadge = (kw: Keyword) => {
     if (kw.last_scrape_error) {
       return (
@@ -297,7 +323,8 @@ export default function KeywordPoolManagement() {
         </span>
       );
     }
-    const method = kw.raw_metrics?.method || kw.raw_metrics?.methodUsed;
+    const rm = parseRawMetrics(kw.raw_metrics);
+    const method = rm?.method || rm?.methodUsed;
 
     if (method === 'etsy_official_api') {
       return (
@@ -583,101 +610,108 @@ export default function KeywordPoolManagement() {
                  </tr>
                ) : (
                  keywords.map((kw) => {
-                   const charLen = kw.keyword.length;
-                   const isTagOk = charLen <= 20;
-                   const oppScore = kw.opportunity_score ?? kw.etsy_score;
-                   const isBlocked = !!kw.last_scrape_error || kw.competition_level === 'Engellendi / Hata';
-                   const hasTopTags = kw.raw_metrics?.topTags && kw.raw_metrics.topTags.length > 0;
+                    const rm = parseRawMetrics(kw.raw_metrics);
+                    const cleanKeyword = kw.keyword || '';
+                    const charLen = cleanKeyword.length;
+                    const isTagOk = charLen <= 20;
+                    const oppScore = toSafeNum(kw.opportunity_score ?? kw.etsy_score, 0);
+                    const totalListings = toSafeNum(kw.total_listings, 0);
+                    const avgPrice = toSafeNum(kw.avg_price, 0);
+                    const bestsellerCount = toSafeNum(kw.bestseller_count, 0);
+                    const isBlocked = !!kw.last_scrape_error || kw.competition_level === 'Engellendi / Hata';
+                    const topTags = Array.isArray(rm?.topTags) ? rm.topTags : [];
+                    const hasTopTags = topTags.length > 0;
+                    const formattedDate = formatDateSafe(kw.last_evaluated_at);
 
-                   return (
-                     <tr key={kw.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                       <td className="px-3 py-3.5 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
-                         {selectedIds.has(kw.id) ? (
-                           <CheckSquare className="w-4 h-4 text-emerald-600 mx-auto" />
-                         ) : (
-                           <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
-                         )}
-                       </td>
-                       <td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">
-                         <div className="flex items-center gap-2">
-                           <span className="font-bold text-slate-900 dark:text-white">{kw.keyword}</span>
-                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isTagOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
-                             {charLen}/20
-                           </span>
-                           {hasTopTags && (
-                             <button 
-                               onClick={() => setActiveDetailsKeyword(kw)}
-                               title="Birlikte kullanılan popüler etiketleri gör"
-                               className="text-slate-400 hover:text-indigo-600 transition-colors"
-                             >
-                               <Info className="w-3.5 h-3.5" />
-                             </button>
-                           )}
-                         </div>
-                       </td>
-                       <td className="px-3 py-3.5 text-center font-mono">{kw.usage_count}</td>
-                       <td className="px-3 py-3.5">
-                          {kw.total_listings && kw.total_listings > 0 ? (
-                            <div>
-                              <div className="font-bold text-slate-900 dark:text-white font-mono">
-                                {kw.total_listings.toLocaleString()} ilan
-                              </div>
-                              <div className="text-[11px] text-slate-500 font-medium">
-                                {kw.competition_level}
-                              </div>
-                            </div>
-                          ) : isBlocked ? (
-                            <div>
-                              <span className="text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center gap-1">
-                                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                                Engellendi / Hata
-                              </span>
-                              <span className="text-[10px] text-rose-500 block truncate max-w-[140px]" title={kw.last_scrape_error || ''}>
-                                {kw.last_scrape_error || 'Etsy Bot Koruması'}
-                              </span>
-                            </div>
+                    return (
+                      <tr key={kw.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-3 py-3.5 text-center cursor-pointer" onClick={() => handleSelect(kw.id)}>
+                          {selectedIds.has(kw.id) ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-600 mx-auto" />
                           ) : (
-                            <span className="text-slate-400 text-xs">Taranmadı</span>
+                            <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 mx-auto" />
                           )}
                         </td>
-                       <td className="px-3 py-3.5 text-center">
-                         {kw.is_etsy_suggested ? (
-                           <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
-                             <CheckCircle2 className="w-3 h-3" />
-                             #{kw.autocomplete_rank || 1}
-                           </span>
-                         ) : (
-                           <span className="text-slate-400 text-xs">-</span>
-                         )}
-                       </td>
-                       <td className="px-3 py-3.5 text-center font-mono font-medium">
-                         {kw.avg_price && kw.avg_price > 0 ? (
-                           <span className="text-emerald-700 dark:text-emerald-400 font-bold">
-                             ${kw.avg_price.toFixed(2)}
-                           </span>
-                         ) : (
-                           <span className="text-slate-400 text-xs">-</span>
-                         )}
-                       </td>
-                       <td className="px-3 py-3.5 text-center font-mono font-bold text-amber-600 dark:text-amber-400">
-                         {kw.bestseller_count && kw.bestseller_count > 0 ? `${kw.bestseller_count} adet` : '-'}
-                       </td>
-                       <td className="px-3 py-3.5 text-center">
-                         {getScoreBadge(oppScore, isBlocked)}
-                       </td>
-                       <td className="px-3 py-3.5 text-[11px] text-slate-500 whitespace-nowrap">
-                         <div className="flex flex-col gap-1 items-start">
-                           {renderSourceBadge(kw)}
-                           {kw.last_evaluated_at && (
-                             <span className="text-[10px] text-slate-400 font-mono">
-                               {new Date(kw.last_evaluated_at).toLocaleDateString('tr-TR')}
-                             </span>
+                        <td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 dark:text-white">{cleanKeyword}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isTagOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
+                              {charLen}/20
+                            </span>
+                            {hasTopTags && (
+                              <button 
+                                onClick={() => setActiveDetailsKeyword(kw)}
+                                title="Birlikte kullanılan popüler etiketleri gör"
+                                className="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                              >
+                                <Info className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 text-center font-mono">{toSafeNum(kw.usage_count, 0)}</td>
+                        <td className="px-3 py-3.5">
+                           {totalListings > 0 ? (
+                             <div>
+                               <div className="font-bold text-slate-900 dark:text-white font-mono">
+                                 {totalListings.toLocaleString('tr-TR')} ilan
+                               </div>
+                               <div className="text-[11px] text-slate-500 font-medium">
+                                 {kw.competition_level || 'Normal'}
+                               </div>
+                             </div>
+                           ) : isBlocked ? (
+                             <div>
+                               <span className="text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center gap-1">
+                                 <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                                 Engellendi / Hata
+                               </span>
+                               <span className="text-[10px] text-rose-500 block truncate max-w-[140px]" title={kw.last_scrape_error || ''}>
+                                 {kw.last_scrape_error || 'Etsy Bot Koruması'}
+                               </span>
+                             </div>
+                           ) : (
+                             <span className="text-slate-400 text-xs">Taranmadı</span>
                            )}
-                         </div>
-                       </td>
-                     </tr>
-                   );
-                 })
+                         </td>
+                        <td className="px-3 py-3.5 text-center">
+                          {kw.is_etsy_suggested ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold inline-flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                              <CheckCircle2 className="w-3 h-3" />
+                              #{toSafeNum(kw.autocomplete_rank, 1)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3.5 text-center font-mono font-medium">
+                          {avgPrice > 0 ? (
+                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                              ${avgPrice.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3.5 text-center font-mono font-bold text-amber-600 dark:text-amber-400">
+                          {bestsellerCount > 0 ? `${bestsellerCount} adet` : '-'}
+                        </td>
+                        <td className="px-3 py-3.5 text-center">
+                          {getScoreBadge(oppScore, isBlocked)}
+                        </td>
+                        <td className="px-3 py-3.5 text-[11px] text-slate-500 whitespace-nowrap">
+                          <div className="flex flex-col gap-1 items-start">
+                            {renderSourceBadge(kw)}
+                            {formattedDate && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {formattedDate}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                )}
              </tbody>
            </table>
@@ -726,56 +760,69 @@ export default function KeywordPoolManagement() {
                </button>
              </div>
 
-             <div className="space-y-3">
-               <div>
-                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                   Birlikte Kullanılan En Popüler Etiketler (Etsy Sample):
-                 </label>
-                 <div className="flex flex-wrap gap-1.5">
-                   {(activeDetailsKeyword.raw_metrics?.topTags || []).map((tag: string, idx: number) => (
-                     <span 
-                       key={idx}
-                       className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800"
-                     >
-                       #{tag}
-                     </span>
-                   ))}
-                 </div>
-               </div>
+             {(() => {
+                const modalRm = parseRawMetrics(activeDetailsKeyword.raw_metrics);
+                const modalTopTags = Array.isArray(modalRm?.topTags) ? modalRm.topTags : [];
+                const modalSuggestions = Array.isArray(modalRm?.autocomplete?.topSuggestions) ? modalRm.autocomplete.topSuggestions : [];
+                const modalAvgPrice = toSafeNum(activeDetailsKeyword.avg_price, 0);
+                const modalAvgFavs = toSafeNum(modalRm?.avgFavorites, 0);
+                const modalAvgViews = toSafeNum(modalRm?.avgViews, 0);
 
-               {activeDetailsKeyword.raw_metrics?.autocomplete?.topSuggestions && (
-                 <div>
-                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                     Etsy Arama Çubuğu Tamamlamaları:
-                   </label>
-                   <div className="flex flex-wrap gap-1.5">
-                     {activeDetailsKeyword.raw_metrics.autocomplete.topSuggestions.map((sug: string, idx: number) => (
-                       <span 
-                         key={idx}
-                         className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg border border-emerald-200 dark:border-emerald-800"
-                       >
-                         {sug}
-                       </span>
-                     ))}
-                   </div>
-                 </div>
-               )}
+                return (
+                  <div className="space-y-3">
+                    {modalTopTags.length > 0 && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                          Birlikte Kullanılan En Popüler Etiketler (Etsy Sample):
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {modalTopTags.map((tag: string, idx: number) => (
+                            <span 
+                              key={idx}
+                              className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                   <span className="text-slate-400 block text-[10px]">Ort. Fiyat</span>
-                   <span className="font-bold text-slate-800 dark:text-slate-200">${activeDetailsKeyword.avg_price || 0}</span>
-                 </div>
-                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                   <span className="text-slate-400 block text-[10px]">Ort. Favori</span>
-                   <span className="font-bold text-slate-800 dark:text-slate-200">{activeDetailsKeyword.raw_metrics?.avgFavorites || 0}</span>
-                 </div>
-                 <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                   <span className="text-slate-400 block text-[10px]">Ort. Görüntülenme</span>
-                   <span className="font-bold text-slate-800 dark:text-slate-200">{activeDetailsKeyword.raw_metrics?.avgViews || 0}</span>
-                 </div>
-               </div>
-             </div>
+                    {modalSuggestions.length > 0 && (
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                          Etsy Arama Çubuğu Tamamlamaları:
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {modalSuggestions.map((sug: string, idx: number) => (
+                            <span 
+                              key={idx}
+                              className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg border border-emerald-200 dark:border-emerald-800"
+                            >
+                              {sug}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                        <span className="text-slate-400 block text-[10px]">Ort. Fiyat</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">${modalAvgPrice > 0 ? modalAvgPrice.toFixed(2) : '0.00'}</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                        <span className="text-slate-400 block text-[10px]">Ort. Favori</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgFavs}</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                        <span className="text-slate-400 block text-[10px]">Ort. Görüntülenme</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgViews}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
              <div className="flex justify-end pt-2">
                <button 
