@@ -194,8 +194,19 @@ export const VariationTableView: React.FC = () => {
             })}
             {filteredVariations.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-500 font-sans">
-                  Seçili filtrelere uygun varyasyon bulunamadı. Lütfen filtreleri temizleyin.
+                <td colSpan={5} className="py-12 px-6 text-center text-slate-500 font-sans">
+                  {variations.length === 0 ? (
+                    <div className="max-w-md mx-auto space-y-2">
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Varyasyon tablosu şu an boş.
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Yukarıdaki <strong>Kayıtlı Şablonu Yükle</strong> veya <strong>Etsy&apos;den Şablon İlan Çek</strong> butonlarını kullanabilir ya da menüden ürün, beden ve renkleri seçip tabloya aktarabilirsiniz.
+                      </p>
+                    </div>
+                  ) : (
+                    <span>Seçili filtrelere uygun varyasyon bulunamadı. Lütfen filtreleri temizleyin.</span>
+                  )}
                 </td>
               </tr>
             )}

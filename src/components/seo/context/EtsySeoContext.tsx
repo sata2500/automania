@@ -96,8 +96,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
   const [selectedDesign, setSelectedDesign] = useState<DesignItem | null>(null);
 
   // Variation Matrix state
-  const [sizes, setSizes] = useState<string[]>(['S', 'M', 'L', 'XL', '2XL', '3XL']);
-  const [colors, setColors] = useState<string[]>(['Black', 'White', 'Navy', 'Pepper']);
+  const [sizes, setSizes] = useState<string[]>([]);
+  const [colors, setColors] = useState<string[]>([]);
   const [variations, setVariations] = useState<VariationRow[]>([]);
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
   const [defaultTemplates, setDefaultTemplates] = useState<Record<number, string>>({});
@@ -807,34 +807,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       .catch(err => console.warn('Error fetching taxonomy properties:', err));
   }, [taxonomyId, etsyConnected]);
 
-  // Generate Variations Matrix whenever sizes or colors change
-  useEffect(() => {
-    setVariations(prev => {
-      const newVars: VariationRow[] = [];
-      colors.forEach(color => {
-        sizes.forEach(size => {
-          const id = `${color}-${size}`;
-          const existing = prev.find(v => v.id === id);
-          if (existing) {
-            newVars.push(existing);
-          } else {
-            const isPlusSize = size === '2XL' || size === '3XL' || size === '4XL';
-            const price = isPlusSize ? basePrice + 3.00 : basePrice;
-            newVars.push({
-              id,
-              color,
-              size,
-              price: Math.round(price * 100) / 100,
-              quantity: 999,
-              sku: '',
-              enabled: true
-            });
-          }
-        });
-      });
-      return newVars;
-    });
-  }, [sizes, colors]); // intentionally omitted basePrice to prevent resetting manual edits
+
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
