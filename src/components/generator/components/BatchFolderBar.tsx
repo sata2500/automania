@@ -25,55 +25,57 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
   const isAllActive = activeFolderId === null;
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-900/90 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-          Üretim İçin Klasör Seçin:
-        </label>
-        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-          Etsy Kuralı: Maksimum 22 medya (20 görsel + 2 video)
+    <div className="relative z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-xs">
+      {/* Bar Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider truncate">
+            Üretim Klasörü Seçin:
+          </label>
+        </div>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium shrink-0">
+          Etsy Limiti: <strong className="font-semibold text-slate-600 dark:text-slate-400">Maks. 22 Medya</strong>
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center">
-        {/* "Tüm Klasörler" Button with 22 limit validation */}
+      {/* Horizontal Scrollable Folder Pills Row on Mobile, Wrap on Desktop */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap pb-1 pt-0.5">
+        {/* "Tüm Klasörler" Pill */}
         <button
           onClick={() => onFolderClick(null)}
-          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer shrink-0 ${
+          className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer shrink-0 whitespace-nowrap ${
             isAllOverLimit
               ? isAllActive
-                ? 'bg-rose-500 border-rose-600 text-white shadow-md shadow-rose-500/30'
-                : 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100/60'
+                ? 'bg-slate-800 dark:bg-slate-850 border-amber-500/60 text-amber-300 ring-1 ring-amber-500/40 shadow-sm'
+                : 'bg-slate-100/90 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300 hover:border-amber-500/40'
               : isAllActive
-              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30'
-              : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500 text-white shadow-md shadow-indigo-600/25'
+              : 'bg-white dark:bg-slate-800/70 border-slate-200 dark:border-slate-700/70 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
           title={
             isAllOverLimit
-              ? `Tüm klasörlerde ${allFoldersStats.itemCount} öğe / ${allFoldersStats.pairCount} varyasyon var. Etsy en fazla 22 öğe kabul eder.`
+              ? `Tüm klasörlerde ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy en fazla 22 öğe kabul eder.`
               : `Tüm Klasörler (${allFoldersStats.itemCount} Öğe - ${allFoldersStats.pairCount} Varyasyon)`
           }
         >
           {isAllOverLimit ? (
-            <AlertTriangle className={`w-4 h-4 shrink-0 ${isAllActive ? 'text-white' : 'text-rose-500'}`} />
+            <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${isAllActive ? 'text-amber-400' : 'text-amber-500'}`} />
           ) : isAllActive ? (
-            <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" />
+            <FolderOpen className="w-3.5 h-3.5 text-amber-300 shrink-0" />
           ) : (
-            <Folder className="w-4 h-4 text-slate-400 shrink-0" />
+            <Folder className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           )}
           <span>Tüm Klasörler</span>
           <span
             className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
               isAllOverLimit
-                ? isAllActive
-                  ? 'bg-slate-950/80 text-rose-300'
-                  : 'bg-rose-200 dark:bg-rose-900/80 text-rose-800 dark:text-rose-200'
+                ? 'bg-amber-500/15 dark:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30'
                 : isAllActive
-                ? 'bg-slate-950/80 text-amber-300'
-                : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                ? 'bg-black/25 text-white'
+                : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
             }`}
           >
-            {isAllOverLimit ? `>22 (${allFoldersStats.pairCount})` : `${allFoldersStats.pairCount} Var.`}
+            {isAllOverLimit ? `>22 (${allFoldersStats.pairCount})` : allFoldersStats.pairCount}
           </span>
         </button>
 
@@ -87,14 +89,14 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
             <button
               key={folder.id}
               onClick={() => onFolderClick(folder.id)}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[240px] min-w-0 ${
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[220px] whitespace-nowrap ${
                 isOverLimit
                   ? isActive
-                    ? 'bg-rose-500 border-rose-600 text-white shadow-md shadow-rose-500/30'
-                    : 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100/60'
+                    ? 'bg-slate-800 dark:bg-slate-850 border-amber-500/60 text-amber-300 ring-1 ring-amber-500/40 shadow-sm'
+                    : 'bg-slate-100/90 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/70 text-slate-700 dark:text-slate-300 hover:border-amber-500/40'
                   : isActive
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-md shadow-indigo-600/30'
-                  : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500 text-white shadow-md shadow-indigo-600/25'
+                  : 'bg-white dark:bg-slate-800/70 border-slate-200 dark:border-slate-700/70 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
               title={
                 isOverLimit
@@ -103,22 +105,20 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
               }
             >
               {isOverLimit ? (
-                <AlertTriangle className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-rose-500'}`} />
+                <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-amber-400' : 'text-amber-500'}`} />
               ) : isActive ? (
-                <FolderOpen className="w-4 h-4 text-amber-300 shrink-0" />
+                <FolderOpen className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               ) : (
-                <Folder className="w-4 h-4 text-slate-400 shrink-0" />
+                <Folder className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               )}
               <span className="truncate">{folder.name}</span>
               <span
                 className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold shrink-0 ${
                   isOverLimit
-                    ? isActive
-                      ? 'bg-slate-950/80 text-rose-300'
-                      : 'bg-rose-200 dark:bg-rose-900/80 text-rose-800 dark:text-rose-200'
+                    ? 'bg-amber-500/15 dark:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30'
                     : isActive
-                    ? 'bg-slate-950/80 text-amber-300'
-                    : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    ? 'bg-black/25 text-white'
+                    : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 {isOverLimit ? `>22 (${stats.itemCount})` : stats.pairCount}
@@ -128,20 +128,20 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
         })}
       </div>
 
-      {/* Warning banner */}
+      {/* Subtle Helper/Warning line */}
       {isAllOverLimit && isAllActive && (
-        <div className="flex items-center gap-2 pt-1 text-[11px] text-rose-600 dark:text-rose-400 font-medium">
-          <Info className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-          <span>
-            Tüm klasörlerde toplam {allFoldersStats.itemCount} öğe ve {allFoldersStats.pairCount} varyasyon bulunuyor. Etsy en fazla 22 medya kabul ettiği için toplu üretim yapabilmek için lütfen en fazla 22 öğe barındıran tek bir klasör seçin.
+        <div className="flex items-center gap-2 pt-0.5 text-[11px] text-amber-600 dark:text-amber-400/90 font-medium">
+          <Info className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+          <span className="leading-tight">
+            Tüm klasörlerde toplam {allFoldersStats.itemCount} öğe / {allFoldersStats.pairCount} varyasyon bulunuyor. Etsy en fazla 22 medya kabul ettiği için lütfen yukarıdan tek bir klasör seçin.
           </span>
         </div>
       )}
 
       {overLimitFolders.length > 0 && !isAllActive && (
-        <div className="flex items-center gap-2 pt-1 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-          <Info className="w-3.5 h-3.5 shrink-0" />
-          <span>
+        <div className="flex items-center gap-2 pt-0.5 text-[11px] text-amber-600 dark:text-amber-400/90 font-medium">
+          <Info className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+          <span className="leading-tight">
             {overLimitFolders.length} adet klasör 22 medya limitini aştığı için toplu üretime uygun değildir (
             {overLimitFolders.map((f) => f.name).join(', ')}).
           </span>
