@@ -43,7 +43,8 @@ import {
   Tag,
   Plus,
   Info,
-  HelpCircle
+  HelpCircle,
+  ChevronDown
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -195,6 +196,66 @@ const PromptVariablePill: React.FC<{
   );
 };
 
+const AccordionCard: React.FC<{
+  isOpen: boolean;
+  onToggle: () => void;
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+  headerAccent?: string;
+}> = ({ isOpen, onToggle, title, subtitle, icon, badge, children, headerAccent }) => {
+  return (
+    <div className={`bg-white dark:bg-slate-900 rounded-3xl border transition-all shadow-xs ${
+      isOpen 
+        ? 'border-indigo-200/80 dark:border-indigo-900/60 ring-1 ring-indigo-500/10 dark:ring-indigo-500/20' 
+        : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+    }`}>
+      {/* Accordion Header */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full p-4 sm:p-5 flex items-center justify-between gap-3 text-left transition-colors rounded-3xl cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`p-2.5 rounded-2xl shrink-0 ${headerAccent || 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50'}`}>
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{title}</h3>
+              {badge}
+            </div>
+            {subtitle && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate hidden sm:block">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className={`p-1.5 rounded-xl border transition-transform duration-200 ${
+            isOpen
+              ? 'rotate-180 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800'
+              : 'rotate-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+          }`}>
+            <ChevronDown className="w-4 h-4" />
+          </div>
+        </div>
+      </button>
+
+      {/* Accordion Content */}
+      {isOpen && (
+        <div className="px-4 pb-5 pt-1 sm:px-6 sm:pb-6 border-t border-slate-100 dark:border-slate-800/80 animate-fadeIn">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
 
 const MODEL_VISION_STORAGE = 'automania_model_vision';
@@ -268,6 +329,23 @@ export const AdminDashboard: React.FC = () => {
   // AI Prompts State
   const [promptAnalyzeDesign, setPromptAnalyzeDesign] = useState('');
   const [promptGenerateListing, setPromptGenerateListing] = useState('');
+  const [activePromptSubTab, setActivePromptSubTab] = useState<'both' | 'vision' | 'listing'>('both');
+
+  // AI Tab Collapsible Sections State (Accordion)
+  const [expandedAiSections, setExpandedAiSections] = useState<Record<string, boolean>>({
+    keys: true,
+    scraping: false,
+    models: true,
+    catalog: false,
+    prompts: true,
+  });
+
+  const toggleAiSection = (key: string) => {
+    setExpandedAiSections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
 
   // OpenRouter Dynamic Models State
   const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
@@ -841,56 +919,113 @@ export const AdminDashboard: React.FC = () => {
 
       {/* SUB TAB 2: AI & OPENROUTER CENTER */}
       {activeSubTab === 'ai' && (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-6 shadow-sm animate-fadeIn">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-2xl border border-indigo-100 dark:border-indigo-800">
-                <Cpu className="w-5 h-5" />
+        <div className="space-y-4 animate-fadeIn">
+          {/* Main Top Banner */}
+          <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3.5">
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-2xl border border-indigo-100 dark:border-indigo-800 shrink-0">
+                <Cpu className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">Yapay Zeka &amp; API Yönetim Merkezi</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Görsel analiz, etiket üretimi ve Etsy optimizasyonu için AI sağlayıcınızı yapılandırın.
+                <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Yapay Zeka &amp; API Yönetim Merkezi</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                    Projenin Beyni
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Görsel analiz, etiket üretimi, canlı kazıma ve sistem promptlarını yapılandırın.
                 </p>
               </div>
             </div>
-            <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800">
-              Projenin Beyni
-            </span>
+
+            {/* Quick Accordion Toggles (Expand all / Collapse all) */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setExpandedAiSections({ keys: true, scraping: true, models: true, catalog: true, prompts: true })}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Tümünü Aç
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpandedAiSections({ keys: false, scraping: false, models: false, catalog: false, prompts: false })}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Tümünü Kapat
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-5">
-            {/* Provider Selection */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Aktif Yapay Zeka Sağlayıcısı</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="ai_provider"
-                    value="openrouter"
-                    checked={activeAiProvider === 'openrouter'}
-                    onChange={() => setActiveAiProvider('openrouter')}
-                    className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">OpenRouter</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="ai_provider"
-                    value="gemini"
-                    checked={activeAiProvider === 'gemini'}
-                    onChange={() => setActiveAiProvider('gemini')}
-                    className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Google Gemini</span>
-                </label>
+          {/* SECTION 1: API KEYS & PROVIDER */}
+          <AccordionCard
+            isOpen={expandedAiSections.keys}
+            onToggle={() => toggleAiSection('keys')}
+            title="1. AI Sağlayıcısı & API Anahtarları"
+            subtitle="OpenRouter, Google Gemini ve Etsy Developer API anahtarları"
+            icon={<Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+            badge={
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${
+                  activeAiProvider === 'openrouter'
+                    ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800'
+                    : 'bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800'
+                }`}>
+                  {activeAiProvider === 'openrouter' ? '🟢 OpenRouter' : '🔷 Google Gemini'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700">
+                  {((openRouterApiKey ? 1 : 0) + (geminiApiKey ? 1 : 0) + (etsyKeystring ? 1 : 0) + (etsySharedSecret ? 1 : 0))}/4 Anahtar
+                </span>
               </div>
-            </div>
+            }
+          >
+            <div className="space-y-4 pt-3">
+              {/* Provider Selection */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Aktif Yapay Zeka Sağlayıcısı</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    activeAiProvider === 'openrouter'
+                      ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-500/20'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="ai_provider"
+                      value="openrouter"
+                      checked={activeAiProvider === 'openrouter'}
+                      onChange={() => setActiveAiProvider('openrouter')}
+                      className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">OpenRouter Router</div>
+                      <div className="text-[10px] text-slate-500">200+ Çoklu Model Havuzu &amp; Özel Yönlendirme</div>
+                    </div>
+                  </label>
 
-            {/* API Key Inputs */}
-            <div className="space-y-4">
+                  <label className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    activeAiProvider === 'gemini'
+                      ? 'bg-sky-50/80 dark:bg-sky-950/60 border-sky-300 dark:border-sky-700 ring-2 ring-sky-500/20'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="ai_provider"
+                      value="gemini"
+                      checked={activeAiProvider === 'gemini'}
+                      onChange={() => setActiveAiProvider('gemini')}
+                      className="text-sky-600 focus:ring-sky-500 cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">Google Gemini Direkt</div>
+                      <div className="text-[10px] text-slate-500">Gemini 3.6 &amp; 2.5 Flash / Pro (Google AI API)</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* API Key Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
@@ -925,7 +1060,7 @@ export const AdminDashboard: React.FC = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
@@ -959,533 +1094,639 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Scraping & Proxy Provider Settings */}
-              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <Globe className="w-4 h-4 text-emerald-500" />
-                    <span>Etsy Kazıma &amp; Proxy Servisleri (Yedek Hatlar)</span>
-                  </label>
-                  <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                    4 Kademeli Hibrit Motor
-                  </span>
-                </div>
-
-                <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1.5">
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">📌 Kazıma Sıralaması &amp; Çalışma Mantığı:</p>
-                  <ul className="list-disc pl-4 space-y-1 text-[11px]">
-                    <li><strong className="text-emerald-600 dark:text-emerald-400">1. Kademe (Birincil):</strong> Bağlı Etsy Mağazanızın Resmi API&apos;si (Sıfır bot engeli, anlık kesin ilan sayısı ve fiyatlar).</li>
-                    <li><strong className="text-sky-600 dark:text-sky-400">2. Kademe:</strong> Tarayıcınızdan Doğrudan Canlı Kazıma (Kelime Havuzu sekmesindeki &quot;Tarayıcımdan Kazı&quot; butonu).</li>
-                    <li><strong className="text-amber-600 dark:text-amber-400">3. Kademe (Proxy):</strong> Cloudflare Worker CORS Proxy (Ücretsiz kendi sunucu hattınız).</li>
-                    <li><strong className="text-indigo-600 dark:text-indigo-400">4. Kademe (Anti-Bot):</strong> Scraper API konut tipi proxy (Bot korumalarını aşmak için yedek hat).</li>
-                  </ul>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Provider Selector */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                      <span>Scraper API Sağlayıcısı</span>
-                    </label>
-                    <select
-                      value={scrapingProvider}
-                      onChange={(e) => setScrapingProvider(e.target.value as any)}
-                      className="w-full px-3.5 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
-                    >
-                      <option value="scraperapi">ScraperAPI (scraperapi.com - 5.000 İstek/Ay Ücretsiz)</option>
-                      <option value="scrapingbee">ScrapingBee (scrapingbee.com - 1.000 İstek Ücretsiz)</option>
-                      <option value="zenrows">ZenRows (zenrows.com - 1.000 İstek Ücretsiz)</option>
-                    </select>
-                  </div>
-
-                  {/* API Key */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Key className="w-3.5 h-3.5 text-emerald-500" />
-                        Scraper API Key
-                      </span>
-                      <a
-                        href={scrapingProvider === 'scrapingbee' ? 'https://www.scrapingbee.com' : scrapingProvider === 'zenrows' ? 'https://www.zenrows.com' : 'https://www.scraperapi.com/signup'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
-                      >
-                        Ücretsiz Key Al ↗
-                      </a>
-                    </label>
-                    <input
-                      type="text"
-                      value={scrapingApiKey}
-                      onChange={(e) => setScrapingApiKey(e.target.value)}
-                      placeholder="Scraper API Key yapıştırın..."
-                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                    />
-                  </div>
-
-                  {/* Cloudflare Worker URL */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        Cloudflare Worker URL (İsteğe Bağlı)
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      value={cloudflareWorkerUrl}
-                      onChange={(e) => setCloudflareWorkerUrl(e.target.value)}
-                      placeholder="https://automania-proxy.xxx.workers.dev"
-                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+              <p className="text-[11px] text-slate-400 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Bu anahtarlar doğrudan sunucu veritabanında (app_settings) şifreli saklanır.</span>
               </p>
             </div>
+          </AccordionCard>
 
-            {/* 3-Tier Model Assignments */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Vision Model */}
-              <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/60 rounded-lg text-indigo-600 dark:text-indigo-400">
-                        <ImageIcon className="w-4 h-4" />
-                      </div>
-                      <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Görsel Analiz Modeli</h4>
-                    </div>
-                  </div>
-                  <div className="text-xs font-medium text-indigo-700 dark:text-indigo-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-indigo-100 dark:border-indigo-800 break-all">
-                    {modelVision || 'Henüz Seçilmedi'}
-                  </div>
-                </div>
-                {modelVision && (
-                  <button 
-                    onClick={() => handleTestSpecificModel(modelVision, 'vision', 'openrouter')}
-                    disabled={testingModel === modelVision}
-                    className="mt-3 w-full py-1.5 bg-indigo-100/50 hover:bg-indigo-200/50 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    {testingModel === modelVision ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                    Bu Modeli Test Et
-                  </button>
-                )}
-              </div>
-
-              {/* Reasoning Model */}
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/60 rounded-lg text-emerald-600 dark:text-emerald-400">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">SEO Metin Yazarı (Reasoning)</h4>
-                    </div>
-                  </div>
-                  <div className="text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-emerald-100 dark:border-emerald-800 break-all">
-                    {modelReasoning || 'Henüz Seçilmedi'}
-                  </div>
-                </div>
-                {modelReasoning && (
-                  <button 
-                    onClick={() => handleTestSpecificModel(modelReasoning, 'reasoning', 'openrouter')}
-                    disabled={testingModel === modelReasoning}
-                    className="mt-3 w-full py-1.5 bg-emerald-100/50 hover:bg-emerald-200/50 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    {testingModel === modelReasoning ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                    Bu Modeli Test Et
-                  </button>
-                )}
-              </div>
-
-              {/* Generation Model */}
-              <div className="p-3 bg-purple-50/50 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-600 dark:text-purple-400">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <h4 className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Görsel Üretim Modeli</h4>
-                    </div>
-                  </div>
-                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 bg-white dark:bg-slate-900 py-1.5 px-2 rounded border border-purple-100 dark:border-purple-800 break-all">
-                    {modelGeneration || 'Henüz Seçilmedi'}
-                  </div>
-                </div>
-                {modelGeneration && (
-                  <button 
-                    onClick={() => handleTestSpecificModel(modelGeneration, 'generation', 'openrouter')}
-                    disabled={testingModel === modelGeneration}
-                    className="mt-3 w-full py-1.5 bg-purple-100/50 hover:bg-purple-200/50 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    {testingModel === modelGeneration ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                    Bu Modeli Test Et
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* 3-Tier Model Assignments - Gemini */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Google Gemini Modelleri</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Görsel Analiz Modeli (Vision)</label>
-                    <select
-                      value={geminiModelVision}
-                      onChange={(e) => setGeminiModelVision(e.target.value)}
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
-                    >
-                      <option value="">Seçiniz</option>
-                      <optgroup label="Gemini 3 Serisi">
-                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
-                      </optgroup>
-                      <optgroup label="Gemini 2.5 Serisi">
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  {geminiModelVision && (
-                    <button 
-                      onClick={() => handleTestSpecificModel(geminiModelVision, 'vision', 'gemini')}
-                      disabled={testingModel === geminiModelVision}
-                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      {testingModel === geminiModelVision ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                      Bu Modeli Test Et
-                    </button>
-                  )}
-                </div>
-                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">SEO Metin Modeli (Reasoning)</label>
-                    <select
-                      value={geminiModelReasoning}
-                      onChange={(e) => setGeminiModelReasoning(e.target.value)}
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
-                    >
-                      <option value="">Seçiniz</option>
-                      <optgroup label="Gemini 3 Serisi">
-                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                        <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
-                      </optgroup>
-                      <optgroup label="Gemini 2.5 Serisi">
-                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  {geminiModelReasoning && (
-                    <button 
-                      onClick={() => handleTestSpecificModel(geminiModelReasoning, 'reasoning', 'gemini')}
-                      disabled={testingModel === geminiModelReasoning}
-                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      {testingModel === geminiModelReasoning ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                      Bu Modeli Test Et
-                    </button>
-                  )}
-                </div>
-                <div className="p-3 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">Görsel Üretim Modeli (T2I)</label>
-                    <select
-                      value={geminiModelGeneration}
-                      onChange={(e) => setGeminiModelGeneration(e.target.value)}
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-lg text-xs"
-                    >
-                      <option value="">Seçiniz</option>
-                      <optgroup label="Gemini Image Modelleri">
-                        <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2) - Ücretli</option>
-                        <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image - Ücretli</option>
-                        <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana Pro) - Ücretli</option>
-                        <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image - Ücretli</option>
-                        <option value="imagen-4.0-generate">Imagen 4.0 - Ücretli</option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  {geminiModelGeneration && (
-                    <button 
-                      onClick={() => handleTestSpecificModel(geminiModelGeneration, 'generation', 'gemini')}
-                      disabled={testingModel === geminiModelGeneration}
-                      className="mt-3 w-full py-1.5 bg-sky-100/50 hover:bg-sky-200/50 dark:bg-sky-900/30 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      {testingModel === geminiModelGeneration ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                      Bu Modeli Test Et
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Model Selector & Browser */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-                <Search className="w-3.5 h-3.5 text-indigo-500" />
-                OpenRouter Model Kataloğu
-              </label>
-
-              <div className="space-y-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Model adı ile ara... (Örn: claude, gemini, gpt)"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    {isLoadingModels && (
-                      <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 animate-spin" />
-                    )}
-                  </div>
-
-                  <div className="h-[400px] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {openRouterModels
-                      .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .map((model) => {
-                        const isFree = parseFloat(model.pricing?.prompt || "1") === 0 && parseFloat(model.pricing?.completion || "1") === 0;
-                        const hasVision = model.architecture?.input_modalities?.includes('image');
-                        const isTextToImage = model.architecture?.output_modalities?.includes('image');
-                        const hasWebSearch = model.supported_parameters?.includes('tools') || Object.keys(model.pricing || {}).includes('web_search');
-
-                        return (
-                          <div key={model.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors group">
-                            <div className="space-y-2 mb-3">
-                              <div className="flex justify-between items-start gap-2">
-                                <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-tight">{model.name}</h5>
-                                {isFree ? (
-                                  <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-[9px] font-bold rounded shrink-0">Ücretsiz</span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-400 text-[9px] font-bold rounded shrink-0 flex items-center gap-0.5"><Coins className="w-2.5 h-2.5"/>Ücretli</span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-1 text-[9px]">
-                                <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                                  <MessageSquare className="w-2.5 h-2.5" /> {(model.context_length / 1000).toFixed(0)}K Context
-                                </span>
-                                {hasVision && (
-                                  <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                                    <ImageIcon className="w-2.5 h-2.5" /> Girdi: Görsel
-                                  </span>
-                                )}
-                                {isTextToImage && (
-                                  <span className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded border border-purple-200 dark:border-purple-800 flex items-center gap-1">
-                                    <Sparkles className="w-2.5 h-2.5" /> Çıktı: Görsel
-                                  </span>
-                                )}
-                                {hasWebSearch && (
-                                  <span className="px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 rounded border border-sky-200 dark:border-sky-800 flex items-center gap-1">
-                                    <Globe className="w-2.5 h-2.5" /> Web Arama
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-800">
-                              <button
-                                onClick={() => {
-                                  if (!hasVision) {
-                                    toast.error('Bu model görsel analiz (Vision) desteklemiyor!');
-                                    return;
-                                  }
-                                  setModelVision(model.id);
-                                }}
-                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
-                                  modelVision === model.id
-                                    ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                }`}
-                              >
-                                Analiz İçin Seç
-                              </button>
-                              
-                              <button
-                                onClick={() => setModelReasoning(model.id)}
-                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
-                                  modelReasoning === model.id
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                }`}
-                              >
-                                SEO İçin Seç
-                              </button>
-                              
-                              <button
-                                onClick={() => setModelGeneration(model.id)}
-                                className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
-                                  modelGeneration === model.id
-                                    ? 'bg-purple-600 text-white border-purple-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                }`}
-                              >
-                                Üretim İçin Seç
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    }
-                    {openRouterModels.length === 0 && !isLoadingModels && (
-                       <div className="col-span-1 md:col-span-2 text-center text-slate-500 text-xs py-10">
-                         Hiç model bulunamadı veya bağlantı hatası oluştu.
-                       </div>
-                    )}
-                  </div>
-                </div>
-            </div>
-
-            {/* Sistem Promptları */}
-            <div className="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-indigo-500" />
-                  <span>Sistem Promptları Yönetimi</span>
-                </label>
-                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 font-semibold px-3 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 self-start sm:self-auto">
-                  <Info className="w-3.5 h-3.5" />
-                  Promptlar İngilizce işlenir, değişken kapsülleri Türkçe açıklanmıştır
+          {/* SECTION 2: SCRAPING & PROXY */}
+          <AccordionCard
+            isOpen={expandedAiSections.scraping}
+            onToggle={() => toggleAiSection('scraping')}
+            title="2. Etsy Kazıma & Proxy Ayarları"
+            subtitle="4 Kademeli Hibrit Kazıma, Scraper API ve Cloudflare Worker"
+            icon={<Globe className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
+            headerAccent="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50"
+            badge={
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                  4 Kademeli Hibrit Hat
+                </span>
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 uppercase">
+                  {scrapingProvider}
                 </span>
               </div>
+            }
+          >
+            <div className="space-y-4 pt-3">
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed space-y-1.5">
+                <p className="font-semibold text-slate-800 dark:text-slate-200">📌 Kazıma Sıralaması &amp; Çalışma Mantığı:</p>
+                <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                  <li><strong className="text-emerald-600 dark:text-emerald-400">1. Kademe (Birincil):</strong> Bağlı Etsy Mağazanızın Resmi API&apos;si (Sıfır bot engeli, anlık kesin ilan sayısı ve fiyatlar).</li>
+                  <li><strong className="text-sky-600 dark:text-sky-400">2. Kademe:</strong> Tarayıcınızdan Doğrudan Canlı Kazıma (Kelime Havuzu sekmesindeki &quot;Tarayıcımdan Kazı&quot; butonu).</li>
+                  <li><strong className="text-amber-600 dark:text-amber-400">3. Kademe (Proxy):</strong> Cloudflare Worker CORS Proxy (Ücretsiz kendi sunucu hattınız).</li>
+                  <li><strong className="text-indigo-600 dark:text-indigo-400">4. Kademe (Anti-Bot):</strong> Scraper API konut tipi proxy (Bot korumalarını aşmak için yedek hat).</li>
+                </ul>
+              </div>
 
-              <div className="space-y-6">
-                {/* 1. Görsel Analizi Promptu */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4 text-indigo-500" />
-                        <span>Görsel Analizi Promptu (Vision AI)</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Tasarım yüklendiğinde görseli ve tipografiyi analiz edip Etsy taksonomisine eşleyen prompt şablonu.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT);
-                        toast.info('Görsel Analizi promptu varsayılana döndürüldü.');
-                      }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                    >
-                      <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
-                    </button>
-                  </div>
-
-                  {/* Değişken Kapsülleri */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Tag className="w-3.5 h-3.5 text-indigo-500" />
-                        Desteklenen Değişken Kapsülleri (İmlecin olduğu konuma eklemek için tıklayın):
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {PROMPT_VARIABLES_ANALYZE.map((v) => (
-                        <PromptVariablePill
-                          key={v.tag}
-                          variable={v}
-                          onClick={() => insertVariable(setPromptAnalyzeDesign, promptAnalyzeDesign, v.tag, 'vision_prompt_textarea', v.label)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <textarea
-                      id="vision_prompt_textarea"
-                      value={promptAnalyzeDesign}
-                      onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
-                      placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                      className="w-full h-52 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
-                    />
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Provider Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>Scraper API Sağlayıcısı</span>
+                  </label>
+                  <select
+                    value={scrapingProvider}
+                    onChange={(e) => setScrapingProvider(e.target.value as any)}
+                    className="w-full px-3.5 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
+                  >
+                    <option value="scraperapi">ScraperAPI (scraperapi.com - 5.000 İstek/Ay Ücretsiz)</option>
+                    <option value="scrapingbee">ScrapingBee (scrapingbee.com - 1.000 İstek Ücretsiz)</option>
+                    <option value="zenrows">ZenRows (zenrows.com - 1.000 İstek Ücretsiz)</option>
+                  </select>
                 </div>
 
-                {/* 2. İlan İçeriği Üretme Promptu */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-emerald-500" />
-                        <span>İlan İçeriği Üretme Promptu (SEO & Copywriting)</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Etsy için 140 karakter SEO başlığı, 13 adet 20 karakterlik etiket, açıklama metni ve taksonomi niteliklerini üreten ana şablon.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT);
-                        toast.info('İlan İçeriği Üretme promptu varsayılana döndürüldü.');
-                      }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                {/* API Key */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-emerald-500" />
+                      Scraper API Key
+                    </span>
+                    <a
+                      href={scrapingProvider === 'scrapingbee' ? 'https://www.scrapingbee.com' : scrapingProvider === 'zenrows' ? 'https://www.zenrows.com' : 'https://www.scraperapi.com/signup'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold"
                     >
-                      <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
-                    </button>
-                  </div>
+                      Ücretsiz Key Al ↗
+                    </a>
+                  </label>
+                  <input
+                    type="text"
+                    value={scrapingApiKey}
+                    onChange={(e) => setScrapingApiKey(e.target.value)}
+                    placeholder="Scraper API Key yapıştırın..."
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                  />
+                </div>
 
-                  {/* Değişken Kapsülleri */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Tag className="w-3.5 h-3.5 text-emerald-500" />
-                        Desteklenen Değişken Kapsülleri ({PROMPT_VARIABLES_GENERATE.length} Adet - Tıklayıp İmleç Konumuna Ekleyin):
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {PROMPT_VARIABLES_GENERATE.map((v) => (
-                        <PromptVariablePill
-                          key={v.tag}
-                          variable={v}
-                          onClick={() => insertVariable(setPromptGenerateListing, promptGenerateListing, v.tag, 'listing_prompt_textarea', v.label)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <textarea
-                      id="listing_prompt_textarea"
-                      value={promptGenerateListing}
-                      onChange={(e) => setPromptGenerateListing(e.target.value)}
-                      placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                      className="w-full h-96 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
-                    />
-                  </div>
+                {/* Cloudflare Worker URL */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      Cloudflare Worker URL (İsteğe Bağlı)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={cloudflareWorkerUrl}
+                    onChange={(e) => setCloudflareWorkerUrl(e.target.value)}
+                    placeholder="https://automania-proxy.xxx.workers.dev"
+                    className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                  />
                 </div>
               </div>
             </div>
+          </AccordionCard>
 
-            {/* Save & Test Buttons */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <button
-                onClick={handleSaveApiSettings}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Ayarları Veritabanına Kaydet &amp; Eşitle</span>
-              </button>
+          {/* SECTION 3: ACTIVE MODELS & TEST */}
+          <AccordionCard
+            isOpen={expandedAiSections.models}
+            onToggle={() => toggleAiSection('models')}
+            title="3. Aktif Model Atamaları & Canlı Test"
+            subtitle="Görsel Analiz (Vision), SEO Metin Yazarı (Reasoning) ve Görsel Üretim"
+            icon={<Cpu className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+            badge={
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                {activeAiProvider === 'openrouter' ? 'OpenRouter 3-Tier Modeli' : 'Gemini Modelleri'}
+              </span>
+            }
+          >
+            <div className="space-y-4 pt-3">
+              {activeAiProvider === 'openrouter' ? (
+                /* OpenRouter 3-Tier Model Cards */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Vision Model */}
+                  <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/60 rounded-lg text-indigo-600 dark:text-indigo-400">
+                          <ImageIcon className="w-4 h-4" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Görsel Analiz Modeli (Vision)</h4>
+                      </div>
+                      <div className="text-xs font-mono font-medium text-indigo-700 dark:text-indigo-400 bg-white dark:bg-slate-900 py-2 px-3 rounded-xl border border-indigo-100 dark:border-indigo-800 break-all shadow-2xs">
+                        {modelVision || 'Henüz Seçilmedi'}
+                      </div>
+                    </div>
+                    {modelVision && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(modelVision, 'vision', 'openrouter')}
+                        disabled={testingModel === modelVision}
+                        className="mt-3 w-full py-2 bg-indigo-100/70 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === modelVision ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Reasoning Model */}
+                  <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/60 rounded-lg text-emerald-600 dark:text-emerald-400">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">SEO Metin Yazarı (Reasoning)</h4>
+                      </div>
+                      <div className="text-xs font-mono font-medium text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-900 py-2 px-3 rounded-xl border border-emerald-100 dark:border-emerald-800 break-all shadow-2xs">
+                        {modelReasoning || 'Henüz Seçilmedi'}
+                      </div>
+                    </div>
+                    {modelReasoning && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(modelReasoning, 'reasoning', 'openrouter')}
+                        disabled={testingModel === modelReasoning}
+                        className="mt-3 w-full py-2 bg-emerald-100/70 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === modelReasoning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Generation Model */}
+                  <div className="p-4 bg-purple-50/50 dark:bg-purple-950/30 rounded-2xl border border-purple-100 dark:border-purple-900/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-600 dark:text-purple-400">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Görsel Üretim Modeli (T2I)</h4>
+                      </div>
+                      <div className="text-xs font-mono font-medium text-purple-700 dark:text-purple-400 bg-white dark:bg-slate-900 py-2 px-3 rounded-xl border border-purple-100 dark:border-purple-800 break-all shadow-2xs">
+                        {modelGeneration || 'Henüz Seçilmedi'}
+                      </div>
+                    </div>
+                    {modelGeneration && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(modelGeneration, 'generation', 'openrouter')}
+                        disabled={testingModel === modelGeneration}
+                        className="mt-3 w-full py-2 bg-purple-100/70 hover:bg-purple-200 dark:bg-purple-900/40 dark:hover:bg-purple-900/70 text-purple-700 dark:text-purple-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === modelGeneration ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Gemini 3-Tier Model Selectors */
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4 text-sky-500" />
+                        Görsel Analiz Modeli (Vision)
+                      </label>
+                      <select
+                        value={geminiModelVision}
+                        onChange={(e) => setGeminiModelVision(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
+                      >
+                        <option value="">Seçiniz</option>
+                        <optgroup label="Gemini 3 Serisi">
+                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
+                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
+                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                        </optgroup>
+                        <optgroup label="Gemini 2.5 Serisi">
+                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
+                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    {geminiModelVision && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(geminiModelVision, 'vision', 'gemini')}
+                        disabled={testingModel === geminiModelVision}
+                        className="w-full py-2 bg-sky-100/70 hover:bg-sky-200 dark:bg-sky-900/40 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === geminiModelVision ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-sky-500" />
+                        SEO Metin Modeli (Reasoning)
+                      </label>
+                      <select
+                        value={geminiModelReasoning}
+                        onChange={(e) => setGeminiModelReasoning(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
+                      >
+                        <option value="">Seçiniz</option>
+                        <optgroup label="Gemini 3 Serisi">
+                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
+                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
+                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                        </optgroup>
+                        <optgroup label="Gemini 2.5 Serisi">
+                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
+                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
+                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    {geminiModelReasoning && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(geminiModelReasoning, 'reasoning', 'gemini')}
+                        disabled={testingModel === geminiModelReasoning}
+                        className="w-full py-2 bg-sky-100/70 hover:bg-sky-200 dark:bg-sky-900/40 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === geminiModelReasoning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-sky-500" />
+                        Görsel Üretim Modeli (T2I)
+                      </label>
+                      <select
+                        value={geminiModelGeneration}
+                        onChange={(e) => setGeminiModelGeneration(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
+                      >
+                        <option value="">Seçiniz</option>
+                        <optgroup label="Gemini Image Modelleri">
+                          <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2) - Ücretli</option>
+                          <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image - Ücretli</option>
+                          <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana Pro) - Ücretli</option>
+                          <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image - Ücretli</option>
+                          <option value="imagen-4.0-generate">Imagen 4.0 - Ücretli</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    {geminiModelGeneration && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(geminiModelGeneration, 'generation', 'gemini')}
+                        disabled={testingModel === geminiModelGeneration}
+                        className="w-full py-2 bg-sky-100/70 hover:bg-sky-200 dark:bg-sky-900/40 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === geminiModelGeneration ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          </AccordionCard>
+
+          {/* SECTION 4: OPENROUTER MODEL CATALOG */}
+          {activeAiProvider === 'openrouter' && (
+            <AccordionCard
+              isOpen={expandedAiSections.catalog}
+              onToggle={() => toggleAiSection('catalog')}
+              title="4. OpenRouter Model Kataloğu & Tarayıcı"
+              subtitle="200+ modeli arayın, filtreleyin ve tek tıkla rollere atayın"
+              icon={<Search className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+              badge={
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700">
+                  {openRouterModels.length > 0 ? `${openRouterModels.length} Model` : 'Model Listesi'}
+                </span>
+              }
+            >
+              <div className="space-y-3 pt-3">
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Model adı veya sağlayıcı ile ara... (Örn: claude, gemini, gpt-4o, llama, deepseek)"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {isLoadingModels && (
+                    <RefreshCw className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500 animate-spin" />
+                  )}
+                </div>
+
+                <div className="h-[380px] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {openRouterModels
+                    .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((model) => {
+                      const isFree = parseFloat(model.pricing?.prompt || "1") === 0 && parseFloat(model.pricing?.completion || "1") === 0;
+                      const hasVision = model.architecture?.input_modalities?.includes('image');
+                      const isTextToImage = model.architecture?.output_modalities?.includes('image');
+                      const hasWebSearch = model.supported_parameters?.includes('tools') || Object.keys(model.pricing || {}).includes('web_search');
+
+                      return (
+                        <div key={model.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors group shadow-2xs">
+                          <div className="space-y-2 mb-2.5">
+                            <div className="flex justify-between items-start gap-2">
+                              <h5 className="text-[11px] font-bold text-slate-800 dark:text-slate-200 leading-tight">{model.name}</h5>
+                              {isFree ? (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-[9px] font-bold rounded shrink-0">Ücretsiz</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-400 text-[9px] font-bold rounded shrink-0 flex items-center gap-0.5"><Coins className="w-2.5 h-2.5"/>Ücretli</span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1 text-[9px]">
+                              <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                <MessageSquare className="w-2.5 h-2.5" /> {(model.context_length / 1000).toFixed(0)}K Context
+                              </span>
+                              {hasVision && (
+                                <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                  <ImageIcon className="w-2.5 h-2.5" /> Girdi: Görsel
+                                </span>
+                              )}
+                              {isTextToImage && (
+                                <span className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                                  <Sparkles className="w-2.5 h-2.5" /> Çıktı: Görsel
+                                </span>
+                              )}
+                              {hasWebSearch && (
+                                <span className="px-1.5 py-0.5 bg-sky-50 dark:bg-sky-900/40 text-sky-600 dark:text-sky-400 rounded border border-sky-200 dark:border-sky-800 flex items-center gap-1">
+                                  <Globe className="w-2.5 h-2.5" /> Web Arama
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              onClick={() => {
+                                if (!hasVision) {
+                                  toast.error('Bu model görsel analiz (Vision) desteklemiyor!');
+                                  return;
+                                }
+                                setModelVision(model.id);
+                                toast.success(`Görsel analiz için ${model.name} seçildi.`);
+                              }}
+                              className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                modelVision === model.id
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              Analiz İçin Seç
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                setModelReasoning(model.id);
+                                toast.success(`SEO metin yazarı için ${model.name} seçildi.`);
+                              }}
+                              className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                modelReasoning === model.id
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              SEO İçin Seç
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                setModelGeneration(model.id);
+                                toast.success(`Görsel üretim için ${model.name} seçildi.`);
+                              }}
+                              className={`flex-1 py-1 text-[9px] font-bold rounded-lg border transition-colors ${
+                                modelGeneration === model.id
+                                  ? 'bg-purple-600 text-white border-purple-600'
+                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              Üretim İçin Seç
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  }
+                  {openRouterModels.length === 0 && !isLoadingModels && (
+                     <div className="col-span-1 md:col-span-2 text-center text-slate-500 text-xs py-10">
+                       Hiç model bulunamadı veya bağlantı hatası oluştu.
+                     </div>
+                  )}
+                </div>
+              </div>
+            </AccordionCard>
+          )}
+
+          {/* SECTION 5: SYSTEM PROMPTS & VARIABLE CAPSULES */}
+          <AccordionCard
+            isOpen={expandedAiSections.prompts}
+            onToggle={() => toggleAiSection('prompts')}
+            title="5. Sistem Promptları & Değişken Kapsülleri"
+            subtitle="Görsel Analiz ve İlan İçeriği Üretme şablonları & Türkçe değişken kapsülleri"
+            icon={<MessageSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />}
+            badge={
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  2 Şablon
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-200 dark:border-emerald-800 hidden sm:inline-block">
+                  12 Değişken Kapsülü
+                </span>
+              </div>
+            }
+          >
+            <div className="space-y-4 pt-3">
+              {/* Header Info & Mobile Quick Subtab Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
+                  <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span>Promptlar İngilizce işlenir, değişken kapsülleri Türkçe açıklanmıştır.</span>
+                </div>
+
+                {/* Sub-tab switcher for mobile/desktop ergonomics */}
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-start sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setActivePromptSubTab('both')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      activePromptSubTab === 'both'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    Tümü
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePromptSubTab('vision')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      activePromptSubTab === 'vision'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <ImageIcon className="w-3 h-3" />
+                    Görsel Analiz
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePromptSubTab('listing')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      activePromptSubTab === 'listing'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3 h-3" />
+                    İlan Üretimi
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* 1. Görsel Analizi Promptu */}
+                {(activePromptSubTab === 'both' || activePromptSubTab === 'vision') && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <ImageIcon className="w-4 h-4 text-indigo-500" />
+                          <span>1. Görsel Analizi Promptu (Vision AI)</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Tasarım yüklendiğinde görseli ve tipografiyi analiz edip Etsy taksonomisine eşleyen prompt şablonu.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT);
+                          toast.info('Görsel Analizi promptu varsayılana döndürüldü.');
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                      </button>
+                    </div>
+
+                    {/* Değişken Kapsülleri */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-indigo-500" />
+                          Desteklenen Değişken Kapsülleri (İmlecin olduğu konuma eklemek için tıklayın):
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {PROMPT_VARIABLES_ANALYZE.map((v) => (
+                          <PromptVariablePill
+                            key={v.tag}
+                            variable={v}
+                            onClick={() => insertVariable(setPromptAnalyzeDesign, promptAnalyzeDesign, v.tag, 'vision_prompt_textarea', v.label)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <textarea
+                        id="vision_prompt_textarea"
+                        value={promptAnalyzeDesign}
+                        onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
+                        placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                        className="w-full h-48 sm:h-56 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. İlan İçeriği Üretme Promptu */}
+                {(activePromptSubTab === 'both' || activePromptSubTab === 'listing') && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-emerald-500" />
+                          <span>2. İlan İçeriği Üretme Promptu (SEO & Copywriting)</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Etsy için 140 karakter SEO başlığı, 13 adet 20 karakterlik etiket, açıklama metni ve taksonomi niteliklerini üreten ana şablon.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT);
+                          toast.info('İlan İçeriği Üretme promptu varsayılana döndürüldü.');
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                      </button>
+                    </div>
+
+                    {/* Değişken Kapsülleri */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-emerald-500" />
+                          Desteklenen Değişken Kapsülleri ({PROMPT_VARIABLES_GENERATE.length} Adet - Tıklayıp İmleç Konumuna Ekleyin):
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {PROMPT_VARIABLES_GENERATE.map((v) => (
+                          <PromptVariablePill
+                            key={v.tag}
+                            variable={v}
+                            onClick={() => insertVariable(setPromptGenerateListing, promptGenerateListing, v.tag, 'listing_prompt_textarea', v.label)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <textarea
+                        id="listing_prompt_textarea"
+                        value={promptGenerateListing}
+                        onChange={(e) => setPromptGenerateListing(e.target.value)}
+                        placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                        className="w-full h-64 sm:h-96 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </AccordionCard>
+
+          {/* Bottom Sticky / Prominent Save Bar */}
+          <div className="sticky bottom-4 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left">
+              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Yapılan tüm AI sağlayıcı, model ve prompt ayarları veritabanı ile eşlenir.</span>
+            </div>
+            <button
+              onClick={handleSaveApiSettings}
+              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Ayarları Veritabanına Kaydet &amp; Eşitle</span>
+            </button>
           </div>
         </div>
       )}

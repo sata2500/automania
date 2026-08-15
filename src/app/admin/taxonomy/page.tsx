@@ -10,10 +10,6 @@ export default function TaxonomyAdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterActive, setFilterActive] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
   const fetchCategories = async () => {
     setLoading(true);
     try {
@@ -28,6 +24,10 @@ export default function TaxonomyAdminPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const handleSync = async () => {
     if (!confirm('Etsy\'den 10.000+ kategori ağacı çekilecek. Bu işlem birkaç saniye sürebilir. Onaylıyor musunuz?')) return;
@@ -142,7 +142,7 @@ export default function TaxonomyAdminPage() {
               {loading ? (
                 <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Yükleniyor...</td></tr>
               ) : filteredCategories.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Kategori bulunamadı. Lütfen "Etsy'den Güncelle" butonuna basın.</td></tr>
+                <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Kategori bulunamadı. Lütfen &quot;Etsy&apos;den Güncelle&quot; butonuna basın.</td></tr>
               ) : (
                 filteredCategories.map((c) => (
                   <tr key={c.id} className={`hover:bg-gray-50 ${c.isActive ? 'bg-green-50/30' : ''}`}>
