@@ -1793,7 +1793,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* SUB TAB 4: SYSTEM SETTINGS & MAINTENANCE */}
       {activeSubTab === 'settings' && (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-6 shadow-sm animate-fadeIn">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-4 sm:space-y-6 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
             <div className="flex items-center space-x-3">
               <div className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-2xl">
@@ -1887,7 +1887,7 @@ function UserManagementSection() {
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-6 shadow-sm animate-fadeIn">
+    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-4 sm:space-y-6 shadow-sm animate-fadeIn">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 gap-4">
         <div className="flex items-center space-x-3">

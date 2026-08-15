@@ -16,9 +16,12 @@ export async function GET(req: Request) {
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const order = searchParams.get('order') || 'desc';
     
-    // Cap limit to prevent OOM
+    const isExport = searchParams.get('export') === 'true';
+    
+    // Cap limit to prevent OOM, allow up to 100,000 for exports
     const rawLimit = parseInt(searchParams.get('limit') || '100', 10);
-    const limit = Math.min(Math.max(1, rawLimit), 200);
+    const maxAllowedLimit = isExport || rawLimit > 200 ? 100000 : 200;
+    const limit = Math.min(Math.max(1, rawLimit), maxAllowedLimit);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     const validSortCols = ['keyword', 'usage_count', 'etsy_score', 'opportunity_score', 'total_listings', 'bestseller_count', 'char_length', 'created_at', 'last_evaluated_at'];

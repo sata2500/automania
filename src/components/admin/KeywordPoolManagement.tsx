@@ -48,6 +48,8 @@ export default function KeywordPoolManagement() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [isExporting, setIsExporting] = useState(false);
+
   // Bulk Progress State
   const [isBulkRunning, setIsBulkRunning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, updated: 0, blocked: 0 });
@@ -116,7 +118,7 @@ export default function KeywordPoolManagement() {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === keywords.length) {
+    if (selectedIds.size === keywords.length && keywords.length > 0) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(keywords.map(k => k.id)));
@@ -251,31 +253,29 @@ export default function KeywordPoolManagement() {
         });
         const data = await res.json();
 
-        if (!data.success || data.evaluatedCount === 0) {
+        if (!data.success) {
+          toast.error(data.error || 'Toplu taramada hata oluştu.');
+          break;
+        }
+
+        if (data.evaluatedCount === 0) {
+          toast.success('Tüm kelime havuzu başarıyla tarandı!');
           break;
         }
 
         processedTotal += data.evaluatedCount;
-        if (data.botBlockedCount) totalBlocked += data.botBlockedCount;
+        if (data.blockedCount) totalBlocked += data.blockedCount;
 
-        setBulkProgress({
-          current: processedTotal,
-          total: Math.max(total, processedTotal),
-          updated: processedTotal - totalBlocked,
+        setBulkProgress(prev => ({
+          ...prev,
+          current: Math.min(prev.total, processedTotal),
+          updated: processedTotal,
           blocked: totalBlocked
-        });
+        }));
 
-        // If returned fewer than batchSize, we've reached the end
-        if (data.evaluatedCount < batchSize) {
-          break;
-        }
-
-        // Throttle 400ms between batches
-        await new Promise(r => setTimeout(r, 400));
+        fetchKeywords();
+        await new Promise(r => setTimeout(r, 600));
       }
-
-      toast.success(`Toplu tarama tamamlandı: ${processedTotal} kelime işlendi!`);
-      fetchKeywords();
     } catch (e: any) {
       toast.error('Toplu tarama sırasında bir hata oluştu: ' + e.message);
     } finally {
@@ -290,45 +290,103 @@ export default function KeywordPoolManagement() {
   };
 
   const handleExportCSV = async () => {
-    if (total === 0) return;
+    if (total === 0) {
+      toast.info('Dışa aktarılacak kelime bulunamadı.');
+      return;
+    }
     
+    setIsExporting(true);
+    toast.info(`Toplam ${total} kelime Excel için hazırlanıyor...`);
+
     try {
-      const res = await fetch(`/api/admin/keywords?filter=${filter}&limit=100000`);
+      const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : '';
+      const res = await fetch(`/api/admin/keywords?filter=${filter}${searchParam}&export=true&limit=100000`);
       const data = await res.json();
       
-      if (!data.success) throw new Error();
+      if (!data.success || !Array.isArray(data.keywords)) {
+        throw new Error(data.error || 'Veriler sunucudan alınamadı.');
+      }
       
-      const allKeywords = data.keywords;
+      const allKeywords: Keyword[] = data.keywords;
       
-      const headers = ['Keyword', 'Length', 'Tag Eligible (<=20)', 'Usage Count', 'Opportunity Score', 'Total Listings', 'Competition Level', 'Bestseller Count', 'Etsy Suggested', 'Avg Price', 'Scrape Source', 'Bot Error', 'Last Evaluated'];
-      const rows = allKeywords.map((k: Keyword) => [
-        `"${k.keyword.replace(/"/g, '""')}"`,
-        k.keyword.length,
-        k.keyword.length <= 20 ? 'EVET' : 'HAYIR',
-        k.usage_count,
-        k.opportunity_score ?? k.etsy_score ?? 0,
-        k.total_listings || 0,
-        `"${k.competition_level || 'Bilinmiyor'}"`,
-        k.bestseller_count || 0,
-        k.is_etsy_suggested ? 'EVET' : 'HAYIR',
-        k.avg_price || 0,
-        `"${k.raw_metrics?.method || 'N/A'}"`,
-        `"${(k.last_scrape_error || '').replace(/"/g, '""')}"`,
-        k.last_evaluated_at ? new Date(k.last_evaluated_at).toISOString() : ''
-      ]);
+      // Turkish & European Excel Standard Headers
+      const headers = [
+        'Anahtar Kelime',
+        'Karakter Sayısı',
+        'Etiket Uygunluğu (<=20)',
+        'Kullanım Sayısı',
+        'Fırsat Skoru (0-100)',
+        'Toplam Etsy İlan Sayısı',
+        'Rekabet Seviyesi',
+        'Bestseller Sayısı',
+        'Etsy Önerisi (Autocomplete)',
+        'Autocomplete Sırası',
+        'Ortalama Fiyat ($)',
+        'Birlikte Kullanılan Popüler Etiketler',
+        'Kazıma Kaynağı',
+        'Hata / Durum',
+        'Son Değerlendirme Tarihi',
+        'Oluşturulma Tarihi'
+      ];
+
+      const escapeCell = (val: any) => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
+        return `"${str}"`;
+      };
+
+      const rows = allKeywords.map((k: Keyword) => {
+        const rm = parseRawMetrics(k.raw_metrics);
+        const topTags = Array.isArray(rm?.topTags) ? rm.topTags.join(', ') : '';
+        const oppScore = k.opportunity_score ?? k.etsy_score ?? 0;
+        const autoRank = k.autocomplete_rank ? `#${k.autocomplete_rank}` : (k.is_etsy_suggested ? 'Önerildi' : '-');
+        const avgPriceFormatted = k.avg_price ? Number(k.avg_price).toFixed(2) : '0.00';
+        const sourceMethod = rm?.method || rm?.methodUsed || 'Hazır Veri';
+        const errorStatus = k.last_scrape_error ? k.last_scrape_error : (k.competition_level === 'Engellendi / Hata' ? 'Engellendi' : 'Sorunsuz / Aktif');
+        const evalDate = k.last_evaluated_at ? new Date(k.last_evaluated_at).toLocaleString('tr-TR') : 'Değerlendirilmedi';
+        const createDate = k.created_at ? new Date(k.created_at).toLocaleString('tr-TR') : '';
+
+        return [
+          escapeCell(k.keyword),
+          escapeCell(k.keyword.length),
+          escapeCell(k.keyword.length <= 20 ? 'EVET' : 'HAYIR'),
+          escapeCell(k.usage_count || 0),
+          escapeCell(oppScore),
+          escapeCell(k.total_listings || 0),
+          escapeCell(k.competition_level || 'Bilinmiyor'),
+          escapeCell(k.bestseller_count || 0),
+          escapeCell(k.is_etsy_suggested ? 'EVET' : 'HAYIR'),
+          escapeCell(autoRank),
+          escapeCell(avgPriceFormatted),
+          escapeCell(topTags),
+          escapeCell(sourceMethod),
+          escapeCell(errorStatus),
+          escapeCell(evalDate),
+          escapeCell(createDate)
+        ];
+      });
       
-      const csvContent = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const delimiter = ';';
+      const csvBody = [headers.map(h => `"${h}"`).join(delimiter), ...rows.map((r: string[]) => r.join(delimiter))].join('\r\n');
+      
+      // UTF-8 BOM (\uFEFF) ensures Turkish characters and distinct columns open flawlessly in Microsoft Excel
+      const bom = '\uFEFF';
+      const blob = new Blob([bom + csvBody], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `etsy_real_keyword_pool_${new Date().toISOString().slice(0,10)}.csv`;
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `etsy_kelime_havuzu_tam_liste_${dateStr}.csv`;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
-      toast.success('Tüm gerçek Etsy verileri CSV olarak indirildi!');
-    } catch (e) {
-      toast.error('CSV dışa aktarılırken bir hata oluştu.');
+      toast.success(`Harika! Toplam ${allKeywords.length} kelime Excel uyumlu CSV olarak indirildi.`);
+    } catch (e: any) {
+      toast.error('CSV dışa aktarılırken hata oluştu: ' + (e?.message || ''));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -468,74 +526,76 @@ export default function KeywordPoolManagement() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header & Status Card */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              Kelime Havuzu & Gerçek Etsy Metrikleri
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
+              Kelime Havuzu &amp; Gerçek Etsy Metrikleri
             </h3>
             {etsyStatus.connected ? (
-              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1.5 shadow-sm">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                🟢 Etsy Resmi API Aktif (Mağaza ID: {etsyStatus.shopId || 'Bağlı'})
+                🟢 Etsy Resmi API (Mağaza: {etsyStatus.shopId || 'Bağlı'})
               </span>
             ) : (
-              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 flex items-center gap-1.5 shadow-sm">
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 flex items-center gap-1.5 shadow-sm">
                 <AlertTriangle className="w-3.5 h-3.5" />
                 Etsy API Bağlantısı Yok
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             Tasarım etiketlerinin ve anahtar kelimelerin %100 gerçek Etsy ilan sayısı, fiyatı, autocomplete sırası ve rekabet analizi.
           </p>
         </div>
         
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
           <button 
             onClick={handleRunFullPoolEvaluation}
-            disabled={isBulkRunning || isEvaluating}
-            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+            disabled={isBulkRunning || isEvaluating || isExporting}
+            className="col-span-2 sm:col-auto px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 min-h-[40px]"
           >
             <RefreshCw className={`w-4 h-4 ${isBulkRunning ? 'animate-spin' : ''}`} />
-            {isBulkRunning ? 'Tüm Havuz Taranıyor...' : '⚡ Tüm Havuzu Güncelle (Gerçek Etsy API)'}
+            <span>{isBulkRunning ? 'Tüm Havuz Taranıyor...' : '⚡ Tüm Havuzu Güncelle'}</span>
           </button>
 
           <button 
             onClick={handleEvaluateBatch}
-            disabled={isEvaluating || isBulkRunning}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+            disabled={isEvaluating || isBulkRunning || isExporting}
+            className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[40px]"
           >
-            <RefreshCw className={`w-4 h-4 ${isEvaluating ? 'animate-spin' : ''}`} />
-            {selectedIds.size > 0 ? `Seçilenleri Güncelle (${selectedIds.size})` : 'Eskimişleri Tara (20)'}
+            <RefreshCw className={`w-3.5 h-3.5 ${isEvaluating ? 'animate-spin' : ''}`} />
+            <span>{selectedIds.size > 0 ? `Seçilenleri Güncelle (${selectedIds.size})` : 'Eskimişleri Tara'}</span>
           </button>
           
           <button 
             onClick={() => setShowTestModal(true)}
-            className="px-3.5 py-2 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-sm font-semibold rounded-xl border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-1.5"
+            className="px-3 py-2.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs sm:text-sm font-semibold rounded-xl border border-blue-200 dark:border-blue-800 transition-colors flex items-center justify-center gap-1.5 min-h-[40px]"
           >
             🧪 Test Et
           </button>
 
           <button 
             onClick={handleExportCSV}
-            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+            disabled={isExporting}
+            className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[40px]"
+            title="Tüm kelimeleri Excel uyumlu CSV olarak indir"
           >
-            <Download className="w-4 h-4" />
-            CSV İndir
+            <Download className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />
+            <span>{isExporting ? 'Hazırlanıyor...' : 'CSV İndir'}</span>
           </button>
           
           {selectedIds.size > 0 && (
             <button 
               onClick={handleDelete}
-              className="px-3.5 py-2 bg-rose-100 text-rose-700 text-sm font-semibold rounded-xl hover:bg-rose-200 transition-colors flex items-center gap-1.5"
+              className="col-span-2 sm:col-auto px-3 py-2.5 bg-rose-100 text-rose-700 text-xs sm:text-sm font-semibold rounded-xl hover:bg-rose-200 transition-colors flex items-center justify-center gap-1.5 min-h-[40px]"
             >
               <Trash2 className="w-4 h-4" />
-              Sil ({selectedIds.size})
+              <span>Sil ({selectedIds.size})</span>
             </button>
           )}
         </div>
@@ -543,79 +603,80 @@ export default function KeywordPoolManagement() {
 
       {/* Bulk Progress Bar */}
       {isBulkRunning && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-2">
-          <div className="flex justify-between items-center text-sm font-bold text-emerald-900 dark:text-emerald-200">
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 sm:p-4 space-y-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs sm:text-sm font-bold text-emerald-900 dark:text-emerald-200">
             <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
-              Etsy API Toplu Tarama İlerleyişi: {bulkProgress.current} / {bulkProgress.total} kelime
+              <RefreshCw className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+              Etsy API Toplu Tarama: {bulkProgress.current} / {bulkProgress.total} kelime
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-end sm:self-auto">
               <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300">
                 %{Math.round((bulkProgress.current / Math.max(1, bulkProgress.total)) * 100)}
               </span>
               <button
                 onClick={handleCancelBulk}
-                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold"
+                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors"
               >
                 Durdur
               </button>
             </div>
           </div>
-          <div className="w-full h-3 bg-emerald-200 dark:bg-emerald-900 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-emerald-200 dark:bg-emerald-900 rounded-full overflow-hidden">
             <div 
               className="h-full bg-emerald-600 transition-all duration-300 rounded-full"
               style={{ width: `${Math.min(100, (bulkProgress.current / Math.max(1, bulkProgress.total)) * 100)}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+          <div className="flex justify-between text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
             <span>✅ Güncellenen: {bulkProgress.updated}</span>
             {bulkProgress.blocked > 0 && <span className="text-rose-600 font-bold">⚠️ Engellenen/Hata: {bulkProgress.blocked}</span>}
           </div>
         </div>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap gap-2 items-center bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs">
+      {/* Filter Tabs (Horizontally scrollable on mobile) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0 sm:flex-wrap bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs">
         <button
           onClick={() => { setFilter('all'); setPage(0); }}
-          className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${filter === 'all' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+          className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors ${filter === 'all' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
         >
           Tüm Kelimeler ({total})
         </button>
         <button
           onClick={() => { setFilter('tag_eligible'); setPage(0); }}
-          className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'tag_eligible' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'}`}
+          className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'tag_eligible' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'}`}
         >
           <Tag className="w-3.5 h-3.5" />
           Sadece ≤20 Karakter (Etiket Uyumlu)
         </button>
         <button
           onClick={() => { setFilter('unevaluated'); setPage(0); }}
-          className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'unevaluated' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'}`}
+          className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'unevaluated' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'}`}
         >
           <RefreshCw className="w-3.5 h-3.5" />
           🕒 Taranmamış / Bekleyen
         </button>
         <button
           onClick={() => { setFilter('gold'); setPage(0); }}
-          className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'gold' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'}`}
+          className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'gold' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'}`}
         >
           <Trophy className="w-3.5 h-3.5" />
           🏆 Altın Nişler (Skor ≥70 &amp; İlan &lt; 5K)
         </button>
         <button
           onClick={() => { setFilter('error'); setPage(0); }}
-          className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'error' ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'}`}
+          className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'error' ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'}`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
           ⚠️ Engellenen / Hatalı Olanlar
         </button>
       </div>
 
-      {/* Main Data Table Card */}
+      {/* Main Data Container (Desktop Table + Mobile Cards) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
-          <div className="relative w-80">
+        {/* Search Bar & Stats Header */}
+        <div className="p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-slate-50 dark:bg-slate-900/50">
+          <div className="relative w-full sm:w-80">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
@@ -626,13 +687,29 @@ export default function KeywordPoolManagement() {
             />
           </div>
           
-          <div className="text-xs text-slate-500">
-            Filtreye uygun <strong>{total}</strong> kelime listeleniyor
+          <div className="flex items-center justify-between sm:justify-end gap-3 text-xs text-slate-500">
+            {/* Mobile Select All Button */}
+            <div className="block md:hidden">
+              <button 
+                onClick={handleSelectAll}
+                className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-emerald-600"
+              >
+                {selectedIds.size > 0 && selectedIds.size === keywords.length ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>Tümünü Seç</span>
+              </button>
+            </div>
+            <div>
+              Toplam <strong>{total.toLocaleString('tr-TR')}</strong> kelime
+            </div>
           </div>
         </div>
 
-        {/* Data Table */}
-        <div className="overflow-x-auto w-full">
+        {/* 1. Desktop & Tablet View (Rich 10-Column Table) */}
+        <div className="hidden md:block overflow-x-auto w-full">
           <table className="w-full min-w-[900px] text-left text-xs sm:text-sm text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
                <tr>
@@ -789,201 +866,327 @@ export default function KeywordPoolManagement() {
                )}
              </tbody>
            </table>
-         </div>
+        </div>
 
-         {/* Pagination */}
-         <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-           <div className="text-xs text-slate-500">
-             Sayfa {page + 1} / {Math.max(1, Math.ceil(total / limit))}
-           </div>
-           <div className="flex gap-2">
-             <button 
-               onClick={() => setPage(Math.max(0, page - 1))}
-               disabled={page === 0}
-               className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100"
-             >
-               <ChevronLeft className="w-4 h-4" />
-             </button>
-             <button 
-               onClick={() => setPage(page + 1)}
-               disabled={(page + 1) * limit >= total}
-               className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100"
-             >
-               <ChevronRight className="w-4 h-4" />
-             </button>
-           </div>
-         </div>
-       </div>
+        {/* 2. Mobile Cards View (Touch-Optimized, No Horizontal Overflow) */}
+        <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800/80">
+          {isLoading ? (
+            <div className="p-8 text-center text-slate-500 text-sm">Kelimeler yükleniyor...</div>
+          ) : keywords.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-sm">Aranan kriterlere uygun kelime bulunamadı.</div>
+          ) : (
+            keywords.map((kw) => {
+              const rm = parseRawMetrics(kw.raw_metrics);
+              const cleanKeyword = kw.keyword || '';
+              const charLen = cleanKeyword.length;
+              const isTagOk = charLen <= 20;
+              const oppScore = toSafeNum(kw.opportunity_score ?? kw.etsy_score, 0);
+              const totalListings = toSafeNum(kw.total_listings, 0);
+              const avgPrice = toSafeNum(kw.avg_price, 0);
+              const bestsellerCount = toSafeNum(kw.bestseller_count, 0);
+              const isBlocked = !!kw.last_scrape_error || kw.competition_level === 'Engellendi / Hata';
+              const topTags = Array.isArray(rm?.topTags) ? rm.topTags : [];
+              const hasTopTags = topTags.length > 0;
+              const formattedDate = formatDateSafe(kw.last_evaluated_at);
 
-       {/* Top Co-Occurring Tags Details Modal */}
-       {activeDetailsKeyword && (
-         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-               <div>
-                 <h4 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                   🏷️ "{activeDetailsKeyword.keyword}" Analiz Detayları
-                 </h4>
-                 <p className="text-xs text-slate-500">Etsy'de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
-               </div>
-               <button 
-                 onClick={() => setActiveDetailsKeyword(null)}
-                 className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-               >
-                 ✕
-               </button>
-             </div>
-
-             {(() => {
-                const modalRm = parseRawMetrics(activeDetailsKeyword.raw_metrics);
-                const modalTopTags = Array.isArray(modalRm?.topTags) ? modalRm.topTags : [];
-                const modalSuggestions = Array.isArray(modalRm?.autocomplete?.topSuggestions) ? modalRm.autocomplete.topSuggestions : [];
-                const modalAvgPrice = toSafeNum(activeDetailsKeyword.avg_price, 0);
-                const modalAvgFavs = toSafeNum(modalRm?.avgFavorites, 0);
-                const modalAvgViews = toSafeNum(modalRm?.avgViews, 0);
-
-                return (
-                  <div className="space-y-3">
-                    {modalTopTags.length > 0 && (
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                          Birlikte Kullanılan En Popüler Etiketler (Etsy Sample):
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {modalTopTags.map((tag: string, idx: number) => (
-                            <span 
-                              key={idx}
-                              className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800"
-                            >
-                              #{tag}
-                            </span>
-                          ))}
+              return (
+                <div key={kw.id} className="p-3.5 space-y-2.5 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                  {/* Top Row: Checkbox, Keyword, Char Badge, Score */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <button 
+                        onClick={() => handleSelect(kw.id)} 
+                        className="mt-0.5 p-1 text-slate-400 hover:text-emerald-600 focus:outline-none"
+                      >
+                        {selectedIds.has(kw.id) ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                        )}
+                      </button>
+                      
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900 dark:text-white text-sm break-all">
+                            {cleanKeyword}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                            isTagOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200'
+                          }`}>
+                            {charLen}/20
+                          </span>
                         </div>
-                      </div>
-                    )}
-
-                    {modalSuggestions.length > 0 && (
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                          Etsy Arama Çubuğu Tamamlamaları:
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {modalSuggestions.map((sug: string, idx: number) => (
-                            <span 
-                              key={idx}
-                              className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg border border-emerald-200 dark:border-emerald-800"
-                            >
-                              {sug}
-                            </span>
-                          ))}
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>Kullanım: {toSafeNum(kw.usage_count, 0)}</span>
+                          {formattedDate && <span>• {formattedDate}</span>}
+                          {renderSourceBadge(kw)}
                         </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                        <span className="text-slate-400 block text-[10px]">Ort. Fiyat</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">${modalAvgPrice > 0 ? modalAvgPrice.toFixed(2) : '0.00'}</span>
-                      </div>
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                        <span className="text-slate-400 block text-[10px]">Ort. Favori</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgFavs}</span>
-                      </div>
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
-                        <span className="text-slate-400 block text-[10px]">Ort. Görüntülenme</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgViews}</span>
                       </div>
                     </div>
+
+                    <div className="shrink-0 flex flex-col items-end">
+                      {getScoreBadge(oppScore, isBlocked)}
+                    </div>
                   </div>
-                );
-              })()}
 
-             <div className="flex justify-end pt-2">
-               <button 
-                 onClick={() => setActiveDetailsKeyword(null)}
-                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
-               >
-                 Kapat
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
+                  {/* Metrics 3-Column Grid */}
+                  <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl text-[11px] border border-slate-100 dark:border-slate-800/60">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Etsy İlanı</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
+                        {totalListings > 0 ? totalListings.toLocaleString('tr-TR') : isBlocked ? 'Hata' : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Ort. Fiyat</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        {avgPrice > 0 ? `$${avgPrice.toFixed(2)}` : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Bestseller</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">
+                        {bestsellerCount > 0 ? `${bestsellerCount} ad.` : '-'}
+                      </span>
+                    </div>
+                  </div>
 
-       {/* Diagnostics / Test Modal */}
-       {showTestModal && (
-         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
-             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-               <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                 🧪 Etsy Kazıyıcı &amp; Canlı API Testi
-               </h3>
-               <button 
-                 onClick={() => setShowTestModal(false)}
-                 className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-               >
-                 ✕
-               </button>
-             </div>
+                  {/* Bottom Row: Autocomplete & Details & Actions */}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {kw.is_etsy_suggested && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200">
+                          Autocomplete #{toSafeNum(kw.autocomplete_rank, 1)}
+                        </span>
+                      )}
+                      {hasTopTags && (
+                        <button
+                          onClick={() => setActiveDetailsKeyword(kw)}
+                          className="px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 rounded-md border border-indigo-200 dark:border-indigo-800 flex items-center gap-1"
+                        >
+                          <Info className="w-3 h-3" />
+                          Alt Etiketler ({topTags.length})
+                        </button>
+                      )}
+                    </div>
 
-             <div className="space-y-4">
-                <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl text-xs font-semibold">
-                  <button
-                    onClick={() => setTestMode('server')}
-                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'server' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    🌐 Etsy Resmi API / Sunucu Testi
-                  </button>
-                  <button
-                    onClick={() => setTestMode('browser')}
-                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'browser' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    ⚡ İstemci Tarayıcı Modu
-                  </button>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
-                    Test Edilecek Kelime:
-                  </label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={testKeyword}
-                      onChange={(e) => setTestKeyword(e.target.value)}
-                      placeholder="Örn: vintage shirt, golden retriever"
-                      className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <button 
-                      onClick={handleTestScraper}
-                      disabled={isTestingScraper}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isTestingScraper ? 'animate-spin' : ''}`} />
-                      {testMode === 'server' ? 'Etsy API ile Test Et' : 'Tarayıcıda Test Et'}
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleEvaluateSingle(kw)}
+                        disabled={evaluatingSingleId === kw.id || isEvaluating || isBulkRunning}
+                        className="p-2 text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors disabled:opacity-40"
+                        title="Güncelle"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${evaluatingSingleId === kw.id ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSingle(kw)}
+                        className="p-2 text-rose-600 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 rounded-lg border border-rose-200 dark:border-rose-800 transition-colors"
+                        title="Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              );
+            })
+          )}
+        </div>
 
-               {testResult && (
-                 <div className="mt-4 bg-slate-950 text-slate-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-80 space-y-2">
-                   <div className="text-emerald-400 font-bold">--- CANLI ETSY TEST RAPORU ---</div>
-                   <pre>{JSON.stringify(testResult, null, 2)}</pre>
+        {/* Pagination */}
+        <div className="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+          <div className="text-xs text-slate-500">
+            Sayfa {page + 1} / {Math.max(1, Math.ceil(total / limit))}
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0}
+              className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => setPage(page + 1)}
+              disabled={(page + 1) * limit >= total}
+              className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 hover:bg-slate-100 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Co-Occurring Tags Details Modal */}
+      {activeDetailsKeyword && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  🏷️ "{activeDetailsKeyword.keyword}" Analiz Detayları
+                </h4>
+                <p className="text-xs text-slate-500">Etsy'de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
+              </div>
+              <button 
+                onClick={() => setActiveDetailsKeyword(null)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+               const modalRm = parseRawMetrics(activeDetailsKeyword.raw_metrics);
+               const modalTopTags = Array.isArray(modalRm?.topTags) ? modalRm.topTags : [];
+               const modalSuggestions = Array.isArray(modalRm?.autocomplete?.topSuggestions) ? modalRm.autocomplete.topSuggestions : [];
+               const modalAvgPrice = toSafeNum(activeDetailsKeyword.avg_price, 0);
+               const modalAvgFavs = toSafeNum(modalRm?.avgFavorites, 0);
+               const modalAvgViews = toSafeNum(modalRm?.avgViews, 0);
+
+               return (
+                 <div className="space-y-3">
+                   {modalTopTags.length > 0 && (
+                     <div>
+                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                         Birlikte Kullanılan En Popüler Etiketler (Etsy Sample):
+                       </label>
+                       <div className="flex flex-wrap gap-1.5">
+                         {modalTopTags.map((tag: string, idx: number) => (
+                           <span 
+                             key={idx}
+                             className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800"
+                           >
+                             #{tag}
+                           </span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   {modalSuggestions.length > 0 && (
+                     <div>
+                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                         Etsy Arama Çubuğu Tamamlamaları:
+                       </label>
+                       <div className="flex flex-wrap gap-1.5">
+                         {modalSuggestions.map((sug: string, idx: number) => (
+                           <span 
+                             key={idx}
+                             className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-xs font-medium rounded-lg border border-emerald-200 dark:border-emerald-800"
+                           >
+                             {sug}
+                           </span>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                     <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                       <span className="text-slate-400 block text-[10px]">Ort. Fiyat</span>
+                       <span className="font-bold text-slate-800 dark:text-slate-200">${modalAvgPrice > 0 ? modalAvgPrice.toFixed(2) : '0.00'}</span>
+                     </div>
+                     <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                       <span className="text-slate-400 block text-[10px]">Ort. Favori</span>
+                       <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgFavs}</span>
+                     </div>
+                     <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl text-center">
+                       <span className="text-slate-400 block text-[10px]">Ort. Görüntülenme</span>
+                       <span className="font-bold text-slate-800 dark:text-slate-200">{modalAvgViews}</span>
+                     </div>
+                   </div>
                  </div>
-               )}
-             </div>
+               );
+             })()}
 
-             <div className="flex justify-end pt-2">
-               <button 
-                 onClick={() => setShowTestModal(false)}
-                 className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
-               >
-                 Kapat
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
-     </div>
-   );
- }
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={() => setActiveDetailsKeyword(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diagnostics / Test Modal */}
+      {showTestModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                🧪 Etsy Kazıyıcı &amp; Canlı API Testi
+              </h3>
+              <button 
+                onClick={() => setShowTestModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+               <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl text-xs font-semibold">
+                 <button
+                   onClick={() => setTestMode('server')}
+                   className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'server' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+                 >
+                   🌐 Etsy Resmi API / Sunucu Testi
+                 </button>
+                 <button
+                   onClick={() => setTestMode('browser')}
+                   className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'browser' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
+                 >
+                   ⚡ İstemci Tarayıcı Modu
+                 </button>
+               </div>
+
+               <div>
+                 <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+                   Test Edilecek Kelime:
+                 </label>
+                 <div className="flex flex-col sm:flex-row gap-2">
+                   <input 
+                     type="text" 
+                     value={testKeyword}
+                     onChange={(e) => setTestKeyword(e.target.value)}
+                     placeholder="Örn: vintage shirt, golden retriever"
+                     className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-200"
+                   />
+                   <button 
+                     onClick={handleTestScraper}
+                     disabled={isTestingScraper}
+                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 min-h-[38px]"
+                   >
+                     <RefreshCw className={`w-3.5 h-3.5 ${isTestingScraper ? 'animate-spin' : ''}`} />
+                     {testMode === 'server' ? 'Etsy API ile Test Et' : 'Tarayıcıda Test Et'}
+                   </button>
+                 </div>
+               </div>
+
+              {testResult && (
+                <div className="mt-4 bg-slate-950 text-slate-100 p-3 sm:p-4 rounded-xl font-mono text-[11px] sm:text-xs overflow-x-auto max-h-60 sm:max-h-80 space-y-2">
+                  <div className="text-emerald-400 font-bold">--- CANLI ETSY TEST RAPORU ---</div>
+                  <pre>{JSON.stringify(testResult, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button 
+                onClick={() => setShowTestModal(false)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
