@@ -47,11 +47,17 @@ export async function GET(req: Request) {
       } else {
         whereClause = sql`WHERE opportunity_score >= 70 AND total_listings < 5000`;
       }
-    } else if (filter === 'error') {
+    } else if (filter === 'error' || filter === 'blocked') {
       if (search) {
-        whereClause = sql`WHERE LOWER(keyword) LIKE ${searchPattern} AND last_scrape_error IS NOT NULL`;
+        whereClause = sql`WHERE LOWER(keyword) LIKE ${searchPattern} AND (last_scrape_error IS NOT NULL OR competition_level = 'Engellendi / Hata')`;
       } else {
-        whereClause = sql`WHERE last_scrape_error IS NOT NULL`;
+        whereClause = sql`WHERE last_scrape_error IS NOT NULL OR competition_level = 'Engellendi / Hata'`;
+      }
+    } else if (filter === 'unevaluated') {
+      if (search) {
+        whereClause = sql`WHERE LOWER(keyword) LIKE ${searchPattern} AND (last_evaluated_at IS NULL OR competition_level IN ('Taranacak', 'Henüz Taranmadı'))`;
+      } else {
+        whereClause = sql`WHERE last_evaluated_at IS NULL OR competition_level IN ('Taranacak', 'Henüz Taranmadı')`;
       }
     }
 

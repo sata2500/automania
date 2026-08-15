@@ -41,7 +41,8 @@ export default function KeywordPoolManagement() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'tag_eligible' | 'gold' | 'error'>('all');
+  const [filter, setFilter] = useState<'all' | 'tag_eligible' | 'gold' | 'error' | 'unevaluated'>('all');
+  const [evaluatingSingleId, setEvaluatingSingleId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState('created_at');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
@@ -142,6 +143,52 @@ export default function KeywordPoolManagement() {
       }
     } catch (e) {
       toast.error('Hata oluştu.');
+    }
+  };
+
+  // Evaluate a single keyword
+  const handleEvaluateSingle = async (kw: Keyword) => {
+    if (evaluatingSingleId || isEvaluating || isBulkRunning) return;
+    setEvaluatingSingleId(kw.id);
+    try {
+      const res = await fetch('/api/admin/keywords/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [kw.id] })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`"${kw.keyword}" güncellendi!`);
+        if (data.warning) toast.error(data.warning);
+        fetchKeywords();
+      } else {
+        toast.error(data.error || 'Değerlendirme başarısız.');
+      }
+    } catch (e: any) {
+      toast.error('Hata: ' + e.message);
+    } finally {
+      setEvaluatingSingleId(null);
+    }
+  };
+
+  // Delete a single keyword
+  const handleDeleteSingle = async (kw: Keyword) => {
+    if (!confirm(`"${kw.keyword}" kelimesini silmek istediğinize emin misiniz?`)) return;
+    try {
+      const res = await fetch('/api/admin/keywords', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [kw.id] })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`"${kw.keyword}" silindi.`);
+        fetchKeywords();
+      } else {
+        toast.error(data.error || 'Silme başarısız.');
+      }
+    } catch (e: any) {
+      toast.error('Hata: ' + e.message);
     }
   };
 
@@ -543,6 +590,13 @@ export default function KeywordPoolManagement() {
           Sadece ≤20 Karakter (Etiket Uyumlu)
         </button>
         <button
+          onClick={() => { setFilter('unevaluated'); setPage(0); }}
+          className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'unevaluated' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'}`}
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          🕒 Taranmamış / Bekleyen
+        </button>
+        <button
           onClick={() => { setFilter('gold'); setPage(0); }}
           className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${filter === 'gold' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'}`}
         >
@@ -597,16 +651,17 @@ export default function KeywordPoolManagement() {
                  <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('bestseller_count')}>İlgi / Bestseller</th>
                  <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700 text-center" onClick={() => handleSort('opportunity_score')}>Fırsat Skoru</th>
                  <th className="px-3 py-3.5 font-semibold cursor-pointer hover:text-slate-700" onClick={() => handleSort('last_evaluated_at')}>Kaynak / Tarih</th>
+                 <th className="px-3 py-3.5 font-semibold text-right">İşlem</th>
                </tr>
              </thead>
              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                {isLoading ? (
                  <tr>
-                   <td colSpan={9} className="p-8 text-center text-slate-500">Yükleniyor...</td>
+                   <td colSpan={10} className="p-8 text-center text-slate-500">Yükleniyor...</td>
                  </tr>
                ) : keywords.length === 0 ? (
                  <tr>
-                   <td colSpan={9} className="p-8 text-center text-slate-500">Aranan kriterlere uygun kelime bulunamadı.</td>
+                   <td colSpan={10} className="p-8 text-center text-slate-500">Aranan kriterlere uygun kelime bulunamadı.</td>
                  </tr>
                ) : (
                  keywords.map((kw) => {
@@ -707,6 +762,25 @@ export default function KeywordPoolManagement() {
                                 {formattedDate}
                               </span>
                             )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleEvaluateSingle(kw)}
+                              disabled={evaluatingSingleId === kw.id || isEvaluating || isBulkRunning}
+                              title="Bu kelimeyi gerçek Etsy verisiyle güncelle"
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition-colors disabled:opacity-40"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${evaluatingSingleId === kw.id ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSingle(kw)}
+                              title="Kelimeyi havuzdan sil"
+                              className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
