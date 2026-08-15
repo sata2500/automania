@@ -39,7 +39,11 @@ import {
   Coins,
   MessageSquare,
   XCircle,
-  ShoppingBag
+  ShoppingBag,
+  Tag,
+  Plus,
+  Info,
+  HelpCircle
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -49,6 +53,147 @@ import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
+
+export interface PromptVariable {
+  tag: string;
+  label: string;
+  desc: string;
+  icon: string;
+  badgeColor: string;
+}
+
+export const PROMPT_VARIABLES_ANALYZE: PromptVariable[] = [
+  {
+    tag: '{{taxonomyHint}}',
+    label: 'Kategori / Taksonomi Listesi',
+    desc: 'Etsy taksonomi ağacından çekilen güncel kategori ID ve başlık listesi rehberini enjekte eder. Vision AI\'ın tasarımı doğru Etsy kategorisine atamasını sağlar.',
+    icon: '🏷️',
+    badgeColor: 'border-indigo-200 bg-indigo-50/80 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60',
+  }
+];
+
+export const PROMPT_VARIABLES_GENERATE: PromptVariable[] = [
+  {
+    tag: '{{designDescription}}',
+    label: 'Tasarım Açıklaması',
+    desc: 'Vision AI görsel analizi ile elde edilen detaylı görsel kompozisyon ve tipografi açıklaması.',
+    icon: '📝',
+    badgeColor: 'border-blue-200 bg-blue-50/80 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60',
+  },
+  {
+    tag: '{{primarySubject}}',
+    label: 'Ana Konu / Nesne',
+    desc: 'Tasarımın ana odak konusu veya nesnesi (Örn: Wildflower, Golden Retriever, Vintage Skull). Alakasız kelimelerin (halüsinasyon) elenmesinde kullanılır.',
+    icon: '🎯',
+    badgeColor: 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60',
+  },
+  {
+    tag: '{{primaryAesthetic}}',
+    label: 'Stil & Estetik',
+    desc: 'Tasarımın görsel ve sanatsal stili (Örn: Cottagecore, Retro Boho, Minimalist Line Art, Gothic Grunge).',
+    icon: '✨',
+    badgeColor: 'border-purple-200 bg-purple-50/80 text-purple-700 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60',
+  },
+  {
+    tag: '{{productType}}',
+    label: 'Ürün Modeli / Tipi',
+    desc: 'İlanda yer alan giyim markaları ve modelleri (Örn: Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee).',
+    icon: '👕',
+    badgeColor: 'border-cyan-200 bg-cyan-50/80 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 hover:bg-cyan-100 dark:hover:bg-cyan-900/60',
+  },
+  {
+    tag: '{{userNotes}}',
+    label: 'Özel Notlar & Kumaş',
+    desc: 'Kullanıcının veya sistemin belirlediği özel ürün/kumaş/beden notları (Örn: %100 Ringspun pamuk, oversized kalıp için 1 beden büyük seçiniz).',
+    icon: '📌',
+    badgeColor: 'border-amber-200 bg-amber-50/80 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60',
+  },
+  {
+    tag: '{{seasonalityContext}}',
+    label: 'Sezon & Trend Rehberi',
+    desc: 'Aktif aya ve döneme ait Etsy trend dalgası ve alıcı arama davranış rehberi (Örn: Mother\'s Day, Back to School, Fall Season).',
+    icon: '🍂',
+    badgeColor: 'border-orange-200 bg-orange-50/80 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/60',
+  },
+  {
+    tag: '{{keywords}}',
+    label: 'Aday Anahtar Kelimeler',
+    desc: 'Kelime Havuzu ve canlı Etsy metrikleriyle zenginleştirilmiş; Fırsat Skoru, Rekabet, Bestseller sayısı ve 20 karakter sınırına uygunluk bilgisi içeren ana aday etiketler.',
+    icon: '🔑',
+    badgeColor: 'border-yellow-300 bg-yellow-50/90 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/60 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/60',
+  },
+  {
+    tag: '{{coOccurringTags}}',
+    label: 'Rakip Alt Etiketleri (Co-occurring)',
+    desc: 'Etsy\'de çok satan başarılı rakiplerin ilanlarında bu kelimelerle birlikte en sık kullandığı kanıtlanmış alt etiketler ve metrikleri.',
+    icon: '🔗',
+    badgeColor: 'border-rose-200 bg-rose-50/80 text-rose-700 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60',
+  },
+  {
+    tag: '{{taxonomyId}}',
+    label: 'Taksonomi ID',
+    desc: 'Seçilen veya tespit edilen Etsy kategori ID numarası (Örn: 482).',
+    icon: '🆔',
+    badgeColor: 'border-teal-200 bg-teal-50/80 text-teal-700 dark:border-teal-800 dark:bg-teal-950/60 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60',
+  },
+  {
+    tag: '{{shopSections}}',
+    label: 'Mağaza Reyonları',
+    desc: 'Bağlı Etsy mağazanızın mevcut reyon ve bölüm listesi (AI en uygun bölümü seçmek için kullanır).',
+    icon: '🏪',
+    badgeColor: 'border-violet-200 bg-violet-50/80 text-violet-700 dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/60',
+  },
+  {
+    tag: '{{taxonomyProperties}}',
+    label: 'Kategori Nitelikleri (Attributes)',
+    desc: 'Etsy kategorisine özel nitelikler ve geçerli değer listeleri (Örn: Yaka stili, Kol tipi, Stil).',
+    icon: '⚙️',
+    badgeColor: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700',
+  },
+];
+
+const PromptVariablePill: React.FC<{
+  variable: PromptVariable;
+  onClick: () => void;
+}> = ({ variable, onClick }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  return (
+    <div className="relative inline-block group">
+      <button
+        type="button"
+        onClick={onClick}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium border transition-all cursor-pointer shadow-xs hover:scale-105 active:scale-95 ${variable.badgeColor}`}
+      >
+        <span>{variable.icon}</span>
+        <span className="font-semibold">{variable.label}</span>
+        <code className="px-1 py-0.5 bg-black/5 dark:bg-white/10 rounded font-mono text-[10px] opacity-80">
+          {variable.tag}
+        </code>
+      </button>
+
+      {/* Hover Info Tooltip */}
+      {showTooltip && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 dark:bg-slate-800 text-white text-[11px] rounded-xl shadow-xl border border-slate-700 pointer-events-none animate-fadeIn leading-relaxed">
+          <div className="flex items-center gap-1.5 font-bold mb-1 text-indigo-300">
+            <span>{variable.icon}</span>
+            <span>{variable.label}</span>
+            <code className="text-[10px] font-mono bg-slate-800 dark:bg-slate-900 px-1 rounded text-amber-300">{variable.tag}</code>
+          </div>
+          <p className="text-slate-300 text-[10px]">{variable.desc}</p>
+          <div className="mt-1.5 pt-1.5 border-t border-slate-700/60 text-[9px] text-emerald-400 font-semibold flex items-center gap-1">
+            <Plus className="w-3 h-3" />
+            <span>Tıklayınca imlecin olduğu konuma ekler</span>
+          </div>
+          {/* Arrow */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-800" />
+        </div>
+      )}
+    </div>
+  );
+};
 
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
 
@@ -246,21 +391,25 @@ export const AdminDashboard: React.FC = () => {
     setter: React.Dispatch<React.SetStateAction<string>>,
     currentValue: string,
     variable: string,
-    textareaId: string
+    textareaId: string,
+    variableLabel?: string
   ) => {
     const textarea = document.getElementById(textareaId) as HTMLTextAreaElement;
     if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
+      const start = textarea.selectionStart ?? currentValue.length;
+      const end = textarea.selectionEnd ?? currentValue.length;
       const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end);
       setter(newValue);
       
       setTimeout(() => {
         textarea.focus();
         textarea.setSelectionRange(start + variable.length, start + variable.length);
-      }, 0);
+      }, 10);
     } else {
-      setter(currentValue + variable);
+      setter(currentValue + (currentValue.endsWith('\n') || currentValue.length === 0 ? '' : '\n') + variable);
+    }
+    if (variableLabel) {
+      toast.success(`${variableLabel} (${variable}) eklendi.`);
     }
   };
 
@@ -682,8 +831,8 @@ export const AdminDashboard: React.FC = () => {
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Uygulama Sürümü</span>
-                <p className="font-bold text-slate-800 dark:text-slate-200">Automania POD Studio v2.5</p>
-                <p className="text-[10px] text-slate-500">Next.js 16 + Turbopack Engine</p>
+                <p className="font-bold text-slate-800 dark:text-slate-200">Automania POD Studio v2.6.0</p>
+                <p className="text-[10px] text-slate-500">Enterprise Suite (Next.js 16 + React 19)</p>
               </div>
             </div>
           </div>
@@ -1207,72 +1356,120 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Sistem Promptları */}
             <div className="pt-6 mt-6 border-t border-slate-200 dark:border-slate-800">
-              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-indigo-500" />
-                Sistem Promptları Yönetimi
-              </label>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-500" />
+                  <span>Sistem Promptları Yönetimi</span>
+                </label>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 font-semibold px-3 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 self-start sm:self-auto">
+                  <Info className="w-3.5 h-3.5" />
+                  Promptlar İngilizce işlenir, değişken kapsülleri Türkçe açıklanmıştır
+                </span>
+              </div>
 
               <div className="space-y-6">
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-                  <div className="mb-3 flex justify-between items-start">
+                {/* 1. Görsel Analizi Promptu */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        Görsel Analizi Promptu (Vision)
+                        <ImageIcon className="w-4 h-4 text-indigo-500" />
+                        <span>Görsel Analizi Promptu (Vision AI)</span>
                       </h4>
-                      <div className="text-[10px] text-slate-500 mt-1 flex flex-wrap items-center gap-1">
-                        Desteklenen değişkenler (Tıklayıp ekleyebilirsiniz): 
-                        <button onClick={() => insertVariable(setPromptAnalyzeDesign, promptAnalyzeDesign, '{{taxonomyHint}}', 'vision_prompt_textarea')} className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-mono rounded cursor-pointer transition-colors border border-indigo-100 dark:border-indigo-800/50">
-                          {"{{taxonomyHint}}"}
-                        </button>
-                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Tasarım yüklendiğinde görseli ve tipografiyi analiz edip Etsy taksonomisine eşleyen prompt şablonu.
+                      </p>
                     </div>
                     <button
-                      onClick={() => setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                      onClick={() => {
+                        setPromptAnalyzeDesign(DEFAULT_ANALYZE_DESIGN_PROMPT);
+                        toast.info('Görsel Analizi promptu varsayılana döndürüldü.');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                     >
                       <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
                     </button>
                   </div>
+
+                  {/* Değişken Kapsülleri */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-indigo-500" />
+                        Desteklenen Değişken Kapsülleri (İmlecin olduğu konuma eklemek için tıklayın):
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {PROMPT_VARIABLES_ANALYZE.map((v) => (
+                        <PromptVariablePill
+                          key={v.tag}
+                          variable={v}
+                          onClick={() => insertVariable(setPromptAnalyzeDesign, promptAnalyzeDesign, v.tag, 'vision_prompt_textarea', v.label)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="relative">
                     <textarea
                       id="vision_prompt_textarea"
                       value={promptAnalyzeDesign}
                       onChange={(e) => setPromptAnalyzeDesign(e.target.value)}
                       placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                      className="w-full h-48 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      className="w-full h-52 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
                     />
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-                  <div className="mb-3 flex justify-between items-start">
+                {/* 2. İlan İçeriği Üretme Promptu */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                        İlan İçeriği Üretme Promptu (SEO/Copywriting)
+                        <FileText className="w-4 h-4 text-emerald-500" />
+                        <span>İlan İçeriği Üretme Promptu (SEO & Copywriting)</span>
                       </h4>
-                      <div className="text-[10px] text-slate-500 mt-1 leading-relaxed flex flex-wrap items-center gap-1">
-                        Desteklenen değişkenler (Tıklayıp ekleyebilirsiniz): 
-                        {["{{designDescription}}", "{{primarySubject}}", "{{primaryAesthetic}}", "{{productType}}", "{{userNotes}}", "{{keywords}}", "{{taxonomyId}}", "{{shopSections}}", "{{taxonomyProperties}}"].map(variable => (
-                          <button key={variable} onClick={() => insertVariable(setPromptGenerateListing, promptGenerateListing, variable, 'listing_prompt_textarea')} className="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-mono rounded cursor-pointer transition-colors border border-indigo-100 dark:border-indigo-800/50">
-                            {variable}
-                          </button>
-                        ))}
-                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Etsy için 140 karakter SEO başlığı, 13 adet 20 karakterlik etiket, açıklama metni ve taksonomi niteliklerini üreten ana şablon.
+                      </p>
                     </div>
                     <button
-                      onClick={() => setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                      onClick={() => {
+                        setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT);
+                        toast.info('İlan İçeriği Üretme promptu varsayılana döndürüldü.');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                     >
                       <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
                     </button>
                   </div>
+
+                  {/* Değişken Kapsülleri */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-emerald-500" />
+                        Desteklenen Değişken Kapsülleri ({PROMPT_VARIABLES_GENERATE.length} Adet - Tıklayıp İmleç Konumuna Ekleyin):
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {PROMPT_VARIABLES_GENERATE.map((v) => (
+                        <PromptVariablePill
+                          key={v.tag}
+                          variable={v}
+                          onClick={() => insertVariable(setPromptGenerateListing, promptGenerateListing, v.tag, 'listing_prompt_textarea', v.label)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="relative">
                     <textarea
                       id="listing_prompt_textarea"
                       value={promptGenerateListing}
                       onChange={(e) => setPromptGenerateListing(e.target.value)}
                       placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
-                      className="w-full h-80 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      className="w-full h-96 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
                     />
                   </div>
                 </div>
