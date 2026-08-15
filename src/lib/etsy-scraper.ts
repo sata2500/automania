@@ -110,9 +110,11 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
   if (etsyToken && etsyApiKey) {
     try {
+      const apiKeyHeader = etsySecret ? `${etsyApiKey}:${etsySecret}` : etsyApiKey;
       const headers = {
-        'x-api-key': `${etsyApiKey}:${etsySecret || ''}`,
-        'Authorization': `Bearer ${etsyToken}`
+        'x-api-key': apiKeyHeader,
+        'Authorization': `Bearer ${etsyToken}`,
+        'Accept': 'application/json'
       };
 
       const apiUrl = `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score`;
@@ -140,12 +142,12 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           ).length;
           bestsellerCount = highEngagementItems;
 
-          // Extract Co-occurring Ranks / Top Tags from real Etsy listings
+          // Extract Co-occurring Ranks / Top Tags from real Etsy listings (filtered to <= 20 chars)
           const tagMap: Record<string, number> = {};
           data.results.forEach((item: any) => {
             (item.tags || []).forEach((t: string) => {
               const cleanTag = t.toLowerCase().trim();
-              if (cleanTag && cleanTag !== cleanKeyword) {
+              if (cleanTag && cleanTag !== cleanKeyword && cleanTag.length <= 20) {
                 tagMap[cleanTag] = (tagMap[cleanTag] || 0) + 1;
               }
             });
@@ -153,7 +155,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
           const topTags = Object.entries(tagMap)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 8)
+            .slice(0, 10)
             .map(([t]) => t);
 
           const totalViews = data.results.reduce((a: number, b: any) => a + (b.views || 0), 0);

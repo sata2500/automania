@@ -23,6 +23,7 @@ export function useDesignAnalysis({
       if (!design) return;
 
       setAnalyzingIds((prev) => [...prev, designId]);
+      toast.info(`'${design.name}' görseli, Etsy kelimeleri ve rakip etiketleri taranıyor...`);
       try {
         const res = await fetch('/api/designs/analyze', {
           method: 'POST',
@@ -41,7 +42,7 @@ export function useDesignAnalysis({
           setAnalysisModalData((prev) =>
             prev && prev.id === designId ? { ...prev, analysis: updatedAnalysis } : prev
           );
-          toast.success(`'${design.name}' analizi başarıyla tamamlandı!`);
+          toast.success(`'${design.name}' analizi ve Etsy kelime havuzu senkronizasyonu tamamlandı!`);
           if (data.warning) {
             toast.error(data.warning);
           }
@@ -64,12 +65,12 @@ export function useDesignAnalysis({
     const toAnalyze = selectedDesignIds.filter((id) => !analyzingIds.includes(id));
     if (toAnalyze.length === 0) return;
 
-    toast.info(`${toAnalyze.length} tasarım kuyruğa alındı, sırayla analiz ediliyor...`);
+    toast.info(`${toAnalyze.length} tasarım için Etsy kelime havuzu ve görsel analizi başlatıldı...`);
 
     for (const id of toAnalyze) {
       await handleAnalyzeDesign(id);
     }
-    toast.success('Toplu analiz işlemi tamamlandı!');
+    toast.success('Tüm tasarımların analizi ve kelime havuzu senkronizasyonu tamamlandı!');
   }, [selectedDesignIds, analyzingIds, handleAnalyzeDesign, toast]);
 
   return {

@@ -71,6 +71,14 @@ export interface DesignItem {
     description: string;
     keywords: string[];
     analyzedAt: number;
+    evaluatedKeywords?: any[];
+    discoveredCompetitorTags?: string[];
+    primarySubject?: string;
+    primaryAesthetic?: string;
+    niche?: string;
+    userNotes?: string;
+    productType?: string;
+    taxonomyId?: number | null;
   };
   
   /** Generated SEO Listing for the design */
