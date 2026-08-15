@@ -52,6 +52,7 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
+import TaxonomyManagement from './TaxonomyManagement';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 
@@ -256,7 +257,7 @@ const AccordionCard: React.FC<{
   );
 };
 
-type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'users' | 'settings';
+type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'taxonomy' | 'users' | 'settings';
 
 const MODEL_VISION_STORAGE = 'automania_model_vision';
 const MODEL_REASONING_STORAGE = 'automania_model_reasoning';
@@ -292,7 +293,7 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     try {
       const savedTab = localStorage.getItem('automania_admin_subtab_v1') as AdminSubTab;
-      if (savedTab && ['overview', 'ai', 'keywords', 'users', 'settings'].includes(savedTab)) {
+      if (savedTab && ['overview', 'ai', 'keywords', 'taxonomy', 'users', 'settings'].includes(savedTab)) {
         setActiveSubTab(savedTab);
       }
     } catch (e) {}
@@ -742,6 +743,18 @@ export const AdminDashboard: React.FC = () => {
           </button>
 
           <button
+            onClick={() => handleSubTabChange('taxonomy')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeSubTab === 'taxonomy'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <FolderTree className="w-4 h-4 text-teal-400" />
+            <span>4. Etsy Kategorileri</span>
+          </button>
+
+          <button
             onClick={() => handleSubTabChange('users')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeSubTab === 'users'
@@ -750,7 +763,7 @@ export const AdminDashboard: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4 text-emerald-400" />
-            <span>4. Kullanıcı Yönetimi</span>
+            <span>5. Kullanıcı Yönetimi</span>
           </button>
 
           <button
@@ -762,7 +775,7 @@ export const AdminDashboard: React.FC = () => {
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>5. Uygulama Ayarları &amp; Bakım</span>
+            <span>6. Uygulama Ayarları &amp; Bakım</span>
           </button>
         </div>
       </div>
@@ -1786,12 +1799,21 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* SUB TAB 4: USER MANAGEMENT */}
+      {/* SUB TAB 4: ETSY TAXONOMY */}
+      {activeSubTab === 'taxonomy' && (
+        <div className="animate-fadeIn">
+          <ErrorBoundary fallbackTitle="Kategori ve Taksonomi Yüklenirken Bir Hata Oluştu">
+            <TaxonomyManagement />
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {/* SUB TAB 5: USER MANAGEMENT */}
       {activeSubTab === 'users' && (
         <UserManagementSection />
       )}
 
-      {/* SUB TAB 4: SYSTEM SETTINGS & MAINTENANCE */}
+      {/* SUB TAB 6: SYSTEM SETTINGS & MAINTENANCE */}
       {activeSubTab === 'settings' && (
         <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-4 sm:space-y-6 shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
