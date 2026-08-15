@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     }
     
     // Parse JSON models from workspace as fallback
-    let visionModel = 'google/gemma-4-26b-a4b-it:free'; // fallback default
+    let visionModel = 'google/gemini-2.0-flash-001'; // reliable vision model default
     try {
       if (rows.length > 0 && rows[0].openrouter_model && rows[0].openrouter_model.startsWith('{')) {
         const parsed = JSON.parse(rows[0].openrouter_model);
@@ -122,36 +122,61 @@ export async function POST(request: Request) {
     // Replace dynamic placeholders
     prompt = prompt.replace('{{taxonomyHint}}', taxonomyHint);
 
+    // Resolve Image data for AI (supports base64, relative /public files, and remote URLs)
+    let mimeType = 'image/png';
+    let base64Data = '';
+    let aiImageUrl = src;
+
+    const base64Match = src.match(/^data:([^;]+);base64,(.+)$/);
+    if (base64Match) {
+      mimeType = base64Match[1];
+      base64Data = base64Match[2];
+      aiImageUrl = src;
+    } else if (src.startsWith('/')) {
+      // Local relative path (e.g. /sample-uploads/... or /api/uploads/...)
+      try {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const cleanPath = src.split('?')[0];
+        const filePath = path.join(process.cwd(), 'public', cleanPath);
+        const buffer = await fs.readFile(filePath);
+        const ext = path.extname(cleanPath).toLowerCase();
+        mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
+        base64Data = buffer.toString('base64');
+        aiImageUrl = `data:${mimeType};base64,${base64Data}`;
+      } catch (err) {
+        console.warn('Local image read fallback:', err);
+      }
+    } else if (src.startsWith('http://') || src.startsWith('https://')) {
+      try {
+        const imgRes = await fetch(src);
+        if (imgRes.ok) {
+          const arrayBuffer = await imgRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          mimeType = imgRes.headers.get('content-type') || 'image/png';
+          base64Data = buffer.toString('base64');
+          aiImageUrl = `data:${mimeType};base64,${base64Data}`;
+        }
+      } catch (err) {
+        console.warn('Remote image fetch error:', err);
+      }
+    }
+
+    if (!base64Data && src.length > 100 && !src.startsWith('http')) {
+      base64Data = src.replace(/^data:image\/\w+;base64,/, '');
+      aiImageUrl = `data:image/png;base64,${base64Data}`;
+    }
+
     let content = '';
 
     if (activeAiProvider === 'gemini') {
       const genAI = new GoogleGenerativeAI(apiKey);
       const model = genAI.getGenerativeModel({ model: visionModel });
       
-      const match = src.match(/^data:(image\/\w+);base64,(.*)$/);
-      let inlineData = null;
-      if (match) {
-        inlineData = {
-          mimeType: match[1],
-          data: match[2]
-        };
-      } else if (src.startsWith('http://') || src.startsWith('https://')) {
-        const imgRes = await fetch(src);
-        if (!imgRes.ok) throw new Error('Görsel sunucudan indirilemedi.');
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const mimeType = imgRes.headers.get('content-type') || 'image/png';
-        inlineData = {
-          mimeType,
-          data: buffer.toString('base64')
-        };
-      } else {
-        // Fallback for some reason, assuming it's a raw base64 string
-        inlineData = {
-          mimeType: 'image/png',
-          data: src.replace(/^data:image\/\w+;base64,/, '')
-        };
-      }
+      const inlineData = {
+        mimeType,
+        data: base64Data
+      };
       
       const result = await model.generateContent([
         prompt,
@@ -174,7 +199,7 @@ export async function POST(request: Request) {
               role: 'user',
               content: [
                 { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: src } }
+                { type: 'image_url', image_url: { url: aiImageUrl } }
               ]
             }
           ]
@@ -218,14 +243,40 @@ export async function POST(request: Request) {
     )) as string[]);
     
     // 1. Check existing keywords in database keyword pool
-    let existingMap = new Map<string, any>();
+    let existingRows: any[] = [];
+    const existingMap = new Map<string, any>();
     if (uniqueKeywords.length > 0) {
-      const existingRows = await sql`
+      existingRows = await sql`
         SELECT * FROM keyword_pool WHERE keyword = ANY(${uniqueKeywords as any})
       `;
       for (const r of existingRows) {
         existingMap.set(r.keyword.toLowerCase(), r);
       }
+    }
+
+    // 2. Immediately ensure all uniqueKeywords are saved in keyword_pool
+    for (const kw of uniqueKeywords) {
+      const existing = existingMap.get(kw);
+      const id = existing?.id || crypto.randomUUID();
+      const charLen = kw.length;
+      const tagOk = charLen <= 20;
+
+      await sql`
+        INSERT INTO keyword_pool (
+          id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+          competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+          char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+          last_evaluated_at, created_at
+        )
+        VALUES (
+          ${id}, ${kw}, 1, 0, 0, 0,
+          'Taranacak', 0, false, 0,
+          ${charLen}, ${tagOk}, '0.00', null, '{}'::jsonb,
+          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (keyword) DO UPDATE
+        SET usage_count = keyword_pool.usage_count + 1
+      `;
     }
 
     const scrapeOptions: ScrapingOptions = {
@@ -237,159 +288,135 @@ export async function POST(request: Request) {
       workerUrl
     };
 
-    // Co-occurring competitor tags discovered during evaluation (depth = 1 only)
-    const discoveredTopTagsMap = new Map<string, number>();
+    // 3. Trigger deep Etsy keyword metric evaluation in background (non-blocking)
+    (async () => {
+      try {
+        const discoveredTopTagsMap = new Map<string, number>();
 
-    // 2. Process & Evaluate Primary Keywords
-    for (const kw of uniqueKeywords) {
-      const existing = existingMap.get(kw);
-      const isFresh = existing && existing.last_evaluated_at && (Date.now() - new Date(existing.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && existing.competition_level !== 'Engellendi / Hata' && existing.competition_level !== 'Taranacak';
+        for (const kw of uniqueKeywords) {
+          const existing = existingMap.get(kw);
+          const isFresh = existing && existing.last_evaluated_at && (Date.now() - new Date(existing.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && existing.competition_level !== 'Engellendi / Hata' && existing.competition_level !== 'Taranacak';
 
-      if (isFresh) {
-        // Keyword already has fresh, valid metrics: just increment usage
-        await sql`
-          UPDATE keyword_pool
-          SET usage_count = COALESCE(usage_count, 0) + 1
-          WHERE keyword = ${kw}
-        `;
-        // Collect its existing topTags if present
-        const rm = typeof existing.raw_metrics === 'string' ? JSON.parse(existing.raw_metrics) : (existing.raw_metrics || {});
-        if (Array.isArray(rm.topTags)) {
-          for (const t of rm.topTags) {
-            const cleanT = String(t).toLowerCase().trim();
-            if (cleanT && cleanT !== kw && cleanT.length <= 20 && !uniqueKeywords.includes(cleanT)) {
-              discoveredTopTagsMap.set(cleanT, (discoveredTopTagsMap.get(cleanT) || 0) + 1);
+          if (isFresh) {
+            const rm = typeof existing.raw_metrics === 'string' ? JSON.parse(existing.raw_metrics) : (existing.raw_metrics || {});
+            if (Array.isArray(rm.topTags)) {
+              for (const t of rm.topTags) {
+                const cleanT = String(t).toLowerCase().trim();
+                if (cleanT && cleanT !== kw && cleanT.length <= 20 && !uniqueKeywords.includes(cleanT)) {
+                  discoveredTopTagsMap.set(cleanT, (discoveredTopTagsMap.get(cleanT) || 0) + 1);
+                }
+              }
+            }
+          } else {
+            try {
+              const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
+              const charLen = kw.length;
+              const tagOk = charLen <= 20;
+
+              await sql`
+                UPDATE keyword_pool
+                SET 
+                  etsy_score = ${scraped.opportunityScore},
+                  opportunity_score = ${scraped.opportunityScore},
+                  total_listings = ${scraped.totalListings},
+                  competition_level = ${scraped.competitionLevel},
+                  bestseller_count = ${scraped.bestsellerCount},
+                  is_etsy_suggested = ${scraped.isEtsySuggested},
+                  autocomplete_rank = ${scraped.autocompleteRank},
+                  avg_price = ${scraped.avgPrice},
+                  last_scrape_error = ${scraped.scrapeError},
+                  raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
+                  last_evaluated_at = CURRENT_TIMESTAMP
+                WHERE keyword = ${kw}
+              `;
+
+              if (scraped.rawMetrics?.topTags && Array.isArray(scraped.rawMetrics.topTags)) {
+                for (const topTag of scraped.rawMetrics.topTags) {
+                  const cleanTag = String(topTag).toLowerCase().trim();
+                  if (cleanTag && cleanTag !== kw && cleanTag.length <= 20 && !uniqueKeywords.includes(cleanTag)) {
+                    discoveredTopTagsMap.set(cleanTag, (discoveredTopTagsMap.get(cleanTag) || 0) + 1);
+                  }
+                }
+              }
+
+              await new Promise(resolve => setTimeout(resolve, 200));
+            } catch (scrapeErr: any) {
+              console.warn(`Evaluation error for primary keyword "${kw}":`, scrapeErr.message);
             }
           }
         }
-      } else {
-        // Evaluate keyword with Etsy data using controlled throttling
-        try {
-          const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
-          const id = existing?.id || crypto.randomUUID();
-          const charLen = kw.length;
-          const tagOk = charLen <= 20;
 
-          await sql`
-            INSERT INTO keyword_pool (
-              id, keyword, usage_count, etsy_score, opportunity_score, total_listings, 
-              competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank, 
-              char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics, 
-              last_evaluated_at, created_at
-            )
-            VALUES (
-              ${id}, ${kw}, ${existing ? (existing.usage_count || 1) + 1 : 1}, 
-              ${scraped.opportunityScore}, ${scraped.opportunityScore}, ${scraped.totalListings},
-              ${scraped.competitionLevel}, ${scraped.bestsellerCount}, ${scraped.isEtsySuggested}, 
-              ${scraped.autocompleteRank}, ${charLen}, ${tagOk}, ${scraped.avgPrice}, 
-              ${scraped.scrapeError}, ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            )
-            ON CONFLICT (keyword) DO UPDATE
-            SET 
-              usage_count = keyword_pool.usage_count + 1,
-              etsy_score = ${scraped.opportunityScore},
-              opportunity_score = ${scraped.opportunityScore},
-              total_listings = ${scraped.totalListings},
-              competition_level = ${scraped.competitionLevel},
-              bestseller_count = ${scraped.bestsellerCount},
-              is_etsy_suggested = ${scraped.isEtsySuggested},
-              autocomplete_rank = ${scraped.autocompleteRank},
-              avg_price = ${scraped.avgPrice},
-              last_scrape_error = ${scraped.scrapeError},
-              raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-              last_evaluated_at = CURRENT_TIMESTAMP
+        // Top Co-Occurring tags
+        const topDiscoveredTags = Array.from(discoveredTopTagsMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+          .map(([tag]) => tag);
+
+        if (topDiscoveredTags.length > 0) {
+          const existingCoRows = await sql`
+            SELECT * FROM keyword_pool WHERE keyword = ANY(${topDiscoveredTags as any})
           `;
+          const existingCoMap = new Map(existingCoRows.map(r => [r.keyword.toLowerCase(), r]));
 
-          // Collect co-occurring competitor tags
-          if (scraped.rawMetrics?.topTags && Array.isArray(scraped.rawMetrics.topTags)) {
-            for (const topTag of scraped.rawMetrics.topTags) {
-              const cleanTag = String(topTag).toLowerCase().trim();
-              if (cleanTag && cleanTag !== kw && cleanTag.length <= 20 && !uniqueKeywords.includes(cleanTag)) {
-                discoveredTopTagsMap.set(cleanTag, (discoveredTopTagsMap.get(cleanTag) || 0) + 1);
+          for (const coTag of topDiscoveredTags) {
+            const existingCo = existingCoMap.get(coTag);
+            const isCoFresh = existingCo && existingCo.last_evaluated_at && (Date.now() - new Date(existingCo.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && existingCo.competition_level !== 'Engellendi / Hata' && existingCo.competition_level !== 'Taranacak';
+
+            if (isCoFresh) {
+              await sql`
+                UPDATE keyword_pool
+                SET usage_count = COALESCE(usage_count, 0) + 1
+                WHERE keyword = ${coTag}
+              `;
+            } else {
+              try {
+                const coScraped = await scrapeEtsyKeywordData(coTag, scrapeOptions);
+                const coId = existingCo?.id || crypto.randomUUID();
+                const coCharLen = coTag.length;
+
+                await sql`
+                  INSERT INTO keyword_pool (
+                    id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+                    competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+                    char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+                    last_evaluated_at, created_at
+                  )
+                  VALUES (
+                    ${coId}, ${coTag}, ${existingCo ? (existingCo.usage_count || 1) + 1 : 1},
+                    ${coScraped.opportunityScore}, ${coScraped.opportunityScore}, ${coScraped.totalListings},
+                    ${coScraped.competitionLevel}, ${coScraped.bestsellerCount}, ${coScraped.isEtsySuggested},
+                    ${coScraped.autocompleteRank}, ${coCharLen}, true, ${coScraped.avgPrice},
+                    ${coScraped.scrapeError},
+                    ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                  )
+                  ON CONFLICT (keyword) DO UPDATE
+                  SET
+                    usage_count = keyword_pool.usage_count + 1,
+                    etsy_score = ${coScraped.opportunityScore},
+                    opportunity_score = ${coScraped.opportunityScore},
+                    total_listings = ${coScraped.totalListings},
+                    competition_level = ${coScraped.competitionLevel},
+                    bestseller_count = ${coScraped.bestsellerCount},
+                    is_etsy_suggested = ${coScraped.isEtsySuggested},
+                    autocomplete_rank = ${coScraped.autocompleteRank},
+                    avg_price = ${coScraped.avgPrice},
+                    last_scrape_error = ${coScraped.scrapeError},
+                    raw_metrics = ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
+                    last_evaluated_at = CURRENT_TIMESTAMP
+                `;
+
+                await new Promise(resolve => setTimeout(resolve, 200));
+              } catch (coErr: any) {
+                console.warn(`Evaluation error for co-occurring tag "${coTag}":`, coErr.message);
               }
             }
           }
-
-          // Throttle between consecutive Etsy requests to prevent bot blocking
-          await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (scrapeErr: any) {
-          console.warn(`Evaluation error for primary keyword "${kw}":`, scrapeErr.message);
         }
+      } catch (bgErr: any) {
+        console.warn('Background keyword scraping task error:', bgErr.message);
       }
-    }
-
-    // 3. Process & Evaluate Top Co-Occurring Competitor Tags (Depth = 1 only!)
-    // Select top 6 most frequent distinct co-occurring tags
-    const topDiscoveredTags = Array.from(discoveredTopTagsMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([tag]) => tag);
-
-    if (topDiscoveredTags.length > 0) {
-      // Check which co-occurring tags already exist in DB
-      const existingCoRows = await sql`
-        SELECT * FROM keyword_pool WHERE keyword = ANY(${topDiscoveredTags as any})
-      `;
-      const existingCoMap = new Map(existingCoRows.map(r => [r.keyword.toLowerCase(), r]));
-
-      for (const coTag of topDiscoveredTags) {
-        const existingCo = existingCoMap.get(coTag);
-        const isCoFresh = existingCo && existingCo.last_evaluated_at && (Date.now() - new Date(existingCo.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && existingCo.competition_level !== 'Engellendi / Hata' && existingCo.competition_level !== 'Taranacak';
-
-        if (isCoFresh) {
-          await sql`
-            UPDATE keyword_pool
-            SET usage_count = COALESCE(usage_count, 0) + 1
-            WHERE keyword = ${coTag}
-          `;
-        } else {
-          try {
-            // Evaluate co-occurring tag so it is saved with FULL genuine metrics (never left un-evaluated!)
-            const coScraped = await scrapeEtsyKeywordData(coTag, scrapeOptions);
-            const coId = existingCo?.id || crypto.randomUUID();
-            const coCharLen = coTag.length;
-
-            await sql`
-              INSERT INTO keyword_pool (
-                id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-                competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-                char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-                last_evaluated_at, created_at
-              )
-              VALUES (
-                ${coId}, ${coTag}, ${existingCo ? (existingCo.usage_count || 1) + 1 : 1},
-                ${coScraped.opportunityScore}, ${coScraped.opportunityScore}, ${coScraped.totalListings},
-                ${coScraped.competitionLevel}, ${coScraped.bestsellerCount}, ${coScraped.isEtsySuggested},
-                ${coScraped.autocompleteRank}, ${coCharLen}, true, ${coScraped.avgPrice},
-                ${coScraped.scrapeError},
-                ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-              )
-              ON CONFLICT (keyword) DO UPDATE
-              SET
-                usage_count = keyword_pool.usage_count + 1,
-                etsy_score = ${coScraped.opportunityScore},
-                opportunity_score = ${coScraped.opportunityScore},
-                total_listings = ${coScraped.totalListings},
-                competition_level = ${coScraped.competitionLevel},
-                bestseller_count = ${coScraped.bestsellerCount},
-                is_etsy_suggested = ${coScraped.isEtsySuggested},
-                autocomplete_rank = ${coScraped.autocompleteRank},
-                avg_price = ${coScraped.avgPrice},
-                last_scrape_error = ${coScraped.scrapeError},
-                raw_metrics = ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
-                last_evaluated_at = CURRENT_TIMESTAMP
-            `;
-
-            // Note: We do NOT collect or scrape tags of tags (Depth = 1 strictly enforced!)
-            await new Promise(resolve => setTimeout(resolve, 200));
-          } catch (coErr: any) {
-            console.warn(`Evaluation error for co-occurring tag "${coTag}":`, coErr.message);
-          }
-        }
-      }
-    }
+    })();
 
     return NextResponse.json({
       success: true,
