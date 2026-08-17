@@ -192,7 +192,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     if (dbGeneratedMockups.length === 0 || allDesigns.length === 0) return;
 
     let targetFolderId = selectedFolderId;
-    if (!targetFolderId && foldersWithMockups.length > 0) {
+    if ((!targetFolderId || !foldersWithMockups.some(f => f.id === targetFolderId)) && foldersWithMockups.length > 0) {
       targetFolderId = foldersWithMockups[0].id;
       setSelectedFolderId(targetFolderId);
     }

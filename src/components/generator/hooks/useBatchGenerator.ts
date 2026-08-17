@@ -158,10 +158,19 @@ export function useBatchGenerator({
     const genToastId = toast.progress('Toplu mockup görselleri üretiliyor...', 5);
     const results: RenderedMatch[] = [];
 
-    const uniqueDesignNames = Array.from(new Set(currentPairs.map((p) => p.design.name)));
-    const combinedDesignName = uniqueDesignNames.join(' & ');
+    const uniqueDesignNames = Array.from(new Set(currentPairs.map((p) => p.design.name).filter(Boolean)));
+    const combinedDesignName = uniqueDesignNames.join(' & ') || 'Tasarım';
     const displayDesignName =
       combinedDesignName.length > 40 ? combinedDesignName.substring(0, 40) + '...' : combinedDesignName;
+
+    // Determine batch identity for Etsy SEO grouping
+    const primaryDesign = currentPairs.find((p) => p.design.id && p.design.id !== 'static-ref')?.design || currentPairs[0]?.design;
+    const primaryDesignId = primaryDesign?.id || 'default';
+    const targetFolderId = activeFolderId || 'all';
+    const targetFolder = folders.find((f) => f.id === activeFolderId);
+    const targetFolderName = targetFolder?.name || 'Tüm Klasörler';
+    const batchFolderId = `batch-${primaryDesignId}-${targetFolderId}`;
+    const batchFolderName = `${targetFolderName} - ${displayDesignName}`;
 
     for (let i = 0; i < currentPairs.length; i++) {
       const { mockup, design } = currentPairs[i];
@@ -191,8 +200,8 @@ export function useBatchGenerator({
           mockupId: mockup.id,
           mockupName: mockup.name,
           mockupApparel: mockup.apparelType,
-          folderId: mockup.folderId || '',
-          folderName: baseFolderName,
+          folderId: batchFolderId,
+          folderName: batchFolderName,
           folderOrderIndex: i + 1,
           designId: design.id,
           designName: design.name,
@@ -223,8 +232,8 @@ export function useBatchGenerator({
             mockupId: mockup.id,
             mockupName: mockup.name,
             mockupApparel: mockup.apparelType,
-            folderId: mockup.folderId || '',
-            folderName: baseFolderName,
+            folderId: batchFolderId,
+            folderName: batchFolderName,
             folderOrderIndex: i + 1,
             designId: design.id,
             designName: design.name,
