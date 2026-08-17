@@ -7,6 +7,7 @@ const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanva
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Tasarımlar yükleniyor...</div> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
 const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
+const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy İlan Paneli yükleniyor...</div> });
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
@@ -27,7 +28,8 @@ import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 
-const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo'];
+const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'listings'];
+
 
 /**
  * Checks if a touched DOM element is inside an interactive control or horizontally scrollable container
@@ -70,10 +72,11 @@ function MainContent() {
   useEffect(() => {
     try {
       const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) as TabKey;
-      if (savedTab && ['mockups', 'designs', 'generator', 'seo'].includes(savedTab)) {
+      if (savedTab && ['mockups', 'designs', 'generator', 'seo', 'listings'].includes(savedTab)) {
         setActiveTabState(savedTab);
       }
     } catch {}
+
   }, []);
 
   const setActiveTab = (tab: TabKey) => {
@@ -375,8 +378,10 @@ function MainContent() {
 
         {activeTab === 'seo' && <EtsySeoHelper renderedMatches={renderedMatches} />}
 
+        {activeTab === 'listings' && <EtsyListingManager />}
 
       </main>
+
 
       {/* Auth Modal & Profile Management Modal */}
       <AuthModal

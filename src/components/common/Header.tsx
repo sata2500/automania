@@ -12,11 +12,12 @@ import {
   Moon,
   Monitor,
   User,
+  ShoppingBag,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './UserAuthContext';
 
-export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo';
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo' | 'listings';
 
 interface HeaderProps {
   activeTab: TabKey;
@@ -31,7 +32,9 @@ const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.Elemen
   { key: 'designs',   label: '2. Tasarımlar',   shortLabel: 'Tasarımlar',   icon: Palette   },
   { key: 'generator', label: '3. Toplu Üretim', shortLabel: 'Toplu Üretim', icon: Sparkles  },
   { key: 'seo',       label: '4. Etsy SEO',     shortLabel: 'SEO',          icon: Tag       },
+  { key: 'listings',  label: '5. Etsy İlanlarım', shortLabel: 'İlanlarım',  icon: ShoppingBag },
 ];
+
 
 const THEME_LABELS: Record<string, string> = {
   system: 'Sistem',

@@ -1,4 +1,5 @@
-import { pgTable, varchar, jsonb, timestamp, integer, boolean, numeric, text } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, jsonb, timestamp, integer, boolean, numeric, text, bigint } from 'drizzle-orm/pg-core';
+
 import { sql } from 'drizzle-orm';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
@@ -66,3 +67,38 @@ export const etsyTaxonomyCache = pgTable('etsy_taxonomy_cache', {
   isActive: boolean('is_active').default(false),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const userEtsyListings = pgTable('user_etsy_listings', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  listingId: varchar('listing_id', { length: 100 }).notNull(),
+  shopId: varchar('shop_id', { length: 100 }),
+  title: text('title'),
+  description: text('description'),
+  tags: jsonb('tags').$type<string[]>().default([]),
+  materials: jsonb('materials').$type<string[]>().default([]),
+  price: numeric('price', { precision: 10, scale: 2 }).default('0'),
+  currencyCode: varchar('currency_code', { length: 10 }).default('USD'),
+  quantity: integer('quantity').default(999),
+  state: varchar('state', { length: 50 }).default('active'),
+  url: text('url'),
+  views: integer('views').default(0),
+  numFavorers: integer('num_favorers').default(0),
+  images: jsonb('images').$type<any[]>().default([]),
+  primaryImageUrl: text('primary_image_url'),
+  taxonomyId: integer('taxonomy_id'),
+  taxonomyPath: varchar('taxonomy_path', { length: 500 }),
+  visionAnalysis: jsonb('vision_analysis').default({}),
+  seoScore: integer('seo_score').default(0),
+  seoEvaluation: jsonb('seo_evaluation').default({}),
+  aiOptimizedTitle: text('ai_optimized_title'),
+  aiOptimizedDescription: text('ai_optimized_description'),
+  aiOptimizedTags: jsonb('ai_optimized_tags').$type<string[]>().default([]),
+  aiOptimizedAt: timestamp('ai_optimized_at'),
+  etsyUpdatedTimestamp: bigint('etsy_updated_timestamp', { mode: 'number' }),
+  lastSyncedAt: timestamp('last_synced_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+
