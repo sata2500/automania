@@ -1,9 +1,44 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 import sql from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
 export const maxDuration = 60;
+
+async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
+  try {
+    if (urlOrPath.startsWith('data:')) {
+      const base64Data = urlOrPath.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      const mimeType = urlOrPath.split(';')[0].split(':')[1] || 'image/webp';
+      return new Blob([buffer], { type: mimeType });
+    }
+    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+      const response = await fetch(urlOrPath);
+      if (!response.ok) return null;
+      return await response.blob();
+    }
+    if (urlOrPath.startsWith('/api/uploads/')) {
+      const filename = path.basename(urlOrPath);
+      const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
+      const buffer = await fs.readFile(filePath);
+      const ext = path.extname(filename).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+      return new Blob([buffer], { type: mimeType });
+    }
+    if (urlOrPath.startsWith('/sample-uploads/')) {
+      const rel = urlOrPath.replace('/sample-uploads/', '');
+      const filePath = path.join(process.cwd(), 'public', 'sample-uploads', rel);
+      const buffer = await fs.readFile(filePath);
+      return new Blob([buffer], { type: 'image/webp' });
+    }
+  } catch (err) {
+    console.warn('[Etsy Publish] Failed to load media blob for:', urlOrPath, err);
+  }
+  return null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -225,18 +260,11 @@ export async function POST(req: Request) {
       for (const imgUrl of imageItems) {
         imgIndex++;
         try {
-          let blob: Blob;
           const uniqueId = `${Date.now()}-${imgIndex}-${Math.random().toString(36).substring(7)}`;
+          const blob = await loadMediaBlob(imgUrl);
 
-          if (imgUrl.startsWith('data:image')) {
-            const base64Data = imgUrl.split(',')[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-            const mimeType = imgUrl.split(';')[0].split(':')[1] || 'image/webp';
-            blob = new Blob([buffer], { type: mimeType });
-          } else if (imgUrl.startsWith('http')) {
-            const response = await fetch(imgUrl);
-            blob = await response.blob();
-          } else {
+          if (!blob) {
+            console.warn(`[Etsy Upload] Image ${imgIndex} could not be loaded:`, imgUrl?.substring(0, 50));
             continue;
           }
 
@@ -289,18 +317,11 @@ export async function POST(req: Request) {
       for (const vidUrl of videosToUpload) {
         vidIndex++;
         try {
-          let blob: Blob;
           const uniqueId = `${Date.now()}-vid${vidIndex}-${Math.random().toString(36).substring(7)}`;
+          const blob = await loadMediaBlob(vidUrl);
 
-          if (vidUrl.startsWith('data:video')) {
-            const base64Data = vidUrl.split(',')[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-            const mimeType = vidUrl.split(';')[0].split(':')[1] || 'video/mp4';
-            blob = new Blob([buffer], { type: mimeType });
-          } else if (vidUrl.startsWith('http')) {
-            const response = await fetch(vidUrl);
-            blob = await response.blob();
-          } else {
+          if (!blob) {
+            console.warn(`[Etsy Upload] Video ${vidIndex} could not be loaded:`, vidUrl?.substring(0, 50));
             continue;
           }
 

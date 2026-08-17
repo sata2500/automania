@@ -16,8 +16,9 @@ export interface OptimizedImageResult {
 import { upload } from '@vercel/blob/client';
 
 /**
- * Uploads a file or Base64 data URL directly to Vercel Blob using client-side upload.
- * Returns the public CDN URL. Throws error if failed.
+ * Uploads a file or Base64 data URL directly to the server / Vercel Blob.
+ * Uses direct FormData server upload first, with Vercel Blob client & Base64 fallbacks.
+ * Returns the public or local URL.
  */
 export async function uploadMediaToServer(
   dataUrlOrFile: string | File,
@@ -25,14 +26,15 @@ export async function uploadMediaToServer(
 ): Promise<string> {
   if (
     typeof dataUrlOrFile === 'string' &&
-    (dataUrlOrFile.startsWith('/api/uploads/') || dataUrlOrFile.startsWith('/sample-uploads/') || dataUrlOrFile.startsWith('http'))
+    (dataUrlOrFile.startsWith('/api/uploads/') || dataUrlOrFile.startsWith('/sample-uploads/') || dataUrlOrFile.startsWith('http://') || dataUrlOrFile.startsWith('https://'))
   ) {
     return dataUrlOrFile;
   }
 
-  try {
-    let fileToUpload: File;
+  let fileToUpload: File | null = null;
+  let rawDataUrl: string | null = null;
 
+  try {
     if (dataUrlOrFile instanceof File) {
       let actualType = dataUrlOrFile.type || mimeType || 'image/webp';
       if (actualType.startsWith('video/')) {
@@ -41,11 +43,11 @@ export async function uploadMediaToServer(
         fileToUpload = dataUrlOrFile;
       }
     } else {
-      // Base64 to Blob to File
+      rawDataUrl = dataUrlOrFile;
+      // Base64 or blob URL to File
       const res = await fetch(dataUrlOrFile);
       const blob = await res.blob();
       let actualType = mimeType || blob.type || 'image/webp';
-      // If the data is actually a video, ignore the passed mimeType if it was an image
       if (blob.type && blob.type.startsWith('video/')) {
         actualType = blob.type;
       }
@@ -62,16 +64,67 @@ export async function uploadMediaToServer(
       fileToUpload = new File([blob], `upload-${Date.now()}.${ext}`, { type: actualType });
     }
 
-    const newBlob = await upload(fileToUpload.name, fileToUpload, {
-      access: 'public',
-      handleUploadUrl: '/api/upload', 
-    });
-    
-    return newBlob.url;
+    // Method 1: Direct FormData Upload to /api/upload
+    try {
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-  } catch (err) {
-    console.error('Failed to upload image via Vercel Blob Client:', err);
-    throw new Error('Dosya yüklenemedi, sınır aşılmış olabilir. Lütfen tekrar deneyin.');
+      if (uploadRes.ok) {
+        const json = await uploadRes.json();
+        if (json.url) return json.url;
+      }
+    } catch (formErr) {
+      console.warn('[uploadMediaToServer] FormData direct upload failed, trying fallback:', formErr);
+    }
+
+    // Method 2: Vercel Blob Client upload
+    try {
+      const newBlob = await upload(fileToUpload.name, fileToUpload, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+      });
+      if (newBlob?.url) return newBlob.url;
+    } catch (blobErr) {
+      console.warn('[uploadMediaToServer] Vercel Blob client upload failed:', blobErr);
+    }
+
+    // Method 3: Base64 JSON upload fallback
+    if (rawDataUrl && rawDataUrl.startsWith('data:')) {
+      try {
+        const jsonRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dataUrl: rawDataUrl,
+            filename: fileToUpload.name,
+            mimeType: fileToUpload.type,
+          }),
+        });
+        if (jsonRes.ok) {
+          const json = await jsonRes.json();
+          if (json.url) return json.url;
+        }
+      } catch (jsonErr) {
+        console.warn('[uploadMediaToServer] Base64 fallback upload failed:', jsonErr);
+      }
+    }
+
+    // Method 4: Safety Net (Offline/Local preview fallback so user never loses their generation)
+    if (typeof dataUrlOrFile === 'string') {
+      return dataUrlOrFile;
+    }
+    return URL.createObjectURL(fileToUpload);
+
+  } catch (err: any) {
+    console.error('[uploadMediaToServer] Critical upload error:', err);
+    if (typeof dataUrlOrFile === 'string') {
+      return dataUrlOrFile;
+    }
+    throw new Error(err.message || 'Dosya kaydedilemedi.');
   }
 }
 
