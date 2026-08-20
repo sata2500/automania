@@ -853,6 +853,25 @@ export const AdminDashboard: React.FC = () => {
       {/* SUB TAB 1: OVERVIEW & METRICS */}
       {activeSubTab === 'overview' && (
         <div className="space-y-6 animate-fadeIn">
+          {/* Live Refresh Bar */}
+          <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Canlı Sistem İstatistikleri</span>
+              <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                Cloudflare R2 + PostgreSQL
+              </span>
+            </div>
+            <button
+              onClick={() => { fetchGlobalStats(); fetchSampleStats(); }}
+              disabled={isLoadingStats}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStats ? 'animate-spin text-indigo-500' : ''}`} />
+              <span>{isLoadingStats ? 'Güncelleniyor...' : 'Verileri Yenile'}</span>
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Users Metric */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
