@@ -6,10 +6,11 @@ import fs from 'fs';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 /**
  * GET /api/admin/sample-data
- * Returns the current global sample data statistics and metadata.
+ * Returns the current global sample data statistics from database (with fallback to static constants).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,16 +19,39 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // 1. Fetch user-default template from Neon PostgreSQL
+    const rows = await sql`
+      SELECT folders, mockups, designs 
+      FROM user_workspaces 
+      WHERE user_id = 'user-default'
+    `;
+
+    let folders: any[] = DEFAULT_FOLDERS;
+    let mockups: any[] = SAMPLE_MOCKUPS;
+    let designs: any[] = SAMPLE_DESIGNS;
+
+    if (rows.length > 0) {
+      const parse = (v: any) => {
+        try { return typeof v === 'string' ? JSON.parse(v) : (Array.isArray(v) ? v : []); }
+        catch { return []; }
+      };
+      folders = parse(rows[0].folders);
+      mockups = parse(rows[0].mockups);
+      designs = parse(rows[0].designs);
+    }
+
     return NextResponse.json({
       success: true,
       stats: {
-        mockupsCount: SAMPLE_MOCKUPS.length,
-        designsCount: SAMPLE_DESIGNS.length,
-        foldersCount: DEFAULT_FOLDERS.length,
+        mockupsCount: mockups.length,
+        designsCount: designs.length,
+        foldersCount: folders.length,
       },
-      folders: DEFAULT_FOLDERS,
-      mockups: SAMPLE_MOCKUPS,
-      designs: SAMPLE_DESIGNS,
+      folders,
+      mockups,
+      designs,
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     });
   } catch (error: any) {
     console.error('Admin Sample Data GET Error:', error);
@@ -37,7 +61,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/admin/sample-data
- * Replaces the global sample template with the admin's current workspace or provided payload.
+ * Replaces the global sample template with the admin's current workspace.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -52,13 +76,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
 
-    // If payload is explicitly provided in body, use it
     if (body.mockups && Array.isArray(body.mockups)) {
       folders = body.folders || [];
       mockups = body.mockups || [];
       designs = body.designs || [];
     } else {
-      // Otherwise, fetch the calling admin's workspace from Postgres
+      // Fetch the calling admin's workspace from Postgres
       const rows = await sql`
         SELECT folders, mockups, designs 
         FROM user_workspaces 
@@ -72,9 +95,13 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      folders = rows[0].folders || [];
-      mockups = rows[0].mockups || [];
-      designs = rows[0].designs || [];
+      const parse = (v: any) => {
+        try { return typeof v === 'string' ? JSON.parse(v) : (Array.isArray(v) ? v : []); }
+        catch { return []; }
+      };
+      folders = parse(rows[0].folders);
+      mockups = parse(rows[0].mockups);
+      designs = parse(rows[0].designs);
     }
 
     // Normalize types
@@ -103,8 +130,28 @@ export async function POST(request: NextRequest) {
       folderId: d.folderId,
     }));
 
-    // 1. Write pristine code to src/lib/sample-data.ts
-    const sampleDataCode = `import { MockupItem, DesignItem, MockupFolder, MockupPreset } from '@/types/pod';
+    // 1. Synchronize user-default workspace in Neon PostgreSQL (Primary Source of Truth)
+    await sql`
+      INSERT INTO user_workspaces (user_id, folders, mockups, designs, etsy_generated_mockups, updated_at)
+      VALUES (
+        'user-default',
+        ${JSON.stringify(folders)}::jsonb,
+        ${JSON.stringify(cleanMockups)}::jsonb,
+        ${JSON.stringify(cleanDesigns)}::jsonb,
+        '[]'::jsonb,
+        NOW()
+      )
+      ON CONFLICT (user_id) DO UPDATE SET
+        folders = ${JSON.stringify(folders)}::jsonb,
+        mockups = ${JSON.stringify(cleanMockups)}::jsonb,
+        designs = ${JSON.stringify(cleanDesigns)}::jsonb,
+        etsy_generated_mockups = '[]'::jsonb,
+        updated_at = NOW()
+    `;
+
+    // 2. Best-effort update to local file if writable (fails gracefully on read-only serverless like Vercel)
+    try {
+      const sampleDataCode = `import { MockupItem, DesignItem, MockupFolder, MockupPreset } from '@/types/pod';
 
 export const DEFAULT_FOLDERS: MockupFolder[] = ${JSON.stringify(folders, null, 2)};
 
@@ -125,28 +172,11 @@ export function isProtectedUrl(url: string): boolean {
   return isProtectedMockup || isProtectedDesign;
 }
 `;
-
-    const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
-    fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
-
-    // 2. Synchronize user-default workspace in Neon PostgreSQL
-    await sql`
-      INSERT INTO user_workspaces (user_id, folders, mockups, designs, etsy_generated_mockups, updated_at)
-      VALUES (
-        'user-default',
-        ${JSON.stringify(folders)}::jsonb,
-        ${JSON.stringify(cleanMockups)}::jsonb,
-        ${JSON.stringify(cleanDesigns)}::jsonb,
-        '[]'::jsonb,
-        NOW()
-      )
-      ON CONFLICT (user_id) DO UPDATE SET
-        folders = ${JSON.stringify(folders)}::jsonb,
-        mockups = ${JSON.stringify(cleanMockups)}::jsonb,
-        designs = ${JSON.stringify(cleanDesigns)}::jsonb,
-        etsy_generated_mockups = '[]'::jsonb,
-        updated_at = NOW()
-    `;
+      const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
+      fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
+    } catch (fsErr) {
+      // Ignored on serverless environments (read-only file system)
+    }
 
     return NextResponse.json({
       success: true,
@@ -156,6 +186,8 @@ export function isProtectedUrl(url: string): boolean {
         mockupsCount: cleanMockups.length,
         designsCount: cleanDesigns.length,
       },
+    }, {
+      headers: { 'Cache-Control': 'no-store' }
     });
   } catch (error: any) {
     console.error('Admin Sample Data POST Error:', error);
@@ -174,9 +206,28 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const defaultFolders: any[] = [];
+    // 1. Reset user-default workspace in Neon PostgreSQL
+    await sql`
+      INSERT INTO user_workspaces (user_id, folders, mockups, designs, etsy_generated_mockups, updated_at)
+      VALUES (
+        'user-default',
+        '[]'::jsonb,
+        '[]'::jsonb,
+        '[]'::jsonb,
+        '[]'::jsonb,
+        NOW()
+      )
+      ON CONFLICT (user_id) DO UPDATE SET 
+        folders = '[]'::jsonb,
+        mockups = '[]'::jsonb,
+        designs = '[]'::jsonb,
+        etsy_generated_mockups = '[]'::jsonb,
+        updated_at = NOW()
+    `;
 
-    const sampleDataCode = `import { MockupItem, DesignItem, MockupFolder, MockupPreset } from '@/types/pod';
+    // 2. Best-effort update to local file if writable
+    try {
+      const sampleDataCode = `import { MockupItem, DesignItem, MockupFolder, MockupPreset } from '@/types/pod';
 
 export const DEFAULT_FOLDERS: MockupFolder[] = [];
 
@@ -190,20 +241,11 @@ export function isProtectedUrl(url: string): boolean {
   return false;
 }
 `;
-
-    const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
-    fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
-
-    await sql`
-      UPDATE user_workspaces
-      SET 
-        folders = '[]'::jsonb,
-        mockups = '[]'::jsonb,
-        designs = '[]'::jsonb,
-        etsy_generated_mockups = '[]'::jsonb,
-        updated_at = NOW()
-      WHERE user_id = 'user-default'
-    `;
+      const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
+      fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
+    } catch (fsErr) {
+      // Ignored on serverless environments
+    }
 
     return NextResponse.json({
       success: true,
@@ -213,6 +255,8 @@ export function isProtectedUrl(url: string): boolean {
         mockupsCount: 0,
         designsCount: 0,
       }
+    }, {
+      headers: { 'Cache-Control': 'no-store' }
     });
   } catch (error: any) {
     console.error('Admin Sample Data DELETE Error:', error);
