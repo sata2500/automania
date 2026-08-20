@@ -30,12 +30,14 @@ export async function GET() {
     `;
 
     // 2. Asset Statistics (Mockups & Designs)
+    // Only count workspaces that belong to valid users (excludes orphaned rows and user-default template)
     const assetsData = await sql`
       SELECT 
         COALESCE(SUM(jsonb_array_length(mockups)), 0) as total_mockups,
         COALESCE(SUM(jsonb_array_length(designs)), 0) as total_designs,
         COALESCE(SUM(jsonb_array_length(folders)), 0) as total_folders
       FROM user_workspaces
+      WHERE user_id IN (SELECT id FROM users)
     `;
 
     const dbLatencyMs = Date.now() - startTime;
