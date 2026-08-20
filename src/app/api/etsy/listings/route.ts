@@ -78,6 +78,10 @@ export async function GET(req: Request) {
     }
 
     const avgScore = total > 0 ? Math.round(totalScoreSum / total) : 0;
+    const now = Date.now();
+    const lastSyncTime = lastSyncedAt ? new Date(lastSyncedAt).getTime() : 0;
+    const hoursSinceLastSync = lastSyncTime > 0 ? (now - lastSyncTime) / (1000 * 60 * 60) : 999999;
+    const isStale = total === 0 || !lastSyncedAt || hoursSinceLastSync >= 24;
 
     // Filter in-memory for fast instantaneous client responsiveness
     let filtered = allRows.filter((r: any) => {
@@ -132,7 +136,9 @@ export async function GET(req: Request) {
         inactive: inactiveCount,
         avgScore,
         analyzedCount,
-        lastSyncedAt
+        lastSyncedAt,
+        hoursSinceLastSync: Math.round(hoursSinceLastSync * 10) / 10,
+        isStale
       }
     });
 
@@ -144,7 +150,7 @@ export async function GET(req: Request) {
 
 /**
  * Helper to fetch all paginated listings for a specific state from Etsy OpenAPI v3.
- * Supports smart delta termination based on updated timestamp.
+ * Supports intelligent delta termination for large shops while ensuring complete sync for standard shops.
  */
 async function fetchAllListingsForState(
   shopId: string,
@@ -178,10 +184,9 @@ async function fetchAllListingsForState(
 
     listings.push(...pageResults);
 
-    // Smart Delta optimization:
-    // If in smart mode, we have prior records in DB, and all items in this page are already in DB with same or newer updated timestamp,
-    // we can terminate early because Etsy returns listings sorted by updated desc (older listings follow).
-    if (mode === 'smart' && maxTimestampInDb > 0 && offset > 0) {
+    // Smart Delta optimization for stores with >300 listings:
+    // If all items on subsequent pages are older than DB cache, we can safely terminate early.
+    if (totalInEtsy > 300 && mode === 'smart' && maxTimestampInDb > 0 && offset > 0) {
       const allOlderAndCached = pageResults.every((item: any) => {
         const itemTs = Number(item.updated_timestamp || item.last_modified_timestamp || item.state_timestamp || 0);
         const ex = existingMap.get(String(item.listing_id));
@@ -189,7 +194,7 @@ async function fetchAllListingsForState(
       });
 
       if (allOlderAndCached) {
-        break; // Reached already-synced history
+        break;
       }
     }
 
@@ -204,8 +209,8 @@ async function fetchAllListingsForState(
 
 /**
  * POST /api/etsy/listings
- * Triggers on-demand synchronization from Etsy API into PostgreSQL DB cache.
- * Accepts mode: 'smart' (default - delta sync) | 'full' (complete pagination across all states).
+ * Triggers unified synchronization from Etsy API into PostgreSQL DB cache.
+ * Accepts mode: 'smart' (default) | 'full' (forced complete pagination).
  */
 export async function POST(req: Request) {
   try {
@@ -248,7 +253,7 @@ export async function POST(req: Request) {
 
     // 1. Fetch existing DB listings for this user to compare timestamps and preserve previous Vision analysis & AI optimizations
     const existingDbRows = await sql`
-      SELECT id, listing_id, title, description, tags, etsy_updated_timestamp, seo_score, seo_evaluation, vision_analysis, ai_optimized_title, ai_optimized_description, ai_optimized_tags, ai_optimized_at 
+      SELECT id, listing_id, state, title, description, tags, etsy_updated_timestamp, seo_score, seo_evaluation, vision_analysis, ai_optimized_title, ai_optimized_description, ai_optimized_tags, ai_optimized_at 
       FROM user_etsy_listings 
       WHERE user_id = ${session.id}
     `;
@@ -261,7 +266,7 @@ export async function POST(req: Request) {
       if (ts > maxTimestampInDb) maxTimestampInDb = ts;
     }
 
-    // 2. Fetch paginated listings from Etsy for Active, Draft, and Inactive states
+    // 2. Fetch listings from Etsy for Active, Draft, and Inactive states
     const [activeData, draftData, inactiveData] = await Promise.all([
       fetchAllListingsForState(String(etsyShopId), 'active', headers, mode, existingMap, maxTimestampInDb),
       fetchAllListingsForState(String(etsyShopId), 'draft', headers, mode, existingMap, maxTimestampInDb),
@@ -292,9 +297,11 @@ export async function POST(req: Request) {
     // 4. Transform and Upsert each listing
     let newOrUpdatedCount = 0;
     let unchangedCount = 0;
+    const returnedEtsyListingIds = new Set<string>();
 
     for (const item of rawEtsyListings) {
       const listingIdStr = String(item.listing_id);
+      returnedEtsyListingIds.add(listingIdStr);
       const compositeId = `${session.id}_${listingIdStr}`;
       const existing = existingMap.get(listingIdStr);
 
@@ -440,14 +447,25 @@ export async function POST(req: Request) {
       `;
     }
 
+    // 5. Handle listings deleted on Etsy (if they existed in DB as active but were deleted on Etsy)
+    if (rawEtsyListings.length > 0) {
+      for (const [listingId, ex] of existingMap.entries()) {
+        if (!returnedEtsyListingIds.has(listingId) && ex.state !== 'removed') {
+          await sql`
+            UPDATE user_etsy_listings 
+            SET state = 'removed', updated_at = CURRENT_TIMESTAMP 
+            WHERE user_id = ${session.id} AND listing_id = ${listingId}
+          `.catch(() => {});
+        }
+      }
+    }
+
     const totalCount = await sql`
-      SELECT COUNT(*) as cnt FROM user_etsy_listings WHERE user_id = ${session.id}
+      SELECT COUNT(*) as cnt FROM user_etsy_listings WHERE user_id = ${session.id} AND state != 'removed'
     `;
     const finalTotal = Number(totalCount[0]?.cnt || 0);
 
-    const message = mode === 'smart'
-      ? `Akıllı senkronizasyon tamamlandı: Toplam ${finalTotal} ilan güncel. (${newOrUpdatedCount} yeni/güncellenen işlendi, ${unchangedCount} değişmeyen ilan korundu)`
-      : `Tam senkronizasyon tamamlandı: Etsy mağazanızdaki tüm sayfalar taranarak toplam ${finalTotal} ilan veritabanına aktarıldı.`;
+    const message = `Etsy senkronizasyonu tamamlandı: Toplam ${finalTotal} ilan güncel. (${newOrUpdatedCount} yeni/güncellenen işlendi, ${unchangedCount} değişmeyen ilan korundu)`;
 
     return NextResponse.json({
       success: true,
@@ -455,6 +473,7 @@ export async function POST(req: Request) {
       totalListings: finalTotal,
       newOrUpdatedCount,
       unchangedCount,
+      lastSyncedAt: new Date().toISOString(),
       message
     });
 

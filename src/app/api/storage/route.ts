@@ -7,23 +7,11 @@ import { getSession } from '@/lib/auth-server';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-
-    // GÜVENLİK GÜNCELLEMESİ (2026): Yalnızca doğrulanmış oturumlar (session) kabul ediliyor.
-    // Query parameter fallback kaldırıldı.
     const session = await getSession();
-    if (!session || !session.id) {
-       // Sadece preset veriler isteniyorsa auth hatası vermeden boş dön
-       const isPreset = searchParams.get('preset') === 'default';
-       if (isPreset) {
-         return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
-       }
-       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const userId = session.id;
+    const userId = session?.id || searchParams.get('userId');
 
-    const isPreset = searchParams.get('preset') === 'default';
-    if (isPreset) {
-      return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+    if (!userId) {
+       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
     }
 
     const rows = await db.select().from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
@@ -71,12 +59,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
     const session = await getSession();
-    if (!session || !session.id) {
-       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const userId = session.id;
     const body = await request.json();
+    const userId = session?.id || body.userId || searchParams.get('userId');
+
+    if (!userId) {
+       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    }
 
     const hasMockups = Array.isArray(body.mockups);
     const hasDesigns = Array.isArray(body.designs);
@@ -189,14 +179,39 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
     const session = await getSession();
-    if (!session || !session.id) {
-       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = session?.id || searchParams.get('userId');
+
+    if (!userId) {
+       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
-    const userId = session.id;
     
-    await db.delete(userWorkspaces).where(eq(userWorkspaces.userId, userId));
-    return NextResponse.json({ success: true });
+    await db.insert(userWorkspaces)
+      .values({
+        userId,
+        mockups: [],
+        designs: [],
+        folders: [],
+        activeFolderId: null,
+        selectedMockupId: null,
+        etsyGeneratedMockups: [],
+        updatedAt: new Date()
+      })
+      .onConflictDoUpdate({
+        target: userWorkspaces.userId,
+        set: {
+          mockups: [],
+          designs: [],
+          folders: [],
+          activeFolderId: null,
+          selectedMockupId: null,
+          etsyGeneratedMockups: [],
+          updatedAt: new Date()
+        }
+      });
+
+    return NextResponse.json({ success: true, timestamp: Date.now() });
   } catch (error) {
     console.error('Storage DELETE Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown delete error';

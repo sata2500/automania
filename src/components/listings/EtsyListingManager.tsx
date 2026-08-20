@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   RefreshCw,
   Sparkles,
@@ -22,7 +22,8 @@ import {
   SlidersHorizontal,
   Flame,
   Layers,
-  Send
+  Send,
+  Clock
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
@@ -42,12 +43,15 @@ export const EtsyListingManager: React.FC = () => {
     inactive: 0,
     avgScore: 0,
     analyzedCount: 0,
-    lastSyncedAt: null as string | null
+    lastSyncedAt: null as string | null,
+    hoursSinceLastSync: null as number | null,
+    isStale: false
   });
 
   // UI / Filter state
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSyncBanner, setAutoSyncBanner] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState('all');
   const [scoreFilter, setScoreFilter] = useState('all');
@@ -56,14 +60,49 @@ export const EtsyListingManager: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
+  // Auto-sync trigger guard (run once on mount if stale)
+  const hasCheckedAutoSyncRef = useRef(false);
+
   // Modals state
   const [selectedListingForModal, setSelectedListingForModal] = useState<any | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<BulkActionType | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
+  // Trigger automated background synchronization if data is older than 24 hours
+  const triggerAutoSync = useCallback(async () => {
+    setIsSyncing(true);
+    setAutoSyncBanner('Etsy verileriniz 24 saatten eski olduğu için arka planda güncelleniyor, lütfen bekleyin...');
+    try {
+      const res = await fetch('/api/etsy/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'smart' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        success(data.message || 'Etsy verileri başarıyla güncellendi!');
+        // Refresh listings and stats from DB
+        const refreshRes = await fetch('/api/etsy/listings');
+        const refreshData = await refreshRes.json();
+        if (refreshData.success) {
+          setListings(refreshData.listings || []);
+          if (refreshData.stats) setStats(refreshData.stats);
+        }
+      } else {
+        // Soft notification if token is missing or not connected
+        warning(data.error || 'Etsy otomatik senkronizasyonu tamamlanamadı.');
+      }
+    } catch (err) {
+      console.error('Auto sync error:', err);
+    } finally {
+      setIsSyncing(false);
+      setAutoSyncBanner(null);
+    }
+  }, [success, warning]);
+
   // Fetch listings from DB cache
-  const fetchListings = useCallback(async () => {
+  const fetchListings = useCallback(async (isInitial = false) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
@@ -78,7 +117,17 @@ export const EtsyListingManager: React.FC = () => {
 
       if (data.success) {
         setListings(data.listings || []);
-        if (data.stats) setStats(data.stats);
+        if (data.stats) {
+          setStats(data.stats);
+
+          // Check if data is older than 24 hours (or never synced) on initial page load
+          if (isInitial && !hasCheckedAutoSyncRef.current) {
+            hasCheckedAutoSyncRef.current = true;
+            if (data.stats.isStale || !data.stats.lastSyncedAt || data.stats.total === 0) {
+              triggerAutoSync();
+            }
+          }
+        }
       } else {
         error(data.error || 'İlanlar yüklenirken bir hata oluştu.');
       }
@@ -88,26 +137,26 @@ export const EtsyListingManager: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, stateFilter, scoreFilter, visionFilter, sortBy, error]);
+  }, [searchQuery, stateFilter, scoreFilter, visionFilter, sortBy, error, triggerAutoSync]);
 
   useEffect(() => {
-    fetchListings();
-  }, [fetchListings]);
+    fetchListings(true);
+  }, []); // Run on initial mount
 
-  // Trigger Etsy Synchronization (mode: 'smart' delta or 'full' all pages)
-  const handleSyncEtsy = async (mode: 'smart' | 'full' = 'smart') => {
+  // Manual Trigger for Etsy Synchronization
+  const handleSyncEtsy = async () => {
     setIsSyncing(true);
     try {
       const res = await fetch('/api/etsy/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode })
+        body: JSON.stringify({ mode: 'smart' })
       });
       const data = await res.json();
 
       if (data.success) {
         success(data.message || 'Etsy ilanları başarıyla senkronize edildi!');
-        fetchListings();
+        fetchListings(false);
       } else {
         error(data.error || 'Etsy senkronizasyonu başarısız oldu.');
       }
@@ -118,8 +167,6 @@ export const EtsyListingManager: React.FC = () => {
       setIsSyncing(false);
     }
   };
-
-
 
   // Multi-select handlers
   const handleToggleSelect = (listingId: string) => {
@@ -169,6 +216,24 @@ export const EtsyListingManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
+
+      {/* 24-HOUR AUTO SYNC NOTIFICATION BANNER */}
+      {autoSyncBanner && (
+        <div className="bg-gradient-to-r from-indigo-900/80 via-purple-900/80 to-indigo-900/80 border border-indigo-500/50 rounded-2xl p-4 text-indigo-100 flex items-center justify-between gap-3 shadow-xl backdrop-blur animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-500/20 rounded-xl">
+              <RefreshCw className="w-5 h-5 text-indigo-300 animate-spin" />
+            </div>
+            <div>
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <span>Otomatik Arka Plan Senkronizasyonu</span>
+                <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full font-mono">24 Saat Kuralı</span>
+              </div>
+              <p className="text-xs text-indigo-200/90 mt-0.5">{autoSyncBanner}</p>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* 1. TOP STATS & HEADER BANNER */}
       <div className="bg-slate-900 text-white p-4 sm:p-6 rounded-2xl border border-slate-800 shadow-xl relative overflow-hidden">
@@ -196,26 +261,15 @@ export const EtsyListingManager: React.FC = () => {
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            {/* Smart Delta Sync */}
+            {/* Single Primary Refresh Button */}
             <button
-              onClick={() => handleSyncEtsy('smart')}
+              onClick={handleSyncEtsy}
               disabled={isSyncing}
-              className="flex-1 sm:flex-none px-3.5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              title="Sadece yeni eklenen veya Etsy'de güncellenen ilanları hızlıca çeker"
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              title="Etsy'deki en güncel ilan, görüntülenme ve favori verilerini çeker (24 saatte bir otomatik güncellenir)"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Senkronize Ediliyor...' : '⚡ Akıllı Senkronizasyon'}</span>
-            </button>
-
-            {/* Full Sync */}
-            <button
-              onClick={() => handleSyncEtsy('full')}
-              disabled={isSyncing}
-              className="flex-1 sm:flex-none px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-              title="Tüm sayfaları (150+ ilanın tamamını) Etsy'den baştan sona eksiksiz çeker"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>🔄 Tam Senkronizasyon</span>
+              <span>{isSyncing ? 'Senkronize Ediliyor...' : '🔄 Etsy Verilerini Güncelle'}</span>
             </button>
 
             <button
@@ -281,9 +335,18 @@ export const EtsyListingManager: React.FC = () => {
           </div>
 
           <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
-            <span className="text-[11px] text-slate-400 font-medium">Son Senkronizasyon</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-slate-400 font-medium">Son Senkronizasyon</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                stats.isStale ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+              }`}>
+                {stats.isStale ? '🕒 Yenilenmeli' : '✅ Güncel'}
+              </span>
+            </div>
             <div className="text-xs font-semibold text-slate-200 mt-1 truncate">
-              {stats.lastSyncedAt ? new Date(stats.lastSyncedAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Henüz senkronize edilmedi'}
+              {stats.lastSyncedAt 
+                ? `${new Date(stats.lastSyncedAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${stats.hoursSinceLastSync !== null && stats.hoursSinceLastSync < 24 ? ` (${stats.hoursSinceLastSync < 1 ? 'Az önce' : `${Math.floor(stats.hoursSinceLastSync)} sa önce`})` : ''}`
+                : 'Henüz senkronize edilmedi'}
             </div>
           </div>
         </div>
@@ -447,18 +510,18 @@ export const EtsyListingManager: React.FC = () => {
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
               {stats.total === 0
-                ? 'Etsy mağazanızdaki ilanları veritabanınıza çekmek için yukarıdaki "Etsy ile Senkronize Et" butonuna tıklayın.'
+                ? 'Etsy mağazanızdaki ilanları veritabanınıza çekmek için "Etsy Verilerini Güncelle" butonuna tıklayın.'
                 : 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'}
             </p>
           </div>
           {stats.total === 0 && (
             <button
-              onClick={() => handleSyncEtsy('full')}
+              onClick={handleSyncEtsy}
               disabled={isSyncing}
-              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2"
+              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>Tüm Sayfaları Senkronize Et (150+ İlan)</span>
+              <span>{isSyncing ? 'Etsy Verileri Çekiliyor...' : '🔄 Etsy Verilerini Güncelle'}</span>
             </button>
           )}
 

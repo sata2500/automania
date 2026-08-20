@@ -1,7 +1,7 @@
 /**
  * Image Optimizer Service
  * Compress and optimize uploaded mockups and design PNGs on client-side canvas
- * without visual quality loss, and persist them via server upload API.
+ * without visual quality loss, and persist them via server upload API (Cloudflare R2).
  */
 
 export interface OptimizedImageResult {
@@ -13,11 +13,9 @@ export interface OptimizedImageResult {
   optimizedSize: number;
 }
 
-import { upload } from '@vercel/blob/client';
-
 /**
- * Uploads a file or Base64 data URL directly to the server / Vercel Blob.
- * Uses direct FormData server upload first, with Vercel Blob client & Base64 fallbacks.
+ * Uploads a file or Base64 data URL directly to the server (Cloudflare R2 / Storage API).
+ * Uses direct FormData server upload first, with Base64 JSON fallbacks.
  * Returns the public or local URL.
  */
 export async function uploadMediaToServer(
@@ -26,7 +24,10 @@ export async function uploadMediaToServer(
 ): Promise<string> {
   if (
     typeof dataUrlOrFile === 'string' &&
-    (dataUrlOrFile.startsWith('/api/uploads/') || dataUrlOrFile.startsWith('/sample-uploads/') || dataUrlOrFile.startsWith('http://') || dataUrlOrFile.startsWith('https://'))
+    (dataUrlOrFile.startsWith('/api/uploads/') ||
+      dataUrlOrFile.startsWith('/sample-uploads/') ||
+      dataUrlOrFile.startsWith('http://') ||
+      dataUrlOrFile.startsWith('https://'))
   ) {
     return dataUrlOrFile;
   }
@@ -36,7 +37,7 @@ export async function uploadMediaToServer(
 
   try {
     if (dataUrlOrFile instanceof File) {
-      let actualType = dataUrlOrFile.type || mimeType || 'image/webp';
+      const actualType = dataUrlOrFile.type || mimeType || 'image/webp';
       if (actualType.startsWith('video/')) {
         fileToUpload = new File([dataUrlOrFile], `upload-${Date.now()}.mp4`, { type: actualType });
       } else {
@@ -51,7 +52,7 @@ export async function uploadMediaToServer(
       if (blob.type && blob.type.startsWith('video/')) {
         actualType = blob.type;
       }
-      
+
       let ext = 'webp';
       if (actualType.startsWith('video/')) {
         ext = 'mp4';
@@ -64,7 +65,7 @@ export async function uploadMediaToServer(
       fileToUpload = new File([blob], `upload-${Date.now()}.${ext}`, { type: actualType });
     }
 
-    // Method 1: Direct FormData Upload to /api/upload
+    // Method 1: Direct FormData Upload to /api/upload (Cloudflare R2 / Server Storage)
     try {
       const formData = new FormData();
       formData.append('file', fileToUpload);
@@ -81,18 +82,7 @@ export async function uploadMediaToServer(
       console.warn('[uploadMediaToServer] FormData direct upload failed, trying fallback:', formErr);
     }
 
-    // Method 2: Vercel Blob Client upload
-    try {
-      const newBlob = await upload(fileToUpload.name, fileToUpload, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-      });
-      if (newBlob?.url) return newBlob.url;
-    } catch (blobErr) {
-      console.warn('[uploadMediaToServer] Vercel Blob client upload failed:', blobErr);
-    }
-
-    // Method 3: Base64 JSON upload fallback
+    // Method 2: Base64 JSON upload fallback
     if (rawDataUrl && rawDataUrl.startsWith('data:')) {
       try {
         const jsonRes = await fetch('/api/upload', {
@@ -113,12 +103,11 @@ export async function uploadMediaToServer(
       }
     }
 
-    // Method 4: Safety Net (Offline/Local preview fallback so user never loses their generation)
+    // Method 3: Safety Net (Offline/Local preview fallback so user never loses their generation)
     if (typeof dataUrlOrFile === 'string') {
       return dataUrlOrFile;
     }
     return URL.createObjectURL(fileToUpload);
-
   } catch (err: any) {
     console.error('[uploadMediaToServer] Critical upload error:', err);
     if (typeof dataUrlOrFile === 'string') {
@@ -135,7 +124,7 @@ export async function uploadMediaToServer(
 export async function optimizeMockupImage(
   fileOrDataUrl: File | string,
   maxDimension = 2000,
-  quality = 0.90
+  quality = 0.9
 ): Promise<OptimizedImageResult> {
   const { img, originalSize } = await loadImageSource(fileOrDataUrl);
 
@@ -225,7 +214,7 @@ export async function optimizeDesignImage(
   ctx.drawImage(img, 0, 0, width, height);
 
   // Use WebP format to allow lossy compression while preserving alpha transparency
-  const quality = 0.90;
+  const quality = 0.9;
   let optimizedDataUrl = canvas.toDataURL('image/webp', quality);
   let finalMime = 'image/webp';
 
@@ -234,7 +223,7 @@ export async function optimizeDesignImage(
     optimizedDataUrl = canvas.toDataURL('image/png');
     finalMime = 'image/png';
   }
-  
+
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
   // Upload optimized binary design to server API

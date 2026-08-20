@@ -44,7 +44,8 @@ import {
   Plus,
   Info,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  Upload
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -273,20 +274,39 @@ export const AdminDashboard: React.FC = () => {
 
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [sampleStats, setSampleStats] = useState<{ mockupsCount: number; designsCount: number; foldersCount: number } | null>(null);
+  const [isUpdatingSampleData, setIsUpdatingSampleData] = useState(false);
 
   const fetchGlobalStats = async () => {
     setIsLoadingStats(true);
     try {
-      const res = await fetch('/api/admin/stats');
+      const res = await fetch(`/api/admin/stats?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (data.success) setGlobalStats(data.stats);
     } catch (err) {}
     setIsLoadingStats(false);
   };
 
+  const fetchSampleStats = async () => {
+    try {
+      const res = await fetch(`/api/admin/sample-data?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      const data = await res.json();
+      if (data.success && data.stats) {
+        setSampleStats(data.stats);
+      }
+    } catch (err) {}
+  };
+
   useEffect(() => {
-    if (activeSubTab === 'overview') {
+    if (activeSubTab === 'overview' || activeSubTab === 'settings') {
       fetchGlobalStats();
+      fetchSampleStats();
     }
   }, [activeSubTab]);
 
@@ -640,7 +660,7 @@ export const AdminDashboard: React.FC = () => {
     setConfirmConfig({
       isOpen: true,
       title: 'Sistem Verilerini Temizle',
-      message: 'Bu işlem, veritabanında karşılığı olmayan veya kullanılmayan tüm çöp (yetim) görselleri Vercel Depolama (Blob) alanından tamamen silecektir.\n\nSistemdeki hazır örnek taslaklar ve kullanıcıların aktif mockupları KORUNACAKTIR. Devam etmek istiyor musunuz?',
+      message: 'Bu işlem, veritabanında karşılığı olmayan veya kullanılmayan tüm çöp (yetim) görselleri Cloudflare R2 / Depolama alanından tamamen silecektir.\n\nSistemdeki hazır örnek taslaklar ve kullanıcıların aktif mockupları KORUNACAKTIR. Devam etmek istiyor musunuz?',
       action: async () => {
         try {
           const res = await fetch('/api/admin/clean-blobs', { method: 'POST' });
@@ -653,6 +673,56 @@ export const AdminDashboard: React.FC = () => {
           }
         } catch (err) {
           toast.error('Sistem temizleme sırasında bir hata oluştu.');
+        }
+      }
+    });
+  };
+
+  const handleSetMyWorkspaceAsSampleData = () => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Çalışma Alanını Genel Örnek Taslak Olarak Ata',
+      message: 'Mevcut yönetici çalışma alanınızdaki tüm klasörler, mockup\'lar ve tasarımlar, sistem genelindeki tüm kullanıcılar için varsayılan "Örnek Taslak" şablonu olarak atanacaktır. Eski örnek veriler tamamen bu yeni verilerle güncellenecektir. Onaylıyor musunuz?',
+      action: async () => {
+        setIsUpdatingSampleData(true);
+        try {
+          const res = await fetch('/api/admin/sample-data', { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            toast.success(data.message || 'Örnek taslak başarıyla güncellendi!');
+            if (data.stats) setSampleStats(data.stats);
+          } else {
+            toast.error(data.error || 'Örnek taslak güncellenirken hata oluştu.');
+          }
+        } catch (e: any) {
+          toast.error('İşlem sırasında bir hata oluştu: ' + (e.message || 'Bilinmeyen hata'));
+        } finally {
+          setIsUpdatingSampleData(false);
+        }
+      }
+    });
+  };
+
+  const handleResetSampleData = () => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Örnek Taslak Verilerini Sıfırla',
+      message: 'Sistem genelindeki örnek taslak şablonu tamamen boşaltılacaktır. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?',
+      action: async () => {
+        setIsUpdatingSampleData(true);
+        try {
+          const res = await fetch('/api/admin/sample-data', { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            toast.success(data.message || 'Örnek taslak sıfırlandı.');
+            setSampleStats(data.stats || { mockupsCount: 0, designsCount: 0, foldersCount: 0 });
+          } else {
+            toast.error(data.error || 'Sıfırlama sırasında hata oluştu.');
+          }
+        } catch (e: any) {
+          toast.error('Hata: ' + e.message);
+        } finally {
+          setIsUpdatingSampleData(false);
         }
       }
     });
@@ -881,7 +951,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Depolama Alanı (Vercel)
+                  Depolama ({globalStats?.storage?.provider || 'Cloudflare R2'})
                 </span>
                 <div className="flex items-baseline space-x-2">
                   <span className={`text-3xl font-extrabold ${
@@ -893,7 +963,10 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="flex gap-2 text-[10px] mt-3 font-bold">
                   <span className="text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-2 py-0.5 rounded-md border border-sky-100 dark:border-sky-800">
-                    🖼️ {globalStats?.storage?.blobCount || 0} Görsel
+                    🖼️ {globalStats?.storage?.blobCount || 0} Dosya
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                    Kota: {((globalStats?.storage?.limitBytes || 10737418240) / (1024 * 1024 * 1024)).toFixed(0)} GB
                   </span>
                 </div>
               </div>
@@ -1829,6 +1902,65 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Global Sample Data & Template Management Card */}
+            <div className="md:col-span-2 p-5 bg-gradient-to-br from-indigo-50/60 via-purple-50/40 to-white dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-900 rounded-2xl border border-indigo-200/80 dark:border-indigo-800/60 space-y-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 dark:text-white">Genel Örnek Taslak &amp; Şablon Kütüphanesi</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Tüm kullanıcıların "Örnek Taslağı Yükle" dediğinde alacağı varsayılan mockup, tasarım ve klasör veri setini yönetin.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Live Stats Badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-800/60 rounded-lg text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 shadow-2xs">
+                    <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{sampleStats?.mockupsCount ?? '...'} Mockup</span>
+                  </div>
+                  <div className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-purple-100 dark:border-purple-800/60 rounded-lg text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 shadow-2xs">
+                    <Palette className="w-3.5 h-3.5 text-purple-500" />
+                    <span>{sampleStats?.designsCount ?? '...'} Tasarım</span>
+                  </div>
+                  <div className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shadow-2xs">
+                    <FolderTree className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{sampleStats?.foldersCount ?? '...'} Klasör</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-white/80 dark:bg-slate-950/60 rounded-xl border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                <p>
+                  💡 <strong>Nasıl Çalışır?</strong> Kendi admin hesabınızda hazırladığınız mockup&apos;ları, baskı alanlarını, videoları ve tasarımları tek tıkla sistemin genel örnek şablonu haline getirebilirsiniz. Bu işlem eski örnek taslağın üzerine yazar ve yeni sisteme dahil olan veya &quot;Örnek Taslağı Yükle&quot; butonuna basan tüm kullanıcılara sizin hazırladığınız bu seti sunar.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+                <button
+                  onClick={handleSetMyWorkspaceAsSampleData}
+                  disabled={isUpdatingSampleData}
+                  className="w-full sm:w-auto flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                >
+                  <Sparkles className={`w-4 h-4 text-amber-300 ${isUpdatingSampleData ? 'animate-spin' : ''}`} />
+                  <span>{isUpdatingSampleData ? 'Örnek Taslak Güncelleniyor...' : 'Mevcut Çalışma Alanımı Genel Örnek Taslak Yap'}</span>
+                </button>
+
+                <button
+                  onClick={handleResetSampleData}
+                  disabled={isUpdatingSampleData}
+                  className="w-full sm:w-auto py-3 px-4 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 font-semibold rounded-xl text-xs border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-800/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Örnek Taslağı Sıfırla</span>
+                </button>
+              </div>
+            </div>
+
             {/* Database Health Card */}
             <div className="p-5 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
               <div className="flex items-center space-x-2">

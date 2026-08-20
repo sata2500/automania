@@ -1,14 +1,56 @@
 import { SAMPLE_MOCKUPS, SAMPLE_DESIGNS } from '../src/lib/sample-data';
 import sharp from 'sharp';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { put } from '@vercel/blob';
 import * as fs from 'fs';
 import * as path from 'path';
-
-// Using the config from env
 import dotenv from 'dotenv';
+
 dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
 
 const MAX_DIMENSION = 2000;
+
+const accountId = process.env.R2_ACCOUNT_ID;
+const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+const bucketName = process.env.R2_BUCKET_NAME;
+const publicUrl = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
+
+const isR2 = Boolean(accountId && accessKeyId && secretAccessKey && bucketName);
+
+let s3Client: S3Client | null = null;
+if (isR2) {
+  s3Client = new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: accessKeyId!,
+      secretAccessKey: secretAccessKey!,
+    },
+  });
+}
+
+async function uploadToStorage(buffer: Buffer, filename: string, contentType: string = 'image/webp'): Promise<string> {
+  if (isR2 && s3Client) {
+    const command = new PutObjectCommand({
+      Bucket: bucketName!,
+      Key: filename,
+      Body: buffer,
+      ContentType: contentType,
+      CacheControl: 'public, max-age=31536000, immutable',
+    });
+    await s3Client.send(command);
+    if (publicUrl) return `${publicUrl}/${filename}`;
+    return `https://${accountId}.r2.cloudflarestorage.com/${bucketName}/${filename}`;
+  }
+
+  const blob = await put(filename, buffer, {
+    access: 'public',
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
+  return blob.url;
+}
 
 async function optimizeUrl(url: string, prefix: string): Promise<{ newUrl: string; width: number; height: number }> {
   console.log(`Downloading ${url}...`);
@@ -17,7 +59,7 @@ async function optimizeUrl(url: string, prefix: string): Promise<{ newUrl: strin
   const buffer = Buffer.from(arrayBuffer);
 
   const metadata = await sharp(buffer).metadata();
-  
+
   if (metadata.format === 'mp4' || metadata.format === 'webm' || metadata.format === 'mov' || !metadata.width || !metadata.height) {
     console.log(`Skipping non-image/video: ${url}`);
     return { newUrl: url, width: metadata.width || 2000, height: metadata.height || 2000 };
@@ -48,32 +90,29 @@ async function optimizeUrl(url: string, prefix: string): Promise<{ newUrl: strin
 
   const filename = `${prefix}-optimized-${Date.now()}.webp`;
   console.log(`Uploading ${filename}...`);
-  const blob = await put(filename, optimizedBuffer, {
-    access: 'public',
-    token: process.env.BLOB_READ_WRITE_TOKEN,
-  });
+  const newUrl = await uploadToStorage(optimizedBuffer, filename, 'image/webp');
 
-  return { newUrl: blob.url, width, height };
+  return { newUrl, width, height };
 }
 
 async function run() {
   const newMockups = [];
-  
+
   for (let i = 0; i < SAMPLE_MOCKUPS.length; i++) {
     const mockup = SAMPLE_MOCKUPS[i];
     if (mockup.isVideo || mockup.src.endsWith('.mp4') || mockup.src.endsWith('.mov')) {
       newMockups.push(mockup);
       continue;
     }
-    
+
     try {
-      console.log(`[Mockup ${i+1}/${SAMPLE_MOCKUPS.length}] Processing ${mockup.name}...`);
+      console.log(`[Mockup ${i + 1}/${SAMPLE_MOCKUPS.length}] Processing ${mockup.name}...`);
       const { newUrl, width, height } = await optimizeUrl(mockup.src, 'mockup');
       newMockups.push({
         ...mockup,
         src: newUrl,
         width,
-        height
+        height,
       });
     } catch (e) {
       console.error(`Failed to process ${mockup.name}:`, e);
@@ -85,13 +124,13 @@ async function run() {
   for (let i = 0; i < SAMPLE_DESIGNS.length; i++) {
     const design = SAMPLE_DESIGNS[i];
     try {
-      console.log(`[Design ${i+1}/${SAMPLE_DESIGNS.length}] Processing ${design.name}...`);
+      console.log(`[Design ${i + 1}/${SAMPLE_DESIGNS.length}] Processing ${design.name}...`);
       const { newUrl, width, height } = await optimizeUrl(design.src, 'design');
       newDesigns.push({
         ...design,
         src: newUrl,
         width,
-        height
+        height,
       });
     } catch (e) {
       console.error(`Failed to process ${design.name}:`, e);
@@ -102,11 +141,10 @@ async function run() {
   // Rewrite sample-data.ts
   const sampleDataPath = path.join(__dirname, '..', 'src', 'lib', 'sample-data.ts');
   let content = fs.readFileSync(sampleDataPath, 'utf-8');
-  
-  // A bit hacky: replace the JSON string representation
+
   const mockupsRegex = /export const SAMPLE_MOCKUPS: MockupItem\[\] = (\[[\s\S]*?\]);\n\nexport const SAMPLE_DESIGNS/m;
   content = content.replace(mockupsRegex, `export const SAMPLE_MOCKUPS: MockupItem[] = ${JSON.stringify(newMockups, null, 2)};\n\nexport const SAMPLE_DESIGNS`);
-  
+
   const designsRegex = /export const SAMPLE_DESIGNS: DesignItem\[\] = (\[[\s\S]*?\]);\n\nexport const SAMPLE_PRESETS/m;
   content = content.replace(designsRegex, `export const SAMPLE_DESIGNS: DesignItem[] = ${JSON.stringify(newDesigns, null, 2)};\n\nexport const SAMPLE_PRESETS`);
 

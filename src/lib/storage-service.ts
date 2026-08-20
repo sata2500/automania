@@ -157,27 +157,6 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string[] | null>(keys.ETSY_FOLDER_ORDER),
       ]);
 
-    // Legacy Recovery: If current prefixed storage is empty, check non-prefixed legacy IndexedDB keys
-    if ((!savedMockups || savedMockups.length === 0) && (!savedDesigns || savedDesigns.length === 0)) {
-      const [legacyMockups, legacyDesigns, legacyFolders] = await Promise.all([
-        get<MockupItem[]>('automania_pod_mockups_v1'),
-        get<DesignItem[]>('automania_pod_designs_v1'),
-        get<MockupFolder[]>('automania_pod_folders_v1'),
-      ]);
-      if ((legacyMockups && legacyMockups.length > 0) || (legacyDesigns && legacyDesigns.length > 0)) {
-        savedMockups = legacyMockups || [];
-        savedDesigns = legacyDesigns || [];
-        savedFolders = legacyFolders || [];
-        await saveToIndexedDB({
-          mockups: savedMockups,
-          designs: savedDesigns,
-          folders: savedFolders,
-          activeFolderId: savedActiveFolder ?? null,
-          selectedMockupId: savedSelectedMockup ?? null,
-        });
-      }
-    }
-
     if (hasInit && (savedMockups?.length || savedDesigns?.length || savedFolders?.length)) {
       return {
         mockups: savedMockups || [],
@@ -270,6 +249,13 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
       del(keys.FOLDERS),
       del(keys.ACTIVE_FOLDER),
       del(keys.SELECTED_MOCKUP),
+      del(keys.ACTIVE_DESIGN_FOLDER),
+      del(keys.ETSY_GENERATED_MOCKUPS),
+      del('automania_pod_mockups_v1'),
+      del('automania_pod_designs_v1'),
+      del('automania_pod_folders_v1'),
+      del('automania_pod_active_folder_v1'),
+      del('automania_pod_selected_mockup_v1'),
       set(keys.HAS_INITIALIZED, true),
     ]);
 

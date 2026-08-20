@@ -18,6 +18,16 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '*.r2.dev',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.cloudflarestorage.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'api.dicebear.com',
         pathname: '/**',
       },

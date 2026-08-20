@@ -1,8 +1,7 @@
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { put } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { isR2Configured, uploadToR2 } from '@/lib/r2';
 
 const DATA_DIR = path.join(process.cwd(), '.data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -24,7 +23,7 @@ async function saveFileLocally(filename: string, buffer: Buffer): Promise<string
 export async function POST(request: Request): Promise<NextResponse> {
   const contentType = request.headers.get('content-type') || '';
 
-  // 1. Handle Multipart / FormData (Direct File Uploads)
+  // 1. Handle Multipart / FormData (Direct File Uploads from Client)
   if (contentType.includes('multipart/form-data')) {
     try {
       const formData = await request.formData();
@@ -35,20 +34,17 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
-      const uniqueName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}${path.extname(file.name) || '.webp'}`;
+      const ext = path.extname(file.name) || (file.type.startsWith('video/') ? '.mp4' : '.webp');
+      const uniqueName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`;
+      const fileMime = file.type || (uniqueName.endsWith('.mp4') ? 'video/mp4' : 'image/webp');
 
-      // Try Vercel Blob if token is configured
-      const token = process.env.BLOB_READ_WRITE_TOKEN;
-      if (token) {
+      // Primary: Cloudflare R2 Upload
+      if (isR2Configured()) {
         try {
-          const blob = await put(uniqueName, buffer, {
-            access: 'public',
-            contentType: file.type || 'image/webp',
-            token,
-          });
-          return NextResponse.json({ success: true, url: blob.url });
-        } catch (blobErr) {
-          console.warn('[Upload Route] Vercel Blob direct put failed, falling back to local storage:', blobErr);
+          const result = await uploadToR2(buffer, uniqueName, fileMime);
+          return NextResponse.json({ success: true, url: result.url });
+        } catch (r2Err) {
+          console.error('[Upload Route] Cloudflare R2 direct put failed:', r2Err);
         }
       }
 
@@ -61,11 +57,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
 
-  // 2. Handle JSON Requests (Base64 dataUrl or Vercel Blob client token handshake)
+  // 2. Handle JSON Requests (Base64 dataUrl)
   try {
     const body = await request.json();
 
-    // 2a. Direct Base64 dataUrl upload
     if (body.dataUrl && typeof body.dataUrl === 'string') {
       const dataUrl = body.dataUrl;
       const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
@@ -74,38 +69,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       const ext = mime.split('/')[1] || 'webp';
       const uniqueName = body.filename || `upload-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
 
-      const token = process.env.BLOB_READ_WRITE_TOKEN;
-      if (token) {
+      // Primary: Cloudflare R2 Upload
+      if (isR2Configured()) {
         try {
-          const blob = await put(uniqueName, buffer, {
-            access: 'public',
-            contentType: mime,
-            token,
-          });
-          return NextResponse.json({ success: true, url: blob.url });
-        } catch (blobErr) {
-          console.warn('[Upload Route] Vercel Blob base64 put failed, falling back to local storage:', blobErr);
+          const result = await uploadToR2(buffer, uniqueName, mime);
+          return NextResponse.json({ success: true, url: result.url });
+        } catch (r2Err) {
+          console.error('[Upload Route] Cloudflare R2 base64 put failed:', r2Err);
         }
       }
 
+      // Fallback: Local file system
       const localUrl = await saveFileLocally(uniqueName, buffer);
       return NextResponse.json({ success: true, url: localUrl });
-    }
-
-    // 2b. Vercel Blob Client Token Generation Handshake
-    if (body.type === 'blob.generate-client-token') {
-      const jsonResponse = await handleUpload({
-        body: body as HandleUploadBody,
-        request,
-        onBeforeGenerateToken: async () => {
-          return {
-            allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'],
-            tokenPayload: JSON.stringify({}),
-          };
-        },
-      });
-
-      return NextResponse.json(jsonResponse);
     }
 
     return NextResponse.json({ error: 'Unrecognized request body format' }, { status: 400 });
@@ -117,4 +93,3 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 }
-
