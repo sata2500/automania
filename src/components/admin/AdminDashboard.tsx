@@ -277,17 +277,31 @@ export const AdminDashboard: React.FC = () => {
   const [sampleStats, setSampleStats] = useState<{ mockupsCount: number; designsCount: number; foldersCount: number } | null>(null);
   const [isUpdatingSampleData, setIsUpdatingSampleData] = useState(false);
 
-  const fetchGlobalStats = async () => {
+  const fetchGlobalStats = async (showToast: boolean = false) => {
     setIsLoadingStats(true);
     try {
       const res = await fetch(`/api/admin/stats?_t=${Date.now()}`, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache, no-store' }
       });
       const data = await res.json();
-      if (data.success) setGlobalStats(data.stats);
-    } catch (err) {}
-    setIsLoadingStats(false);
+      if (data.success && data.stats) {
+        setGlobalStats(data.stats);
+        if (showToast) {
+          toast.success(`İstatistikler güncellendi: ${data.stats.assets.mockups} Mockup, ${data.stats.assets.designs} Tasarım, ${data.stats.storage.blobCount} R2 Dosyası.`);
+        }
+      } else {
+        if (showToast) {
+          toast.error(data.message || data.error || 'İstatistikler alınamadı.');
+        }
+      }
+    } catch (err: any) {
+      if (showToast) {
+        toast.error('İstatistikler yüklenirken bağlantı hatası oluştu.');
+      }
+    } finally {
+      setIsLoadingStats(false);
+    }
   };
 
   const fetchSampleStats = async () => {
@@ -863,7 +877,7 @@ export const AdminDashboard: React.FC = () => {
               </span>
             </div>
             <button
-              onClick={() => { fetchGlobalStats(); fetchSampleStats(); }}
+              onClick={() => { fetchGlobalStats(true); fetchSampleStats(); }}
               disabled={isLoadingStats}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50"
             >
