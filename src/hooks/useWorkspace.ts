@@ -19,6 +19,8 @@ export function useWorkspace() {
   const [hasGenerated, setHasGenerated] = useState<boolean>(false);
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupProcessing, setIsBackupProcessing] = useState(false);
 
@@ -34,9 +36,11 @@ export function useWorkspace() {
   const isSyncFetchingRef = useRef<boolean>(false);
   const isFirstRenderAfterInit = useRef<boolean>(true);
 
-  // Load initial data
+  // Load initial data. Always resolve initialization so a storage failure cannot leave the UI in a permanent loading state.
   useEffect(() => {
     let isMounted = true;
+    setIsInitialized(false);
+    setInitializationError(null);
     try {
       if (localStorage.getItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED) === 'true') setIsGuestInfoDismissed(true);
       if (localStorage.getItem(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED) === 'true') setIsEmptyWorkspaceDismissed(true);
@@ -46,18 +50,31 @@ export function useWorkspace() {
       setIsPwaInstalled(!!isStandalone);
     } catch {}
 
-    loadAppData().then((data) => {
-      if (!isMounted) return;
-      setMockups(data.mockups || []);
-      setDesigns(data.designs || []);
-      setFolders(data.folders || []);
-      setActiveFolderId(data.activeFolderId || null);
-      setSelectedMockupId(data.selectedMockupId || null);
-      setActiveDesignFolderId(data.activeDesignFolderId || null);
-      setIsInitialized(true);
-    });
+    loadAppData()
+      .then((data) => {
+        if (!isMounted) return;
+        setMockups(data.mockups || []);
+        setDesigns(data.designs || []);
+        setFolders(data.folders || []);
+        setActiveFolderId(data.activeFolderId || null);
+        setSelectedMockupId(data.selectedMockupId || null);
+        setActiveDesignFolderId(data.activeDesignFolderId || null);
+        setIsInitialized(true);
+      })
+      .catch((error) => {
+        console.error('[Workspace] Initial data load failed:', error instanceof Error ? error.message : 'unknown error');
+        if (!isMounted) return;
+        setInitializationError('Çalışma alanı yüklenirken bir hata oluştu. Yerel boş çalışma alanıyla devam edebilirsiniz.');
+        setMockups([]);
+        setDesigns([]);
+        setFolders([]);
+        setActiveFolderId(null);
+        setSelectedMockupId(null);
+        setActiveDesignFolderId(null);
+        setIsInitialized(true);
+      });
     return () => { isMounted = false; };
-  }, []);
+  }, [initializationAttempt]);
 
   // Auto-save data
   useEffect(() => {
@@ -148,6 +165,8 @@ export function useWorkspace() {
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized, setIsInitialized,
+    initializationError,
+    retryInitialization: () => setInitializationAttempt((attempt) => attempt + 1),
     isSaving, setIsSaving,
     isBackupProcessing, setIsBackupProcessing,
     isGuestInfoDismissed, setIsGuestInfoDismissed,
