@@ -4,9 +4,22 @@ import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
+import { getAuthoritativeSession } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const session = await getAuthoritativeSession();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimit = consumeRateLimit(`ai:generate-listing:${session.id}`, 10, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'AI listing üretim limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const body = await req.json();
     const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties } = body;
 
@@ -20,8 +33,8 @@ export async function POST(req: Request) {
     // Query Workspace settings for SEO Copywriter AI Model
     const rows = await sql`
       SELECT openrouter_model 
-      FROM user_workspaces 
-      ORDER BY updated_at DESC
+      FROM user_workspaces
+      WHERE user_id = ${session.id}
       LIMIT 1
     `;
 
@@ -340,8 +353,8 @@ export async function POST(req: Request) {
       modelUsed: seoModel
     });
 
-  } catch (error: any) {
-    console.error('Generate Listing API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Generate Listing] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Listing içeriği üretilemedi.' }, { status: 500 });
   }
 }

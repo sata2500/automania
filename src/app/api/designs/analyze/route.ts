@@ -6,6 +6,7 @@ import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
@@ -150,22 +151,32 @@ async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeTy
 
 export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const { src, name } = await request.json();
+
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const rateLimit = consumeRateLimit(`ai:design-analyze:${session.id}`, 10, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Vision AI analiz limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
 
     if (!src) {
       return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
     }
 
-    // 1. Session ve Workspace Ayarlarını Çek
-    const session = await getAuthoritativeSession();
+    // 1. Session ve yalnızca mevcut kullanıcıya ait workspace ayarlarını çek
 
     const workspaceRows = await sql`
       SELECT user_id, etsy_shop_id, etsy_access_token, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces 
-      ORDER BY (CASE WHEN etsy_access_token IS NOT NULL THEN 1 ELSE 2 END), updated_at DESC
-      LIMIT 5
+      FROM user_workspaces
+      WHERE user_id = ${session.id}
+      LIMIT 1
     `;
 
     // 2. Global Sistem Ayarlarını Çek (API Anahtarları, Vision Modelleri, Prompts, Etsy API Key)
@@ -219,44 +230,23 @@ export async function POST(request: Request) {
 
     // 3. Etsy Resmi API OAuth Token Çözümleme (Kullanıcı Oturumu veya Workspace Önceliğiyle)
     let etsyAccessToken: string | undefined = undefined;
-    const targetUserId = userId || session?.id || workspaceRows[0]?.user_id;
+    const targetUserId = session.id;
 
-    if (targetUserId) {
-      try {
-        const tokenRes = await getValidEtsyToken(targetUserId);
+    try {
+      const tokenRes = await getValidEtsyToken(targetUserId);
         if (tokenRes.success && tokenRes.access_token) {
           etsyAccessToken = tokenRes.access_token;
           etsyApiKey = tokenRes.api_key || etsyApiKey;
           etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
         }
-      } catch (e: any) {
-        console.warn('Etsy token error for target user:', e.message);
-      }
-    }
-
-    // Fallback: Diğer workspace kayıtlarında aktif token ara
-    if (!etsyAccessToken && workspaceRows.length > 0) {
-      for (const ws of workspaceRows) {
-        if (ws.user_id && ws.user_id !== targetUserId) {
-          try {
-            const wsTokenRes = await getValidEtsyToken(ws.user_id);
-            if (wsTokenRes.success && wsTokenRes.access_token) {
-              etsyAccessToken = wsTokenRes.access_token;
-              etsyApiKey = wsTokenRes.api_key || etsyApiKey;
-              etsySharedSecret = wsTokenRes.shared_secret || etsySharedSecret;
-              break;
-            }
-          } catch (err) {
-            // sessizce devam et
-          }
-        }
-      }
+    } catch (e) {
+      console.warn('[Design Analyze] Etsy token lookup failed:', e instanceof Error ? e.message : 'unknown error');
     }
     
     // Vision model belirleme
     let visionModel = 'google/gemini-2.0-flash-001';
     try {
-      if (workspaceRows.length > 0 && workspaceRows[0].openrouter_model && workspaceRows[0].openrouter_model.startsWith('{')) {
+          if (workspaceRows[0]?.openrouter_model && workspaceRows[0].openrouter_model.startsWith('{')) {
         const parsed = JSON.parse(workspaceRows[0].openrouter_model);
         if (parsed.vision) {
           visionModel = parsed.vision;

@@ -7,10 +7,14 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
+import { isOwnedUploadName } from '@/lib/upload-security';
+import { validateEtsyDraftPreflight } from '@/lib/etsy-preflight';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 60;
+const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
 
-async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
+async function loadMediaBlob(userId: string, urlOrPath: string): Promise<Blob | null> {
   if (!urlOrPath) return null;
   try {
     // 1. Data URL (Base64)
@@ -18,6 +22,7 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
       const parts = urlOrPath.split(',');
       const base64Data = parts[1];
       const buffer = Buffer.from(base64Data, 'base64');
+      if (buffer.byteLength > MAX_PUBLISH_MEDIA_BYTES) return null;
       const mimeType = urlOrPath.split(';')[0].split(':')[1] || 'image/png';
       return new Blob([buffer], { type: mimeType });
     }
@@ -25,6 +30,7 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
     // 2. Cloudflare R2 Proxy Path (/api/r2/...) or raw R2 key
     if (urlOrPath.startsWith('/api/r2/') || urlOrPath.startsWith('api/r2/')) {
       const key = extractKeyFromUrlOrKey(urlOrPath);
+      if (!key || !isOwnedUploadName(userId, key)) return null;
       if (isR2Configured() && key) {
         try {
           const client = getR2Client();
@@ -37,7 +43,7 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
             return new Blob([Buffer.from(bytes)], { type: mimeType });
           }
         } catch (r2Err) {
-          console.warn('[Etsy Publish] Direct R2 get failed, trying local fallback:', r2Err);
+          console.warn('[Etsy Publish] Direct R2 get failed; local fallback will be attempted.');
         }
       }
 
@@ -53,7 +59,8 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
 
     // 3. Local Uploads (/api/uploads/...)
     if (urlOrPath.startsWith('/api/uploads/')) {
-      const filename = path.basename(urlOrPath);
+      const filename = path.basename(decodeURIComponent(urlOrPath.split('?')[0]));
+      if (!isOwnedUploadName(userId, filename)) return null;
       const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
       if (fsSync.existsSync(filePath)) {
         const buffer = await fs.readFile(filePath);
@@ -66,7 +73,9 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
     // 4. Sample Uploads (/sample-uploads/...)
     if (urlOrPath.startsWith('/sample-uploads/')) {
       const rel = urlOrPath.replace('/sample-uploads/', '');
-      const filePath = path.join(process.cwd(), 'public', 'sample-uploads', rel);
+      const sampleRoot = path.resolve(process.cwd(), 'public', 'sample-uploads');
+      const filePath = path.resolve(sampleRoot, rel);
+      if (!filePath.startsWith(`${sampleRoot}${path.sep}`)) return null;
       if (fsSync.existsSync(filePath)) {
         const buffer = await fs.readFile(filePath);
         const ext = path.extname(rel).toLowerCase();
@@ -79,6 +88,7 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
     if (urlOrPath.startsWith('/')) {
       const cleanPath = urlOrPath.split('?')[0];
       const filename = path.basename(cleanPath);
+      if (!isOwnedUploadName(userId, filename)) return null;
       
       const dataUploadsPath = path.join(process.cwd(), '.data', 'uploads', filename);
       if (fsSync.existsSync(dataUploadsPath)) {
@@ -97,40 +107,12 @@ async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
       }
     }
 
-    // 6. Remote URL (http:// or https://)
-    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
-      if (isR2Configured()) {
-        try {
-          const key = extractKeyFromUrlOrKey(urlOrPath);
-          if (key) {
-            const client = getR2Client();
-            const bucket = getBucketName();
-            const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-            if (res.Body) {
-              const bytes = await res.Body.transformToByteArray();
-              const ext = path.extname(key).toLowerCase();
-              const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp')).split(';')[0].trim();
-              return new Blob([Buffer.from(bytes)], { type: mimeType });
-            }
-          }
-        } catch {}
-      }
+    // Remote URLs are deliberately rejected: publish should only use user-owned uploads or data URLs.
+    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) return null;
 
-      const response = await fetch(urlOrPath);
-      if (response.ok) {
-        return await response.blob();
-      }
-    }
-
-    // 7. Raw Base64 string
-    if (urlOrPath.length > 100 && !urlOrPath.startsWith('http') && !urlOrPath.startsWith('/')) {
-      const buffer = Buffer.from(urlOrPath.replace(/\s+/g, ''), 'base64');
-      if (buffer.length > 50) {
-        return new Blob([buffer], { type: 'image/png' });
-      }
-    }
+    // Raw non-URL strings are rejected to avoid ambiguous or attacker-controlled sources.
   } catch (err) {
-    console.warn('[Etsy Publish] Failed to load media blob for:', urlOrPath, err);
+    console.warn('[Etsy Publish] Failed to load media blob:', err instanceof Error ? err.message : 'unknown error');
   }
   return null;
 }
@@ -140,6 +122,14 @@ export async function POST(req: Request) {
     const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const rateLimit = consumeRateLimit(`etsy:publish-draft:${session.id}`, 5, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Etsy draft oluşturma limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
     }
 
     const body = await req.json();
@@ -173,7 +163,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Başlık, açıklama ve etiketler zorunludur.' }, { status: 400 });
     }
 
-    // Enforce 13 tag & 20 char limit
+    const preflightErrors = validateEtsyDraftPreflight({
+      state,
+      title,
+      description,
+      tags,
+      taxonomyId: taxonomy_id,
+      variations,
+      images,
+    });
+    if (preflightErrors.length > 0) {
+      return NextResponse.json({ success: false, error: preflightErrors.join(' ') }, { status: 400 });
+    }
+
+    const taxonomyId = Number(taxonomy_id);
     const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
 
     const tokenRes = await getValidEtsyToken(session.id);
@@ -198,6 +201,11 @@ export async function POST(req: Request) {
           state
         }
       });
+    }
+
+    const taxonomyRows = await sql`SELECT id FROM etsy_taxonomy_cache WHERE id = ${taxonomyId} LIMIT 1`;
+    if (taxonomyRows.length === 0) {
+      return NextResponse.json({ success: false, error: 'Taxonomy ID doğrulanamadı. Önce Etsy taxonomy senkronizasyonunu çalıştırın.' }, { status: 400 });
     }
 
     // Validate & Sanitize Etsy Marketplace Fields
@@ -230,7 +238,7 @@ export async function POST(req: Request) {
         price: Number(price) || 24.99,
         who_made: safeWhoMade,
         when_made: safeWhenMade,
-        taxonomy_id: Number(taxonomy_id) || 1081,
+        taxonomy_id: taxonomyId,
         materials: Array.isArray(materials) 
           ? materials.flatMap((m: string) => (typeof m === 'string' ? m.split(',') : []))
               .map(m => m.replace(/[^a-zA-Z0-9 _\-&+]/g, '').trim().substring(0, 13).trim())
@@ -252,8 +260,8 @@ export async function POST(req: Request) {
     });
 
     if (!createRes.ok) {
-      const errText = await createRes.text();
-      throw new Error(`Etsy API Hatası (${createRes.status}): ${errText}`);
+      await createRes.text();
+      throw new Error(`Etsy API Hatası (${createRes.status}).`);
     }
 
     const listingData = await createRes.json();
@@ -370,10 +378,10 @@ export async function POST(req: Request) {
         imgIndex++;
         try {
           const uniqueId = `${Date.now()}-${imgIndex}-${Math.random().toString(36).substring(7)}`;
-          const blob = await loadMediaBlob(imgUrl);
+          const blob = await loadMediaBlob(session.id, imgUrl);
 
           if (!blob) {
-            console.warn(`[Etsy Upload] Image ${imgIndex} could not be loaded:`, imgUrl?.substring(0, 50));
+            console.warn(`[Etsy Upload] Image ${imgIndex} could not be loaded.`);
             continue;
           }
 
@@ -402,12 +410,10 @@ export async function POST(req: Request) {
             console.log(`[Etsy Upload] Image ${imgIndex}/${imageItems.length} uploaded: ${filename}`);
           } else {
             const errText = await imgRes.text();
-            console.warn(`[Etsy Upload] Image ${imgIndex} failed (${imgRes.status}): ${errText}`);
-            uploadErrors.push(`Image ${imgIndex}: ${errText}`);
+            uploadErrors.push(`Image ${imgIndex}: yükleme başarısız (HTTP ${imgRes.status}).`);
           }
         } catch (err: any) {
-          console.warn(`[Etsy Upload] Image ${imgIndex} exception:`, err.message);
-          uploadErrors.push(`Image ${imgIndex} exception: ${err.message}`);
+          uploadErrors.push(`Image ${imgIndex}: yükleme sırasında beklenmeyen hata.`);
         }
       }
     }
@@ -428,10 +434,10 @@ export async function POST(req: Request) {
         vidIndex++;
         try {
           const uniqueId = `${Date.now()}-vid${vidIndex}-${Math.random().toString(36).substring(7)}`;
-          const blob = await loadMediaBlob(vidUrl);
+          const blob = await loadMediaBlob(session.id, vidUrl);
 
           if (!blob) {
-            console.warn(`[Etsy Upload] Video ${vidIndex} could not be loaded:`, vidUrl?.substring(0, 50));
+            console.warn(`[Etsy Upload] Video ${vidIndex} could not be loaded.`);
             continue;
           }
 
@@ -459,8 +465,7 @@ export async function POST(req: Request) {
             console.log(`[Etsy Upload] Video ${vidIndex} uploaded successfully:`, vidData);
           } else {
             const errText = await vidRes.text();
-            console.warn(`[Etsy Upload] Video ${vidIndex} failed (${vidRes.status}): ${errText}`);
-            uploadErrors.push(`Video ${vidIndex}: ${errText}`);
+            uploadErrors.push(`Video ${vidIndex}: yükleme başarısız (HTTP ${vidRes.status}).`);
           }
 
           // Always wait 5 seconds between videos to let Etsy finish processing
@@ -469,8 +474,7 @@ export async function POST(req: Request) {
             await new Promise(resolve => setTimeout(resolve, 5000));
           }
         } catch (err: any) {
-          console.warn(`[Etsy Upload] Video ${vidIndex} exception:`, err.message);
-          uploadErrors.push(`Video ${vidIndex} exception: ${err.message}`);
+          uploadErrors.push(`Video ${vidIndex}: yükleme sırasında beklenmeyen hata.`);
         }
       }
     }
@@ -485,8 +489,8 @@ export async function POST(req: Request) {
       message: `İlan Etsy Mağazanıza (${state.toUpperCase()}) olarak aktarıldı!`
     });
 
-  } catch (error: any) {
-    console.error('Etsy Publish API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Etsy Publish] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Etsy taslak aktarımı başarısız oldu.' }, { status: 500 });
   }
 }

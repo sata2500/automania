@@ -2,19 +2,35 @@ import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { requireAdmin } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimit = consumeRateLimit(`scraper:evaluate:${session.id}`, 3, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Toplu scraper değerlendirme limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     await ensureKeywordPoolColumns();
     const body = await req.json();
     let { ids, limit = 20 } = body;
+    limit = Math.min(20, Math.max(1, Number(limit) || 20));
+    if (ids !== undefined && (!Array.isArray(ids) || ids.length > 20)) {
+      return NextResponse.json({ success: false, error: 'Tek istekte en fazla 20 keyword değerlendirilebilir.' }, { status: 400 });
+    }
 
     // 1. Fetch Etsy OAuth Token & Shop credentials from user_workspaces
     const workspaceRows = await sql`
       SELECT user_id, etsy_shop_id, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces 
-      WHERE etsy_access_token IS NOT NULL OR scraping_api_key IS NOT NULL
-      ORDER BY updated_at DESC
+      FROM user_workspaces
+      WHERE user_id = ${session.id}
       LIMIT 1
     `;
 
@@ -142,8 +158,8 @@ export async function POST(req: Request) {
       warning
     });
 
-  } catch (error: any) {
-    console.error('Keywords Evaluate API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Keywords Evaluate] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Keyword değerlendirme isteği işlenemedi.' }, { status: 500 });
   }
 }

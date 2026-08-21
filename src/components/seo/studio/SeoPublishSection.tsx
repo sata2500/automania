@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { AlertTriangle, ShieldCheck, Send, Rocket, CheckCircle } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Send, CheckCircle } from 'lucide-react';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { useEtsySeo } from '../context/EtsySeoContext';
 
@@ -77,23 +77,14 @@ export const SeoPublishSection: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2.5">
+              <div className="flex w-full sm:w-auto">
                 <button
                   onClick={() => handlePublishToEtsy('draft')}
                   disabled={isPublishing || !selectedShippingProfileId}
                   className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Send className={`w-3.5 h-3.5 ${isPublishing ? 'animate-spin' : ''}`} />
-                  🚀 Taslak (Draft) Olarak Aktar
-                </button>
-
-                <button
-                  onClick={() => handlePublishToEtsy('active')}
-                  disabled={isPublishing || !selectedShippingProfileId}
-                  className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Rocket className={`w-3.5 h-3.5 ${isPublishing ? 'animate-spin' : ''}`} />
-                  🔥 Doğrudan Canlıya Al
+                  Taslak (Draft) Olarak Aktar
                 </button>
               </div>
             </div>

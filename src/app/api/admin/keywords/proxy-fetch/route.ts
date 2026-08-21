@@ -2,9 +2,22 @@ import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { requireAdmin } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export async function GET(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimit = consumeRateLimit(`scraper:proxy:${session.id}`, 30, 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Scraper istek limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     await ensureKeywordPoolColumns();
     const { searchParams } = new URL(req.url);
     const targetUrl = searchParams.get('url');
@@ -19,9 +32,8 @@ export async function GET(req: Request) {
     // Query user workspace & app settings
     const workspaceRows = await sql`
       SELECT user_id, etsy_shop_id, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces 
-      WHERE etsy_access_token IS NOT NULL OR scraping_api_key IS NOT NULL
-      ORDER BY updated_at DESC
+      FROM user_workspaces
+      WHERE user_id = ${session.id}
       LIMIT 1
     `;
 
@@ -77,8 +89,8 @@ export async function GET(req: Request) {
       error: result.scrapeError || 'Etsy Bot Koruması Engeli (HTTP 403). Etsy Mağazanızı bağlayın veya Scraper API ekleyin.'
     }, { status: 200 });
 
-  } catch (error: any) {
-    console.error('Proxy Fetch Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Proxy Fetch] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Scraper isteği işlenemedi.' }, { status: 500 });
   }
 }

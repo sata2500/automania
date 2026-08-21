@@ -2,19 +2,37 @@ import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { requireAdmin } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimit = consumeRateLimit(`scraper:test:${session.id}`, 10, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Scraper test limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     await ensureKeywordPoolColumns();
     const body = await req.json();
     const { keyword = 'vintage shirt', workerUrl } = body;
+    if (typeof keyword !== 'string' || keyword.trim().length === 0 || keyword.length > 200) {
+      return NextResponse.json({ success: false, error: 'Geçersiz keyword.' }, { status: 400 });
+    }
+    if (workerUrl !== undefined && (typeof workerUrl !== 'string' || workerUrl.length > 2048)) {
+      return NextResponse.json({ success: false, error: 'Geçersiz worker URL.' }, { status: 400 });
+    }
 
     // Fetch user workspace & app settings
     const workspaceRows = await sql`
       SELECT user_id, etsy_shop_id, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces 
-      WHERE etsy_access_token IS NOT NULL OR scraping_api_key IS NOT NULL
-      ORDER BY updated_at DESC
+      FROM user_workspaces
+      WHERE user_id = ${session.id}
       LIMIT 1
     `;
 
@@ -72,8 +90,8 @@ export async function POST(req: Request) {
         apiError: result.rawMetrics?.apiError || null
       }
     });
-  } catch (error: any) {
-    console.error('Test Scraper API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Test Scraper] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Scraper test isteği işlenemedi.' }, { status: 500 });
   }
 }

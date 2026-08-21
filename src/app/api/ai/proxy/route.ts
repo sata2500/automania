@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 const OPENROUTER_CHAT_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -75,6 +76,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const rateLimit = consumeRateLimit(`ai:chat:${session.id}`, 20, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'AI istek limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const body = await readJsonBody(req);
     if (!body) {
       return NextResponse.json({ success: false, error: 'Geçersiz veya çok büyük AI isteği.' }, { status: 400 });
@@ -83,6 +92,10 @@ export async function POST(req: Request) {
     const provider = body.provider;
     if (!isProvider(provider)) {
       return NextResponse.json({ success: false, error: 'Desteklenmeyen AI sağlayıcısı.' }, { status: 400 });
+    }
+
+    if (!Array.isArray(body.messages) || body.messages.length === 0 || body.messages.length > 100) {
+      return NextResponse.json({ success: false, error: 'Geçersiz messages payload’ı.' }, { status: 400 });
     }
 
     const endpoint = allowedChatEndpoint(provider, body.endpoint);
@@ -125,8 +138,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const rateLimit = consumeRateLimit(`ai:models:${session.id}`, 30, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'AI model listesi istek limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const requestedProvider = new URL(req.url).searchParams.get('provider') || 'openrouter';
-    const provider: AiProvider = requestedProvider === 'gemini' ? 'gemini' : 'openrouter';
+    if (!isProvider(requestedProvider)) {
+      return NextResponse.json({ success: false, error: 'Desteklenmeyen AI sağlayıcısı.' }, { status: 400 });
+    }
+    const provider: AiProvider = requestedProvider;
     const apiKey = await getApiKey(provider);
     if (!apiKey) {
       return NextResponse.json({ success: false, error: `${provider} API anahtarı sunucuda yapılandırılmamış.` }, { status: 500 });

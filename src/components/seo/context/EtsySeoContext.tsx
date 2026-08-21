@@ -1290,7 +1290,12 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     };
   }, [dragState, filteredVariations]);
 
-  const handlePublishToEtsy = async (state: 'draft' | 'active') => {
+  const handlePublishToEtsy = async (requestedState: 'draft' | 'active' = 'draft') => {
+    if (requestedState !== 'draft') {
+      toast.error('Güvenlik nedeniyle yalnızca Etsy taslağı oluşturulabilir.');
+      return;
+    }
+    const state: 'draft' = 'draft';
     if (!etsyConnected) {
       toast.error('Lütfen önce Etsy mağazanızı bağlayın.');
       return;

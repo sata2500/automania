@@ -1155,10 +1155,13 @@ export const AdminDashboard: React.FC = () => {
                     <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
                   </label>
                   <input
-                    type="text"
+                    type="password"
+                    autoComplete="new-password"
                     value={openRouterApiKey}
+                    onFocus={() => { if (openRouterApiKey === '***') setOpenRouterApiKey(''); }}
                     onChange={(e) => setOpenRouterApiKey(e.target.value)}
-                    placeholder="sk-or-v1-..."
+                    placeholder={openRouterApiKey === '***' ? 'Mevcut key kayıtlı; değiştirmek için yeni key girin' : 'sk-or-v1-...'}
+                    aria-label="OpenRouter API Key"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                   />
                 </div>
@@ -1171,10 +1174,13 @@ export const AdminDashboard: React.FC = () => {
                     <span className="text-[10px] text-slate-400 font-normal">Sunucu Tabanlı</span>
                   </label>
                   <input
-                    type="text"
+                    type="password"
+                    autoComplete="new-password"
                     value={geminiApiKey}
+                    onFocus={() => { if (geminiApiKey === '***') setGeminiApiKey(''); }}
                     onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
+                    placeholder={geminiApiKey === '***' ? 'Mevcut key kayıtlı; değiştirmek için yeni key girin' : 'AIzaSy...'}
+                    aria-label="Google Gemini API Key"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-all"
                   />
                 </div>
@@ -1189,10 +1195,13 @@ export const AdminDashboard: React.FC = () => {
                     </span>
                   </label>
                   <input
-                    type="text"
+                    type="password"
+                    autoComplete="new-password"
                     value={etsyKeystring}
+                    onFocus={() => { if (etsyKeystring === '***') setEtsyKeystring(''); }}
                     onChange={(e) => setEtsyKeystring(e.target.value)}
-                    placeholder="Etsy Developer App Keystring"
+                    placeholder={etsyKeystring === '***' ? 'Mevcut key kayıtlı; değiştirmek için yeni key girin' : 'Etsy Developer App Keystring'}
+                    aria-label="Etsy Keystring"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
                   />
                 </div>
@@ -1205,9 +1214,12 @@ export const AdminDashboard: React.FC = () => {
                   </label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={etsySharedSecret}
+                    onFocus={() => { if (etsySharedSecret === '***') setEtsySharedSecret(''); }}
                     onChange={(e) => setEtsySharedSecret(e.target.value)}
-                    placeholder="Etsy Shared Secret"
+                    placeholder={etsySharedSecret === '***' ? 'Mevcut secret kayıtlı; değiştirmek için yeni değer girin' : 'Etsy Shared Secret'}
+                    aria-label="Etsy Shared Secret"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
                   />
                 </div>
@@ -1215,7 +1227,7 @@ export const AdminDashboard: React.FC = () => {
 
               <p className="text-[11px] text-slate-400 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Bu anahtarlar doğrudan sunucu veritabanında (app_settings) şifreli saklanır.</span>
+                <span>Secret değerler sunucu tarafında tutulur ve admin paneline geri döndürülmez. Değiştirmek için yeni değer girmeniz yeterlidir.</span>
               </p>
             </div>
           </AccordionCard>
@@ -1284,10 +1296,13 @@ export const AdminDashboard: React.FC = () => {
                     </a>
                   </label>
                   <input
-                    type="text"
+                    type="password"
+                    autoComplete="new-password"
                     value={scrapingApiKey}
+                    onFocus={() => { if (scrapingApiKey === '***') setScrapingApiKey(''); }}
                     onChange={(e) => setScrapingApiKey(e.target.value)}
-                    placeholder="Scraper API Key yapıştırın..."
+                    placeholder={scrapingApiKey === '***' ? 'Mevcut key kayıtlı; değiştirmek için yeni key girin' : 'Scraper API Key yapıştırın...'}
+                    aria-label="Scraper API Key"
                     className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
                   />
                 </div>

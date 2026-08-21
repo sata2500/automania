@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -134,6 +135,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
+    const rateLimit = consumeRateLimit(`ai:etsy-vision:${session.id}`, 10, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Etsy Vision AI analiz limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const body = await req.json();
     const { listingId, listingIds } = body;
 
@@ -147,6 +156,9 @@ export async function POST(req: Request) {
 
     if (targetIds.length === 0) {
       return NextResponse.json({ success: false, error: 'Analiz edilecek listing ID belirtilmedi.' }, { status: 400 });
+    }
+    if (targetIds.length > 10) {
+      return NextResponse.json({ success: false, error: 'Tek istekte en fazla 10 listing analiz edilebilir.' }, { status: 400 });
     }
 
     // 1. Fetch AI Model Settings from app_settings

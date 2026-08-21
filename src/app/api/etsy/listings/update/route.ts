@@ -3,6 +3,7 @@ import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 60;
 
@@ -17,11 +18,22 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
+    const rateLimit = consumeRateLimit(`etsy:update:${session.id}`, 20, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Etsy güncelleme limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const body = await req.json();
     const { listingId, title, description, tags, materials, state } = body;
 
     if (!listingId) {
       return NextResponse.json({ success: false, error: 'Güncellenecek Listing ID belirtilmedi.' }, { status: 400 });
+    }
+    if (state !== undefined && state !== 'draft') {
+      return NextResponse.json({ success: false, error: 'Güvenlik nedeniyle listing state yalnızca draft olarak tutulabilir.' }, { status: 400 });
     }
 
     const tokenRes = await getValidEtsyToken(session.id);
@@ -142,8 +154,8 @@ export async function PATCH(req: Request) {
       etsyResponse: updatedEtsyData
     });
 
-  } catch (error: any) {
-    console.error('Etsy Listing Update Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Etsy Listing Update] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Etsy listing güncellenemedi.' }, { status: 500 });
   }
 }

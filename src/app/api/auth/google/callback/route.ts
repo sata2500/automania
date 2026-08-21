@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     const tokenData = await tokenRes.json();
 
     if (!tokenRes.ok || !tokenData.access_token) {
-      console.error('Google Token Exchange Error:', tokenData);
+      console.error('[Google OAuth] Token exchange failed:', tokenRes.status);
       return NextResponse.redirect(`${origin}/?auth_error=Token+alınamadı`);
     }
 

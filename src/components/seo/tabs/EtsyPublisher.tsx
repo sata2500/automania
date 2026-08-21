@@ -434,14 +434,6 @@ export const EtsyPublisher = () => {
                     🚀 Etsy'ye Taslak (Draft) Olarak Aktar
                   </button>
 
-                  <button
-                    onClick={() => handlePublishToEtsy('active')}
-                    disabled={isPublishing || !selectedShippingProfileId}
-                    className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <ShoppingBag className={`w-4 h-4 ${isPublishing ? 'animate-spin' : ''}`} />
-                    🔥 Doğrudan Canlıya Al (Active)
-                  </button>
                 </div>
               </>
             )}
