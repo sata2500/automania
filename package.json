@@ -14,7 +14,9 @@
     "clean-blobs": "tsx scripts/clean-blobs.ts",
     "migrate:r2": "tsx scripts/migrate-blob-to-r2.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:sqlite": "tsx scripts/test-sqlite-runtime.ts",
+    "db:sqlite:init": "tsx scripts/init-sqlite.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1114.0",
@@ -39,13 +41,15 @@
     "next": "16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "serwist": "^9.5.12"
+    "serwist": "^9.5.12",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sql.js": "^1.4.11",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
