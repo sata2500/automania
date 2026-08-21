@@ -65,7 +65,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     activeDesignFolderId,
     renderedMatches,
     setRenderedMatches,
-    hasGenerated,
     setHasGenerated,
   });
 

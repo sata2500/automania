@@ -11,6 +11,10 @@ import { loadAppData, saveAppData } from '@/lib/storage-service';
 import confetti from 'canvas-confetti';
 import { AspectRatioType } from '../components/BatchAspectRatioSelector';
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu.';
+}
+
 interface UseBatchGeneratorProps {
   mockups: MockupItem[];
   designs: DesignItem[];
@@ -20,7 +24,6 @@ interface UseBatchGeneratorProps {
   activeDesignFolderId: string | null;
   renderedMatches: RenderedMatch[];
   setRenderedMatches: Dispatch<SetStateAction<RenderedMatch[]>>;
-  hasGenerated: boolean;
   setHasGenerated: (val: boolean) => void;
 }
 
@@ -33,7 +36,6 @@ export function useBatchGenerator({
   activeDesignFolderId,
   renderedMatches,
   setRenderedMatches,
-  hasGenerated,
   setHasGenerated,
 }: UseBatchGeneratorProps) {
   const toast = useToast();
@@ -292,10 +294,10 @@ export function useBatchGenerator({
       });
       toast.removeToast(zipToastId);
       toast.success('ZIP dosyası başarıyla indirildi!');
-    } catch (err: any) {
-      console.error('ZIP download error:', err);
+    } catch (error: unknown) {
+      console.error('ZIP download error:', getErrorMessage(error));
       toast.removeToast(zipToastId);
-      toast.error('ZIP oluşturulurken bir hata oluştu: ' + (err.message || err));
+      toast.error('ZIP oluşturulurken bir hata oluştu: ' + getErrorMessage(error));
     } finally {
       setExportProgress(null);
     }
@@ -395,10 +397,10 @@ export function useBatchGenerator({
       toast.success(
         `${updatedMatches.length} görsel Etsy Yöneticisi için başarıyla kaydedildi! 'Etsy' sekmesinden ilan taslağınızı oluşturabilirsiniz.`
       );
-    } catch (err: any) {
-      console.error('Save for Etsy error:', err);
+    } catch (error: unknown) {
+      console.error('Save for Etsy error:', getErrorMessage(error));
       toast.removeToast(uploadToastId);
-      toast.error('Görseller kaydedilirken bir hata oluştu: ' + (err.message || err));
+      toast.error('Görseller kaydedilirken bir hata oluştu: ' + getErrorMessage(error));
     } finally {
       setIsGenerating(false);
       setExportProgress(null);

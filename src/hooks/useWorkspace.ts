@@ -43,10 +43,12 @@ export function useWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupProcessing, setIsBackupProcessing] = useState(false);
 
-  const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.GUEST_BANNER_DISMISSED));
-  const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED));
-  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.PWA_BANNER_DISMISSED));
-  const [isPwaInstalled, setIsPwaInstalled] = useState(detectPwaInstalled);
+  // These values depend on browser-only APIs. Keep the first render identical
+  // on the server and client, then hydrate preferences after mount.
+  const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(false);
+  const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(false);
+  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(false);
+  const [isPwaInstalled, setIsPwaInstalled] = useState(true);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -54,6 +56,17 @@ export function useWorkspace() {
   const syncedFromServerRef = useRef<boolean>(false);
   const isSyncFetchingRef = useRef<boolean>(false);
   const isFirstRenderAfterInit = useRef<boolean>(true);
+
+  useEffect(() => {
+    const preferenceTimer = window.setTimeout(() => {
+      setIsGuestInfoDismissed(readStoredBoolean(STORAGE_KEYS.GUEST_BANNER_DISMISSED));
+      setIsEmptyWorkspaceDismissed(readStoredBoolean(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED));
+      setIsPwaInfoDismissed(readStoredBoolean(STORAGE_KEYS.PWA_BANNER_DISMISSED));
+      setIsPwaInstalled(detectPwaInstalled());
+    }, 0);
+
+    return () => window.clearTimeout(preferenceTimer);
+  }, []);
 
   // Load initial data. Always resolve initialization so a storage failure cannot leave the UI in a permanent loading state.
   useEffect(() => {

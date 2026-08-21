@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Header, TabKey } from '@/components/common/Header';
 import dynamic from 'next/dynamic';
 const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Editör yükleniyor...</div> });
@@ -8,23 +8,17 @@ const DesignUploader = dynamic(() => import('@/components/design/DesignUploader'
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
 const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
 const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy İlan Paneli yükleniyor...</div> });
-import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
-  loadAppData,
   saveAppData,
   loadSampleAppData,
   clearAllAppData,
   exportAppDataFile,
   parseAppDataBackupFile,
-  updateLocalCache,
-  saveUIStateToIndexedDB,
 } from '@/lib/storage-service';
-import { ThemeProvider } from '@/components/common/ThemeProvider';
-import { UserAuthProvider, useAuth } from '@/components/common/UserAuthContext';
-import { ToastProvider } from '@/components/common/ToastContext';
+import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
-import { STORAGE_KEYS, TIMING } from '@/config/constants';
+import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 
@@ -66,17 +60,20 @@ function isInsideScrollableOrInteractive(el: HTMLElement | null): boolean {
 }
 
 function MainContent() {
-  const { user, isAdmin, setIsAuthModalOpen } = useAuth();
+  const { user, setIsAuthModalOpen } = useAuth();
   const [activeTabState, setActiveTabState] = useState<TabKey>('mockups');
 
   useEffect(() => {
-    try {
-      const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) as TabKey;
-      if (savedTab && ['mockups', 'designs', 'generator', 'seo', 'listings'].includes(savedTab)) {
-        setActiveTabState(savedTab);
-      }
-    } catch {}
+    const tabTimer = window.setTimeout(() => {
+      try {
+        const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) as TabKey;
+        if (savedTab && ['mockups', 'designs', 'generator', 'seo', 'listings'].includes(savedTab)) {
+          setActiveTabState(savedTab);
+        }
+      } catch {}
+    }, 0);
 
+    return () => window.clearTimeout(tabTimer);
   }, []);
 
   const setActiveTab = (tab: TabKey) => {
@@ -97,15 +94,15 @@ function MainContent() {
     activeDesignFolderId, setActiveDesignFolderId,
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
-    isInitialized, setIsInitialized,
+    isInitialized,
     initializationError,
     retryInitialization,
-    isSaving, setIsSaving,
+    isSaving,
     isBackupProcessing, setIsBackupProcessing,
     isGuestInfoDismissed, setIsGuestInfoDismissed,
     isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed,
     isPwaInfoDismissed, setIsPwaInfoDismissed,
-    isPwaInstalled, setIsPwaInstalled
+    isPwaInstalled
   } = useWorkspace();
 
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
@@ -143,22 +140,30 @@ function MainContent() {
       setHasGenerated(false);
       await saveAppData(data);
       alert('Yedek başarıyla yüklendi!');
-    } catch (err: any) {
-      alert(err.message || 'Yedek yüklenirken bir hata oluştu.');
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : 'Yedek yüklenirken bir hata oluştu.');
     } finally {
       setIsBackupProcessing(false);
     }
   };
 
   const handleLoadSampleData = async () => {
-    const data = await loadSampleAppData();
-    setMockups(data.mockups);
-    setDesigns(data.designs);
-    setFolders(data.folders);
-    setActiveFolderId(data.activeFolderId);
-    setSelectedMockupId(data.selectedMockupId);
-    setRenderedMatches([]);
-    setHasGenerated(false);
+    try {
+      const data = await loadSampleAppData();
+      if (data.mockups.length === 0 || data.designs.length === 0) {
+        throw new Error('Örnek taslak paketi boş. Lütfen yönetici ayarlarından örnek şablonu yapılandırın.');
+      }
+      setMockups(data.mockups);
+      setDesigns(data.designs);
+      setFolders(data.folders);
+      setActiveFolderId(data.activeFolderId);
+      setSelectedMockupId(data.selectedMockupId);
+      setRenderedMatches([]);
+      setHasGenerated(false);
+    } catch (error) {
+      console.error('[Workspace] Sample data load failed:', error instanceof Error ? error.message : 'unknown error');
+      alert(error instanceof Error ? error.message : 'Örnek taslak yüklenirken bir hata oluştu.');
+    }
   };
 
   const handleClearAllData = async () => {
@@ -264,7 +269,7 @@ function MainContent() {
                   <span>☁️ Çalışmalarınızı Kaydetmek & Tüm Cihazlardan Erişmek İçin Giriş Yapın</span>
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
-                  Oturum açarak kendi özel mockup'larınızı, tasarımlarınızı ve baskı ayarlarınızı kişisel hesabınıza kaydedebilir ve tüm cihazlarınızdan güvenle erişebilirsiniz. <i>(Giriş yapmadan da örnek taslağımızı yükleyip hemen kullanmaya başlayabilirsiniz.)</i>
+                  Oturum açarak kendi özel mockup&apos;larınızı, tasarımlarınızı ve baskı ayarlarınızı kişisel hesabınıza kaydedebilir ve tüm cihazlarınızdan güvenle erişebilirsiniz. <i>(Giriş yapmadan da örnek taslağımızı yükleyip hemen kullanmaya başlayabilirsiniz.)</i>
                 </p>
               </div>
             </div>
@@ -301,7 +306,7 @@ function MainContent() {
             <div className="flex items-center space-x-2.5 min-w-0">
               <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300 truncate">
-                Çalışma alanınız boş. Dilerseniz 60 adet hazır mockup ve örnek tasarımı yükleyebilirsiniz:
+                Çalışma alanınız boş. Hazır demo mockup ve örnek tasarımları yükleyebilirsiniz:
               </span>
             </div>
             <div className="flex items-center space-x-2 shrink-0">
@@ -335,7 +340,7 @@ function MainContent() {
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-slate-900 dark:text-white">Uygulamayı Cihazınıza Yükleyin</span>
                 <p className="text-xs font-medium text-slate-600 dark:text-slate-400 max-w-md leading-relaxed mt-0.5">
-                  Tarayıcı menüsünden "Ana Ekrana Ekle" diyerek daha hızlı, tam ekran ve kotasız bir deneyim yaşayabilirsiniz.
+                  Tarayıcı menüsünden &quot;Ana Ekrana Ekle&quot; diyerek daha hızlı, tam ekran ve kotasız bir deneyim yaşayabilirsiniz.
                 </p>
               </div>
             </div>

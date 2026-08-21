@@ -1,4 +1,5 @@
 import { RenderedMatch, ExportFormatType } from '@/types/pod';
+import { downloadBlob } from './download';
 
 export function dataURLtoBlob(dataurl: string): Blob {
   const arr = dataurl.split(',');
@@ -52,8 +53,6 @@ export async function downloadMatchesAsZip(
   onProgress?: (percent: number) => void
 ): Promise<void> {
   const JSZip = (await import('jszip')).default;
-  const { saveAs } = await import('file-saver');
-
   const zip = new JSZip();
   const folder = zip.folder('etsy_mockups');
 
@@ -78,5 +77,5 @@ export async function downloadMatchesAsZip(
     }
   });
 
-  saveAs(zipContent, zipFileName);
+  downloadBlob(zipContent, zipFileName);
 }

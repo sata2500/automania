@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     }
 
     const cleanEmail = userData.email.toLowerCase().trim();
-    const userId = 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
+    const generatedUserId = 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
     const userName = userData.name || cleanEmail.split('@')[0];
     const avatarUrl = userData.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanEmail)}`;
     
@@ -67,21 +67,22 @@ export async function GET(request: Request) {
           last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `;
-    } catch(e) {}
+    } catch {}
 
     // Role is always driven by the database — no hardcoded email checks.
     let userRole: 'admin' | 'user' = 'user';
-    let userStatus = 'active';
 
     // Check existing record to preserve role and status
-    const existing = await sql`SELECT role, status FROM users WHERE email = ${cleanEmail}`;
+    const existing = await sql`SELECT id, role, status FROM users WHERE email = ${cleanEmail}`;
+    const userId = existing.length > 0 && existing[0].id
+      ? String(existing[0].id)
+      : generatedUserId;
     if (existing.length > 0) {
       if (existing[0].status === 'blocked') {
         return NextResponse.redirect(`${origin}/?auth_error=Hesabınız+yönetici+tarafından+engellenmiştir.`);
       }
       // Preserve existing role from DB (may have been promoted to admin)
       userRole = existing[0].role as 'admin' | 'user';
-      userStatus = existing[0].status;
 
       await sql`
         UPDATE users
@@ -132,8 +133,9 @@ export async function GET(request: Request) {
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     });
-  } catch (err: any) {
-    console.error('Google Callback Exception:', err);
-    return NextResponse.redirect(`${origin}/?auth_error=${encodeURIComponent(err?.message || 'Bilinmeyen hata')}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Bilinmeyen hata';
+    console.error('Google Callback Exception:', message);
+    return NextResponse.redirect(`${origin}/?auth_error=${encodeURIComponent(message)}`);
   }
 }

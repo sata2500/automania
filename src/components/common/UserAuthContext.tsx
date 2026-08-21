@@ -71,7 +71,8 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const saved = localStorage.getItem(AUTH_STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
-          setUser(parsed); // Set immediately for fast UI
+          // Do not trust localStorage as authentication. The profile becomes
+          // visible only after the server accepts the session sync below.
           
           // Background sync to verify status and update last login
           try {
@@ -86,12 +87,19 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               localStorage.removeItem(AUTH_STORAGE_KEY);
               return;
             }
-            if (res.ok) {
-              const data = await res.json();
-              if (data.success && data.user) {
-                setUser(data.user);
-                localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
-              }
+            if (!res.ok) {
+              setUser(null);
+              localStorage.removeItem(AUTH_STORAGE_KEY);
+              return;
+            }
+            const data = await res.json();
+            if (data.success && data.user) {
+              setUser(data.user);
+              localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+            } else {
+              setUser(null);
+              localStorage.removeItem(AUTH_STORAGE_KEY);
+              return;
             }
             
             // DİKKAT: Kullanıcı oturumu doğrulandıktan hemen sonra sunucudaki en güncel çalışma alanını yerel tarayıcıya zorla eşitle!
@@ -115,7 +123,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const saveUserSession = async (userProfile: UserProfile | null) => {
-    setUser(userProfile);
+    setUser(null);
     if (userProfile) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
 
@@ -129,20 +137,25 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         if (res.status === 403) {
           alert('⚠️ Hesabınız yönetici tarafından engellenmiştir.');
-          setUser(null);
           localStorage.removeItem(AUTH_STORAGE_KEY);
           return;
         }
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.user) {
-            setUser(data.user);
-            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
-          }
+        if (!res.ok) {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          return;
+        }
+
+        const data = await res.json();
+        if (data.success && data.user) {
+          setUser(data.user);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        } else {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
         }
       } catch (err) {
         console.error('Error syncing user with server:', err);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
       }
 
       fetchUsersFromDb();

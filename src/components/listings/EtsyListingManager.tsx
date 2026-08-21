@@ -1,41 +1,54 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Image from 'next/image';
 import {
   RefreshCw,
   Sparkles,
   Eye,
   TrendingUp,
   Search,
-  Filter,
   Grid,
   List,
   CheckSquare,
   Square,
   ExternalLink,
   Tag,
-  AlertCircle,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowUpDown,
-  ShoppingBag,
-  SlidersHorizontal,
-  Flame,
-  Layers,
-  Send,
-  Clock
+  ShoppingBag
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
-import { useAuth } from '@/components/common/UserAuthContext';
 import { ListingDetailModal } from './ListingDetailModal';
 import { BulkActionModal, BulkActionType } from './BulkActionModal';
 
+type VisionAnalysis = Record<string, unknown> & {
+  primarySubject?: string;
+  description?: string;
+  analyzedAt?: string;
+};
+
+type EtsyListingRecord = {
+  listing_id: string;
+  title?: string;
+  description?: string;
+  tags?: string[] | string | null;
+  state?: string;
+  seo_score?: number | string | null;
+  vision_analysis?: VisionAnalysis | string | null;
+  primary_image_url?: string | null;
+  images?: Array<{ url_570xN?: string; url_fullxfull?: string }>;
+  price?: number | string | null;
+  currency_code?: string | null;
+  views?: number | string | null;
+  num_favorers?: number | string | null;
+  url?: string | null;
+  [key: string]: unknown;
+};
+
 export const EtsyListingManager: React.FC = () => {
-  const { user } = useAuth();
   const { success, error, warning } = useToast();
 
   // Data state
-  const [listings, setListings] = useState<any[]>([]);
+  const [listings, setListings] = useState<EtsyListingRecord[]>([]);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -64,10 +77,12 @@ export const EtsyListingManager: React.FC = () => {
   const hasCheckedAutoSyncRef = useRef(false);
 
   // Modals state
-  const [selectedListingForModal, setSelectedListingForModal] = useState<any | null>(null);
+  const [selectedListingForModal, setSelectedListingForModal] = useState<EtsyListingRecord | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [bulkActionType, setBulkActionType] = useState<BulkActionType | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+  const initialFetchRef = useRef(false);
 
   // Trigger automated background synchronization if data is older than 24 hours
   const triggerAutoSync = useCallback(async () => {
@@ -131,8 +146,8 @@ export const EtsyListingManager: React.FC = () => {
       } else {
         error(data.error || 'İlanlar yüklenirken bir hata oluştu.');
       }
-    } catch (err: any) {
-      console.error('Listings load error:', err);
+    } catch (err: unknown) {
+      console.error('Listings load error:', err instanceof Error ? err.message : 'unknown error');
       error('İlanlar sunucudan alınamadı.');
     } finally {
       setIsLoading(false);
@@ -140,8 +155,13 @@ export const EtsyListingManager: React.FC = () => {
   }, [searchQuery, stateFilter, scoreFilter, visionFilter, sortBy, error, triggerAutoSync]);
 
   useEffect(() => {
-    fetchListings(true);
-  }, []); // Run on initial mount
+    if (initialFetchRef.current) return;
+    initialFetchRef.current = true;
+    const timer = window.setTimeout(() => {
+      void fetchListings(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchListings]);
 
   // Manual Trigger for Etsy Synchronization
   const handleSyncEtsy = async () => {
@@ -160,8 +180,8 @@ export const EtsyListingManager: React.FC = () => {
       } else {
         error(data.error || 'Etsy senkronizasyonu başarısız oldu.');
       }
-    } catch (err: any) {
-      console.error('Sync error:', err);
+    } catch (err: unknown) {
+      console.error('Sync error:', err instanceof Error ? err.message : 'unknown error');
       error('Etsy senkronizasyonu sırasında hata oluştu.');
     } finally {
       setIsSyncing(false);
@@ -184,13 +204,13 @@ export const EtsyListingManager: React.FC = () => {
   };
 
   // Open Detail Modal
-  const handleOpenDetail = (listing: any) => {
+  const handleOpenDetail = (listing: EtsyListingRecord) => {
     setSelectedListingForModal(listing);
     setIsDetailModalOpen(true);
   };
 
   // Callback when a listing is updated in detail modal
-  const handleListingUpdated = (updated: any) => {
+  const handleListingUpdated = (updated: EtsyListingRecord) => {
     setListings(prev =>
       prev.map(l => (String(l.listing_id) === String(updated.listing_id) ? { ...l, ...updated } : l))
     );
@@ -554,10 +574,14 @@ export const EtsyListingManager: React.FC = () => {
               >
                 {/* Card Top: Image + Badges */}
                 <div className="relative aspect-video bg-slate-950 overflow-hidden">
-                  <img
+                  <Image
+                    loader={({ src }) => src}
                     src={imageUrl}
-                    alt={item.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    alt={item.title || 'Etsy ilan görseli'}
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
+                    unoptimized
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
 
                   {/* Multi-select check */}
@@ -735,7 +759,15 @@ export const EtsyListingManager: React.FC = () => {
                       <td className="p-3.5">
                         <div className="flex items-center space-x-3">
                           <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 shrink-0">
-                            <img src={imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                            <Image
+                              loader={({ src }) => src}
+                              src={imageUrl}
+                              alt={item.title || 'Etsy ilan görseli'}
+                              fill
+                              sizes="48px"
+                              unoptimized
+                              className="object-cover"
+                            />
                           </div>
                           <div className="min-w-0 max-w-sm">
                             <div className="text-[10px] font-mono text-slate-400">#{item.listing_id}</div>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Mountain adventure design</title>
+  <desc id="desc">Minimal mountain and moon illustration for an outdoor apparel design.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0f172a"/><stop offset="1" stop-color="#312e81"/></linearGradient>
+  </defs>
+  <rect width="1200" height="1200" rx="72" fill="url(#sky)"/>
+  <circle cx="860" cy="280" r="105" fill="#fef3c7"/>
+  <circle cx="900" cy="250" r="105" fill="#1e1b4b"/>
+  <path d="M100 890 390 520l165 205 180-270 365 435H100z" fill="#94a3b8"/>
+  <path d="m390 520 74 92 91 113-86-30-74 54-53-68zM735 455l104 146 100 119-117-42-83 58-73-97z" fill="#f8fafc"/>
+  <path d="M100 890h1000v130H100z" fill="#0f766e"/>
+  <text x="600" y="1060" fill="#ccfbf1" font-family="Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="5" text-anchor="middle">WANDER MORE</text>
+</svg>

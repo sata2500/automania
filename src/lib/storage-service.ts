@@ -1,5 +1,6 @@
 import { get, set, del } from 'idb-keyval';
 import { uploadMediaToServer } from './image-optimizer';
+import { downloadBlob } from './download';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
 function getCurrentUserId(): string {
@@ -36,6 +37,13 @@ function getStorageKeys() {
   };
 }
 
+interface EtsyVariationTemplate {
+  id: string;
+  name: string;
+  updatedAt: string;
+  variations: unknown[];
+}
+
 export interface AppDataPayload {
   mockups: MockupItem[];
   designs: DesignItem[];
@@ -48,7 +56,7 @@ export interface AppDataPayload {
   modelGeneration?: string;
   etsyProductTypes?: string;
   etsyUserNotes?: string;
-  etsyVariationTemplates?: { id: string; name: string; updatedAt: string; variations: any[] }[];
+  etsyVariationTemplates?: EtsyVariationTemplate[];
   etsyDefaultTemplates?: Record<number, string>;
   etsyCustomSizes?: string[];
   etsyCustomColors?: string[];
@@ -62,7 +70,6 @@ export interface AppDataPayload {
  * Preserves local UI state (active folders, selected mockup) if available.
  */
 export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
-  const userId = getCurrentUserId();
   try {
     const res = await fetch('/api/storage');
     if (res.ok) {
@@ -143,7 +150,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
         get<string | null>(keys.ETSY_PRODUCT_TYPES),
         get<string | null>(keys.ETSY_USER_NOTES),
-        get<any[] | null>(keys.ETSY_VARIATION_TEMPLATES),
+        get<EtsyVariationTemplate[] | null>(keys.ETSY_VARIATION_TEMPLATES),
         get<Record<number, string> | null>(keys.ETSY_DEFAULT_TEMPLATES),
         get<string[] | null>(keys.ETSY_CUSTOM_SIZES),
         get<string[] | null>(keys.ETSY_CUSTOM_COLORS),
@@ -223,8 +230,6 @@ export async function deleteBlobs(urls: string[]): Promise<void> {
  */
 export async function clearAllAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
-  const userId = getCurrentUserId();
-
   try {
     // Toplayıp sileceğimiz blob'ları bulalım
     const mockups = await get<MockupItem[]>(keys.MOCKUPS);
@@ -286,7 +291,9 @@ export async function saveAppData(
     const query = userId ? `?userId=${userId}` : '';
     
     // UI state'lerini (activeFolderId, selectedMockupId) sunucuya gönderme! Sadece yerel cihazda kalsın.
-    const { activeFolderId, selectedMockupId, ...dataPayload } = payload;
+    const dataPayload = Object.fromEntries(
+      Object.entries(payload).filter(([key]) => key !== 'activeFolderId' && key !== 'selectedMockupId')
+    ) as Omit<AppDataPayload, 'activeFolderId' | 'selectedMockupId'>;
     
     const payloadString = JSON.stringify({
       ...dataPayload,
@@ -380,8 +387,6 @@ async function saveToIndexedDB(payload: AppDataPayload): Promise<void> {
  */
 export async function exportAppDataFile(payload: AppDataPayload): Promise<void> {
   const JSZip = (await import('jszip')).default;
-  const { saveAs } = await import('file-saver');
-
   const zip = new JSZip();
   const imagesFolder = zip.folder("images");
   if (!imagesFolder) throw new Error("Failed to create zip folder");
@@ -416,7 +421,7 @@ export async function exportAppDataFile(payload: AppDataPayload): Promise<void> 
 
   const content = await zip.generateAsync({ type: "blob" });
   const dateStr = new Date().toISOString().slice(0, 10);
-  saveAs(content, `automania-pod-backup-${dateStr}.zip`);
+  downloadBlob(content, `automania-pod-backup-${dateStr}.zip`);
 }
 
 /**

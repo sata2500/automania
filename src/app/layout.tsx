@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -93,7 +94,9 @@ export default function RootLayout({
       <head>
         {/* Blocking theme script — prevents flash of unstyled content (FOUC) */}
         { }
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <Script id="automania-theme-init" strategy="beforeInteractive">
+          {themeScript}
+        </Script>
       </head>
       <body className="min-h-full flex flex-col">
         <Providers>
