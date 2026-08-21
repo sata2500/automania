@@ -1419,17 +1419,15 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini 3 Serisi">
-                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                        <optgroup label="Gemini 2.5 Serisi (Tavsiye Edilen)">
+                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (En Hızlı Vision)</option>
+                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Hafif)</option>
+                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Gelişmiş Vision)</option>
                         </optgroup>
-                        <optgroup label="Gemini 2.5 Serisi">
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        <optgroup label="Gemini 2.0 & 1.5 Serisi">
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                         </optgroup>
                       </select>
                     </div>
@@ -1457,17 +1455,15 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini 3 Serisi">
-                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
+                        <optgroup label="Gemini 2.5 Serisi (Tavsiye Edilen)">
+                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Önerilen)</option>
+                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Derin SEO Mantığı)</option>
+                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Hızlı)</option>
                         </optgroup>
-                        <optgroup label="Gemini 2.5 Serisi">
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        <optgroup label="Gemini 2.0 & 1.5 Serisi">
+                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                         </optgroup>
                       </select>
                     </div>
@@ -1495,12 +1491,8 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini Image Modelleri">
-                          <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2) - Ücretli</option>
-                          <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image - Ücretli</option>
-                          <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana Pro) - Ücretli</option>
-                          <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image - Ücretli</option>
-                          <option value="imagen-4.0-generate">Imagen 4.0 - Ücretli</option>
+                        <optgroup label="Google Imagen Modelleri">
+                          <option value="imagen-3.0-generate-002">Imagen 3 (imagen-3.0-generate-002)</option>
                         </optgroup>
                       </select>
                     </div>

@@ -7,8 +7,146 @@ import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getSession } from '@/lib/auth-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
+import fs from 'fs/promises';
+import fsSync from 'fs';
+import path from 'path';
 
 export const maxDuration = 60; // Allow up to 60s for vision AI + synchronous Etsy keyword & competitor tag evaluation
+
+async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  // 1. Data URL (Base64)
+  const base64Match = src.match(/^data:([^;]+);base64,([\s\S]+)$/);
+  if (base64Match) {
+    const rawMime = base64Match[1].split(';')[0].trim().toLowerCase();
+    const cleanBase64 = base64Match[2].replace(/\s+/g, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    return { buffer, mimeType: rawMime || 'image/png' };
+  }
+
+  // 2. Cloudflare R2 Proxy Path (/api/r2/...) or explicit R2 key
+  if (src.startsWith('/api/r2/') || src.startsWith('api/r2/')) {
+    const key = extractKeyFromUrlOrKey(src);
+    if (isR2Configured() && key) {
+      try {
+        const client = getR2Client();
+        const bucket = getBucketName();
+        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+        if (res.Body) {
+          const bytes = await res.Body.transformToByteArray();
+          const ext = path.extname(key).toLowerCase();
+          const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp')).split(';')[0].trim();
+          return { buffer: Buffer.from(bytes), mimeType };
+        }
+      } catch (r2Err) {
+        console.warn('[Analyze API] Direct R2 get failed, trying local fallback:', r2Err);
+      }
+    }
+    const localFallbackPath = path.join(process.cwd(), '.data', 'uploads', path.basename(key));
+    if (fsSync.existsSync(localFallbackPath)) {
+      const buffer = await fs.readFile(localFallbackPath);
+      const ext = path.extname(key).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+      return { buffer, mimeType };
+    }
+  }
+
+  // 3. Local Uploads (/api/uploads/...)
+  if (src.startsWith('/api/uploads/')) {
+    const filename = path.basename(src);
+    const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
+    if (fsSync.existsSync(filePath)) {
+      const buffer = await fs.readFile(filePath);
+      const ext = path.extname(filename).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+      return { buffer, mimeType };
+    }
+  }
+
+  // 4. Sample Uploads (/sample-uploads/...)
+  if (src.startsWith('/sample-uploads/')) {
+    const rel = src.replace(/^\/sample-uploads\//, '');
+    const filePath = path.join(process.cwd(), 'public', 'sample-uploads', rel);
+    if (fsSync.existsSync(filePath)) {
+      const buffer = await fs.readFile(filePath);
+      const ext = path.extname(rel).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+      return { buffer, mimeType };
+    }
+  }
+
+  // 5. Generic Local Path (starts with /)
+  if (src.startsWith('/')) {
+    const cleanPath = src.split('?')[0];
+    const filename = path.basename(cleanPath);
+    
+    // Check .data/uploads first
+    const dataUploadsPath = path.join(process.cwd(), '.data', 'uploads', filename);
+    if (fsSync.existsSync(dataUploadsPath)) {
+      const buffer = await fs.readFile(dataUploadsPath);
+      const ext = path.extname(filename).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+      return { buffer, mimeType };
+    }
+
+    // Check public directory
+    const publicPath = path.join(process.cwd(), 'public', cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+    if (fsSync.existsSync(publicPath)) {
+      const buffer = await fs.readFile(publicPath);
+      const ext = path.extname(cleanPath).toLowerCase();
+      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
+      return { buffer, mimeType };
+    }
+  }
+
+  // 6. Remote URL (http:// or https:// - e.g. Cloudflare R2 Public URL or CDN)
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    // If it's an R2 URL and R2 is configured, try direct S3 fetch first for performance & speed
+    if (isR2Configured()) {
+      try {
+        const key = extractKeyFromUrlOrKey(src);
+        if (key) {
+          const client = getR2Client();
+          const bucket = getBucketName();
+          const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+          if (res.Body) {
+            const bytes = await res.Body.transformToByteArray();
+            const ext = path.extname(key).toLowerCase();
+            const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp')).split(';')[0].trim();
+            return { buffer: Buffer.from(bytes), mimeType };
+          }
+        }
+      } catch {}
+    }
+
+    try {
+      const imgRes = await fetch(src);
+      if (imgRes.ok) {
+        const arrayBuffer = await imgRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const rawMime = imgRes.headers.get('content-type') || 'image/png';
+        const mimeType = rawMime.split(';')[0].trim().toLowerCase();
+        return { buffer, mimeType: mimeType.startsWith('image/') ? mimeType : 'image/png' };
+      }
+    } catch (err) {
+      console.warn('[Analyze API] Remote image fetch error:', err);
+    }
+  }
+
+  // 7. Raw Base64 string without data: prefix
+  if (src.length > 100 && !src.startsWith('http') && !src.startsWith('/')) {
+    const clean = src.replace(/\s+/g, '');
+    try {
+      const buffer = Buffer.from(clean, 'base64');
+      if (buffer.length > 50) {
+        return { buffer, mimeType: 'image/png' };
+      }
+    } catch {}
+  }
+
+  return null;
+}
 
 export async function POST(request: Request) {
   try {
@@ -150,48 +288,23 @@ export async function POST(request: Request) {
     }
     prompt = prompt.replace('{{taxonomyHint}}', taxonomyHint);
 
-    // Görseli Base64 veya URL olarak çözümle
-    let mimeType = 'image/png';
-    let base64Data = '';
-    let aiImageUrl = src;
-
-    const base64Match = src.match(/^data:([^;]+);base64,(.+)$/);
-    if (base64Match) {
-      mimeType = base64Match[1];
-      base64Data = base64Match[2];
-      aiImageUrl = src;
-    } else if (src.startsWith('/')) {
-      try {
-        const fs = await import('fs/promises');
-        const path = await import('path');
-        const cleanPath = src.split('?')[0];
-        const filePath = path.join(process.cwd(), 'public', cleanPath);
-        const buffer = await fs.readFile(filePath);
-        const ext = path.extname(cleanPath).toLowerCase();
-        mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
-        base64Data = buffer.toString('base64');
-        aiImageUrl = `data:${mimeType};base64,${base64Data}`;
-      } catch (err) {
-        console.warn('Local image read fallback:', err);
-      }
-    } else if (src.startsWith('http://') || src.startsWith('https://')) {
-      try {
-        const imgRes = await fetch(src);
-        if (imgRes.ok) {
-          const arrayBuffer = await imgRes.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-          mimeType = imgRes.headers.get('content-type') || 'image/png';
-          base64Data = buffer.toString('base64');
-          aiImageUrl = `data:${mimeType};base64,${base64Data}`;
-        }
-      } catch (err) {
-        console.warn('Remote image fetch error:', err);
-      }
+    // Görseli Cloudflare R2 / Disk / Remote URL / Data URL üzerinden Buffer ve Base64 olarak çözümle
+    const resolvedImage = await resolveImageBuffer(src);
+    if (!resolvedImage || !resolvedImage.buffer || resolvedImage.buffer.length < 50) {
+      return NextResponse.json({
+        success: false,
+        error: 'Görsel dosyası depolama alanından (Cloudflare R2 / Disk) okunamadı veya yükleme henüz tamamlanmadı. Lütfen görseli kontrol edip tekrar deneyin.'
+      }, { status: 400 });
     }
 
-    if (!base64Data && src.length > 100 && !src.startsWith('http')) {
-      base64Data = src.replace(/^data:image\/\w+;base64,/, '');
-      aiImageUrl = `data:image/png;base64,${base64Data}`;
+    const { buffer, mimeType } = resolvedImage;
+    const base64Data = buffer.toString('base64');
+    const aiImageUrl = `data:${mimeType};base64,${base64Data}`;
+
+    // Gemini API'nin desteklediği saf MIME türlerini kontrol et
+    let geminiMimeType = mimeType.toLowerCase();
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(geminiMimeType)) {
+      geminiMimeType = 'image/png';
     }
 
     // 4. Vision AI Analizini Çalıştır
@@ -202,7 +315,7 @@ export async function POST(request: Request) {
       const model = genAI.getGenerativeModel({ model: visionModel });
       
       const inlineData = {
-        mimeType,
+        mimeType: geminiMimeType,
         data: base64Data
       };
       
