@@ -63,6 +63,16 @@ const SCHEMA_SQL = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    resource_type TEXT,
+    resource_id TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS job_runs (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -113,6 +123,8 @@ const SCHEMA_SQL = `
     UNIQUE (user_id, listing_id)
   );
 
+  CREATE INDEX IF NOT EXISTS idx_sqlite_audit_logs_user_created ON audit_logs(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_sqlite_audit_logs_action_created ON audit_logs(action, created_at);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_sqlite_job_runs_user_idempotency ON job_runs(user_id, idempotency_key);
   CREATE INDEX IF NOT EXISTS idx_sqlite_job_runs_status ON job_runs(status);
   CREATE INDEX IF NOT EXISTS idx_sqlite_workspace_updated_at ON user_workspaces(updated_at);

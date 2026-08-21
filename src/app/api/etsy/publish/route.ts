@@ -10,6 +10,7 @@ import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } fr
 import { isOwnedUploadName } from '@/lib/upload-security';
 import { validateEtsyDraftPreflight } from '@/lib/etsy-preflight';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { writeAuditLog } from '@/lib/audit-log';
 
 export const maxDuration = 60;
 const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
@@ -478,6 +479,21 @@ export async function POST(req: Request) {
         }
       }
     }
+
+    await writeAuditLog({
+      userId: session.id,
+      action: 'etsy.draft_listing.created',
+      resourceType: 'etsy_listing',
+      resourceId: listingId ? String(listingId) : undefined,
+      metadata: {
+        state: 'draft',
+        taxonomyId,
+        imageCount: imageItems.length,
+        videoCount: videoItems.length,
+        variationCount: Array.isArray(variations) ? variations.length : 0,
+        uploadErrorCount: uploadErrors.length,
+      },
+    });
 
     return NextResponse.json({
       success: true,

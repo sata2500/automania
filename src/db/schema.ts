@@ -68,6 +68,19 @@ export const etsyTaxonomyCache = pgTable('etsy_taxonomy_cache', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+export const auditLogs = pgTable('audit_logs', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  action: varchar('action', { length: 100 }).notNull(),
+  resourceType: varchar('resource_type', { length: 100 }),
+  resourceId: varchar('resource_id', { length: 255 }),
+  metadata: jsonb('metadata').default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  userCreatedIdx: index('audit_logs_user_created_idx').on(table.userId, table.createdAt),
+  actionCreatedIdx: index('audit_logs_action_created_idx').on(table.action, table.createdAt),
+}));
+
 export const jobRuns = pgTable('job_runs', {
   id: varchar('id', { length: 255 }).primaryKey(),
   userId: varchar('user_id', { length: 255 }).notNull(),

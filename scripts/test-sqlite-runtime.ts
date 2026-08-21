@@ -16,6 +16,7 @@ async function main() {
     assert.ok(tableNames.includes('user_workspaces'));
     assert.ok(tableNames.includes('user_etsy_listings'));
     assert.ok(tableNames.includes('job_runs'));
+    assert.ok(tableNames.includes('audit_logs'));
 
     database.run("INSERT INTO users (id, email) VALUES (?, ?)", ['u1', 'u1@example.com']);
     database.run("INSERT INTO user_workspaces (user_id) VALUES (?)", ['u1']);
@@ -23,6 +24,7 @@ async function main() {
     assert.throws(() => {
       database.run("INSERT INTO user_etsy_listings (id, user_id, listing_id) VALUES (?, ?, ?)", ['row2', 'u1', 'listing-1']);
     });
+    database.run("INSERT INTO audit_logs (id, user_id, action, metadata) VALUES (?, ?, ?, ?)", ['audit-1', 'u1', 'test.action', '{\"apiKey\":\"[redacted]\"}']);
     database.run("INSERT INTO job_runs (id, user_id, job_type, idempotency_key, progress) VALUES (?, ?, ?, ?, ?)", ['job-1', 'u1', 'vision', 'request-123456', '{\"completed\":0,\"total\":1}']);
     assert.throws(() => {
       database.run("INSERT INTO job_runs (id, user_id, job_type, idempotency_key) VALUES (?, ?, ?, ?)", ['job-2', 'u1', 'vision', 'request-123456']);

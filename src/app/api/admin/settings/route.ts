@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
 import { maskSettingValue, shouldPreserveSecretValue } from '@/lib/setting-security';
+import { writeAuditLog } from '@/lib/audit-log';
 
 const ALLOWED_SETTING_KEYS = new Set([
   'active_ai_provider',
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Geçersiz ayar formatı.' }, { status: 400 });
     }
 
+    const changedKeys: string[] = [];
     for (const [key, rawValue] of Object.entries(settings)) {
       if (!ALLOWED_SETTING_KEYS.has(key) || typeof rawValue !== 'string') continue;
       if (rawValue.length > MAX_SETTING_VALUE_LENGTH) {
@@ -79,6 +81,7 @@ export async function POST(request: NextRequest) {
         ON CONFLICT (setting_key)
         DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
       `;
+      changedKeys.push(key);
 
       if (key === 'scraping_api_key') {
         await sql`UPDATE user_workspaces SET scraping_api_key = ${rawValue} WHERE user_id = ${session.id}`.catch(() => {});
@@ -87,6 +90,15 @@ export async function POST(request: NextRequest) {
       } else if (key === 'cloudflare_worker_url') {
         await sql`UPDATE user_workspaces SET cloudflare_worker_url = ${rawValue} WHERE user_id = ${session.id}`.catch(() => {});
       }
+    }
+
+    if (changedKeys.length > 0) {
+      await writeAuditLog({
+        userId: session.id,
+        action: 'admin.settings.updated',
+        resourceType: 'app_settings',
+        metadata: { keys: changedKeys },
+      });
     }
 
     return NextResponse.json({ success: true });
