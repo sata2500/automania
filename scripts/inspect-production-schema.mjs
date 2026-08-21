@@ -54,6 +54,15 @@ async function main() {
     ORDER BY table_name, ordinal_position
   `;
 
+  const countRows = await sql`
+    SELECT 'users' AS table_name, COUNT(*)::int AS row_count FROM users
+    UNION ALL SELECT 'user_workspaces', COUNT(*)::int FROM user_workspaces
+    UNION ALL SELECT 'keyword_pool', COUNT(*)::int FROM keyword_pool
+    UNION ALL SELECT 'audit_logs', COUNT(*)::int FROM audit_logs
+    UNION ALL SELECT 'job_runs', COUNT(*)::int FROM job_runs
+    UNION ALL SELECT 'user_etsy_listings', COUNT(*)::int FROM user_etsy_listings
+  `;
+
   const columnsByTable = new Map();
   for (const row of rows) {
     const tableName = String(row.table_name);
@@ -76,10 +85,15 @@ async function main() {
     for (const column of missingColumns) missing.push(`${tableName}.${column}`);
   }
 
+  const rowCounts = Object.fromEntries(
+    countRows.map((row) => [String(row.table_name), Number(row.row_count)])
+  );
+
   console.log(JSON.stringify({
     readOnly: true,
     tablesInspected: Object.keys(requiredSchema).length,
     summary,
+    rowCounts,
     missing,
     status: missing.length === 0 ? 'ready' : 'migration_required',
   }, null, 2));
