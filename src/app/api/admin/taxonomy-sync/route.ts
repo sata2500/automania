@@ -3,26 +3,40 @@ import { db } from '@/lib/db';
 import { etsyTaxonomyCache, appSettings } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/auth-server';
+
+type TaxonomyNode = { id: number; name: string; children?: TaxonomyNode[] };
+type TaxonomyPayload = { results?: TaxonomyNode[] };
+type FlatTaxonomyNode = { id: number; name: string; path: string; isActive: boolean };
 
 export async function GET() {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     // Return all categories from the cache
     const categories = await db.select().from(etsyTaxonomyCache).orderBy(etsyTaxonomyCache.name);
     return NextResponse.json({ success: true, categories });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Taxonomy] GET failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Taxonomy verileri alınamadı.' }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     const { action, id, isActive } = await req.json().catch(() => ({ action: 'sync' }));
     
     // Action: Update single category's isActive status
     if (action === 'update' && id) {
+      const taxonomyId = Number(id);
+      if (!Number.isInteger(taxonomyId) || taxonomyId <= 0 || typeof isActive !== 'boolean') {
+        return NextResponse.json({ success: false, error: 'Geçersiz taxonomy güncellemesi.' }, { status: 400 });
+      }
       await db.update(etsyTaxonomyCache)
         .set({ isActive, updatedAt: new Date() })
-        .where(eq(etsyTaxonomyCache.id, id));
+        .where(eq(etsyTaxonomyCache.id, taxonomyId));
       return NextResponse.json({ success: true });
     }
 
@@ -49,11 +63,11 @@ export async function POST(req: Request) {
         throw new Error(`Etsy API Error: ${await res.text()}`);
       }
 
-      const data = await res.json();
-      const flatNodes: any[] = [];
+      const data = await res.json() as TaxonomyPayload;
+      const flatNodes: FlatTaxonomyNode[] = [];
       const defaultActiveIds = [482, 2202, 1853, 1062, 153, 101, 1054]; // Default POD items
 
-      const flatten = (nodes: any[], path: string = "") => {
+      const flatten = (nodes: TaxonomyNode[], path = '') => {
         for (const node of nodes) {
           const currentPath = path ? `${path} > ${node.name}` : node.name;
           flatNodes.push({
@@ -92,7 +106,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Taxonomy] POST failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Taxonomy işlemi başarısız oldu.' }, { status: 500 });
   }
 }

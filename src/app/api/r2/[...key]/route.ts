@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getBucketName, getR2Client, isR2Configured } from '@/lib/r2';
 import fs from 'fs';
 import path from 'path';
+import { getAuthoritativeSession } from '@/lib/auth-server';
+import { isAllowedUploadMime, isOwnedUploadName } from '@/lib/upload-security';
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -20,12 +22,18 @@ export async function GET(
   { params }: { params: Promise<{ key: string[] }> }
 ) {
   try {
+    const session = await getAuthoritativeSession();
+    if (!session) return new NextResponse('Unauthorized', { status: 401 });
+
     const { key } = (await params) || {};
     const rawKey = Array.isArray(key) ? key.join('/') : (key || '');
     const objectKey = decodeURIComponent(rawKey);
 
     if (!objectKey) {
       return new NextResponse('File key is missing', { status: 400 });
+    }
+    if (!isOwnedUploadName(session.id, objectKey)) {
+      return new NextResponse('Forbidden', { status: 403 });
     }
 
     // 1. Try Cloudflare R2 first if configured
@@ -42,7 +50,8 @@ export async function GET(
         const response = await client.send(command);
 
         if (response.Body) {
-          const contentType = response.ContentType || getContentType(objectKey);
+          const contentType = (response.ContentType || getContentType(objectKey)).split(';')[0].trim().toLowerCase();
+          if (!isAllowedUploadMime(contentType)) return new NextResponse('Unsupported media type', { status: 415 });
           const bytes = await response.Body.transformToByteArray();
 
           return new NextResponse(Buffer.from(bytes), {
@@ -50,16 +59,19 @@ export async function GET(
             headers: {
               'Content-Type': contentType,
               'Content-Length': bytes.length.toString(),
-              'Cache-Control': 'public, max-age=31536000, immutable',
-              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'private, max-age=3600',
+              'Access-Control-Allow-Origin': request.headers.get('origin') || 'null',
               'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
             },
           });
         }
-      } catch (r2Error: any) {
-        // Fallthrough to local fallback if not found in R2
-        if (r2Error.name !== 'NoSuchKey' && r2Error.$metadata?.httpStatusCode !== 404) {
-          console.warn(`[R2 API Route] R2 fetch error for ${objectKey}:`, r2Error.message);
+      } catch (r2Error: unknown) {
+        // Fall through to local fallback if the object is not found in R2.
+        const errorRecord = r2Error && typeof r2Error === 'object' ? r2Error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } } : {};
+        const errorName = typeof errorRecord.name === 'string' ? errorRecord.name : '';
+        const httpStatus = errorRecord.$metadata?.httpStatusCode;
+        if (errorName !== 'NoSuchKey' && httpStatus !== 404) {
+          console.warn(`[R2 API Route] R2 fetch error for ${objectKey}.`);
         }
       }
     }
@@ -69,23 +81,7 @@ export async function GET(
     if (fs.existsSync(localPath)) {
       const fileBuffer = fs.readFileSync(localPath);
       const contentType = getContentType(objectKey);
-
-      // Async sync to R2 in background if configured
-      if (isR2Configured()) {
-        try {
-          const client = getR2Client();
-          const bucket = getBucketName();
-          client.send(
-            new PutObjectCommand({
-              Bucket: bucket,
-              Key: objectKey,
-              Body: fileBuffer,
-              ContentType: contentType,
-              CacheControl: 'public, max-age=31536000, immutable',
-            })
-          ).catch((e) => console.warn('[R2 Sync Error]', e.message));
-        } catch {}
-      }
+      if (!isAllowedUploadMime(contentType)) return new NextResponse('Unsupported media type', { status: 415 });
 
       return new NextResponse(fileBuffer, {
         status: 200,
@@ -100,8 +96,8 @@ export async function GET(
     }
 
     return new NextResponse('Object not found in R2 or local storage', { status: 404 });
-  } catch (error: any) {
-    console.error('[R2 API Route] Unexpected error:', error);
-    return new NextResponse(error.message || 'Internal Server Error', { status: 500 });
+  } catch (error) {
+    console.error('[R2 API Route] Unexpected error:', error instanceof Error ? error.message : 'unknown error');
+    return new NextResponse('Internal Server Error', { status: 500 });
   }
 }

@@ -1,14 +1,27 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAdmin();
+    if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+    const rateLimit = consumeRateLimit(`admin:keywords:bulk-update:${session.id}`, 10, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Toplu keyword güncelleme limiti aşıldı.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     await ensureKeywordPoolColumns();
     const body = await req.json();
     const { results } = body;
 
-    if (!results || !Array.isArray(results) || results.length === 0) {
-      return NextResponse.json({ success: false, error: 'Güncellenecek sonuç verisi bulunamadı.' }, { status: 400 });
+    if (!results || !Array.isArray(results) || results.length === 0 || results.length > 100) {
+      return NextResponse.json({ success: false, error: '1–100 arası sonuç verisi gönderilmelidir.' }, { status: 400 });
     }
 
     let updatedCount = 0;
@@ -34,8 +47,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, updatedCount });
-  } catch (error: any) {
-    console.error('Bulk Update API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Keywords Bulk Update] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Toplu keyword güncellemesi başarısız oldu.' }, { status: 500 });
   }
 }

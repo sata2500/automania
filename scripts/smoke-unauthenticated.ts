@@ -4,6 +4,7 @@ const cases: Array<{ name: string; path: string; init?: RequestInit; expected: n
   { name: 'storage GET', path: '/api/storage', expected: 401 },
   { name: 'storage blob DELETE', path: '/api/storage/blob', init: { method: 'DELETE', body: JSON.stringify({ urls: [] }), headers: { 'Content-Type': 'application/json' } }, expected: 401 },
   { name: 'upload POST', path: '/api/upload', init: { method: 'POST' }, expected: 401 },
+  { name: 'R2 proxy GET', path: '/api/r2/test-owned-file.png', expected: 401 },
   { name: 'AI proxy POST', path: '/api/ai/proxy', init: { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } }, expected: 401 },
   { name: 'admin settings GET', path: '/api/admin/settings', expected: 401 },
   { name: 'admin audit logs GET', path: '/api/admin/audit-logs', expected: 401 },
