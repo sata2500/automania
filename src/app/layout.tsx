@@ -92,7 +92,7 @@ export default function RootLayout({
     >
       <head>
         {/* Blocking theme script — prevents flash of unstyled content (FOUC) */}
-        {/* eslint-disable-next-line react/no-danger */}
+        { }
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-full flex flex-col">

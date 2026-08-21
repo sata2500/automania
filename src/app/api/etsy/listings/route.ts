@@ -112,7 +112,7 @@ export async function GET(req: Request) {
     const isStale = total === 0 || !lastSyncedAt || hoursSinceLastSync >= 24;
 
     // Filter in-memory for fast instantaneous client responsiveness
-    let filtered = allRows.filter((r: any) => {
+    const filtered = allRows.filter((r: any) => {
       // Search
       if (search) {
         const titleMatch = (r.title || '').toLowerCase().includes(search);
@@ -357,7 +357,7 @@ export async function POST(req: Request) {
 
       // Extract images
       const images = Array.isArray(item.images) ? item.images : [];
-      let primaryImageUrl = item.images?.[0]?.url_570xN || item.images?.[0]?.url_fullxfull || item.images?.[0]?.url_170x135 || null;
+      const primaryImageUrl = item.images?.[0]?.url_570xN || item.images?.[0]?.url_fullxfull || item.images?.[0]?.url_170x135 || null;
 
       // Preserve existing vision analysis and AI optimization
       const visionAnalysis = existing?.vision_analysis || {};

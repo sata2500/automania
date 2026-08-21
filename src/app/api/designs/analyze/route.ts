@@ -205,8 +205,8 @@ export async function POST(request: Request) {
     let etsyApiKey = process.env.ETSY_API_KEY;
     let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
     let scrapingApiKey = workspaceRows[0]?.scraping_api_key || process.env.SCRAPER_API_KEY || '';
-    let scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
-    let workerUrl = (workspaceRows.length > 0 ? workspaceRows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
+    const scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
+    const workerUrl = (workspaceRows.length > 0 ? workspaceRows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
     
     for (const row of settingsRows) {
       if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;

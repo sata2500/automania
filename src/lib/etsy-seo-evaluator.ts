@@ -349,7 +349,7 @@ export function evaluateEtsyListingSeo(params: {
   const hasCare = lowerDesc.includes('wash') || lowerDesc.includes('care') || lowerDesc.includes('yıkama') || lowerDesc.includes('bakım');
   const hasMaterial = lowerDesc.includes('cotton') || lowerDesc.includes('fabric') || lowerDesc.includes('material') || lowerDesc.includes('kumaş');
 
-  let sectionCount = (hasSizing ? 1 : 0) + (hasCare ? 1 : 0) + (hasMaterial ? 1 : 0);
+  const sectionCount = (hasSizing ? 1 : 0) + (hasCare ? 1 : 0) + (hasMaterial ? 1 : 0);
   if (sectionCount >= 2) {
     descriptionScore += 5;
     strengths.push('Açıklamada beden tablosu, kumaş özellikleri ve yıkama talimatları detaylandırılmış.');

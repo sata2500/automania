@@ -6,7 +6,7 @@
  * Posts back: { outputData } (transferable ArrayBuffer)
  */
 
-/* eslint-disable no-restricted-globals */
+
 
 /** Fast approximate Gaussian blur using repeated box blurs */
 function gaussianBlur(src, w, h, radius) {

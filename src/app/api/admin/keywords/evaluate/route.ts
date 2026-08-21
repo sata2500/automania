@@ -44,8 +44,8 @@ export async function POST(req: Request) {
     let etsyApiKey = process.env.ETSY_API_KEY;
     let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
     let scrapingApiKey = workspaceRows[0]?.scraping_api_key || process.env.SCRAPER_API_KEY || '';
-    let scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
-    let workerUrl = workspaceRows[0]?.cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
+    const scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
+    const workerUrl = workspaceRows[0]?.cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
 
     for (const r of appSettingRows) {
       if (r.setting_key === 'etsy_keystring' && r.setting_value) etsyApiKey = r.setting_value;

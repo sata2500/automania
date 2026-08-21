@@ -132,7 +132,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
 
   // 2. Fallback to IndexedDB if Offline or Server fails
   try {
-    let [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyDefaultTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
+    const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyDefaultTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
       await Promise.all([
         get<boolean>(keys.HAS_INITIALIZED),
         get<MockupItem[]>(keys.MOCKUPS),
@@ -396,7 +396,7 @@ export async function exportAppDataFile(payload: AppDataPayload): Promise<void> 
         const blob = await response.blob();
         
         const urlObj = new URL(item.src);
-        let filename = urlObj.pathname.split('/').pop() || `${item.id}.png`;
+        const filename = urlObj.pathname.split('/').pop() || `${item.id}.png`;
         
         imagesFolder.file(filename, blob);
         item.src = `images/${filename}`;

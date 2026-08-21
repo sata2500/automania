@@ -107,8 +107,8 @@ export async function POST(req: Request) {
     const uniqueInputKeywords = Array.from(new Set(safeInputKeywords.map(k => k.toLowerCase())));
 
     // Direct Database Keyword Pool Enrichment (Real Etsy Metrics & Co-Occurring Competitor Tags)
-    let dbKeywordsMap = new Map<string, any>();
-    let coOccurringTagsList: string[] = [];
+    const dbKeywordsMap = new Map<string, any>();
+    const coOccurringTagsList: string[] = [];
 
     if (uniqueInputKeywords.length > 0) {
       try {
@@ -152,7 +152,7 @@ export async function POST(req: Request) {
       .slice(0, 15);
 
     // Query DB for evaluated metrics of competitor co-occurring sub-keywords
-    let dbCoOccurringMap = new Map<string, any>();
+    const dbCoOccurringMap = new Map<string, any>();
     if (rankedCoOccurringTags.length > 0) {
       try {
         const dbCoRows = await sql`

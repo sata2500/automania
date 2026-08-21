@@ -104,7 +104,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
       try {
         let endpoint = '';
-        let body: any = { listingIds: chunkIds };
+        const body: any = { listingIds: chunkIds };
 
         if (actionType === 'vision') {
           endpoint = '/api/etsy/listings/analyze-vision';

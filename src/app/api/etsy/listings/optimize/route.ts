@@ -77,7 +77,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Admin panelinde SEO AI anahtarı yapılandırılmamış.' }, { status: 500 });
     }
 
-    let seoModel = activeAiProvider === 'gemini'
+    const seoModel = activeAiProvider === 'gemini'
       ? (dbGeminiReasoningModel || 'gemini-1.5-pro')
       : (dbReasoningModel || 'google/gemma-4-26b-a4b-it:free');
 

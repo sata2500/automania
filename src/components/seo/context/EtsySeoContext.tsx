@@ -283,7 +283,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     }
 
     // Remove from folderOrder if present
-    let currentOrder = [...folderOrder];
+    const currentOrder = [...folderOrder];
     const idx = currentOrder.indexOf(folderId);
     if (idx !== -1) {
       currentOrder.splice(idx, 1);
@@ -887,7 +887,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       }
 
       // We now receive taxonomyId directly from the analyze step (saved in selectedDesign.analysis)
-      let predictedTaxonomyId = selectedDesign.analysis?.taxonomyId || 482;
+      const predictedTaxonomyId = selectedDesign.analysis?.taxonomyId || 482;
 
       let fetchedTaxonomyProperties = [];
       try {

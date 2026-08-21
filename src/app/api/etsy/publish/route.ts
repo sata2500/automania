@@ -183,8 +183,8 @@ export async function POST(req: Request) {
     const tokenRes = await getValidEtsyToken(session.id);
     const etsyAccessToken = tokenRes.access_token || process.env.ETSY_ACCESS_TOKEN;
     const etsyShopId = tokenRes.shop_id || process.env.ETSY_SHOP_ID;
-    let etsyApiKey = tokenRes.api_key || process.env.ETSY_API_KEY;
-    let etsySharedSecret = tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET;
+    const etsyApiKey = tokenRes.api_key || process.env.ETSY_API_KEY;
+    const etsySharedSecret = tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET;
 
     // If Etsy OAuth is not connected yet, return a clean simulated draft preview
     if (!tokenRes.success && (!etsyAccessToken || !etsyShopId)) {

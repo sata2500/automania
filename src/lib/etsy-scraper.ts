@@ -47,14 +47,14 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   const isFast = Boolean(options?.fastMode);
 
   let totalListings = 0;
-  let competitionLevel = 'Bilinmiyor';
+  const competitionLevel = 'Bilinmiyor';
   let bestsellerCount = 0;
   let isEtsySuggested = false;
   let autocompleteRank = 0;
-  let opportunityScore = 0;
+  const opportunityScore = 0;
   let avgPrice = 0;
   let scrapeError: string | null = null;
-  let rawMetrics: ScrapingResult['rawMetrics'] = {};
+  const rawMetrics: ScrapingResult['rawMetrics'] = {};
 
   // 1. Etsy Native Autocomplete API (100% Real Etsy Suggestion Engine)
   try {
@@ -116,10 +116,10 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
       if (!etsyToken) {
         const targetUser = options?.userId;
-        let wsQuery = targetUser 
+        const wsQuery = targetUser
           ? sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE user_id = ${targetUser} LIMIT 1`
           : sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE etsy_access_token IS NOT NULL ORDER BY updated_at DESC LIMIT 1`;
-        
+
         const wsRows = await wsQuery;
         if (wsRows.length > 0 && wsRows[0].user_id) {
           const { getValidEtsyToken } = await import('@/lib/etsy-token-manager');
@@ -291,7 +291,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         const html = await searchRes.text();
         const lowerHtml = html.toLowerCase();
         if (!lowerHtml.includes('captcha') && !lowerHtml.includes('robot check') && !lowerHtml.includes('access denied')) {
-          let countMatch = html.match(/([\d,.]+)\s*(?:\+|plus)?\s*results/i) ||
+          const countMatch = html.match(/([\d,.]+)\s*(?:\+|plus)?\s*results/i) ||
                            html.match(/"total_results"\s*:\s*(\d+)/i) ||
                            html.match(/data-search-results-count="(\d+)"/i) ||
                            html.match(/([\d,.]+)\s*results\s+for/i);

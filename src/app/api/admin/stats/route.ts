@@ -45,7 +45,7 @@ export async function GET() {
     // 3. Storage Statistics (Cloudflare R2)
     let totalSizeBytes = 0;
     let blobCount = 0;
-    let storageProvider = 'Cloudflare R2';
+    const storageProvider = 'Cloudflare R2';
     const storageLimitBytes = 10 * 1024 * 1024 * 1024; // 10 GB Free Tier for Cloudflare R2
 
     if (isR2Configured()) {

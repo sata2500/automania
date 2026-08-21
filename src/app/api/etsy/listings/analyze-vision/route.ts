@@ -196,7 +196,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Admin panelinde Vision AI anahtarı yapılandırılmamış.' }, { status: 500 });
     }
 
-    let visionModel = activeAiProvider === 'gemini' 
+    const visionModel = activeAiProvider === 'gemini'
       ? (dbGeminiVisionModel || 'gemini-1.5-flash')
       : (dbVisionModel || 'google/gemini-2.0-flash-001');
 
