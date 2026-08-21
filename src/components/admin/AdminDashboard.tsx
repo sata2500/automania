@@ -55,6 +55,7 @@ import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
 import TaxonomyManagement from './TaxonomyManagement';
 import { AdminSettingsSection } from './AdminSettingsSection';
+import { AdminOverviewSection, type AdminGlobalStats } from './AdminOverviewSection';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 
@@ -273,7 +274,7 @@ export const AdminDashboard: React.FC = () => {
   // Active Sub Tab state
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('overview');
 
-  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [globalStats, setGlobalStats] = useState<AdminGlobalStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [sampleStats, setSampleStats] = useState<{ mockupsCount: number; designsCount: number; foldersCount: number } | null>(null);
   const [isUpdatingSampleData, setIsUpdatingSampleData] = useState(false);
@@ -867,174 +868,11 @@ export const AdminDashboard: React.FC = () => {
 
       {/* SUB TAB 1: OVERVIEW & METRICS */}
       {activeSubTab === 'overview' && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Live Refresh Bar */}
-          <div className="flex items-center justify-between bg-white dark:bg-slate-900 px-5 py-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Canlı Sistem İstatistikleri</span>
-              <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                Cloudflare R2 + PostgreSQL
-              </span>
-            </div>
-            <button
-              onClick={() => { fetchGlobalStats(true); fetchSampleStats(); }}
-              disabled={isLoadingStats}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStats ? 'animate-spin text-indigo-500' : ''}`} />
-              <span>{isLoadingStats ? 'Güncelleniyor...' : 'Verileri Yenile'}</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Users Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Kayıtlı Kullanıcılar
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
-                    {isLoadingStats ? '...' : globalStats?.users?.total || 0}
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Kullanıcı</span>
-                </div>
-                <div className="flex gap-2 text-[10px] font-bold mt-3">
-                  <span className="text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-800">
-                    🟢 {globalStats?.users?.active || 0} Aktif
-                  </span>
-                  <span className="text-rose-500 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md border border-rose-100 dark:border-rose-800">
-                    🔴 {globalStats?.users?.blocked || 0} Engelli
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-2xl shadow-sm border border-indigo-100 dark:border-indigo-800/50">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Global Mockups Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Global Mockup Arşivi
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
-                    {isLoadingStats ? '...' : globalStats?.assets?.mockups || 0}
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Görsel</span>
-                </div>
-                <p className="text-[10px] text-purple-600 dark:text-purple-400 mt-3 font-bold bg-purple-50 dark:bg-purple-950/50 inline-block px-2 py-0.5 rounded-md border border-purple-100 dark:border-purple-800">
-                  Tüm kullanıcıların ortak üretimi
-                </p>
-              </div>
-              <div className="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-2xl shadow-sm border border-purple-100 dark:border-purple-800/50">
-                <Layers className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Global Designs Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Global Tasarım Üretimi
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
-                    {isLoadingStats ? '...' : globalStats?.assets?.designs || 0}
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">Tasarım</span>
-                </div>
-                <div className="flex gap-2 text-[10px] mt-3 font-bold">
-                  <span className="text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md border border-amber-100 dark:border-amber-800">
-                    📂 {globalStats?.assets?.folders || 0} Global Klasör
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl shadow-sm border border-amber-100 dark:border-amber-800/50">
-                <Palette className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Database Health Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Veritabanı Sağlığı
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className={`text-3xl font-extrabold ${
-                    globalStats?.health?.status === 'excellent' ? 'text-emerald-600 dark:text-emerald-400' :
-                    globalStats?.health?.status === 'good' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
-                  }`}>
-                    {isLoadingStats ? '...' : (globalStats?.health?.status === 'excellent' ? 'Mükemmel' : globalStats?.health?.status === 'good' ? 'İyi' : 'Yavaş')}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-3 font-bold bg-slate-50 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
-                  {isLoadingStats ? 'Ölçülüyor...' : `Gecikme (Ping): ${globalStats?.health?.dbLatencyMs || 0}ms`}
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-800/50">
-                <Activity className="w-6 h-6" />
-              </div>
-            </div>
-
-            {/* Storage Metric */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Depolama ({globalStats?.storage?.provider || 'Cloudflare R2'})
-                </span>
-                <div className="flex items-baseline space-x-2">
-                  <span className={`text-3xl font-extrabold ${
-                    (globalStats?.storage?.usedBytes || 0) / (globalStats?.storage?.limitBytes || 1) > 0.85 ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'
-                  }`}>
-                    {isLoadingStats ? '...' : ((globalStats?.storage?.usedBytes || 0) / (1024 * 1024)).toFixed(1)}
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium uppercase">MB Dolu</span>
-                </div>
-                <div className="flex gap-2 text-[10px] mt-3 font-bold">
-                  <span className="text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-2 py-0.5 rounded-md border border-sky-100 dark:border-sky-800">
-                    🖼️ {globalStats?.storage?.blobCount || 0} Dosya
-                  </span>
-                  <span className="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                    Kota: {((globalStats?.storage?.limitBytes || 10737418240) / (1024 * 1024 * 1024)).toFixed(0)} GB
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 rounded-2xl shadow-sm border border-sky-100 dark:border-sky-800/50">
-                <HardDrive className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          {/* Quick System Info Banner */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-indigo-500" />
-              <span>Sistem Çalışma Durumu &amp; Özet</span>
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Veritabanı Motoru</span>
-                <p className="font-bold text-slate-800 dark:text-slate-200">PostgreSQL (Server DB Sync)</p>
-                <p className="text-[10px] text-slate-500">Tüm cihazlarda kesintisiz veri erişimi</p>
-              </div>
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Yapay Zeka Altyapısı</span>
-                <p className="font-bold text-slate-800 dark:text-slate-200">OpenRouter Multi-Model Router</p>
-                <p className="text-[10px] text-slate-500">Sunucu API Anahtarı ile Aktif</p>
-              </div>
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Uygulama Sürümü</span>
-                <p className="font-bold text-slate-800 dark:text-slate-200">Automania POD Studio v2.6.0</p>
-                <p className="text-[10px] text-slate-500">Enterprise Suite (Next.js 16 + React 19)</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AdminOverviewSection
+          globalStats={globalStats}
+          isLoadingStats={isLoadingStats}
+          onRefresh={() => { fetchGlobalStats(true); fetchSampleStats(); }}
+        />
       )}
 
       {/* SUB TAB 2: AI & OPENROUTER CENTER */}
