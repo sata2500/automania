@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off diagnostics are retained for history but are not application code.
+    "test.mjs",
+    "temp_check_urls.js",
+    "fix_mime.js",
+    "refactor.js",
+    "get-etsy-data.js",
+    "scratch/**",
   ]),
 ]);
 
