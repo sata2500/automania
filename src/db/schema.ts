@@ -1,4 +1,4 @@
-import { pgTable, varchar, jsonb, timestamp, integer, boolean, numeric, text, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, jsonb, timestamp, integer, boolean, numeric, text, bigint, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 import { sql } from 'drizzle-orm';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
@@ -67,6 +67,25 @@ export const etsyTaxonomyCache = pgTable('etsy_taxonomy_cache', {
   isActive: boolean('is_active').default(false),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+export const jobRuns = pgTable('job_runs', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  jobType: varchar('job_type', { length: 100 }).notNull(),
+  status: varchar('status', { length: 30 }).default('queued').notNull(),
+  idempotencyKey: varchar('idempotency_key', { length: 255 }),
+  requestHash: varchar('request_hash', { length: 128 }),
+  progress: jsonb('progress').$type<{ completed: number; total: number; message?: string }>().default({ completed: 0, total: 0 }),
+  result: jsonb('result').default({}),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow(),
+  startedAt: timestamp('started_at'),
+  finishedAt: timestamp('finished_at'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdIdempotencyIdx: uniqueIndex('job_runs_user_id_idempotency_idx').on(table.userId, table.idempotencyKey),
+  statusIdx: index('job_runs_status_idx').on(table.status),
+}));
 
 export const userEtsyListings = pgTable('user_etsy_listings', {
   id: varchar('id', { length: 255 }).primaryKey(),

@@ -63,6 +63,22 @@ const SCHEMA_SQL = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS job_runs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    idempotency_key TEXT,
+    request_hash TEXT,
+    progress TEXT NOT NULL DEFAULT '{"completed":0,"total":0}',
+    result TEXT NOT NULL DEFAULT '{}',
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS user_etsy_listings (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -97,6 +113,8 @@ const SCHEMA_SQL = `
     UNIQUE (user_id, listing_id)
   );
 
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_sqlite_job_runs_user_idempotency ON job_runs(user_id, idempotency_key);
+  CREATE INDEX IF NOT EXISTS idx_sqlite_job_runs_status ON job_runs(status);
   CREATE INDEX IF NOT EXISTS idx_sqlite_workspace_updated_at ON user_workspaces(updated_at);
   CREATE INDEX IF NOT EXISTS idx_sqlite_listings_user_id ON user_etsy_listings(user_id);
   CREATE INDEX IF NOT EXISTS idx_sqlite_listings_state ON user_etsy_listings(user_id, state);

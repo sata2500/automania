@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const action = searchParams.get('action');
-
-
+    const session = await requireAdmin();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
 
     await sql`
       CREATE TABLE IF NOT EXISTS user_workspaces (
@@ -68,6 +68,26 @@ export async function GET(request: Request) {
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS raw_metrics JSONB DEFAULT '{}'::jsonb`;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS job_runs (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        job_type VARCHAR(100) NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'queued',
+        idempotency_key VARCHAR(255),
+        request_hash VARCHAR(128),
+        progress JSONB NOT NULL DEFAULT '{"completed":0,"total":0}'::jsonb,
+        result JSONB NOT NULL DEFAULT '{}'::jsonb,
+        error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_runs_user_idempotency ON job_runs(user_id, idempotency_key)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_job_runs_status ON job_runs(status)`;
+
+    await sql`
       CREATE TABLE IF NOT EXISTS user_etsy_listings (
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
@@ -106,16 +126,9 @@ export async function GET(request: Request) {
     await sql`CREATE INDEX IF NOT EXISTS idx_user_etsy_listings_state ON user_etsy_listings(state)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_user_etsy_listings_seo_score ON user_etsy_listings(seo_score)`;
 
-    // Seed default admin user into PostgreSQL users table if not existing
-    await sql`
-      INSERT INTO users (id, name, email, role, status, provider)
-      VALUES ('user-demo-101', 'Salih TANRISEVEN', 'salihtanriseven25@gmail.com', 'admin', 'active', 'google')
-      ON CONFLICT (email) DO NOTHING
-    `;
-    
     return NextResponse.json({ success: true, message: 'Veritabanı tabloları başarıyla oluşturuldu/kontrol edildi.' });
-  } catch (error: any) {
-    console.error('Setup Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Setup] Failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Veritabanı kurulumu başarısız oldu.' }, { status: 500 });
   }
 }
