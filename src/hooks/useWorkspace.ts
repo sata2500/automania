@@ -4,6 +4,25 @@ import { loadAppData, saveAppData, saveUIStateToIndexedDB, updateLocalCache } fr
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { useAuth } from '@/components/common/UserAuthContext';
 
+function readStoredBoolean(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(key) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function detectPwaInstalled(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const standalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
+    return Boolean(window.matchMedia('(display-mode: standalone)').matches || standalone);
+  } catch {
+    return false;
+  }
+}
+
 export function useWorkspace() {
   const { user } = useAuth();
   
@@ -24,10 +43,10 @@ export function useWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupProcessing, setIsBackupProcessing] = useState(false);
 
-  const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(false);
-  const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(false);
-  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(false);
-  const [isPwaInstalled, setIsPwaInstalled] = useState(true);
+  const [isGuestInfoDismissed, setIsGuestInfoDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.GUEST_BANNER_DISMISSED));
+  const [isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED));
+  const [isPwaInfoDismissed, setIsPwaInfoDismissed] = useState(() => readStoredBoolean(STORAGE_KEYS.PWA_BANNER_DISMISSED));
+  const [isPwaInstalled, setIsPwaInstalled] = useState(detectPwaInstalled);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -39,17 +58,6 @@ export function useWorkspace() {
   // Load initial data. Always resolve initialization so a storage failure cannot leave the UI in a permanent loading state.
   useEffect(() => {
     let isMounted = true;
-    setIsInitialized(false);
-    setInitializationError(null);
-    try {
-      if (localStorage.getItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED) === 'true') setIsGuestInfoDismissed(true);
-      if (localStorage.getItem(STORAGE_KEYS.EMPTY_WORKSPACE_DISMISSED) === 'true') setIsEmptyWorkspaceDismissed(true);
-      if (localStorage.getItem(STORAGE_KEYS.PWA_BANNER_DISMISSED) === 'true') setIsPwaInfoDismissed(true);
-      
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-      setIsPwaInstalled(!!isStandalone);
-    } catch {}
-
     loadAppData()
       .then((data) => {
         if (!isMounted) return;
@@ -59,6 +67,7 @@ export function useWorkspace() {
         setActiveFolderId(data.activeFolderId || null);
         setSelectedMockupId(data.selectedMockupId || null);
         setActiveDesignFolderId(data.activeDesignFolderId || null);
+        setInitializationError(null);
         setIsInitialized(true);
       })
       .catch((error) => {
@@ -111,7 +120,7 @@ export function useWorkspace() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [mockups, designs, folders, isInitialized]);
+  }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
 
   // Auto-save UI state locally
   useEffect(() => {
@@ -148,7 +157,7 @@ export function useWorkspace() {
           }
           isSyncFetchingRef.current = false;
         }
-      } catch (err) {
+      } catch {
         isSyncFetchingRef.current = false;
       }
     }, TIMING.SYNC_POLL_INTERVAL_MS);
