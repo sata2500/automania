@@ -27,19 +27,47 @@ export async function GET(req: Request) {
     const visionFilter = searchParams.get('visionFilter') || 'all'; // all, analyzed, not_analyzed
     const sortBy = searchParams.get('sort') || 'newest';
 
-    // 1. Single listing detail query
+    // 1. Single listing detail & inventory query
     if (listingId) {
+      let inventory = null;
+      try {
+        const tokenRes = await getValidEtsyToken(session.id);
+        if (tokenRes.success && tokenRes.access_token) {
+          const { access_token: etsyAccessToken, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
+          const headers = {
+            'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+            'Authorization': `Bearer ${etsyAccessToken}`
+          };
+          const invRes = await fetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
+            method: 'GET',
+            headers,
+            next: { revalidate: 0 }
+          });
+          if (invRes.ok) {
+            inventory = await invRes.json();
+          } else {
+            console.warn(`[Etsy Listings] Inventory fetch returned ${invRes.status}:`, await invRes.text().catch(() => ''));
+          }
+        }
+      } catch (invErr: any) {
+        console.warn('[Etsy Listings] Inventory fetch exception:', invErr.message);
+      }
+
       const rows = await sql`
         SELECT * FROM user_etsy_listings 
         WHERE user_id = ${session.id} AND listing_id = ${listingId}
         LIMIT 1
       `;
 
-      if (rows.length === 0) {
-        return NextResponse.json({ success: false, error: 'İlan veritabanında bulunamadı.' }, { status: 404 });
+      if (rows.length === 0 && !inventory) {
+        return NextResponse.json({ success: false, error: 'İlan bulunamadı.' }, { status: 404 });
       }
 
-      return NextResponse.json({ success: true, listing: rows[0] });
+      return NextResponse.json({ 
+        success: true, 
+        listing: rows[0] || null,
+        inventory
+      });
     }
 
     // 2. Fetch all user listings from PostgreSQL
