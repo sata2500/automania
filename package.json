@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:sqlite": "tsx scripts/test-sqlite-runtime.ts",
+    "test:smoke": "tsx scripts/smoke-unauthenticated.ts",
     "db:sqlite:init": "tsx scripts/init-sqlite.ts"
   },
   "dependencies": {
