@@ -200,6 +200,21 @@ export async function POST(req: Request) {
       });
     }
 
+    // Validate & Sanitize Etsy Marketplace Fields
+    // Etsy allows POD items only when who_made is 'i_did' (you designed it) or when is_supply is true.
+    const safeWhoMade = (who_made === 'someone_else' || who_made === 'collective') ? who_made : 'i_did';
+    const safeWhenMade = when_made || 'made_to_order';
+    const safeIsSupply = Boolean(is_supply);
+
+    // Sanitize production_partner_ids: must be an array of positive numbers or omitted
+    let safeProductionPartners: number[] | undefined = undefined;
+    if (Array.isArray(production_partner_id)) {
+      const validPartners = production_partner_id.map(Number).filter(n => !isNaN(n) && n > 0);
+      if (validPartners.length > 0) safeProductionPartners = validPartners;
+    } else if (production_partner_id && !isNaN(Number(production_partner_id)) && Number(production_partner_id) > 0) {
+      safeProductionPartners = [Number(production_partner_id)];
+    }
+
     // Call Official Etsy API v3 createDraftListing endpoint
     const createRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
       method: 'POST',
@@ -209,31 +224,30 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        quantity,
+        quantity: Math.max(1, Number(quantity) || 999),
         title: title.slice(0, 140),
         description,
-        price,
-        who_made,
-        when_made,
-        taxonomy_id,
+        price: Number(price) || 24.99,
+        who_made: safeWhoMade,
+        when_made: safeWhenMade,
+        taxonomy_id: Number(taxonomy_id) || 1081,
         materials: Array.isArray(materials) 
           ? materials.flatMap((m: string) => (typeof m === 'string' ? m.split(',') : []))
               .map(m => m.replace(/[^a-zA-Z0-9 _\-&+]/g, '').trim().substring(0, 13).trim())
               .filter(Boolean).slice(0, 13) 
           : [],
         styles: Array.isArray(styles) ? styles.slice(0, 2) : [],
-        is_supply,
+        is_supply: safeIsSupply,
         tags: validTags,
-        shipping_profile_id,
-        readiness_state_id,
+        shipping_profile_id: shipping_profile_id ? Number(shipping_profile_id) : undefined,
+        readiness_state_id: readiness_state_id ? Number(readiness_state_id) : undefined,
         type: 'physical',
-        is_customizable,
-        production_partner_ids: production_partner_id,
-        item_weight: undefined, // Optional future use
+        is_customizable: Boolean(is_customizable),
+        production_partner_ids: safeProductionPartners,
         state,
-        shop_section_id,
-        return_policy_id,
-        should_auto_renew
+        shop_section_id: shop_section_id ? Number(shop_section_id) : undefined,
+        return_policy_id: return_policy_id ? Number(return_policy_id) : undefined,
+        should_auto_renew: Boolean(should_auto_renew)
       })
     });
 
