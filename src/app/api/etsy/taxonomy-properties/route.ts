@@ -4,16 +4,16 @@ import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
 export async function GET(req: Request) {
   try {
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const taxonomy_id = searchParams.get('taxonomy_id');
 
     if (!taxonomy_id) {
       return NextResponse.json({ success: false, error: 'taxonomy_id is required' }, { status: 400 });
-    }
-
-    const session = await getAuthoritativeSession();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const tokenRes = await getValidEtsyToken(session.id);
@@ -38,8 +38,8 @@ export async function GET(req: Request) {
 
     const data = await propertiesRes.json();
     return NextResponse.json({ success: true, properties: data.results || [] });
-  } catch (error: any) {
-    console.error('Etsy Taxonomy Properties Fetch Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error('Etsy Taxonomy Properties Fetch Error:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Etsy taxonomy özellikleri alınamadı.' }, { status: 500 });
   }
 }

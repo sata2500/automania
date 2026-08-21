@@ -46,7 +46,7 @@ const cases: Array<{ name: string; path: string; init?: RequestInit; expected: n
   { name: 'Etsy return policies GET', path: '/api/etsy/return-policies', expected: 401 },
   { name: 'Etsy shipping profiles GET', path: '/api/etsy/shipping-profiles', expected: 401 },
   { name: 'Etsy shop sections GET', path: '/api/etsy/shop-sections', expected: 401 },
-  { name: 'Etsy taxonomy properties GET', path: '/api/etsy/taxonomy-properties?taxonomy_id=1081', expected: 401 },
+  { name: 'Etsy taxonomy properties GET missing query', path: '/api/etsy/taxonomy-properties', expected: 401 },
   { name: 'Etsy variations POST', path: '/api/etsy/update-variations', init: json({}), expected: 401 },
   { name: 'job status GET', path: '/api/jobs/job-test', expected: 401 },
   { name: 'users GET', path: '/api/users', expected: 403 },
