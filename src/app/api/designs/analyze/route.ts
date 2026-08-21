@@ -13,8 +13,25 @@ import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } fr
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import type { EvaluatedKeyword } from '@/types/pod';
 
 export const maxDuration = 60; // Allow up to 60s for vision AI + synchronous Etsy keyword & competitor tag evaluation
+
+type ParsedAnalysisResult = {
+  description: string;
+  keywords: string[];
+  primarySubject?: string;
+  primaryAesthetic?: string;
+  niche?: string;
+  userNotes?: string;
+  productType?: string;
+  taxonomyId?: number | null;
+};
+
+type KeywordPoolRow = EvaluatedKeyword & {
+  usage_count?: number | null;
+  last_evaluated_at?: string | Date | null;
+};
 
 async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   // 1. Data URL (Base64)
@@ -151,7 +168,7 @@ async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeTy
 
 export async function POST(request: Request) {
   try {
-    const { src, name } = await request.json();
+    const { src } = await request.json();
 
     const session = await getAuthoritativeSession();
     if (!session) {
@@ -252,7 +269,7 @@ export async function POST(request: Request) {
           visionModel = parsed.vision;
         }
       }
-    } catch(e) {}
+    } catch {}
     
     if (activeAiProvider === 'gemini') {
       visionModel = dbGeminiVisionModel || 'gemini-1.5-flash';
@@ -352,14 +369,18 @@ export async function POST(request: Request) {
       content = jsonMatch[0];
     }
 
-    let parsedResult;
+    let parsedResult: Partial<ParsedAnalysisResult>;
     try {
-      parsedResult = JSON.parse(content);
-    } catch (e) {
+      parsedResult = JSON.parse(content) as Partial<ParsedAnalysisResult>;
+    } catch {
       throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
     }
 
-    if (!parsedResult.description || !parsedResult.keywords || !Array.isArray(parsedResult.keywords)) {
+    if (
+      typeof parsedResult.description !== 'string' ||
+      !Array.isArray(parsedResult.keywords) ||
+      !parsedResult.keywords.every((keyword): keyword is string => typeof keyword === 'string')
+    ) {
       throw new Error('Yapay zeka eksik veri döndürdü.');
     }
 
@@ -374,12 +395,12 @@ export async function POST(request: Request) {
     )) as string[]);
     
     // 6. Kelime Havuzundaki Mevcut Kayıtları Çek
-    let existingRows: any[] = [];
-    const existingMap = new Map<string, any>();
+    let existingRows: KeywordPoolRow[] = [];
+    const existingMap = new Map<string, KeywordPoolRow>();
     if (uniqueKeywords.length > 0) {
       existingRows = await sql`
-        SELECT * FROM keyword_pool WHERE keyword = ANY(${uniqueKeywords as any})
-      `;
+        SELECT * FROM keyword_pool WHERE keyword = ANY(${uniqueKeywords})
+      ` as unknown as KeywordPoolRow[];
       for (const r of existingRows) {
         existingMap.set(r.keyword.toLowerCase(), r);
       }
@@ -433,9 +454,9 @@ export async function POST(request: Request) {
         await sql`
           UPDATE keyword_pool 
           SET usage_count = COALESCE(usage_count, 0) + 1 
-          WHERE keyword = ANY(${freshKeywords as any})
+          WHERE keyword = ANY(${freshKeywords})
         `;
-      } catch (err) {}
+      } catch {}
     }
 
     // 7. Kelime Havuzu Kontrolü & Sadece Taranmamış Kelimeleri Hızlıca Puanlama
@@ -491,8 +512,8 @@ export async function POST(request: Request) {
                 }
               }
             }
-          } catch (scrapeErr: any) {
-            console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr.message);
+          } catch (scrapeErr: unknown) {
+            console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr instanceof Error ? scrapeErr.message : 'unknown error');
           }
         })
       );
@@ -527,13 +548,13 @@ export async function POST(request: Request) {
             )
             ON CONFLICT (keyword) DO NOTHING;
           `;
-        } catch (e) {}
+        } catch {}
       }
     }
 
     // 9. Güncellenen ve Puanlanan Tüm Kelimeleri Çekerek Yanıta Ekle
     const allTrackedKeywords = [...uniqueKeywords, ...topDiscoveredTags];
-    let evaluatedKeywords: any[] = [];
+    let evaluatedKeywords: EvaluatedKeyword[] = [];
     if (allTrackedKeywords.length > 0) {
       evaluatedKeywords = await sql`
         SELECT 
@@ -552,8 +573,8 @@ export async function POST(request: Request) {
           raw_metrics,
           last_scrape_error
         FROM keyword_pool
-        WHERE keyword = ANY(${allTrackedKeywords as any})
-      `;
+        WHERE keyword = ANY(${allTrackedKeywords})
+      ` as unknown as EvaluatedKeyword[];
     }
 
     return NextResponse.json({
@@ -574,8 +595,8 @@ export async function POST(request: Request) {
       }
     });
 
-  } catch (error: any) {
-    console.error('Design Analyze Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[Design Analyze] Request failed:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ success: false, error: 'Tasarım analizi başarısız oldu.' }, { status: 500 });
   }
 }

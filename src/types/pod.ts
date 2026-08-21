@@ -56,6 +56,23 @@ export interface MockupItem {
   exportAspect?: 'original' | 'square';
 }
 
+export interface EvaluatedKeyword {
+  id: string;
+  keyword: string;
+  etsy_score?: number | null;
+  opportunity_score?: number | null;
+  total_listings?: number | null;
+  competition_level?: string | null;
+  bestseller_count?: number | null;
+  is_etsy_suggested?: boolean | null;
+  autocomplete_rank?: number | null;
+  avg_price?: number | string | null;
+  char_length?: number | null;
+  tag_eligible?: boolean | null;
+  raw_metrics?: Record<string, unknown> | null;
+  last_scrape_error?: string | null;
+}
+
 export interface DesignItem {
   id: string;
   name: string;
@@ -71,7 +88,7 @@ export interface DesignItem {
     description: string;
     keywords: string[];
     analyzedAt: number;
-    evaluatedKeywords?: any[];
+    evaluatedKeywords?: EvaluatedKeyword[];
     discoveredCompetitorTags?: string[];
     primarySubject?: string;
     primaryAesthetic?: string;

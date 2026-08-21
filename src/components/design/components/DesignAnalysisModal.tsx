@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sparkles, X, Clock, FileText, Hash, RefreshCw, Trophy, Tag, Layers } from 'lucide-react';
-import { DesignItem } from '@/types/pod';
+import { DesignItem, EvaluatedKeyword } from '@/types/pod';
 
 interface DesignAnalysisModalProps {
   analysisModalData: DesignItem | null;
@@ -16,7 +16,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
   if (!analysisModalData || !analysisModalData.analysis) return null;
 
   const analysis = analysisModalData.analysis;
-  const evaluatedMap = new Map<string, any>();
+  const evaluatedMap = new Map<string, EvaluatedKeyword>();
   if (analysis.evaluatedKeywords && Array.isArray(analysis.evaluatedKeywords)) {
     for (const item of analysis.evaluatedKeywords) {
       if (item && item.keyword) {
@@ -113,7 +113,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
                     className="group px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-xs font-medium rounded-xl border border-emerald-200 dark:border-emerald-800/80 flex items-center gap-2 transition-colors"
                   >
                     <span>{kw}</span>
-                    {score !== undefined && score > 0 ? (
+                    {score != null && score > 0 ? (
                       <span
                         className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 ${
                           score >= 70
@@ -160,7 +160,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
                     >
                       <Tag className="w-3 h-3 text-amber-500 shrink-0" />
                       <span>{tag}</span>
-                      {score !== undefined && score > 0 && (
+                      {score != null && score > 0 && (
                         <span className="text-[10px] font-bold px-1 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200">
                           {score}p
                         </span>
