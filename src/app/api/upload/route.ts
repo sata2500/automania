@@ -2,94 +2,107 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 import { isR2Configured, uploadToR2 } from '@/lib/r2';
+import { getAuthoritativeSession } from '@/lib/auth-server';
+import {
+  createOwnedUploadName,
+  detectMimeFromMagicBytes,
+  getUploadLimit,
+  isAllowedUploadMime,
+  validateUploadSize,
+} from '@/lib/upload-security';
 
 const DATA_DIR = path.join(process.cwd(), '.data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 
-async function ensureUploadsDir() {
-  try {
-    await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  } catch {}
-}
-
 async function saveFileLocally(filename: string, buffer: Buffer): Promise<string> {
-  await ensureUploadsDir();
-  const safeFilename = path.basename(filename);
-  const filePath = path.join(UPLOADS_DIR, safeFilename);
-  await fs.writeFile(filePath, buffer);
-  return `/api/uploads/${safeFilename}`;
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+  const filePath = path.join(UPLOADS_DIR, path.basename(filename));
+  await fs.writeFile(filePath, buffer, { mode: 0o600 });
+  return `/api/uploads/${encodeURIComponent(path.basename(filename))}`;
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
-  const contentType = request.headers.get('content-type') || '';
+async function persistUpload(userId: string, originalName: string, mimeType: string, buffer: Buffer) {
+  if (!isAllowedUploadMime(mimeType)) {
+    return NextResponse.json({ error: 'Desteklenmeyen dosya türü.' }, { status: 415 });
+  }
 
-  // 1. Handle Multipart / FormData (Direct File Uploads from Client)
-  if (contentType.includes('multipart/form-data')) {
+  const sizeError = validateUploadSize(buffer.byteLength, mimeType);
+  if (sizeError) return NextResponse.json({ error: sizeError }, { status: 413 });
+
+  const detectedMime = detectMimeFromMagicBytes(buffer);
+  if (detectedMime !== mimeType && !(mimeType === 'video/webm' && detectedMime === null)) {
+    return NextResponse.json({ error: 'Dosya içeriği ile MIME türü eşleşmiyor.' }, { status: 415 });
+  }
+
+  const filename = createOwnedUploadName(userId, originalName, mimeType);
+
+  if (isR2Configured()) {
     try {
-      const formData = await request.formData();
-      const file = formData.get('file') as File | null;
-      if (!file) {
-        return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
-      }
-
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const ext = path.extname(file.name) || (file.type.startsWith('video/') ? '.mp4' : '.webp');
-      const uniqueName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`;
-      const fileMime = file.type || (uniqueName.endsWith('.mp4') ? 'video/mp4' : 'image/webp');
-
-      // Primary: Cloudflare R2 Upload
-      if (isR2Configured()) {
-        try {
-          const result = await uploadToR2(buffer, uniqueName, fileMime);
-          return NextResponse.json({ success: true, url: result.url });
-        } catch (r2Err) {
-          console.error('[Upload Route] Cloudflare R2 direct put failed:', r2Err);
-        }
-      }
-
-      // Fallback: Local file system
-      const localUrl = await saveFileLocally(uniqueName, buffer);
-      return NextResponse.json({ success: true, url: localUrl });
-    } catch (err: any) {
-      console.error('[Upload Route] FormData upload error:', err);
-      return NextResponse.json({ error: err.message || 'File upload failed' }, { status: 500 });
+      const result = await uploadToR2(buffer, filename, mimeType);
+      return NextResponse.json({ success: true, url: result.url });
+    } catch (error) {
+      console.error('[Upload Route] R2 upload failed; using local fallback.', error instanceof Error ? error.message : 'unknown error');
     }
   }
 
-  // 2. Handle JSON Requests (Base64 dataUrl)
-  try {
-    const body = await request.json();
+  const localUrl = await saveFileLocally(filename, buffer);
+  return NextResponse.json({ success: true, url: localUrl });
+}
 
-    if (body.dataUrl && typeof body.dataUrl === 'string') {
-      const dataUrl = body.dataUrl;
-      const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-      const buffer = Buffer.from(base64Data, 'base64');
-      const mime = body.mimeType || (dataUrl.includes(';') ? dataUrl.split(';')[0].replace('data:', '') : 'image/webp');
-      const ext = mime.split('/')[1] || 'webp';
-      const uniqueName = body.filename || `upload-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+function parseBase64DataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
+  const match = dataUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
+  if (!match) return null;
+  return { mimeType: match[1].toLowerCase(), base64: match[2].replace(/\s/g, '') };
+}
 
-      // Primary: Cloudflare R2 Upload
-      if (isR2Configured()) {
-        try {
-          const result = await uploadToR2(buffer, uniqueName, mime);
-          return NextResponse.json({ success: true, url: result.url });
-        } catch (r2Err) {
-          console.error('[Upload Route] Cloudflare R2 base64 put failed:', r2Err);
-        }
+export async function POST(request: Request): Promise<NextResponse> {
+  const session = await getAuthoritativeSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const contentType = request.headers.get('content-type') || '';
+
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const formData = await request.formData();
+      const file = formData.get('file');
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: 'Dosya yüklenmedi.' }, { status: 400 });
       }
 
-      // Fallback: Local file system
-      const localUrl = await saveFileLocally(uniqueName, buffer);
-      return NextResponse.json({ success: true, url: localUrl });
+      const mimeType = file.type.toLowerCase();
+      if (file.size > getUploadLimit(mimeType)) {
+        return NextResponse.json({ error: 'Dosya boyutu izin verilen sınırı aşıyor.' }, { status: 413 });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      return await persistUpload(session.id, file.name, mimeType, buffer);
+    } catch (error) {
+      console.error('[Upload Route] FormData upload error:', error instanceof Error ? error.message : 'unknown error');
+      return NextResponse.json({ error: 'Dosya yüklenemedi.' }, { status: 400 });
+    }
+  }
+
+  try {
+    const body = await request.json();
+    if (typeof body?.dataUrl !== 'string') {
+      return NextResponse.json({ error: 'Geçersiz upload gövdesi.' }, { status: 400 });
     }
 
-    return NextResponse.json({ error: 'Unrecognized request body format' }, { status: 400 });
-  } catch (error: any) {
-    console.error('[Upload Route] JSON handling error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Upload processing failed' },
-      { status: 400 }
-    );
+    if (body.dataUrl.length > 70 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Upload gövdesi izin verilen sınırı aşıyor.' }, { status: 413 });
+    }
+
+    const parsed = parseBase64DataUrl(body.dataUrl);
+    if (!parsed) return NextResponse.json({ error: 'Yalnızca base64 data URL kabul edilir.' }, { status: 400 });
+
+    const requestedMime = typeof body.mimeType === 'string' ? body.mimeType.toLowerCase() : parsed.mimeType;
+    if (requestedMime !== parsed.mimeType) {
+      return NextResponse.json({ error: 'MIME türü data URL ile eşleşmiyor.' }, { status: 400 });
+    }
+
+    const buffer = Buffer.from(parsed.base64, 'base64');
+    return await persistUpload(session.id, typeof body.filename === 'string' ? body.filename : 'upload', requestedMime, buffer);
+  } catch (error) {
+    console.error('[Upload Route] JSON upload error:', error instanceof Error ? error.message : 'unknown error');
+    return NextResponse.json({ error: 'Upload işlenemedi.' }, { status: 400 });
   }
 }
