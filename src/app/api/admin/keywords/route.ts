@@ -94,20 +94,33 @@ export async function GET(req: Request) {
     `;
     count = parseInt(countRes[0].total, 10);
 
-    const etsyWorkspace = await sql`
-      SELECT etsy_shop_id 
-      FROM user_workspaces 
-      WHERE etsy_access_token IS NOT NULL 
-      LIMIT 1
-    `;
+    const [etsyWorkspace, etsySettings] = await Promise.all([
+      sql`
+        SELECT etsy_shop_id 
+        FROM user_workspaces 
+        WHERE etsy_access_token IS NOT NULL 
+        LIMIT 1
+      `,
+      sql`
+        SELECT setting_value 
+        FROM app_settings 
+        WHERE setting_key = 'etsy_keystring' 
+        LIMIT 1
+      `
+    ]);
+
+    const hasApiKey = Boolean(etsySettings[0]?.setting_value || process.env.ETSY_API_KEY);
+    const hasOAuth = etsyWorkspace.length > 0;
 
     return NextResponse.json({
       success: true,
       keywords: data,
       total: count,
       etsyStatus: {
-        connected: etsyWorkspace.length > 0,
-        shopId: etsyWorkspace[0]?.etsy_shop_id || null
+        connected: hasOAuth || hasApiKey,
+        hasOAuth,
+        hasApiKey,
+        shopId: etsyWorkspace[0]?.etsy_shop_id || (hasApiKey ? 'Etsy Developer API' : null)
       }
     });
   } catch (error: any) {

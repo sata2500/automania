@@ -447,42 +447,10 @@ export async function POST(request: Request) {
       } catch (err) {}
     }
 
-    // Taranmamış kelimeler: En fazla ilk 5 kelimeyi paralel olarak hızlıca tara (kalanlar hızlı placeholder ile kaydedilir)
-    const keywordsToScrape = staleKeywords.slice(0, 5);
-    const keywordsToDefer = staleKeywords.slice(5);
-
-    // Ertelenenleri havuza 'Taranacak' olarak kaydet
-    for (const kw of keywordsToDefer) {
-      const existing = existingMap.get(kw);
-      const id = existing?.id || crypto.randomUUID();
-      const charLen = kw.length;
-      const tagOk = charLen <= 20;
-      try {
-        await sql`
-          INSERT INTO keyword_pool (
-            id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-            competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-            char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-            last_evaluated_at, created_at
-          )
-          VALUES (
-            ${id}, ${kw}, ${existing ? (existing.usage_count || 1) + 1 : 1},
-            0, 0, 0,
-            'Taranacak', 0, false,
-            0, ${charLen}, ${tagOk}, 0,
-            null, '{}'::jsonb,
-            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-          )
-          ON CONFLICT (keyword) DO UPDATE
-          SET usage_count = keyword_pool.usage_count + 1;
-        `;
-      } catch (e) {}
-    }
-
-    // Öncelikli kelimeleri paralel (Promise.allSettled) ile hızlıca tara (max 8 saniye)
-    if (keywordsToScrape.length > 0) {
+    // 7. Tüm Anahtar Kelimeleri Paralel Olarak Etsy API ile Tara & Puanla
+    if (staleKeywords.length > 0) {
       await Promise.allSettled(
-        keywordsToScrape.map(async (kw) => {
+        staleKeywords.map(async (kw) => {
           const existing = existingMap.get(kw);
           try {
             const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
@@ -533,17 +501,79 @@ export async function POST(request: Request) {
               }
             }
           } catch (scrapeErr: any) {
-            console.warn(`Evaluation error for primary keyword "${kw}":`, scrapeErr.message);
+            console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr.message);
           }
         })
       );
     }
 
-    // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla
+    // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla ve Puanla
     const topDiscoveredTags = Array.from(discoveredTopTagsMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([tag]) => tag);
+
+    if (topDiscoveredTags.length > 0) {
+      const existingCoRows = await sql`
+        SELECT * FROM keyword_pool WHERE keyword = ANY(${topDiscoveredTags as any})
+      `;
+      const existingCoMap = new Map(existingCoRows.map(r => [r.keyword.toLowerCase(), r]));
+
+      const coTagsToScrape = topDiscoveredTags.filter(tag => {
+        const row = existingCoMap.get(tag);
+        return !(row && row.last_evaluated_at && (Date.now() - new Date(row.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && row.competition_level !== 'Engellendi / Hata' && row.competition_level !== 'Taranacak');
+      });
+
+      if (coTagsToScrape.length > 0) {
+        await Promise.allSettled(
+          coTagsToScrape.map(async (coTag) => {
+            const existingCo = existingCoMap.get(coTag);
+            try {
+              const coScraped = await scrapeEtsyKeywordData(coTag, scrapeOptions);
+              const coId = existingCo?.id || crypto.randomUUID();
+              const coCharLen = coTag.length;
+              const coTagOk = coCharLen <= 20;
+
+              await sql`
+                INSERT INTO keyword_pool (
+                  id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+                  competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+                  char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+                  last_evaluated_at, created_at
+                )
+                VALUES (
+                  ${coId}, ${coTag}, ${existingCo ? (existingCo.usage_count || 1) + 1 : 1},
+                  ${coScraped.opportunityScore}, ${coScraped.opportunityScore}, ${coScraped.totalListings},
+                  ${coScraped.competitionLevel}, ${coScraped.bestsellerCount}, ${coScraped.isEtsySuggested},
+                  ${coScraped.autocompleteRank}, ${coCharLen}, ${coTagOk}, ${coScraped.avgPrice},
+                  ${coScraped.scrapeError},
+                  ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (keyword) DO UPDATE
+                SET 
+                  usage_count = keyword_pool.usage_count + 1,
+                  etsy_score = ${coScraped.opportunityScore},
+                  opportunity_score = ${coScraped.opportunityScore},
+                  total_listings = ${coScraped.totalListings},
+                  competition_level = ${coScraped.competitionLevel},
+                  bestseller_count = ${coScraped.bestsellerCount},
+                  is_etsy_suggested = ${coScraped.isEtsySuggested},
+                  autocomplete_rank = ${coScraped.autocompleteRank},
+                  char_length = ${coCharLen},
+                  tag_eligible = ${coTagOk},
+                  avg_price = ${coScraped.avgPrice},
+                  last_scrape_error = ${coScraped.scrapeError},
+                  raw_metrics = ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
+                  last_evaluated_at = CURRENT_TIMESTAMP
+              `;
+            } catch (coErr: any) {
+              console.warn(`Evaluation error for co-occurring tag "${coTag}":`, coErr.message);
+            }
+          })
+        );
+      }
+    }
 
     // 9. Güncellenen ve Puanlanan Tüm Kelimeleri Çekerek Yanıta Ekle
     const allTrackedKeywords = [...uniqueKeywords, ...topDiscoveredTags];

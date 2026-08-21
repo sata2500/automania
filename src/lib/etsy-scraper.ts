@@ -93,32 +93,74 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   let etsyApiKey = options?.etsyApiKey || process.env.ETSY_API_KEY;
   let etsySecret = options?.etsySharedSecret || process.env.ETSY_SHARED_SECRET;
 
-  // If userId provided but no token in options, try resolving token dynamically
-  if (!etsyToken && options?.userId) {
+  // Auto-resolve Etsy credentials from DB if missing in options
+  if (!etsyApiKey || !etsyToken) {
     try {
-      const { getValidEtsyToken } = await import('@/lib/etsy-token-manager');
-      const tokenRes = await getValidEtsyToken(options.userId);
-      if (tokenRes.success && tokenRes.access_token) {
-        etsyToken = tokenRes.access_token;
-        etsyApiKey = tokenRes.api_key || etsyApiKey;
-        etsySecret = tokenRes.shared_secret || etsySecret;
+      const sqlModule = await import('@/lib/db');
+      const sql = sqlModule.default;
+
+      if (!etsyApiKey) {
+        const settingsRows = await sql`
+          SELECT setting_key, setting_value 
+          FROM app_settings 
+          WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')
+        `;
+        for (const r of settingsRows) {
+          if (r.setting_key === 'etsy_keystring' && r.setting_value) etsyApiKey = r.setting_value;
+          if (r.setting_key === 'etsy_shared_secret' && r.setting_value) etsySecret = r.setting_value;
+        }
+      }
+
+      if (!etsyToken) {
+        const targetUser = options?.userId;
+        let wsQuery = targetUser 
+          ? sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE user_id = ${targetUser} LIMIT 1`
+          : sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE etsy_access_token IS NOT NULL ORDER BY updated_at DESC LIMIT 1`;
+        
+        const wsRows = await wsQuery;
+        if (wsRows.length > 0 && wsRows[0].user_id) {
+          const { getValidEtsyToken } = await import('@/lib/etsy-token-manager');
+          const tokenRes = await getValidEtsyToken(wsRows[0].user_id);
+          if (tokenRes.success && tokenRes.access_token) {
+            etsyToken = tokenRes.access_token;
+            etsyApiKey = tokenRes.api_key || etsyApiKey;
+            etsySecret = tokenRes.shared_secret || etsySecret;
+          }
+        }
       }
     } catch (e: any) {
-      console.warn('Could not dynamically load Etsy token:', e.message);
+      console.warn('Could not dynamically load Etsy credentials from DB:', e.message);
     }
   }
 
-  if (etsyToken && etsyApiKey) {
+  // Etsy Open API v3 call (works with API Key and optional OAuth token)
+  if (etsyApiKey || etsyToken) {
     try {
-      const apiKeyHeader = etsySecret ? `${etsyApiKey}:${etsySecret}` : etsyApiKey;
-      const headers = {
-        'x-api-key': apiKeyHeader,
-        'Authorization': `Bearer ${etsyToken}`,
+      const apiUrl = `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score`;
+      
+      const headers: Record<string, string> = {
         'Accept': 'application/json'
       };
+      if (etsyApiKey) {
+        headers['x-api-key'] = etsyApiKey;
+      }
+      if (etsyToken) {
+        headers['Authorization'] = `Bearer ${etsyToken}`;
+      }
 
-      const apiUrl = `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score`;
-      const apiRes = await fetch(apiUrl, { headers, next: { revalidate: 0 } });
+      let apiRes = await fetch(apiUrl, { headers, next: { revalidate: 0 } });
+
+      // Fallback: If Bearer token fails with 401/403, retry with x-api-key only
+      if (!apiRes.ok && etsyToken && etsyApiKey && (apiRes.status === 401 || apiRes.status === 403)) {
+        const fallbackHeaders: Record<string, string> = {
+          'x-api-key': etsyApiKey,
+          'Accept': 'application/json'
+        };
+        const retryRes = await fetch(apiUrl, { headers: fallbackHeaders, next: { revalidate: 0 } });
+        if (retryRes.ok) {
+          apiRes = retryRes;
+        }
+      }
 
       if (apiRes.ok) {
         const data = await apiRes.json();

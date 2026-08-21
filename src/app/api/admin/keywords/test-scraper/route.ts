@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       result,
       diagnostics: {
         testedKeyword: keyword,
-        etsyOfficialApiConnected: !!etsyAccessToken,
+        etsyOfficialApiConnected: result.rawMetrics?.method === 'etsy_official_api' || !!etsyAccessToken || !!etsyApiKey,
         etsyShopId: etsyShopId || 'Yok',
         hasScraperApiKey: !!scrapingApiKey,
         scrapingProvider,
