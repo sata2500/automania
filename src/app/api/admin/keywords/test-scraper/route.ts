@@ -67,7 +67,9 @@ export async function POST(req: Request) {
         hasScraperApiKey: !!scrapingApiKey,
         scrapingProvider,
         workerUrlUsed: effectiveWorkerUrl || 'Yok',
-        dataSourceUsed: result.rawMetrics?.method || (result.scrapeError ? 'error' : 'unknown')
+        dataSourceUsed: result.rawMetrics?.method || (result.scrapeError ? 'error' : 'unknown'),
+        apiStatus: result.rawMetrics?.apiStatus || null,
+        apiError: result.rawMetrics?.apiError || null
       }
     });
   } catch (error: any) {

@@ -37,12 +37,14 @@ export interface ScrapingOptions {
   provider?: string;
   workerUrl?: string;
   serperApiKey?: string;
+  fastMode?: boolean; // When true, strictly caps external timeouts to 2s to prevent serverless timeouts
 }
 
 export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingOptions): Promise<ScrapingResult> {
   const cleanKeyword = keyword.trim().toLowerCase();
   const charLength = cleanKeyword.length;
   const tagEligible = charLength <= 20;
+  const isFast = Boolean(options?.fastMode);
 
   let totalListings = 0;
   let competitionLevel = 'Bilinmiyor';
@@ -62,6 +64,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*'
       },
+      signal: AbortSignal.timeout(isFast ? 1000 : 1500),
       next: { revalidate: 0 }
     });
 
@@ -85,7 +88,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       };
     }
   } catch (nativeSuggestErr: any) {
-    console.warn(`Etsy Suggestion warning for "${cleanKeyword}":`, nativeSuggestErr.message);
+    // Autocomplete timeout or block is non-fatal
   }
 
   // 2. PRIMARY SOURCE: Etsy Open API v3 (100% Genuine, Exact Listing Count & Real Listing Data)
@@ -133,36 +136,78 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
     }
   }
 
-  // Etsy Open API v3 call (works with API Key and optional OAuth token)
-  if (etsyApiKey || etsyToken) {
+  const cleanApiKey = etsyApiKey?.replace(/['"\s]+/g, '').trim();
+  const cleanSecret = etsySecret?.replace(/['"\s]+/g, '').trim();
+  const cleanToken = etsyToken?.replace(/['"\s]+/g, '').trim();
+
+  // Etsy Open API v3 call (multi-header attempt: keystring:secret or raw keystring)
+  if (cleanApiKey || cleanToken) {
     try {
-      const apiUrl = `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score`;
+      const primaryApiKeyHeader = cleanSecret ? `${cleanApiKey}:${cleanSecret}` : cleanApiKey;
+      const apiUrls = [
+        `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score&sort_order=desc`,
+        `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25`
+      ];
       
-      const headers: Record<string, string> = {
-        'Accept': 'application/json'
-      };
-      if (etsyApiKey) {
-        headers['x-api-key'] = etsyApiKey;
-      }
-      if (etsyToken) {
-        headers['Authorization'] = `Bearer ${etsyToken}`;
-      }
+      let apiRes: Response | null = null;
 
-      let apiRes = await fetch(apiUrl, { headers, next: { revalidate: 0 } });
+      for (const apiUrl of apiUrls) {
+        if (apiRes && apiRes.ok) break;
 
-      // Fallback: If Bearer token fails with 401/403, retry with x-api-key only
-      if (!apiRes.ok && etsyToken && etsyApiKey && (apiRes.status === 401 || apiRes.status === 403)) {
-        const fallbackHeaders: Record<string, string> = {
-          'x-api-key': etsyApiKey,
+        // Attempt 1: Combined key:secret header (standard across this codebase) + Bearer token if present
+        const headers1: Record<string, string> = {
+          'x-api-key': primaryApiKeyHeader || '',
           'Accept': 'application/json'
         };
-        const retryRes = await fetch(apiUrl, { headers: fallbackHeaders, next: { revalidate: 0 } });
-        if (retryRes.ok) {
-          apiRes = retryRes;
+        if (cleanToken) {
+          headers1['Authorization'] = `Bearer ${cleanToken}`;
+        }
+
+        try {
+          const r1 = await fetch(apiUrl, { headers: headers1, signal: AbortSignal.timeout(isFast ? 1500 : 4000), next: { revalidate: 0 } });
+          if (r1.ok) {
+            apiRes = r1;
+            break;
+          } else {
+            apiRes = r1;
+          }
+        } catch (fErr: any) {}
+
+        // Attempt 2: If attempt 1 returned 401/403, try raw keystring alone
+        if (cleanApiKey) {
+          const headers2: Record<string, string> = {
+            'x-api-key': cleanApiKey,
+            'Accept': 'application/json'
+          };
+          if (cleanToken) {
+            headers2['Authorization'] = `Bearer ${cleanToken}`;
+          }
+          try {
+            const r2 = await fetch(apiUrl, { headers: headers2, signal: AbortSignal.timeout(isFast ? 1500 : 4000), next: { revalidate: 0 } });
+            if (r2.ok) {
+              apiRes = r2;
+              break;
+            }
+          } catch (rErr) {}
+        }
+
+        // Attempt 3: Without Authorization header (pure public API search)
+        if (cleanApiKey) {
+          const headers3: Record<string, string> = {
+            'x-api-key': primaryApiKeyHeader || cleanApiKey,
+            'Accept': 'application/json'
+          };
+          try {
+            const r3 = await fetch(apiUrl, { headers: headers3, signal: AbortSignal.timeout(isFast ? 1500 : 3000), next: { revalidate: 0 } });
+            if (r3.ok) {
+              apiRes = r3;
+              break;
+            }
+          } catch (rErr) {}
         }
       }
 
-      if (apiRes.ok) {
+      if (apiRes && apiRes.ok) {
         const data = await apiRes.json();
         totalListings = typeof data.count === 'number' ? data.count : 0;
         rawMetrics.method = 'etsy_official_api';
@@ -212,8 +257,10 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
         // Successfully retrieved from Official Etsy API! Skip fallback scrapers.
         return finalizeKeywordMetrics(cleanKeyword, charLength, tagEligible, totalListings, bestsellerCount, isEtsySuggested, autocompleteRank, avgPrice, null, rawMetrics);
-      } else {
-        const errText = await apiRes.text();
+      } else if (apiRes) {
+        const errText = await apiRes.text().catch(() => '');
+        rawMetrics.apiStatus = apiRes.status;
+        rawMetrics.apiError = errText.substring(0, 200);
         console.warn(`Etsy Open API returned status ${apiRes.status} for "${cleanKeyword}":`, errText.substring(0, 150));
       }
     } catch (apiErr: any) {
@@ -227,18 +274,19 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
   if (scraperKey) {
     try {
+      const cleanScraperKey = scraperKey.replace(/['"\s]+/g, '').trim();
       const targetSearchUrl = `https://www.etsy.com/search?q=${encodeURIComponent(cleanKeyword)}`;
       let finalFetchUrl = targetSearchUrl;
 
       if (provider === 'scrapingbee') {
-        finalFetchUrl = `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(scraperKey)}&url=${encodeURIComponent(targetSearchUrl)}&render_js=false`;
+        finalFetchUrl = `https://app.scrapingbee.com/api/v1/?api_key=${encodeURIComponent(cleanScraperKey)}&url=${encodeURIComponent(targetSearchUrl)}&render_js=false`;
       } else if (provider === 'zenrows') {
-        finalFetchUrl = `https://api.zenrows.com/v1/?api_key=${encodeURIComponent(scraperKey)}&url=${encodeURIComponent(targetSearchUrl)}&js_render=false`;
+        finalFetchUrl = `https://api.zenrows.com/v1/?api_key=${encodeURIComponent(cleanScraperKey)}&url=${encodeURIComponent(targetSearchUrl)}&js_render=false`;
       } else {
-        finalFetchUrl = `http://api.scraperapi.com?api_key=${encodeURIComponent(scraperKey)}&url=${encodeURIComponent(targetSearchUrl)}`;
+        finalFetchUrl = `http://api.scraperapi.com?api_key=${encodeURIComponent(cleanScraperKey)}&url=${encodeURIComponent(targetSearchUrl)}`;
       }
 
-      const searchRes = await fetch(finalFetchUrl, { next: { revalidate: 0 } });
+      const searchRes = await fetch(finalFetchUrl, { signal: AbortSignal.timeout(isFast ? 2500 : 12000), next: { revalidate: 0 } });
       if (searchRes.ok) {
         const html = await searchRes.text();
         const lowerHtml = html.toLowerCase();
@@ -275,7 +323,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         }
       }
     } catch (scraperErr: any) {
-      console.warn(`Scraper API warning for "${cleanKeyword}":`, scraperErr.message);
+      // Scraper error
     }
   }
 
@@ -284,7 +332,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   if (workerUrl) {
     try {
       const proxyTarget = `${workerUrl.replace(/\/$/, '')}?q=${encodeURIComponent(cleanKeyword)}`;
-      const workerRes = await fetch(proxyTarget, { next: { revalidate: 0 } });
+      const workerRes = await fetch(proxyTarget, { signal: AbortSignal.timeout(3000), next: { revalidate: 0 } });
       if (workerRes.ok) {
         const workerData = await workerRes.json();
         if (workerData.success && workerData.totalListings > 0 && workerData.methodUsed !== 'bing_etsy_index' && workerData.methodUsed !== 'ddg_etsy_index') {
@@ -303,7 +351,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         }
       }
     } catch (e: any) {
-      console.warn(`Cloudflare Worker Proxy warning for "${cleanKeyword}":`, e.message);
+      // Worker error
     }
   }
 

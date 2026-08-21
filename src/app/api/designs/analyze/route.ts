@@ -402,7 +402,8 @@ export async function POST(request: Request) {
       userId: targetUserId,
       apiKey: scrapingApiKey,
       provider: scrapingProvider,
-      workerUrl
+      workerUrl,
+      fastMode: true
     };
 
     // 7. Hızlı & Paralel Etsy Kelime Puanlama & Havuz Kayıt Pipeline'ı
@@ -447,7 +448,7 @@ export async function POST(request: Request) {
       } catch (err) {}
     }
 
-    // 7. Tüm Anahtar Kelimeleri Paralel Olarak Etsy API ile Tara & Puanla
+    // 7. Kelime Havuzu Kontrolü & Sadece Taranmamış Kelimeleri Hızlıca Puanlama
     if (staleKeywords.length > 0) {
       await Promise.allSettled(
         staleKeywords.map(async (kw) => {
@@ -507,71 +508,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla ve Puanla
+    // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla
     const topDiscoveredTags = Array.from(discoveredTopTagsMap.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([tag]) => tag);
 
+    // Havuzda henüz olmayan rakip etiketleri hafif placeholder ile kaydet
     if (topDiscoveredTags.length > 0) {
-      const existingCoRows = await sql`
-        SELECT * FROM keyword_pool WHERE keyword = ANY(${topDiscoveredTags as any})
-      `;
-      const existingCoMap = new Map(existingCoRows.map(r => [r.keyword.toLowerCase(), r]));
-
-      const coTagsToScrape = topDiscoveredTags.filter(tag => {
-        const row = existingCoMap.get(tag);
-        return !(row && row.last_evaluated_at && (Date.now() - new Date(row.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && row.competition_level !== 'Engellendi / Hata' && row.competition_level !== 'Taranacak');
-      });
-
-      if (coTagsToScrape.length > 0) {
-        await Promise.allSettled(
-          coTagsToScrape.map(async (coTag) => {
-            const existingCo = existingCoMap.get(coTag);
-            try {
-              const coScraped = await scrapeEtsyKeywordData(coTag, scrapeOptions);
-              const coId = existingCo?.id || crypto.randomUUID();
-              const coCharLen = coTag.length;
-              const coTagOk = coCharLen <= 20;
-
-              await sql`
-                INSERT INTO keyword_pool (
-                  id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-                  competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-                  char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-                  last_evaluated_at, created_at
-                )
-                VALUES (
-                  ${coId}, ${coTag}, ${existingCo ? (existingCo.usage_count || 1) + 1 : 1},
-                  ${coScraped.opportunityScore}, ${coScraped.opportunityScore}, ${coScraped.totalListings},
-                  ${coScraped.competitionLevel}, ${coScraped.bestsellerCount}, ${coScraped.isEtsySuggested},
-                  ${coScraped.autocompleteRank}, ${coCharLen}, ${coTagOk}, ${coScraped.avgPrice},
-                  ${coScraped.scrapeError},
-                  ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
-                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-                ON CONFLICT (keyword) DO UPDATE
-                SET 
-                  usage_count = keyword_pool.usage_count + 1,
-                  etsy_score = ${coScraped.opportunityScore},
-                  opportunity_score = ${coScraped.opportunityScore},
-                  total_listings = ${coScraped.totalListings},
-                  competition_level = ${coScraped.competitionLevel},
-                  bestseller_count = ${coScraped.bestsellerCount},
-                  is_etsy_suggested = ${coScraped.isEtsySuggested},
-                  autocomplete_rank = ${coScraped.autocompleteRank},
-                  char_length = ${coCharLen},
-                  tag_eligible = ${coTagOk},
-                  avg_price = ${coScraped.avgPrice},
-                  last_scrape_error = ${coScraped.scrapeError},
-                  raw_metrics = ${JSON.stringify({ ...coScraped.rawMetrics, source: 'competitor_co_occurring_tag' })}::jsonb,
-                  last_evaluated_at = CURRENT_TIMESTAMP
-              `;
-            } catch (coErr: any) {
-              console.warn(`Evaluation error for co-occurring tag "${coTag}":`, coErr.message);
-            }
-          })
-        );
+      for (const coTag of topDiscoveredTags) {
+        const charLen = coTag.length;
+        const tagOk = charLen <= 20;
+        try {
+          await sql`
+            INSERT INTO keyword_pool (
+              id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+              competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+              char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+              last_evaluated_at, created_at
+            )
+            VALUES (
+              ${crypto.randomUUID()}, ${coTag}, 1,
+              0, 0, 0,
+              'Taranacak', 0, false,
+              0, ${charLen}, ${tagOk}, 0,
+              null, '{"source":"competitor_tag"}'::jsonb,
+              CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (keyword) DO NOTHING;
+          `;
+        } catch (e) {}
       }
     }
 
