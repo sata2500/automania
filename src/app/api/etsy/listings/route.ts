@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureUserEtsyListingsTable } from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   try {
     await ensureUserEtsyListingsTable();
 
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
@@ -244,7 +244,7 @@ export async function POST(req: Request) {
   try {
     await ensureUserEtsyListingsTable();
 
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }

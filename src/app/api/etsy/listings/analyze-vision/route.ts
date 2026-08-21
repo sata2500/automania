@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -129,7 +129,7 @@ Return ONLY valid JSON matching this schema. No markdown backticks, no explanati
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }

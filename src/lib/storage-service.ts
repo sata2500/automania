@@ -43,7 +43,6 @@ export interface AppDataPayload {
   activeFolderId: string | null;
   selectedMockupId: string | null;
   activeDesignFolderId?: string | null;
-  openRouterKey?: string;
   modelVision?: string;
   modelReasoning?: string;
   modelGeneration?: string;
@@ -65,7 +64,7 @@ export interface AppDataPayload {
 export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
   const userId = getCurrentUserId();
   try {
-    const res = await fetch(`/api/storage?userId=${userId}`);
+    const res = await fetch('/api/storage');
     if (res.ok) {
       const serverData = await res.json();
       if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
@@ -84,7 +83,6 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           activeFolderId: activeFolderId ?? serverData.activeFolderId ?? null,
           selectedMockupId: selectedMockupId ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
           activeDesignFolderId: activeDesignFolderId ?? null,
-          openRouterKey: serverData.openRouterKey,
           modelVision: serverData.modelVision,
           modelReasoning: serverData.modelReasoning,
           modelGeneration: serverData.modelGeneration,
@@ -100,10 +98,6 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
         // Write the fresh server data back to local IndexedDB
         await saveToIndexedDB(payload);
 
-        // Also update local storage caches for AI keys
-        if (serverData.openRouterKey) {
-          try { localStorage.setItem('automania_openrouter_api_key', serverData.openRouterKey); } catch {}
-        }
         if (serverData.modelVision) {
           try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
         }
@@ -259,8 +253,7 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
       set(keys.HAS_INITIALIZED, true),
     ]);
 
-    const query = userId ? `?userId=${userId}` : '';
-    await fetch(`/api/storage${query}`, { method: 'DELETE' }).catch(() => {});
+    await fetch('/api/storage', { method: 'DELETE' }).catch(() => {});
   } catch (err) {
     console.error('Failed to clear storage:', err);
   }

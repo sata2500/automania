@@ -1,11 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
@@ -15,11 +15,25 @@ export async function GET(req: NextRequest) {
     const state = searchParams.get('state');
     const error = searchParams.get('error');
 
-    const returnUrl = req.cookies.get('etsy_return_to')?.value || '/admin';
+    const requestedReturnUrl = req.cookies.get('etsy_return_to')?.value || '/admin';
+    const requestOrigin = new URL(req.url).origin;
+    const getSafeReturnPath = (value: string): string => {
+      try {
+        const parsed = new URL(value, req.url);
+        if (parsed.origin !== requestOrigin) return '/admin';
+        if (!parsed.pathname.startsWith('/')) return '/admin';
+        return `${parsed.pathname}${parsed.search}`;
+      } catch {
+        return '/admin';
+      }
+    };
+    const returnPath = getSafeReturnPath(requestedReturnUrl);
     const getRedirectUrl = (query: string) => {
-      const targetUrl = new URL(returnUrl, req.url);
-      const [key, val] = query.split('=');
-      targetUrl.searchParams.set(key, val);
+      const targetUrl = new URL(returnPath, req.url);
+      const separator = query.indexOf('=');
+      if (separator > 0) {
+        targetUrl.searchParams.set(query.slice(0, separator), query.slice(separator + 1));
+      }
       return targetUrl;
     };
 

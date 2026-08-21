@@ -110,7 +110,7 @@ export async function POST(request: Request) {
         name: userName,
         email: cleanEmail,
         role: finalRole,
-        status: 'active',
+        status: 'active' as const,
         provider: userProvider,
         avatarUrl: finalAvatar || null,
       };

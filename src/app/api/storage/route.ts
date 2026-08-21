@@ -2,17 +2,15 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { userWorkspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const session = await getSession();
-    const userId = session?.id || searchParams.get('userId');
-
-    if (!userId) {
-       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.id;
 
     const rows = await db.select().from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
 
@@ -39,7 +37,6 @@ export async function GET(request: Request) {
       folders: data.folders || [],
       activeFolderId: data.activeFolderId,
       selectedMockupId: data.selectedMockupId,
-      openRouterKey: data.openrouterKey || null,
       modelVision: parsedModels.vision || null,
       modelReasoning: parsedModels.reasoning || null,
       modelGeneration: parsedModels.generation || null,
@@ -59,14 +56,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const session = await getSession();
-    const body = await request.json();
-    const userId = session?.id || body.userId || searchParams.get('userId');
-
-    if (!userId) {
-       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const body = await request.json();
+    const userId = session.id;
 
     const hasMockups = Array.isArray(body.mockups);
     const hasDesigns = Array.isArray(body.designs);
@@ -79,7 +74,6 @@ export async function POST(request: Request) {
     const foldersJson = body.folders || [];
     const activeFolderId = body.activeFolderId || null;
     const selectedMockupId = body.selectedMockupId || null;
-    const openRouterKey = body.openRouterKey || null;
     const etsyProductTypes = body.etsyProductTypes || null;
     const etsyUserNotes = body.etsyUserNotes || null;
     const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
@@ -127,7 +121,6 @@ export async function POST(request: Request) {
       folders: foldersJson,
       activeFolderId,
       selectedMockupId,
-      openrouterKey: openRouterKey,
       openrouterModel: openRouterModel,
       etsyProductTypes,
       etsyUserNotes,
@@ -146,7 +139,6 @@ export async function POST(request: Request) {
     if (hasFolders) updateData.folders = foldersJson;
     if (activeFolderId !== undefined) updateData.activeFolderId = activeFolderId;
     if (selectedMockupId !== undefined) updateData.selectedMockupId = selectedMockupId;
-    if (openRouterKey !== undefined) updateData.openrouterKey = openRouterKey;
     if (openRouterModel !== undefined) updateData.openrouterModel = openRouterModel;
     if (hasProductTypes) updateData.etsyProductTypes = etsyProductTypes;
     if (hasUserNotes) updateData.etsyUserNotes = etsyUserNotes;
@@ -179,13 +171,11 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const session = await getSession();
-    const userId = session?.id || searchParams.get('userId');
-
-    if (!userId) {
-       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userId = session.id;
     
     await db.insert(userWorkspaces)
       .values({

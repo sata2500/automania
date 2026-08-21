@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
@@ -159,7 +159,7 @@ export async function POST(request: Request) {
     }
 
     // 1. Session ve Workspace Ayarlarını Çek
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
 
     const workspaceRows = await sql`
       SELECT user_id, etsy_shop_id, etsy_access_token, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 

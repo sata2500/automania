@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,12 +8,13 @@ export const dynamic = 'force-dynamic';
  * Lightweight endpoint that returns only the last updated timestamp for a user's workspace.
  * Used by clients for efficient real-time sync polling — avoids fetching full payload every 5s.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    // Prefer authenticated session; fallback to query param for backwards-compat
-    const session = await getSession();
-    const userId = session?.id || searchParams.get('userId') || 'default_guest';
+    const session = await getAuthoritativeSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = session.id;
 
     const rows = await sql`
       SELECT EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_at_ms
