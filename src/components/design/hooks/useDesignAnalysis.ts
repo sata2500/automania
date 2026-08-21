@@ -30,7 +30,14 @@ export function useDesignAnalysis({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ src: design.src, name: design.name }),
         });
-        const data = await res.json();
+        
+        let data: any;
+        const rawText = await res.text();
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(rawText ? (rawText.length > 200 ? rawText.substring(0, 200) + '...' : rawText) : `Sunucu yanıt vermedi (HTTP ${res.status})`);
+        }
 
         if (data.success && data.analysis) {
           const updatedAnalysis = data.analysis;
@@ -51,7 +58,7 @@ export function useDesignAnalysis({
         }
       } catch (e: any) {
         console.error('Tasarım analiz hatası:', e);
-        toast.error('Analiz işlemi sırasında sunucu hatası oluştu.');
+        toast.error(`Analiz hatası: ${e.message || 'Sunucu hatası oluştu.'}`);
       } finally {
         setAnalyzingIds((prev) => prev.filter((id) => id !== designId));
       }
