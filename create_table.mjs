@@ -39,7 +39,6 @@ async function main() {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_api_key VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS scraping_provider VARCHAR(100) DEFAULT 'scraperapi'`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS cloudflare_worker_url VARCHAR(500)`;
-    await sql`UPDATE user_workspaces SET cloudflare_worker_url = 'https://automania-etsy-proxy.salihtanriseven25.workers.dev'`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_verifier VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_state VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_refresh_token VARCHAR(500)`;
@@ -120,7 +119,8 @@ async function main() {
     
     console.log('Table keyword_pool updated with new columns successfully.');
   } catch (error) {
-    console.error('Error creating/updating table:', error);
+    console.error('Error creating/updating table:', error instanceof Error ? error.message : 'unknown error');
+    process.exitCode = 1;
   }
 }
 
