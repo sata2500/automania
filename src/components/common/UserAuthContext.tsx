@@ -184,7 +184,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           name: name.charAt(0).toUpperCase() + name.slice(1),
           email: cleanEmail,
           avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanEmail)}`,
-          provider: 'google',
+          provider: 'demo',
           role: 'user',
         };
 

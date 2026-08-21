@@ -168,12 +168,12 @@ async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeTy
 
 export async function POST(request: Request) {
   try {
-    const { src } = await request.json();
-
     const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { src } = await request.json();
 
     const rateLimit = consumeRateLimit(`ai:design-analyze:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {

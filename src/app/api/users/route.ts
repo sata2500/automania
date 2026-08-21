@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
-import { requireAdmin, setSessionCookie } from '@/lib/auth-server';
+import { getAuthoritativeSession, requireAdmin, setSessionCookie } from '@/lib/auth-server';
 
 // Ensure table exists on first request
 async function ensureUsersTable() {
@@ -19,7 +19,7 @@ async function ensureUsersTable() {
       )
     `;
     // Note: First admin must be seeded via: npm run seed-admin
-  } catch (err) {}
+  } catch {}
 }
 
 export async function GET() {
@@ -37,14 +37,13 @@ export async function GET() {
       ORDER BY created_at DESC
     `;
     return NextResponse.json({ success: true, users: rows });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ success: false, users: [] }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    await ensureUsersTable();
     const body = await request.json();
     const { action, id, name, email, role, status, provider, avatarUrl } = body;
 
@@ -67,16 +66,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // Default action: Login Upsert (used primarily for Demo login and initial session sync)
-    if (email) {
+    // Default action: sync an already authenticated OAuth session, or allow the
+    // explicitly marked demo flow only outside production. A caller cannot mint a
+    // session for an arbitrary email/id pair by posting directly to this route.
+    if (typeof email === 'string' && email.trim()) {
       const cleanEmail = email.toLowerCase().trim();
+      const userProvider = provider || 'google';
+      const session = await getAuthoritativeSession();
+      const isSessionSync = Boolean(
+        session &&
+        typeof id === 'string' &&
+        session.id === id &&
+        session.email.toLowerCase() === cleanEmail
+      );
+      const isDevelopmentDemoLogin = process.env.NODE_ENV !== 'production' && userProvider === 'demo';
+
+      if (!isSessionSync && !isDevelopmentDemoLogin) {
+        return NextResponse.json({ success: false, message: 'Geçerli bir OAuth oturumu gerekiyor.' }, { status: 401 });
+      }
+
+      await ensureUsersTable();
       const userId = id || 'user-' + btoa(cleanEmail).replace(/=/g, '').toLowerCase();
       const userName = name || cleanEmail.split('@')[0];
       // Role is always driven by the database — no hardcoded email checks.
       // New users always start as 'user'. Promotion to admin is done via the Admin Dashboard.
       const userRole: 'admin' | 'user' = 'user';
-      const userProvider = provider || 'google';
-
       // Check existing status
       const existing = await sql`SELECT role, status, avatar_url FROM users WHERE email = ${cleanEmail}`;
       
@@ -125,8 +139,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: false, message: 'Geçersiz parametreler.' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Unknown users error' }, { status: 500 });
   }
 }
 
@@ -148,7 +162,7 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: false, message: 'ID eksik.' }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Unknown users error' }, { status: 500 });
   }
 }
