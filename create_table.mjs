@@ -72,6 +72,40 @@ async function main() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        resource_type VARCHAR(100),
+        resource_id VARCHAR(255),
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_created ON audit_logs(user_id, created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created ON audit_logs(action, created_at)`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS job_runs (
+        id VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        job_type VARCHAR(100) NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'queued',
+        idempotency_key VARCHAR(255),
+        request_hash VARCHAR(128),
+        progress JSONB NOT NULL DEFAULT '{"completed":0,"total":0}'::jsonb,
+        result JSONB NOT NULL DEFAULT '{}'::jsonb,
+        error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        started_at TIMESTAMP,
+        finished_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_runs_user_idempotency ON job_runs(user_id, idempotency_key)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_job_runs_status ON job_runs(status)`;
+
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS total_listings INT DEFAULT 0`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS competition_level VARCHAR(50) DEFAULT 'Henüz Taranmadı'`;
     await sql`ALTER TABLE keyword_pool ADD COLUMN IF NOT EXISTS bestseller_count INT DEFAULT 0`;
