@@ -15,6 +15,15 @@ import { writeAuditLog } from '@/lib/audit-log';
 export const maxDuration = 60;
 const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
 
+type EtsyVariationInput = {
+  sku?: string;
+  size?: string;
+  color?: string;
+  price?: number | string;
+  quantity?: number;
+  enabled?: boolean;
+};
+
 async function loadMediaBlob(userId: string, urlOrPath: string): Promise<Blob | null> {
   if (!urlOrPath) return null;
   try {
@@ -43,7 +52,7 @@ async function loadMediaBlob(userId: string, urlOrPath: string): Promise<Blob | 
             const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp')).split(';')[0].trim();
             return new Blob([Buffer.from(bytes)], { type: mimeType });
           }
-        } catch (r2Err) {
+        } catch {
           console.warn('[Etsy Publish] Direct R2 get failed; local fallback will be attempted.');
         }
       }
@@ -269,7 +278,6 @@ export async function POST(req: Request) {
     const listingId = listingData.listing_id;
 
     // Update dynamic taxonomy properties if provided
-    let propertiesUpdatedCount = 0;
     const uploadErrors: string[] = [];
     if (listingId && taxonomy_properties_values && Object.keys(taxonomy_properties_values).length > 0) {
       for (const [propId, valueIds] of Object.entries(taxonomy_properties_values)) {
@@ -284,14 +292,12 @@ export async function POST(req: Request) {
               },
               body: JSON.stringify({ value_ids: valueIds, values: [] })
             });
-            if (propRes.ok) {
-              propertiesUpdatedCount++;
-            } else {
+            if (!propRes.ok) {
               const err = await propRes.text();
               uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err}`);
             }
-          } catch (err: any) {
-            uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err.message}`);
+          } catch (err: unknown) {
+            uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err instanceof Error ? err.message : 'unknown error'}`);
           }
         }
       }
@@ -301,7 +307,7 @@ export async function POST(req: Request) {
     let variationsUpdated = false;
     if (listingId && Array.isArray(variations) && variations.length > 0) {
       try {
-        const productsPayload = variations.map((v: any, idx: number) => ({
+        const productsPayload = (variations as EtsyVariationInput[]).map((v) => ({
           ...(v.sku ? { sku: v.sku } : (sku ? { sku: sku } : {})),
           property_values: [
             { property_id: 513, property_name: 'Size', values: [v.size || 'M'] },
@@ -338,8 +344,8 @@ export async function POST(req: Request) {
           const invErr = await invRes.text();
           uploadErrors.push(`Varyasyon hatası: ${invErr}`);
         }
-      } catch (err: any) {
-        uploadErrors.push(`Varyasyon hatası: ${err.message}`);
+      } catch (err: unknown) {
+        uploadErrors.push(`Varyasyon hatası: ${err instanceof Error ? err.message : 'unknown error'}`);
       }
     }
 
@@ -410,10 +416,9 @@ export async function POST(req: Request) {
             imagesUploaded++;
             console.log(`[Etsy Upload] Image ${imgIndex}/${imageItems.length} uploaded: ${filename}`);
           } else {
-            const errText = await imgRes.text();
             uploadErrors.push(`Image ${imgIndex}: yükleme başarısız (HTTP ${imgRes.status}).`);
           }
-        } catch (err: any) {
+        } catch {
           uploadErrors.push(`Image ${imgIndex}: yükleme sırasında beklenmeyen hata.`);
         }
       }
@@ -465,7 +470,6 @@ export async function POST(req: Request) {
             const vidData = await vidRes.json();
             console.log(`[Etsy Upload] Video ${vidIndex} uploaded successfully:`, vidData);
           } else {
-            const errText = await vidRes.text();
             uploadErrors.push(`Video ${vidIndex}: yükleme başarısız (HTTP ${vidRes.status}).`);
           }
 
@@ -474,7 +478,7 @@ export async function POST(req: Request) {
             console.log(`[Etsy Upload] Waiting 5 seconds before next video...`);
             await new Promise(resolve => setTimeout(resolve, 5000));
           }
-        } catch (err: any) {
+        } catch {
           uploadErrors.push(`Video ${vidIndex}: yükleme sırasında beklenmeyen hata.`);
         }
       }
