@@ -1,38 +1,133 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import sql from '@/lib/db';
 import { getSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
 
 export const maxDuration = 60;
 
 async function loadMediaBlob(urlOrPath: string): Promise<Blob | null> {
+  if (!urlOrPath) return null;
   try {
+    // 1. Data URL (Base64)
     if (urlOrPath.startsWith('data:')) {
-      const base64Data = urlOrPath.split(',')[1];
+      const parts = urlOrPath.split(',');
+      const base64Data = parts[1];
       const buffer = Buffer.from(base64Data, 'base64');
-      const mimeType = urlOrPath.split(';')[0].split(':')[1] || 'image/webp';
+      const mimeType = urlOrPath.split(';')[0].split(':')[1] || 'image/png';
       return new Blob([buffer], { type: mimeType });
     }
-    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
-      const response = await fetch(urlOrPath);
-      if (!response.ok) return null;
-      return await response.blob();
+
+    // 2. Cloudflare R2 Proxy Path (/api/r2/...) or raw R2 key
+    if (urlOrPath.startsWith('/api/r2/') || urlOrPath.startsWith('api/r2/')) {
+      const key = extractKeyFromUrlOrKey(urlOrPath);
+      if (isR2Configured() && key) {
+        try {
+          const client = getR2Client();
+          const bucket = getBucketName();
+          const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+          if (res.Body) {
+            const bytes = await res.Body.transformToByteArray();
+            const ext = path.extname(key).toLowerCase();
+            const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp')).split(';')[0].trim();
+            return new Blob([Buffer.from(bytes)], { type: mimeType });
+          }
+        } catch (r2Err) {
+          console.warn('[Etsy Publish] Direct R2 get failed, trying local fallback:', r2Err);
+        }
+      }
+
+      // Local fallback in .data/uploads
+      const localFallbackPath = path.join(process.cwd(), '.data', 'uploads', path.basename(key));
+      if (fsSync.existsSync(localFallbackPath)) {
+        const buffer = await fs.readFile(localFallbackPath);
+        const ext = path.extname(key).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+        return new Blob([buffer], { type: mimeType });
+      }
     }
+
+    // 3. Local Uploads (/api/uploads/...)
     if (urlOrPath.startsWith('/api/uploads/')) {
       const filename = path.basename(urlOrPath);
       const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
-      const buffer = await fs.readFile(filePath);
-      const ext = path.extname(filename).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
-      return new Blob([buffer], { type: mimeType });
+      if (fsSync.existsSync(filePath)) {
+        const buffer = await fs.readFile(filePath);
+        const ext = path.extname(filename).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+        return new Blob([buffer], { type: mimeType });
+      }
     }
+
+    // 4. Sample Uploads (/sample-uploads/...)
     if (urlOrPath.startsWith('/sample-uploads/')) {
       const rel = urlOrPath.replace('/sample-uploads/', '');
       const filePath = path.join(process.cwd(), 'public', 'sample-uploads', rel);
-      const buffer = await fs.readFile(filePath);
-      return new Blob([buffer], { type: 'image/webp' });
+      if (fsSync.existsSync(filePath)) {
+        const buffer = await fs.readFile(filePath);
+        const ext = path.extname(rel).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+        return new Blob([buffer], { type: mimeType });
+      }
+    }
+
+    // 5. Generic Local Path (starts with /)
+    if (urlOrPath.startsWith('/')) {
+      const cleanPath = urlOrPath.split('?')[0];
+      const filename = path.basename(cleanPath);
+      
+      const dataUploadsPath = path.join(process.cwd(), '.data', 'uploads', filename);
+      if (fsSync.existsSync(dataUploadsPath)) {
+        const buffer = await fs.readFile(dataUploadsPath);
+        const ext = path.extname(filename).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+        return new Blob([buffer], { type: mimeType });
+      }
+
+      const publicPath = path.join(process.cwd(), 'public', cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
+      if (fsSync.existsSync(publicPath)) {
+        const buffer = await fs.readFile(publicPath);
+        const ext = path.extname(cleanPath).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp';
+        return new Blob([buffer], { type: mimeType });
+      }
+    }
+
+    // 6. Remote URL (http:// or https://)
+    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+      if (isR2Configured()) {
+        try {
+          const key = extractKeyFromUrlOrKey(urlOrPath);
+          if (key) {
+            const client = getR2Client();
+            const bucket = getBucketName();
+            const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+            if (res.Body) {
+              const bytes = await res.Body.transformToByteArray();
+              const ext = path.extname(key).toLowerCase();
+              const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.mp4' ? 'video/mp4' : 'image/webp')).split(';')[0].trim();
+              return new Blob([Buffer.from(bytes)], { type: mimeType });
+            }
+          }
+        } catch {}
+      }
+
+      const response = await fetch(urlOrPath);
+      if (response.ok) {
+        return await response.blob();
+      }
+    }
+
+    // 7. Raw Base64 string
+    if (urlOrPath.length > 100 && !urlOrPath.startsWith('http') && !urlOrPath.startsWith('/')) {
+      const buffer = Buffer.from(urlOrPath.replace(/\s+/g, ''), 'base64');
+      if (buffer.length > 50) {
+        return new Blob([buffer], { type: 'image/png' });
+      }
     }
   } catch (err) {
     console.warn('[Etsy Publish] Failed to load media blob for:', urlOrPath, err);
@@ -268,8 +363,9 @@ export async function POST(req: Request) {
             continue;
           }
 
-          const ext = blob.type.split('/')[1] || 'webp';
-          const filename = `mockup-${uniqueId}.${ext}`;
+          let fileExt = (blob.type.split('/')[1] || 'jpeg').toLowerCase();
+          if (fileExt === 'webp') fileExt = 'jpeg';
+          const filename = `mockup-${uniqueId}.${fileExt}`;
 
           const formData = new FormData();
           formData.append('image', blob, filename);
