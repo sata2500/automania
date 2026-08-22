@@ -4,6 +4,21 @@ import { userWorkspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 
+function hasTemporaryMediaUrl(value: unknown): boolean {
+  return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
+}
+
+function payloadContainsTemporaryMedia(body: Record<string, unknown>): boolean {
+  const mockups = Array.isArray(body.mockups) ? body.mockups : [];
+  const designs = Array.isArray(body.designs) ? body.designs : [];
+  const generatedMockups = Array.isArray(body.etsyGeneratedMockups) ? body.etsyGeneratedMockups : [];
+  return [
+    ...mockups.map((item) => item && typeof item === 'object' ? (item as Record<string, unknown>).src : undefined),
+    ...designs.map((item) => item && typeof item === 'object' ? (item as Record<string, unknown>).src : undefined),
+    ...generatedMockups.map((item) => item && typeof item === 'object' ? (item as Record<string, unknown>).previewUrl : undefined),
+  ].some(hasTemporaryMediaUrl);
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getAuthoritativeSession();
@@ -60,8 +75,16 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const body = await request.json();
+    const body = await request.json() as Record<string, unknown>;
     const userId = session.id;
+
+    if (payloadContainsTemporaryMedia(body)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Geçici medya URL’si kaydedilemez. Dosyayı kalıcı depolamaya yeniden yükleyin.',
+        code: 'TEMPORARY_MEDIA_URL',
+      }, { status: 422 });
+    }
 
     const hasMockups = Array.isArray(body.mockups);
     const hasDesigns = Array.isArray(body.designs);
@@ -94,7 +117,9 @@ export async function POST(request: Request) {
       generation: body.modelGeneration || null
     }) : null;
 
-    const lastKnownServerTimestamp = body.lastKnownServerTimestamp || null;
+    const lastKnownServerTimestamp = typeof body.lastKnownServerTimestamp === 'number' && Number.isFinite(body.lastKnownServerTimestamp)
+      ? body.lastKnownServerTimestamp
+      : null;
 
     // 1. Optimistic Concurrency Control
     if (lastKnownServerTimestamp) {

@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { setSessionCookie } from '@/lib/auth-server';
+import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
+  const origin = getCanonicalAppOrigin(requestUrl, process.env.NEXT_PUBLIC_APP_URL);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 

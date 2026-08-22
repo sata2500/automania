@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,10 +17,11 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get('error');
 
     const requestedReturnUrl = req.cookies.get('etsy_return_to')?.value || '/admin';
-    const requestOrigin = new URL(req.url).origin;
+    const canonicalOrigin = getCanonicalAppOrigin(req.url, process.env.NEXT_PUBLIC_APP_URL);
+    const requestOrigin = new URL(canonicalOrigin).origin;
     const getSafeReturnPath = (value: string): string => {
       try {
-        const parsed = new URL(value, req.url);
+        const parsed = new URL(value, canonicalOrigin);
         if (parsed.origin !== requestOrigin) return '/admin';
         if (!parsed.pathname.startsWith('/')) return '/admin';
         return `${parsed.pathname}${parsed.search}`;
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
     };
     const returnPath = getSafeReturnPath(requestedReturnUrl);
     const getRedirectUrl = (query: string) => {
-      const targetUrl = new URL(returnPath, req.url);
+      const targetUrl = new URL(returnPath, canonicalOrigin);
       const separator = query.indexOf('=');
       if (separator > 0) {
         targetUrl.searchParams.set(query.slice(0, separator), query.slice(separator + 1));
@@ -80,8 +82,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(getRedirectUrl(`etsy_error=missing_api_key`));
     }
 
-    const url = new URL(req.url);
-    const redirectUri = `${url.protocol}//${url.host}/api/etsy/callback`;
+    const redirectUri = `${canonicalOrigin}/api/etsy/callback`;
 
     // 4. Exchange authorization code for access token
     const tokenRes = await fetch('https://api.etsy.com/v3/public/oauth/token', {
@@ -99,13 +100,20 @@ export async function GET(req: NextRequest) {
     });
 
     if (!tokenRes.ok) {
-      const errorText = await tokenRes.text();
-      console.error("Etsy Token Exchange Error:", errorText);
+      console.error('[Etsy OAuth] Token exchange failed', { status: tokenRes.status });
       return NextResponse.redirect(getRedirectUrl(`etsy_error=token_exchange_failed`));
     }
 
     const tokenData = await tokenRes.json();
     const { access_token, refresh_token, expires_in } = tokenData;
+    if (
+      typeof access_token !== 'string' || access_token.length === 0 ||
+      typeof refresh_token !== 'string' || refresh_token.length === 0 ||
+      typeof expires_in !== 'number' || !Number.isFinite(expires_in) || expires_in <= 0
+    ) {
+      console.error('[Etsy OAuth] Token exchange returned an invalid response');
+      return NextResponse.redirect(getRedirectUrl(`etsy_error=token_exchange_failed`));
+    }
 
     // Calculate expiration timestamp
     const expiresAt = new Date(Date.now() + expires_in * 1000);
@@ -127,7 +135,7 @@ export async function GET(req: NextRequest) {
         const meData = await meRes.json();
         shopId = meData.shop_id || (meData.results && meData.results[0]?.shop_id) || null;
       } else {
-        console.warn("Failed to fetch shop ID:", await meRes.text());
+          console.warn('[Etsy OAuth] Shop lookup failed', { status: meRes.status });
       }
     }
 
@@ -151,8 +159,8 @@ export async function GET(req: NextRequest) {
     
     return response;
 
-  } catch (error: any) {
-    console.error('Etsy Callback Route Error:', error);
+  } catch {
+    console.error('[Etsy OAuth] Callback failed');
     // Fallback to absolute admin path if cookies or request URL fail
     return NextResponse.redirect(new URL(`/admin?etsy_error=internal_error`, req.url));
   }

@@ -357,7 +357,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       if (!selectedMockup) return;
       try {
         const oldSrc = selectedMockup.src;
-        const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
+        const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp', { requireDurable: true });
         if (oldSrc && oldSrc !== serverUrl) {
           deleteBlobs([oldSrc]);
         }

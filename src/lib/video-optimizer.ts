@@ -79,7 +79,7 @@ export async function optimizeVideoFile(
         try {
           if (onProgress) onProgress(100);
           const dataUrl = await blobToDataUrl(compressedFile);
-          const serverUrl = await uploadMediaToServer(dataUrl, 'video/webm');
+          const serverUrl = await uploadMediaToServer(compressedFile, 'video/webm');
           resolve({
             dataUrl: serverUrl || dataUrl,
             url: serverUrl || dataUrl,
@@ -127,7 +127,7 @@ export async function optimizeVideoFile(
         .then(async (ffmpegFile) => {
           try {
             const dataUrl = await blobToDataUrl(ffmpegFile);
-            const serverUrl = await uploadMediaToServer(dataUrl, 'video/mp4');
+            const serverUrl = await uploadMediaToServer(ffmpegFile, 'video/mp4');
             resolve({
               dataUrl: serverUrl || dataUrl,
               url: serverUrl || dataUrl,

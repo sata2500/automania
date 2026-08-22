@@ -11,6 +11,7 @@ export interface OptimizedImageResult {
   height: number;
   originalSize: number;
   optimizedSize: number;
+  mimeType: string;
 }
 
 export function blobToDataUrl(blob: Blob | File): Promise<string> {
@@ -27,9 +28,14 @@ export function blobToDataUrl(blob: Blob | File): Promise<string> {
  * Uses direct FormData server upload first, with Base64 JSON fallbacks.
  * Returns the public or local URL.
  */
+export interface UploadMediaOptions {
+  requireDurable?: boolean;
+}
+
 export async function uploadMediaToServer(
   dataUrlOrFile: string | File,
-  mimeType?: string
+  mimeType?: string,
+  options: UploadMediaOptions = {},
 ): Promise<string> {
   if (
     typeof dataUrlOrFile === 'string' &&
@@ -90,7 +96,7 @@ export async function uploadMediaToServer(
 
       if (uploadRes.ok) {
         const json = await uploadRes.json();
-        if (json.url) return json.url;
+        if (json.url && (!options.requireDurable || json.durable === true)) return json.url;
       }
     } catch (formErr) {
       console.warn('[uploadMediaToServer] FormData direct upload failed, trying fallback:', formErr);
@@ -110,11 +116,15 @@ export async function uploadMediaToServer(
         });
         if (jsonRes.ok) {
           const json = await jsonRes.json();
-          if (json.url) return json.url;
+          if (json.url && (!options.requireDurable || json.durable === true)) return json.url;
         }
       } catch (jsonErr) {
         console.warn('[uploadMediaToServer] Base64 fallback upload failed:', jsonErr);
       }
+    }
+
+    if (options.requireDurable) {
+      throw new Error('Kalıcı medya depolaması kullanılamıyor. R2 bağlantısını kontrol edip tekrar deneyin.');
     }
 
     // Method 3: Safety Net (Offline/Local preview fallback so user never loses their data)
@@ -125,15 +135,18 @@ export async function uploadMediaToServer(
       return dataUrlOrFile;
     }
     return URL.createObjectURL(fileToUpload);
-  } catch (err: any) {
-    console.error('[uploadMediaToServer] Critical upload error:', err);
+  } catch (err: unknown) {
+    console.error('[uploadMediaToServer] Critical upload error:', err instanceof Error ? err.message : 'unknown error');
+    if (options.requireDurable) {
+      throw err instanceof Error ? err : new Error('Kalıcı medya depolaması kullanılamıyor.');
+    }
     if (rawDataUrl) {
       return rawDataUrl;
     }
     if (typeof dataUrlOrFile === 'string') {
       return dataUrlOrFile;
     }
-    throw new Error(err.message || 'Dosya kaydedilemedi.');
+    throw new Error(err instanceof Error ? err.message : 'Dosya kaydedilemedi.');
   }
 }
 
@@ -185,7 +198,7 @@ export async function optimizeMockupImage(
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
   // Upload optimized binary image to server API
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, mime);
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, mime, { requireDurable: true });
 
   return {
     dataUrl: optimizedDataUrl,
@@ -194,6 +207,7 @@ export async function optimizeMockupImage(
     height,
     originalSize,
     optimizedSize,
+    mimeType: mime,
   };
 }
 
@@ -247,8 +261,8 @@ export async function optimizeDesignImage(
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload to storage / server API
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime);
+  // Upload optimized binary design to server API
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime, { requireDurable: true });
 
   return {
     dataUrl: optimizedDataUrl,
@@ -257,6 +271,7 @@ export async function optimizeDesignImage(
     height,
     originalSize,
     optimizedSize,
+    mimeType: finalMime,
   };
 }
 

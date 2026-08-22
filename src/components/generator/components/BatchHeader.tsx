@@ -3,11 +3,8 @@
 import React from 'react';
 import { UserProfile } from '@/components/common/UserAuthContext';
 import { Sparkles, RefreshCw, Play, FileArchive, CloudUpload, Trash2 } from 'lucide-react';
-import { BatchAspectRatioSelector, AspectRatioType } from './BatchAspectRatioSelector';
 
 interface BatchHeaderProps {
-  aspectOverride: AspectRatioType;
-  setAspectOverride: (val: AspectRatioType) => void;
   hasGenerated: boolean;
   isGenerating: boolean;
   canGenerate: boolean;
@@ -21,8 +18,6 @@ interface BatchHeaderProps {
 }
 
 export const BatchHeader: React.FC<BatchHeaderProps> = ({
-  aspectOverride,
-  setAspectOverride,
   hasGenerated,
   isGenerating,
   canGenerate,
@@ -52,18 +47,10 @@ export const BatchHeader: React.FC<BatchHeaderProps> = ({
           </div>
         </div>
 
-        {/* Aspect Ratio Selector on Mobile */}
-        <div className="sm:hidden shrink-0">
-          <BatchAspectRatioSelector value={aspectOverride} onChange={setAspectOverride} />
-        </div>
       </div>
 
-      {/* Action Controls & Aspect Ratio for Desktop */}
+      {/* Action Controls */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Desktop Aspect Ratio Selector */}
-        <div className="hidden sm:block">
-          <BatchAspectRatioSelector value={aspectOverride} onChange={setAspectOverride} />
-        </div>
 
         {hasGenerated && (
           <button

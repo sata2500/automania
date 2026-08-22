@@ -17,19 +17,23 @@ function getMediaUrl(item: EtsyMediaItem): string | null {
   return typeof url === 'string' && url.trim().length > 0 ? url : null;
 }
 
-export function validateEtsyDraftPreflight(input: {
-  state?: unknown;
-  title?: unknown;
-  description?: unknown;
-  tags?: unknown;
-  taxonomyId?: unknown;
-  variations?: unknown;
-  images?: unknown;
-}): string[] {
+export function validateEtsyDraftPreflight(
+  input: {
+    state?: unknown;
+    title?: unknown;
+    description?: unknown;
+    tags?: unknown;
+    taxonomyId?: unknown;
+    variations?: unknown;
+    images?: unknown;
+  },
+  options: { allowActive?: boolean; requirePhoto?: boolean } = {},
+): string[] {
   const errors: string[] = [];
 
-  if (input.state !== undefined && input.state !== 'draft') {
-    errors.push('Etsy güvenlik politikası nedeniyle yalnızca draft listing oluşturulabilir.');
+  const isActive = input.state === 'active';
+  if (input.state !== undefined && input.state !== 'draft' && !(isActive && options.allowActive)) {
+    errors.push('Etsy yayınlama state değeri geçersiz.');
   }
   if (typeof input.title !== 'string' || input.title.trim().length === 0) {
     errors.push('Başlık zorunludur.');
@@ -65,6 +69,9 @@ export function validateEtsyDraftPreflight(input: {
     const photos = input.images.length - videos;
     if (photos > MAX_ETSY_PHOTOS) errors.push(`En fazla ${MAX_ETSY_PHOTOS} fotoğraf yüklenebilir.`);
     if (videos > MAX_ETSY_VIDEOS) errors.push(`En fazla ${MAX_ETSY_VIDEOS} video yüklenebilir.`);
+    if (options.requirePhoto && photos < 1) errors.push('Canlı yayın için en az bir fotoğraf gereklidir.');
+  } else if (options.requirePhoto) {
+    errors.push('Canlı yayın için en az bir fotoğraf gereklidir.');
   }
 
   return errors;

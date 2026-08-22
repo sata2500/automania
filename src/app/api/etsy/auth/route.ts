@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
 
 export async function GET(req: Request) {
   try {
@@ -49,8 +50,7 @@ export async function GET(req: Request) {
     const scopes = ['listings_r', 'listings_w', 'shops_r', 'profile_r'].join(' ');
     
     // We need an absolute URL for redirect_uri.
-    const url = new URL(req.url);
-    const redirectUri = `${url.protocol}//${url.host}/api/etsy/callback`;
+    const redirectUri = `${getCanonicalAppOrigin(req.url, process.env.NEXT_PUBLIC_APP_URL)}/api/etsy/callback`;
 
     const authUrl = new URL('https://www.etsy.com/oauth/connect');
     authUrl.searchParams.append('response_type', 'code');

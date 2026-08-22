@@ -8,6 +8,7 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  Search,
 } from 'lucide-react';
 
 type SampleStats = {
@@ -21,6 +22,12 @@ type DbHealthResult = {
   latencyMs: number;
 };
 
+type StorageDiagnostics = {
+  records?: { mockups?: number; designs?: number; generatedMockups?: number; durable?: number; temporary?: number; other?: number; missing?: number };
+  referencedR2Objects?: number;
+  r2?: { objectCount?: number; totalBytes?: number; orphanObjectCount?: number | null; missingReferencedObjectCount?: number | null };
+};
+
 export type AdminSettingsSectionProps = {
   sampleStats: SampleStats | null;
   isUpdatingSampleData: boolean;
@@ -29,6 +36,9 @@ export type AdminSettingsSectionProps = {
   isTestingDb: boolean;
   dbHealthResult: DbHealthResult | null;
   onTestDatabaseHealth: () => void;
+  storageDiagnostics: StorageDiagnostics | null;
+  isCheckingStorage: boolean;
+  onCheckStorage: () => void;
   onPurgeSystemJunkData: () => void;
 };
 
@@ -40,6 +50,9 @@ export function AdminSettingsSection({
   isTestingDb,
   dbHealthResult,
   onTestDatabaseHealth,
+  storageDiagnostics,
+  isCheckingStorage,
+  onCheckStorage,
   onPurgeSystemJunkData,
 }: AdminSettingsSectionProps) {
   return (
@@ -154,6 +167,24 @@ export function AdminSettingsSection({
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
             PostgreSQL veritabanındaki tüm yetkisiz test kayıtlarını ve çöp artıkları temizler. Sistemdeki hazır demo şablon kütüphanesi olduğu gibi muhafaza edilir.
           </p>
+          <button
+            type="button"
+            onClick={onCheckStorage}
+            disabled={isCheckingStorage}
+            className="w-full py-3 px-4 bg-white dark:bg-slate-900 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-200 dark:border-amber-800/60 disabled:opacity-50"
+          >
+            <Search className={`w-4 h-4 text-amber-500 ${isCheckingStorage ? 'animate-spin' : ''}`} />
+            <span>{isCheckingStorage ? 'Depolama Kontrol Ediliyor...' : 'Depolama Kayıtlarını Doğrula (Silmez)'}</span>
+          </button>
+
+          {storageDiagnostics && (
+            <div role="status" className="p-3 bg-white/80 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+              <p><strong>{storageDiagnostics.referencedR2Objects ?? 0}</strong> R2 nesnesi workspace kayıtlarıyla eşleşiyor; bucket toplamı <strong>{storageDiagnostics.r2?.objectCount ?? 0}</strong>.</p>
+              <p><strong>{storageDiagnostics.r2?.missingReferencedObjectCount ?? 0}</strong> kayıtlı medya nesnesi eksik; <strong>{storageDiagnostics.r2?.orphanObjectCount ?? 0}</strong> nesne workspace dışında görünüyor.</p>
+              <p>Geçici URL: <strong>{storageDiagnostics.records?.temporary ?? 0}</strong> · Kalıcı R2 URL: <strong>{storageDiagnostics.records?.durable ?? 0}</strong>.</p>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onPurgeSystemJunkData}
