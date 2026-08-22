@@ -10,6 +10,7 @@ import {
   Video,
   Image as ImageIcon,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { MockupItem, PrintArea } from '@/types/pod';
 import { MockupItemMenu } from './MockupItemMenu';
@@ -54,6 +55,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
   // Inline Rename State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
+  const [brokenImageIds, setBrokenImageIds] = useState<Set<string>>(() => new Set());
 
   // 3-Dots Context Menu State
   const [menuState, setMenuState] = useState<{
@@ -357,11 +359,22 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
                         <Video className="w-4 h-4 text-white" />
                       </div>
                     </>
+                  ) : brokenImageIds.has(item.id) ? (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-rose-50 dark:bg-rose-950/30 text-rose-500" role="img" aria-label={`${item.name} görseli erişilemiyor`}>
+                      <AlertCircle className="w-4 h-4" aria-hidden="true" />
+                      <span className="px-1 text-center text-[8px] font-semibold leading-tight">Erişilemiyor</span>
+                    </div>
                   ) : (
                     <img
                       src={item.src}
                       alt={item.name}
                       className="w-full h-full object-cover"
+                      onError={() => setBrokenImageIds((previous) => {
+                        if (previous.has(item.id)) return previous;
+                        const next = new Set(previous);
+                        next.add(item.id);
+                        return next;
+                      })}
                     />
                   )}
                 </div>

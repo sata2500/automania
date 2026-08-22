@@ -78,7 +78,7 @@ export async function optimizeVideoFile(
 
         try {
           if (onProgress) onProgress(100);
-          const serverUrl = await uploadMediaToServer(compressedFile, 'video/webm');
+          const serverUrl = await uploadMediaToServer(compressedFile, 'video/webm', { requireDurable: true });
           resolve({
             dataUrl: serverUrl,
             url: serverUrl,
@@ -125,7 +125,7 @@ export async function optimizeVideoFile(
       transcodeWithFFmpeg(file, onProgress)
         .then(async (ffmpegFile) => {
           try {
-            const serverUrl = await uploadMediaToServer(ffmpegFile, 'video/mp4');
+            const serverUrl = await uploadMediaToServer(ffmpegFile, 'video/mp4', { requireDurable: true });
             resolve({
               dataUrl: serverUrl,
               url: serverUrl,

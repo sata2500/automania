@@ -335,10 +335,10 @@ export function useBatchGenerator({
               type: match.isVideo ? 'video/mp4' : 'image/webp',
             });
 
-            persistentUrl = await uploadMediaToServer(file, match.isVideo ? 'video/mp4' : 'image/webp');
+            persistentUrl = await uploadMediaToServer(file, match.isVideo ? 'video/mp4' : 'image/webp', { requireDurable: true });
           } catch (e) {
-            console.warn(`[Save for Etsy] Mockup #${index + 1} upload failed, using local preview fallback:`, e);
-            persistentUrl = match.previewUrl;
+            console.warn(`[Save for Etsy] Mockup #${index + 1} upload failed; durable storage is required:`, e);
+            throw e;
           }
         }
 

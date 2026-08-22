@@ -5,7 +5,7 @@ import { DesignItem, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
-import { uploadMediaToServer } from '@/lib/image-optimizer';
+import { optimizeDesignImage } from '@/lib/image-optimizer';
 import { deleteBlobs } from '@/lib/storage-service';
 
 // Modular Hooks
@@ -203,19 +203,20 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   const handleCropComplete = async (croppedDataUrl: string) => {
     if (!cropTargetDesign) return;
     const oldSrc = cropTargetDesign.src;
-    const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/png');
+    const optimized = await optimizeDesignImage(croppedDataUrl, 2000);
+    const serverUrl = optimized.url || optimized.dataUrl;
     if (oldSrc && oldSrc !== serverUrl) {
       deleteBlobs([oldSrc]);
     }
     setDesigns((prev) =>
       prev.map((d) =>
         d.id === cropTargetDesign.id
-          ? { ...d, src: serverUrl, width: 1500, height: 1500 }
+          ? { ...d, src: serverUrl, width: optimized.width, height: optimized.height }
           : d
       )
     );
     setCropTargetDesign(null);
-    toast.success('Tasarım görseli başarıyla kırpıldı!');
+    toast.success(`Tasarım kırpıldı ve ${optimized.mimeType === 'image/webp' ? 'WebP' : optimized.mimeType} olarak optimize edildi.`);
   };
 
   return (

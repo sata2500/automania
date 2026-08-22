@@ -39,14 +39,14 @@ async function persistUpload(userId: string, originalName: string, mimeType: str
   if (isR2Configured()) {
     try {
       const result = await uploadToR2(buffer, filename, mimeType);
-      return NextResponse.json({ success: true, url: result.url });
+      return NextResponse.json({ success: true, url: result.url, storageProvider: 'r2', durable: true });
     } catch (error) {
       console.error('[Upload Route] R2 upload failed; using local fallback.', error instanceof Error ? error.message : 'unknown error');
     }
   }
 
   const localUrl = await saveFileLocally(filename, buffer);
-  return NextResponse.json({ success: true, url: localUrl });
+  return NextResponse.json({ success: true, url: localUrl, storageProvider: 'local', durable: false });
 }
 
 function parseBase64DataUrl(dataUrl: string): { mimeType: string; base64: string } | null {

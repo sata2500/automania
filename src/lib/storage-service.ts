@@ -3,6 +3,48 @@ import { uploadMediaToServer } from './image-optimizer';
 import { downloadBlob } from './download';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
+function isTemporaryMediaUrl(value: unknown): value is string {
+  return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
+}
+
+function hasTemporaryMediaUrl(payload: AppDataPayload): boolean {
+  return [
+    ...(payload.mockups || []).map((item) => item.src),
+    ...(payload.designs || []).map((item) => item.src),
+    ...(payload.etsyGeneratedMockups || []).map((item) => item.previewUrl),
+  ].some(isTemporaryMediaUrl);
+}
+
+async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ payload: AppDataPayload; changed: boolean }> {
+  let changed = false;
+  const promote = async (value: string, mimeType: string): Promise<string> => {
+    if (!isTemporaryMediaUrl(value)) return value;
+    try {
+      const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: true });
+      if (promotedUrl !== value) changed = true;
+      return promotedUrl;
+    } catch (error) {
+      console.warn('[Workspace] Temporary media promotion skipped:', error instanceof Error ? error.message : 'unknown error');
+      return value;
+    }
+  };
+
+  const mockups = await Promise.all((payload.mockups || []).map(async (item) => ({
+    ...item,
+    src: await promote(item.src, item.isVideo ? 'video/webm' : 'image/webp'),
+  })));
+  const designs = await Promise.all((payload.designs || []).map(async (item) => ({
+    ...item,
+    src: await promote(item.src, 'image/webp'),
+  })));
+  const etsyGeneratedMockups = await Promise.all((payload.etsyGeneratedMockups || []).map(async (item) => ({
+    ...item,
+    previewUrl: await promote(item.previewUrl, item.isVideo ? 'video/webm' : 'image/webp'),
+  })));
+
+  return { payload: { ...payload, mockups, designs, etsyGeneratedMockups }, changed };
+}
+
 function getCurrentUserId(): string {
   if (typeof window === 'undefined') return 'default_user';
   try {
@@ -83,7 +125,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           get<string | null>(keys.ACTIVE_DESIGN_FOLDER)
         ]);
 
-        const payload: AppDataPayload = {
+        let payload: AppDataPayload = {
           mockups: serverData.mockups || [],
           designs: serverData.designs || [],
           folders: serverData.folders || [],
@@ -101,6 +143,16 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           etsyCustomColors: serverData.etsyCustomColors || [],
           etsyGeneratedMockups: serverData.etsyGeneratedMockups || [],
         };
+
+        // Promote legacy temporary URLs when they are still recoverable in this browser.
+        const promoted = await promoteTemporaryMediaUrls(payload);
+        payload = promoted.payload;
+        if (promoted.changed) {
+          const syncResult = await saveAppData(payload);
+          if (!syncResult.success) {
+            console.warn('[Workspace] Promoted media could not be persisted to the server.');
+          }
+        }
 
         // Write the fresh server data back to local IndexedDB
         await saveToIndexedDB(payload);
@@ -232,15 +284,19 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
   try {
     // Toplayıp sileceğimiz blob'ları bulalım
-    const mockups = await get<MockupItem[]>(keys.MOCKUPS);
-    const designs = await get<DesignItem[]>(keys.DESIGNS);
+    const [mockups, designs, generatedMockups] = await Promise.all([
+      get<MockupItem[]>(keys.MOCKUPS),
+      get<DesignItem[]>(keys.DESIGNS),
+      get<RenderedMatch[]>(keys.ETSY_GENERATED_MOCKUPS),
+    ]);
     
     const urlsToDelete: string[] = [];
     if (mockups) mockups.forEach(m => { if (m.src) urlsToDelete.push(m.src); });
     if (designs) designs.forEach(d => { if (d.src) urlsToDelete.push(d.src); });
+    if (generatedMockups) generatedMockups.forEach(item => { if (item.previewUrl) urlsToDelete.push(item.previewUrl); });
     
-    // Asenkron olarak silme isteği başlat (best-effort)
-    deleteBlobs(urlsToDelete);
+    // Wait for server-side deletion before clearing the authoritative workspace.
+    await deleteBlobs(Array.from(new Set(urlsToDelete)));
 
     await Promise.all([
       del(keys.MOCKUPS),
@@ -250,11 +306,27 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
       del(keys.SELECTED_MOCKUP),
       del(keys.ACTIVE_DESIGN_FOLDER),
       del(keys.ETSY_GENERATED_MOCKUPS),
+      del(keys.ETSY_FOLDER_ORDER),
+      del(keys.ETSY_PRODUCT_TYPES),
+      del(keys.ETSY_USER_NOTES),
+      del(keys.ETSY_VARIATION_TEMPLATES),
+      del(keys.ETSY_DEFAULT_TEMPLATES),
+      del(keys.ETSY_CUSTOM_SIZES),
+      del(keys.ETSY_CUSTOM_COLORS),
       del('automania_pod_mockups_v1'),
       del('automania_pod_designs_v1'),
       del('automania_pod_folders_v1'),
       del('automania_pod_active_folder_v1'),
       del('automania_pod_selected_mockup_v1'),
+      del('automania_pod_active_design_folder_v1'),
+      del('automania_etsy_generated_mockups_v1'),
+      del('automania_etsy_folder_order_v1'),
+      del('automania_etsy_product_types_v1'),
+      del('automania_etsy_user_notes_v1'),
+      del('automania_etsy_variation_templates_v1'),
+      del('automania_etsy_default_templates_v1'),
+      del('automania_etsy_custom_sizes_v1'),
+      del('automania_etsy_custom_colors_v1'),
       set(keys.HAS_INITIALIZED, true),
     ]);
 
@@ -284,6 +356,11 @@ export async function saveAppData(
 ): Promise<{ success: boolean; conflict?: boolean; timestamp?: number }> {
   const userId = getCurrentUserId();
   try {
+    if (hasTemporaryMediaUrl(payload)) {
+      console.warn('[Workspace] Refusing to sync temporary blob/data media URLs.');
+      return { success: false };
+    }
+
     // Save to IndexedDB (Client side instant persistence)
     await saveToIndexedDB(payload);
 
@@ -452,7 +529,7 @@ export async function parseAppDataBackupFile(file: File): Promise<AppDataPayload
           const blobData = await imgFile.async("blob");
           const ext = item.src.split('.').pop() || 'png';
           const fileToUpload = new File([blobData], `restore-${Date.now()}.${ext}`, { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-          const newUrl = await uploadMediaToServer(fileToUpload);
+          const newUrl = await uploadMediaToServer(fileToUpload, fileToUpload.type, { requireDurable: true });
           item.src = newUrl;
         } catch (err) {
           console.error(`Failed to restore image ${item.src}:`, err);

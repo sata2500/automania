@@ -278,6 +278,12 @@ export const AdminDashboard: React.FC = () => {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [sampleStats, setSampleStats] = useState<{ mockupsCount: number; designsCount: number; foldersCount: number } | null>(null);
   const [isUpdatingSampleData, setIsUpdatingSampleData] = useState(false);
+  const [storageDiagnostics, setStorageDiagnostics] = useState<{
+    records?: { mockups?: number; designs?: number; generatedMockups?: number; durable?: number; temporary?: number; other?: number; missing?: number };
+    referencedR2Objects?: number;
+    r2?: { objectCount?: number; totalBytes?: number; orphanObjectCount?: number | null; missingReferencedObjectCount?: number | null };
+  } | null>(null);
+  const [isCheckingStorage, setIsCheckingStorage] = useState(false);
 
   const fetchGlobalStats = async (showToast: boolean = false) => {
     setIsLoadingStats(true);
@@ -303,6 +309,26 @@ export const AdminDashboard: React.FC = () => {
       }
     } finally {
       setIsLoadingStats(false);
+    }
+  };
+
+  const handleCheckStorage = async () => {
+    setIsCheckingStorage(true);
+    try {
+      const res = await fetch(`/api/admin/storage/diagnostics?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Storage diagnostics failed');
+      }
+      setStorageDiagnostics(data);
+      toast.success('Depolama kayıtları doğrulandı; hiçbir dosya silinmedi.');
+    } catch {
+      toast.error('Depolama kayıtları doğrulanamadı.');
+    } finally {
+      setIsCheckingStorage(false);
     }
   };
 
@@ -1783,6 +1809,9 @@ export const AdminDashboard: React.FC = () => {
           isTestingDb={isTestingDb}
           dbHealthResult={dbHealthResult}
           onTestDatabaseHealth={handleTestDatabaseHealth}
+          storageDiagnostics={storageDiagnostics}
+          isCheckingStorage={isCheckingStorage}
+          onCheckStorage={handleCheckStorage}
           onPurgeSystemJunkData={handlePurgeSystemJunkData}
         />
       )}
