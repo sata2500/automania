@@ -1,1 +1,9 @@
-import { neon } from '@neondatabase/serverless'; import dotenv from 'dotenv'; dotenv.config({path:'.env.local'}); const sql=neon(process.env.DATABASE_URL); sql\SELECT user_id, jsonb_array_length(mockups) as mockups_count, jsonb_array_length(designs) as designs_count, jsonb_array_length(folders) as folders_count, jsonb_array_length(etsy_variation_template) as v_template_count FROM user_workspaces\.then(console.log).catch(console.error);
+import { neon } from '@neondatabase/serverless';
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+const sql = neon(process.env.DATABASE_URL);
+async function run() {
+  const users = await sql`SELECT id, name, email, role, status FROM users`;
+  console.log('Users:', users);
+}
+run().catch(console.error);
