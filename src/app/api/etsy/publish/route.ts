@@ -11,6 +11,11 @@ import { isOwnedUploadName } from '@/lib/upload-security';
 import { validateEtsyDraftPreflight } from '@/lib/etsy-preflight';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
 import { writeAuditLog } from '@/lib/audit-log';
+import {
+  hasExplicitLivePublishConfirmation,
+  isLivePublishEnabled,
+  resolveEtsyPublishMode,
+} from '@/lib/etsy-publish-mode';
 
 export const maxDuration = 60;
 const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
@@ -134,26 +139,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`etsy:publish-draft:${session.id}`, 5, 10 * 60_000);
-    if (!rateLimit.allowed) {
-      return NextResponse.json({ success: false, error: 'Etsy draft oluşturma limiti aşıldı.' }, {
-        status: 429,
-        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
-      });
-    }
-
     const body = await req.json();
-    const { 
-      title, 
-      description, 
-      tags, 
-      price = 24.99, 
-      quantity = 999, 
-      variations = [], 
+    const {
+      title,
+      description,
+      tags,
+      price = 24.99,
+      quantity = 999,
+      variations = [],
       images = [],
       shipping_profile_id,
       readiness_state_id,
-      state = 'draft',
+      state: requestedState,
+      publishMode: requestedPublishMode,
+      confirmLivePublish,
+      confirmationPhrase,
       taxonomy_id = 1081,
       who_made = 'i_did',
       when_made = 'made_to_order',
@@ -169,6 +169,44 @@ export async function POST(req: Request) {
       taxonomy_properties_values = {}
     } = body;
 
+    const state = resolveEtsyPublishMode({
+      publishMode: requestedPublishMode,
+      state: requestedState,
+    });
+    if (!state) {
+      return NextResponse.json({ success: false, error: 'Geçersiz Etsy yayınlama modu.' }, { status: 400 });
+    }
+
+    if (state === 'active') {
+      if (!isLivePublishEnabled(process.env.ETSY_LIVE_PUBLISH_ENABLED)) {
+        return NextResponse.json({
+          success: false,
+          error: 'Canlı Etsy yayınlama bu sunucuda devre dışıdır.',
+        }, { status: 403 });
+      }
+      if (!hasExplicitLivePublishConfirmation({ confirmLivePublish, confirmationPhrase })) {
+        return NextResponse.json({
+          success: false,
+          error: 'Canlı yayın için açık kullanıcı onayı gereklidir.',
+        }, { status: 400 });
+      }
+    }
+
+    const rateLimit = consumeRateLimit(
+      `etsy:publish:${state}:${session.id}`,
+      state === 'active' ? 2 : 5,
+      state === 'active' ? 30 * 60_000 : 10 * 60_000,
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json({
+        success: false,
+        error: state === 'active' ? 'Canlı Etsy yayınlama limiti aşıldı.' : 'Etsy draft oluşturma limiti aşıldı.',
+      }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     if (!title || !description || !tags || !Array.isArray(tags)) {
       return NextResponse.json({ success: false, error: 'Başlık, açıklama ve etiketler zorunludur.' }, { status: 400 });
     }
@@ -181,6 +219,9 @@ export async function POST(req: Request) {
       taxonomyId: taxonomy_id,
       variations,
       images,
+    }, {
+      allowActive: state === 'active',
+      requirePhoto: state === 'active',
     });
     if (preflightErrors.length > 0) {
       return NextResponse.json({ success: false, error: preflightErrors.join(' ') }, { status: 400 });
@@ -195,8 +236,14 @@ export async function POST(req: Request) {
     const etsyApiKey = tokenRes.api_key || process.env.ETSY_API_KEY;
     const etsySharedSecret = tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET;
 
-    // If Etsy OAuth is not connected yet, return a clean simulated draft preview
+    // Draft preview is safe without OAuth; live publication must never be simulated.
     if (!tokenRes.success && (!etsyAccessToken || !etsyShopId)) {
+      if (state === 'active') {
+        return NextResponse.json({
+          success: false,
+          error: 'Canlı yayın için doğrulanmış Etsy mağaza bağlantısı gereklidir.',
+        }, { status: 412 });
+      }
       return NextResponse.json({
         success: true,
         simulated: true,
@@ -233,40 +280,50 @@ export async function POST(req: Request) {
       safeProductionPartners = [Number(production_partner_id)];
     }
 
-    // Call Official Etsy API v3 createDraftListing endpoint
+    const safeMaterials = Array.isArray(materials)
+      ? materials.flatMap((m: string) => (typeof m === 'string' ? m.split(',') : []))
+          .map((m) => m.replace(/[^a-zA-Z0-9 _\-&+]/g, '').trim().substring(0, 13).trim())
+          .filter(Boolean)
+          .slice(0, 13)
+      : [];
+    const safeStyles = Array.isArray(styles)
+      ? styles.filter((style: unknown): style is string => typeof style === 'string' && style.trim().length > 0).slice(0, 2)
+      : [];
+
+    // Etsy's createDraftListing endpoint accepts application/x-www-form-urlencoded.
+    // Arrays are encoded as repeated fields, except tags which Etsy documents as
+    // a comma-separated list.
+    const createBody = new URLSearchParams({
+      quantity: String(Math.max(1, Number(quantity) || 999)),
+      title: title.slice(0, 140),
+      description,
+      price: String(Number(price) || 24.99),
+      who_made: safeWhoMade,
+      when_made: safeWhenMade,
+      taxonomy_id: String(taxonomyId),
+      tags: validTags.join(','),
+      is_supply: String(safeIsSupply),
+      type: 'physical',
+      is_customizable: String(Boolean(is_customizable)),
+      should_auto_renew: String(Boolean(should_auto_renew)),
+    });
+    for (const material of safeMaterials) createBody.append('materials', material);
+    for (const style of safeStyles) createBody.append('styles', style);
+    for (const partnerId of safeProductionPartners || []) createBody.append('production_partner_ids', String(partnerId));
+    if (shipping_profile_id) createBody.set('shipping_profile_id', String(Number(shipping_profile_id)));
+    if (readiness_state_id) createBody.set('readiness_state_id', String(Number(readiness_state_id)));
+    if (shop_section_id) createBody.set('shop_section_id', String(Number(shop_section_id)));
+    if (return_policy_id) createBody.set('return_policy_id', String(Number(return_policy_id)));
+
+    // Call Official Etsy API v3 createDraftListing endpoint.
     const createRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
       method: 'POST',
       headers: {
         'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
         'Authorization': `Bearer ${etsyAccessToken}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
-        quantity: Math.max(1, Number(quantity) || 999),
-        title: title.slice(0, 140),
-        description,
-        price: Number(price) || 24.99,
-        who_made: safeWhoMade,
-        when_made: safeWhenMade,
-        taxonomy_id: taxonomyId,
-        materials: Array.isArray(materials) 
-          ? materials.flatMap((m: string) => (typeof m === 'string' ? m.split(',') : []))
-              .map(m => m.replace(/[^a-zA-Z0-9 _\-&+]/g, '').trim().substring(0, 13).trim())
-              .filter(Boolean).slice(0, 13) 
-          : [],
-        styles: Array.isArray(styles) ? styles.slice(0, 2) : [],
-        is_supply: safeIsSupply,
-        tags: validTags,
-        shipping_profile_id: shipping_profile_id ? Number(shipping_profile_id) : undefined,
-        readiness_state_id: readiness_state_id ? Number(readiness_state_id) : undefined,
-        type: 'physical',
-        is_customizable: Boolean(is_customizable),
-        production_partner_ids: safeProductionPartners,
-        state,
-        shop_section_id: shop_section_id ? Number(shop_section_id) : undefined,
-        return_policy_id: return_policy_id ? Number(return_policy_id) : undefined,
-        should_auto_renew: Boolean(should_auto_renew)
-      })
+      body: createBody,
     });
 
     if (!createRes.ok) {
@@ -484,15 +541,119 @@ export async function POST(req: Request) {
       }
     }
 
+    let activated = false;
+    if (state === 'active') {
+      const blockingUploadErrors = uploadErrors.filter((error) => !error.startsWith('Bilgi:'));
+      if (!listingId || imagesUploaded < 1 || blockingUploadErrors.length > 0) {
+        const error = !listingId
+          ? 'Etsy listing kimliği alınamadığı için canlı yayın durduruldu.'
+          : imagesUploaded < 1
+            ? 'Canlı yayın için en az bir görselin Etsy’ye başarıyla yüklenmesi gerekir.'
+            : 'Görsel, varyasyon veya kategori adımlarındaki hatalar nedeniyle canlı yayın durduruldu.';
+        await writeAuditLog({
+          userId: session.id,
+          action: 'etsy.listing.publish_blocked',
+          resourceType: 'etsy_listing',
+          resourceId: listingId ? String(listingId) : undefined,
+          metadata: {
+            requestedState: state,
+            resultingState: 'draft',
+            taxonomyId,
+            imageCount: imageItems.length,
+            imagesUploaded,
+            videoCount: videoItems.length,
+            variationCount: Array.isArray(variations) ? variations.length : 0,
+            uploadErrorCount: uploadErrors.length,
+          },
+        });
+        return NextResponse.json({
+          success: false,
+          draftCreated: Boolean(listingId),
+          listingId,
+          state: 'draft',
+          error,
+          uploadErrors: uploadErrors.length > 0 ? uploadErrors : undefined,
+        }, { status: 502 });
+      }
+
+      try {
+        const activateRes = await fetch(
+          `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+              'Authorization': `Bearer ${etsyAccessToken}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({ state: 'active' }),
+          },
+        );
+
+        if (!activateRes.ok) {
+          console.warn('[Etsy Publish] Listing activation failed', { status: activateRes.status });
+          await writeAuditLog({
+            userId: session.id,
+            action: 'etsy.listing.publish_failed',
+            resourceType: 'etsy_listing',
+            resourceId: String(listingId),
+            metadata: {
+              requestedState: state,
+              resultingState: 'draft',
+              activationStatus: activateRes.status,
+              taxonomyId,
+              imageCount: imageItems.length,
+              imagesUploaded,
+              variationCount: Array.isArray(variations) ? variations.length : 0,
+            },
+          });
+          return NextResponse.json({
+            success: false,
+            draftCreated: true,
+            listingId,
+            state: 'draft',
+            error: 'Listing taslak olarak oluşturuldu ancak canlı yayınlama adımı başarısız oldu.',
+          }, { status: 502 });
+        }
+        activated = true;
+      } catch {
+        await writeAuditLog({
+          userId: session.id,
+          action: 'etsy.listing.publish_failed',
+          resourceType: 'etsy_listing',
+          resourceId: String(listingId),
+          metadata: {
+            requestedState: state,
+            resultingState: 'draft',
+            activationStatus: 'network_error',
+            taxonomyId,
+            imageCount: imageItems.length,
+            imagesUploaded,
+            variationCount: Array.isArray(variations) ? variations.length : 0,
+          },
+        });
+        return NextResponse.json({
+          success: false,
+          draftCreated: true,
+          listingId,
+          state: 'draft',
+          error: 'Listing taslak olarak oluşturuldu ancak canlı yayınlama bağlantısı başarısız oldu.',
+        }, { status: 502 });
+      }
+    }
+
+    const resultingState = activated ? 'active' : 'draft';
     await writeAuditLog({
       userId: session.id,
-      action: 'etsy.draft_listing.created',
+      action: activated ? 'etsy.listing.published' : 'etsy.draft_listing.created',
       resourceType: 'etsy_listing',
       resourceId: listingId ? String(listingId) : undefined,
       metadata: {
-        state: 'draft',
+        requestedState: state,
+        resultingState,
         taxonomyId,
         imageCount: imageItems.length,
+        imagesUploaded,
         videoCount: videoItems.length,
         variationCount: Array.isArray(variations) ? variations.length : 0,
         uploadErrorCount: uploadErrors.length,
@@ -502,15 +663,18 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       listingId,
+      state: resultingState,
       listingUrl: listingData.url || `https://www.etsy.com/listing/${listingId}`,
       variationsUpdated,
       imagesUploaded,
       uploadErrors: uploadErrors.length > 0 ? uploadErrors : undefined,
-      message: `İlan Etsy Mağazanıza (${state.toUpperCase()}) olarak aktarıldı!`
+      message: activated
+        ? 'İlan Etsy mağazanızda canlı olarak yayınlandı.'
+        : 'İlan Etsy mağazanıza taslak (DRAFT) olarak aktarıldı.',
     });
 
   } catch (error) {
     console.error('[Etsy Publish] Request failed:', error instanceof Error ? error.message : 'unknown error');
-    return NextResponse.json({ success: false, error: 'Etsy taslak aktarımı başarısız oldu.' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Etsy listing aktarımı başarısız oldu.' }, { status: 500 });
   }
 }

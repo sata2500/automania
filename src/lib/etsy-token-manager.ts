@@ -67,14 +67,25 @@ export async function getValidEtsyToken(userId: string): Promise<EtsyTokenRespon
       });
 
       if (!tokenRes.ok) {
-        const errorText = await tokenRes.text();
-        console.error("Etsy Token Refresh Error:", errorText);
+        console.error('[Etsy] Token refresh failed', { status: tokenRes.status });
         return { success: false, error: 'Oturum süresi dolmuş ve yenilenemedi. Lütfen tekrar bağlanın.' };
       }
 
       const tokenData = await tokenRes.json();
       const { access_token, refresh_token, expires_in } = tokenData;
-      
+      if (
+        typeof access_token !== 'string' ||
+        access_token.length === 0 ||
+        typeof refresh_token !== 'string' ||
+        refresh_token.length === 0 ||
+        typeof expires_in !== 'number' ||
+        !Number.isFinite(expires_in) ||
+        expires_in <= 0
+      ) {
+        console.error('[Etsy] Token refresh returned an invalid response');
+        return { success: false, error: 'Etsy oturumu yenileme yanıtı geçersiz.' };
+      }
+
       const newExpiresAt = new Date(Date.now() + expires_in * 1000);
       accessToken = access_token;
 
@@ -88,8 +99,8 @@ export async function getValidEtsyToken(userId: string): Promise<EtsyTokenRespon
           updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ${userId}
       `;
-    } catch (err: any) {
-       console.error("Etsy Token Refresh Exception:", err);
+    } catch {
+       console.error('[Etsy] Token refresh exception');
        return { success: false, error: 'Token yenileme işlemi başarısız oldu.' };
     }
   }

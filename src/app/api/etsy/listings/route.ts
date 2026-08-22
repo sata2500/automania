@@ -70,9 +70,35 @@ export async function GET(req: Request) {
       });
     }
 
-    // 2. Fetch all user listings from PostgreSQL
+    // 2. Fetch lightweight listing summaries for the list view.
+    // Heavy fields (description, materials, images, SEO/vision JSON) are fetched
+    // on demand by the listing_id detail branch above to keep mobile/initial loads fast.
     const allRows = await sql`
-      SELECT * FROM user_etsy_listings 
+      SELECT
+        id,
+        user_id,
+        listing_id,
+        shop_id,
+        title,
+        tags,
+        price,
+        currency_code,
+        quantity,
+        state,
+        url,
+        views,
+        num_favorers,
+        primary_image_url,
+        taxonomy_id,
+        vision_analysis,
+        seo_score,
+        ai_optimized_title,
+        ai_optimized_at,
+        etsy_updated_timestamp,
+        last_synced_at,
+        created_at,
+        updated_at
+      FROM user_etsy_listings
       WHERE user_id = ${session.id}
       ORDER BY updated_at DESC
     `;

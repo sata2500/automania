@@ -16,8 +16,23 @@ describe('etsy draft preflight', () => {
     expect(validateEtsyDraftPreflight(validInput)).toEqual([]);
   });
 
-  it('rejects an active publish request', () => {
-    expect(validateEtsyDraftPreflight({ ...validInput, state: 'active' }).join(' ')).toContain('yalnızca draft');
+  it('rejects an active publish request unless explicitly allowed', () => {
+    expect(validateEtsyDraftPreflight({ ...validInput, state: 'active' }).join(' ')).toContain('geçersiz');
+  });
+
+  it('accepts an active payload only when explicitly allowed and photo-backed', () => {
+    expect(validateEtsyDraftPreflight(
+      { ...validInput, state: 'active' },
+      { allowActive: true, requirePhoto: true },
+    )).toEqual([]);
+  });
+
+  it('rejects an active payload without a photo', () => {
+    const errors = validateEtsyDraftPreflight(
+      { ...validInput, state: 'active', images: [] },
+      { allowActive: true, requirePhoto: true },
+    );
+    expect(errors.join(' ')).toContain('en az bir fotoğraf');
   });
 
   it('rejects tag, taxonomy, variation, and media violations', () => {

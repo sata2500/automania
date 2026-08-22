@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { useToast } from '@/components/common/ToastContext';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, RenderedMatch } from '@/types/pod';
+import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 
 interface VariationRow {
   id: string;
@@ -1290,12 +1291,15 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     };
   }, [dragState, filteredVariations]);
 
-  const handlePublishToEtsy = async (requestedState: 'draft' | 'active' = 'draft') => {
-    if (requestedState !== 'draft') {
-      toast.error('Güvenlik nedeniyle yalnızca Etsy taslağı oluşturulabilir.');
+  const handlePublishToEtsy = async (
+    requestedState: 'draft' | 'active' = 'draft',
+    liveConfirmation?: { confirmLivePublish: boolean; confirmationPhrase: string },
+  ) => {
+    const state = requestedState;
+    if (state === 'active' && (!liveConfirmation?.confirmLivePublish || liveConfirmation.confirmationPhrase !== LIVE_PUBLISH_CONFIRMATION)) {
+      toast.error('Canlı yayın için açık kullanıcı onayı gereklidir.');
       return;
     }
-    const state: 'draft' = 'draft';
     if (!etsyConnected) {
       toast.error('Lütfen önce Etsy mağazanızı bağlayın.');
       return;
@@ -1319,6 +1323,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           quantity: 999,
           variations: variations, // Send all variations (including disabled) to maintain matrix integrity
           state,
+          publishMode: state,
+          ...(state === 'active' ? liveConfirmation : {}),
           taxonomy_id: taxonomyId,
           who_made: whoMade,
           when_made: whenMade,

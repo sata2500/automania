@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { forceSyncFromServer } from '@/lib/storage-service';
+import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
 
 export interface UserProfile {
   id: string;
@@ -173,7 +174,9 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
     if (googleClientId) {
-      const redirectUri = encodeURIComponent(window.location.origin + '/api/auth/google/callback');
+      const browserUrl = new URL(window.location.origin);
+      const appOrigin = getCanonicalAppOrigin(browserUrl, process.env.NEXT_PUBLIC_APP_URL);
+      const redirectUri = encodeURIComponent(`${appOrigin}/api/auth/google/callback`);
       const scope = encodeURIComponent('email profile');
       const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
       window.location.href = googleAuthUrl;
