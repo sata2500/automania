@@ -24,6 +24,9 @@ export interface ScrapingResult {
     avgViews?: number;
     currencyCode?: string;
     sampleSize?: number;
+    errorType?: 'provider_rate_limited' | 'bot_blocked' | 'network_timeout' | 'provider_unavailable' | 'invalid_response' | 'not_configured';
+    retryable?: boolean;
+    retryAfterSeconds?: number;
     [key: string]: any;
   };
 }
@@ -55,6 +58,25 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   let avgPrice = 0;
   let scrapeError: string | null = null;
   const rawMetrics: ScrapingResult['rawMetrics'] = {};
+  const markProviderError = (
+    errorType: NonNullable<ScrapingResult['rawMetrics']['errorType']>,
+    details?: { status?: number; retryAfterSeconds?: number },
+  ) => {
+    if (!rawMetrics.errorType || errorType === 'provider_rate_limited') {
+      rawMetrics.errorType = errorType;
+      rawMetrics.retryable = errorType !== 'invalid_response';
+    }
+    if (details?.status !== undefined) rawMetrics.apiStatus = details.status;
+    if (details?.retryAfterSeconds !== undefined) rawMetrics.retryAfterSeconds = details.retryAfterSeconds;
+  };
+  const getRetryAfterSeconds = (response: Response): number | undefined => {
+    const value = response.headers.get('retry-after');
+    if (!value) return undefined;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+    const date = Date.parse(value);
+    return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1000)) : undefined;
+  };
 
   // 1. Etsy Native Autocomplete API (100% Real Etsy Suggestion Engine)
   try {
@@ -259,12 +281,18 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         return finalizeKeywordMetrics(cleanKeyword, charLength, tagEligible, totalListings, bestsellerCount, isEtsySuggested, autocompleteRank, avgPrice, null, rawMetrics);
       } else if (apiRes) {
         const errText = await apiRes.text().catch(() => '');
+        const retryAfterSeconds = getRetryAfterSeconds(apiRes);
         rawMetrics.apiStatus = apiRes.status;
         rawMetrics.apiError = errText.substring(0, 200);
-        console.warn(`Etsy Open API returned status ${apiRes.status} for "${cleanKeyword}":`, errText.substring(0, 150));
+        markProviderError(
+          apiRes.status === 429 ? 'provider_rate_limited' : apiRes.status === 403 ? 'bot_blocked' : 'provider_unavailable',
+          { status: apiRes.status, retryAfterSeconds },
+        );
+        console.warn(`Etsy Open API returned status ${apiRes.status} for "${cleanKeyword}"`);
       }
     } catch (apiErr: any) {
-      console.warn(`Etsy Open API error for "${cleanKeyword}":`, apiErr.message);
+      markProviderError(apiErr?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
+      console.warn(`Etsy Open API error for "${cleanKeyword}"`);
     }
   }
 
@@ -320,10 +348,18 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           if (totalListings > 0) {
             return finalizeKeywordMetrics(cleanKeyword, charLength, tagEligible, totalListings, bestsellerCount, isEtsySuggested, autocompleteRank, avgPrice, null, rawMetrics);
           }
+          markProviderError('invalid_response');
+        } else {
+          markProviderError('bot_blocked', { status: searchRes.status });
         }
+      } else {
+        markProviderError(
+          searchRes.status === 429 ? 'provider_rate_limited' : searchRes.status === 403 ? 'bot_blocked' : 'provider_unavailable',
+          { status: searchRes.status, retryAfterSeconds: getRetryAfterSeconds(searchRes) },
+        );
       }
     } catch (scraperErr: any) {
-      // Scraper error
+      markProviderError(scraperErr?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
     }
   }
 
@@ -349,14 +385,32 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
             { viaWorker: true, method: 'cloudflare_worker' }
           );
         }
+        markProviderError('invalid_response');
+      } else {
+        markProviderError(
+          workerRes.status === 429 ? 'provider_rate_limited' : workerRes.status === 403 ? 'bot_blocked' : 'provider_unavailable',
+          { status: workerRes.status, retryAfterSeconds: getRetryAfterSeconds(workerRes) },
+        );
       }
     } catch (e: any) {
-      // Worker error
+      markProviderError(e?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
     }
   }
 
-  // 5. ZERO FAKE DATA PRINCIPLE: If no genuine Etsy data source succeeded, report strict error!
-  scrapeError = 'Etsy Bot Koruması (HTTP 403) veya Etsy API Bağlantısı Gerekli';
+  // Do not turn provider failures into a valid-looking opportunity score.
+  const errorType = rawMetrics.errorType || (
+    !cleanApiKey && !cleanToken && !scraperKey && !workerUrl ? 'not_configured' : 'provider_unavailable'
+  );
+  markProviderError(errorType);
+  const errorMessages: Record<NonNullable<ScrapingResult['rawMetrics']['errorType']>, string> = {
+    provider_rate_limited: 'Veri sağlayıcısı rate limit uyguladı; daha sonra tekrar denenmeli.',
+    bot_blocked: 'Etsy veya veri sağlayıcısı bot koruması nedeniyle yanıt vermedi.',
+    network_timeout: 'Veri sağlayıcısı zaman aşımına uğradı; daha sonra tekrar denenmeli.',
+    provider_unavailable: 'Etsy veri sağlayıcısı şu anda kullanılamıyor; daha sonra tekrar denenmeli.',
+    invalid_response: 'Veri sağlayıcısından geçerli metrik yanıtı alınamadı.',
+    not_configured: 'Etsy veya scraper veri sağlayıcısı yapılandırılmamış.',
+  };
+  scrapeError = errorMessages[errorType];
   rawMetrics.method = 'error';
 
   return finalizeKeywordMetrics(cleanKeyword, charLength, tagEligible, 0, 0, isEtsySuggested, autocompleteRank, 0, scrapeError, rawMetrics);

@@ -37,8 +37,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   const {
     isGenerating,
     exportProgress,
-    aspectOverride,
-    setAspectOverride,
     confirmClearOpen,
     setConfirmClearOpen,
     user,
@@ -72,8 +70,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     <div className="space-y-5">
       {/* Top Header Bar */}
       <BatchHeader
-        aspectOverride={aspectOverride}
-        setAspectOverride={setAspectOverride}
         hasGenerated={hasGenerated}
         isGenerating={isGenerating}
         canGenerate={isCurrentSelectionEligible && currentPairs.length > 0}

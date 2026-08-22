@@ -11,6 +11,7 @@ export interface OptimizedImageResult {
   height: number;
   originalSize: number;
   optimizedSize: number;
+  mimeType: string;
 }
 
 /**
@@ -174,6 +175,7 @@ export async function optimizeMockupImage(
     height,
     originalSize,
     optimizedSize,
+    mimeType: mime,
   };
 }
 
@@ -236,6 +238,7 @@ export async function optimizeDesignImage(
     height,
     originalSize,
     optimizedSize,
+    mimeType: finalMime,
   };
 }
 

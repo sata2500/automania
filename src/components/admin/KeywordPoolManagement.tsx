@@ -194,44 +194,55 @@ export default function KeywordPoolManagement() {
     }
   };
 
-  // Evaluate selected or 20 single batch
+  // Evaluate selected keywords in API-sized chunks so a selection larger than
+  // 20 does not get rejected as one oversized request.
   const handleEvaluateBatch = async () => {
     if (isEvaluating || isBulkRunning) return;
     setIsEvaluating(true);
     try {
-      const payload = selectedIds.size > 0 
-        ? { ids: Array.from(selectedIds) } 
-        : { limit: 20 };
+      const selected = Array.from(selectedIds);
+      const chunks: string[][] = selected.length > 0
+        ? Array.from({ length: Math.ceil(selected.length / 20) }, (_, index) => selected.slice(index * 20, (index + 1) * 20))
+        : [[]];
+      let evaluatedCount = 0;
+      let blockedCount = 0;
+      let failed = false;
+      const warnings: string[] = [];
 
-      const res = await fetch('/api/admin/keywords/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        if (data.evaluatedCount > 0) {
-          toast.success(`${data.evaluatedCount} kelime %100 gerçek Etsy verisi ile güncellendi!`);
-          if (data.warning) {
-            toast.error(data.warning);
-          }
-          setSelectedIds(new Set());
-          fetchKeywords();
-        } else {
-          toast.info('Değerlendirilecek kelime bulunamadı.');
+      for (const ids of chunks) {
+        const payload = ids.length > 0 ? { ids } : { limit: 20 };
+        const res = await fetch('/api/admin/keywords/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          failed = true;
+          toast.error(data.error || 'Değerlendirme başarısız.');
+          break;
         }
-      } else {
-        toast.error(data.error || 'Değerlendirme başarısız.');
+        evaluatedCount += Number(data.evaluatedCount) || 0;
+        blockedCount += Number(data.botBlockedCount) || 0;
+        if (data.warning) warnings.push(data.warning);
       }
-    } catch (e) {
+
+      if (evaluatedCount > 0) {
+        toast.success(`${evaluatedCount} kelime gerçek Etsy verisi ile güncellendi${blockedCount > 0 ? `; ${blockedCount} kelimede veri alınamadı` : ''}.`);
+        for (const warning of warnings) toast.error(warning);
+        if (!failed) setSelectedIds(new Set());
+        fetchKeywords();
+      } else if (selected.length === 0) {
+        toast.info('Değerlendirilecek kelime bulunamadı.');
+      }
+    } catch {
       toast.error('Etsy verisi çekilirken hata oluştu.');
     } finally {
       setIsEvaluating(false);
     }
   };
 
-  // Full Pool Bulk Runner (loops batches of 25 until complete)
+  // Full Pool Bulk Runner (loops API-sized batches of 20 until complete)
   const handleRunFullPoolEvaluation = async () => {
     if (isBulkRunning || isEvaluating) return;
     if (!confirm(`Kelime havuzundaki tüm kelimeler (%100 Gerçek Etsy API) taranıp güncellenecek. Başlatmak istiyor musunuz?`)) return;
@@ -240,7 +251,7 @@ export default function KeywordPoolManagement() {
     cancelBulkRef.current = false;
     let processedTotal = 0;
     let totalBlocked = 0;
-    const batchSize = 25;
+    const batchSize = 20;
 
     setBulkProgress({ current: 0, total, updated: 0, blocked: 0 });
 
@@ -264,7 +275,7 @@ export default function KeywordPoolManagement() {
         }
 
         processedTotal += data.evaluatedCount;
-        if (data.blockedCount) totalBlocked += data.blockedCount;
+        if (data.botBlockedCount) totalBlocked += data.botBlockedCount;
 
         setBulkProgress(prev => ({
           ...prev,
@@ -417,18 +428,23 @@ export default function KeywordPoolManagement() {
   };
 
   const renderSourceBadge = (kw: Keyword) => {
+    const rm = parseRawMetrics(kw.raw_metrics);
     if (kw.last_scrape_error) {
+      const isRetryable = rm?.retryable === true;
+      const retryAfter = Number(rm?.retryAfterSeconds);
+      const retryHint = isRetryable && retryAfter > 0 ? ` Tekrar deneme aralığı: ${retryAfter} sn.` : '';
       return (
-        <span 
-          title={kw.last_scrape_error}
-          className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shrink-0"
+        <span
+          title={`${kw.last_scrape_error}${retryHint}`}
+          className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 shrink-0 ${isRetryable
+            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
+            : 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-800'}`}
         >
           <ShieldAlert className="w-3 h-3" />
-          Engellendi
+          {isRetryable ? 'Geçici Hata' : 'Engellendi'}
         </span>
       );
     }
-    const rm = parseRawMetrics(kw.raw_metrics);
     const method = rm?.method || rm?.methodUsed;
 
     if (method === 'etsy_official_api') {

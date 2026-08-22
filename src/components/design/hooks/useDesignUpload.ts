@@ -26,12 +26,18 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
 
       const uploadToastId = toast.progress('Tasarımlar işleniyor...', 10);
       let uploadedCount = 0;
+      let webpImageCount = 0;
+      let fallbackImageCount = 0;
+      let savedBytesTotal = 0;
       const newDesigns: DesignItem[] = [];
 
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
           const optimized = await optimizeDesignImage(file, 2000);
+          if (optimized.mimeType === 'image/webp') webpImageCount++;
+          else fallbackImageCount++;
+          savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
           newDesigns.push({
             id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) + i,
             name: file.name.replace(/\.[^/.]+$/, ''),
@@ -67,6 +73,11 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
 
       toast.removeToast(uploadToastId);
       if (uploadedCount > 0) {
+        const savedMb = (savedBytesTotal / (1024 * 1024)).toFixed(1);
+        const formatMessage = fallbackImageCount > 0
+          ? `${webpImageCount} WebP, ${fallbackImageCount} tarayıcı fallback formatı`
+          : 'WebP';
+        toast.success(`${uploadedCount} tasarım optimize edildi (${formatMessage}); toplam ${savedMb} MB tasarruf.`);
         toast.success(`${uploadedCount} tasarım başarıyla yüklendi!`);
       }
       setIsOptimizing(false);

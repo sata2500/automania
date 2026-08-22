@@ -9,7 +9,6 @@ import { downloadMatchesAsZip, formatExportFileName } from '@/lib/export-utils';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { loadAppData, saveAppData } from '@/lib/storage-service';
 import confetti from 'canvas-confetti';
-import { AspectRatioType } from '../components/BatchAspectRatioSelector';
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu.';
@@ -43,7 +42,6 @@ export function useBatchGenerator({
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
-  const [aspectOverride, setAspectOverride] = useState<AspectRatioType>('mockup');
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const exportFormat: ExportFormatType = 'image/webp';
@@ -215,12 +213,9 @@ export function useBatchGenerator({
           mimeType: mockup.mimeType || 'video/mp4',
         });
       } else {
-        const exportAspect =
-          aspectOverride === 'mockup'
-            ? mockup.exportAspect || 'original'
-            : aspectOverride === 'square'
-            ? 'square'
-            : 'original';
+        // The mockup editor is the single source of truth for crop/aspect.
+        // Batch generation must not apply a second user-selected crop.
+        const exportAspect = mockup.exportAspect || 'original';
 
         try {
           const dataUrl = await renderMockupWithDesign(mockup, design, {
@@ -421,8 +416,6 @@ export function useBatchGenerator({
   return {
     isGenerating,
     exportProgress,
-    aspectOverride,
-    setAspectOverride,
     confirmClearOpen,
     setConfirmClearOpen,
     user,

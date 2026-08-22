@@ -10,11 +10,20 @@ export async function POST(req: Request) {
     const session = await requireAdmin();
     if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-    const rateLimit = consumeRateLimit(`scraper:evaluate:${session.id}`, 3, 10 * 60_000);
+    // This is an application-level guard for expensive provider calls, not an
+    // Etsy quota claim. A request evaluates at most 20 keywords sequentially.
+    const rateLimit = consumeRateLimit(`scraper:evaluate:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
-      return NextResponse.json({ success: false, error: 'Toplu scraper değerlendirme limiti aşıldı.' }, {
+      return NextResponse.json({
+        success: false,
+        error: `Kelime değerlendirme istek limiti doldu. Yaklaşık ${rateLimit.retryAfterSeconds} saniye sonra tekrar deneyin.`,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      }, {
         status: 429,
-        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+        headers: {
+          'Retry-After': String(rateLimit.retryAfterSeconds),
+          'X-RateLimit-Remaining': '0',
+        },
       });
     }
 
@@ -152,6 +161,10 @@ export async function POST(req: Request) {
       success: true,
       evaluatedCount,
       botBlockedCount,
+      rateLimit: {
+        remaining: rateLimit.remaining,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
       totalRequested: targetKeywords.length,
       hasEtsyApi: !!etsyAccessToken,
       errors: errors.length > 0 ? errors : undefined,

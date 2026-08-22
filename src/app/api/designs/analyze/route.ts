@@ -425,16 +425,36 @@ export async function POST(request: Request) {
 
     for (const kw of uniqueKeywords) {
       const existing = existingMap.get(kw);
-      const isFresh = existing && 
-                      existing.last_evaluated_at && 
-                      (Date.now() - new Date(existing.last_evaluated_at).getTime() < 7 * 24 * 60 * 60 * 1000) && 
-                      existing.competition_level !== 'Engellendi / Hata' && 
+      let existingMetrics: Record<string, unknown> = {};
+      if (existing?.raw_metrics) {
+        try {
+          existingMetrics = typeof existing.raw_metrics === 'string'
+            ? JSON.parse(existing.raw_metrics) as Record<string, unknown>
+            : existing.raw_metrics as Record<string, unknown>;
+        } catch {
+          existingMetrics = {};
+        }
+      }
+      const evaluatedAt = existing?.last_evaluated_at ? new Date(existing.last_evaluated_at).getTime() : 0;
+      const ageMs = evaluatedAt > 0 ? Date.now() - evaluatedAt : Number.POSITIVE_INFINITY;
+      const errorRetryAfterMs = Number(existingMetrics.retryAfterSeconds) > 0
+        ? Number(existingMetrics.retryAfterSeconds) * 1000
+        : 15 * 60 * 1000;
+      const retryCooldownActive = Boolean(existing?.last_scrape_error) && ageMs < Math.max(15 * 60 * 1000, errorRetryAfterMs);
+      const isFresh = existing &&
+                      Boolean(existing.last_evaluated_at) &&
+                      ageMs < 7 * 24 * 60 * 60 * 1000 &&
+                      existing.competition_level !== 'Engellendi / Hata' &&
                       existing.competition_level !== 'Taranacak' &&
                       existing.competition_level !== 'Henüz Taranmadı';
 
+      // Do not hammer a provider immediately after a retryable failure. The
+      // admin error filter can still explicitly retry the keyword.
+      if (retryCooldownActive) continue;
+
       if (isFresh) {
         freshKeywords.push(kw);
-        const rm = typeof existing.raw_metrics === 'string' ? JSON.parse(existing.raw_metrics) : (existing.raw_metrics || {});
+        const rm = existingMetrics;
         if (Array.isArray(rm.topTags)) {
           for (const t of rm.topTags) {
             const cleanT = String(t).toLowerCase().trim();
