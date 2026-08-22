@@ -211,6 +211,36 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     [mockups, selectedMockupId, setMockups, setSelectedMockupId, toast]
   );
 
+  // Single Move to Folder
+  const handleMoveMockupToFolder = useCallback(
+    (mockupId: string, folderId: string | null) => {
+      setMockups((prev) =>
+        prev.map((m) =>
+          m.id === mockupId ? { ...m, folderId: folderId || undefined } : m
+        )
+      );
+      toast.success('Mockup taşındı.');
+    },
+    [setMockups, toast]
+  );
+
+  // Bulk Move to Folder
+  const handleBulkMoveMockups = useCallback(
+    (folderId: string | null) => {
+      if (selectedIds.length === 0) return;
+      setMockups((prev) =>
+        prev.map((m) =>
+          selectedIds.includes(m.id)
+            ? { ...m, folderId: folderId || undefined }
+            : m
+        )
+      );
+      setSelectedIds([]);
+      toast.success(`${selectedIds.length} mockup taşındı.`);
+    },
+    [selectedIds, setMockups, toast]
+  );
+
   // Folder Operations
   const handleOpenNewFolderModal = useCallback(() => {
     setFolderModalState({
@@ -416,6 +446,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           <MockupSidebarList
             filteredMockups={filteredMockups}
             allMockups={mockups}
+            mockupFolders={mockupFolders}
             selectedMockupId={selectedMockupId}
             setSelectedMockupId={(id) => {
               setSelectedMockupId(id);
@@ -431,6 +462,8 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             onApplyConfigToSelected={handleApplyConfigToSelected}
             onBatchDeleteRequest={handleBatchDeleteRequest}
             onRequestDeleteMockup={handleRequestDeleteMockup}
+            onMoveToFolder={handleMoveMockupToFolder}
+            onBulkMove={handleBulkMoveMockups}
             activePrintArea={activePrintArea}
           />
         </div>

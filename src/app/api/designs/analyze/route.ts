@@ -169,32 +169,46 @@ async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeTy
 export async function POST(request: Request) {
   try {
     const session = await getAuthoritativeSession();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
 
-    const { src } = await request.json();
+    const clientIp =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+      request.headers.get('x-real-ip') ||
+      'guest';
 
-    const rateLimit = consumeRateLimit(`ai:design-analyze:${session.id}`, 10, 10 * 60_000);
+    const rateLimitKey = session ? `ai:design-analyze:${session.id}` : `ai:design-analyze:guest:${clientIp}`;
+    const rateLimit = consumeRateLimit(rateLimitKey, 15, 10 * 60_000);
     if (!rateLimit.allowed) {
-      return NextResponse.json({ success: false, error: 'Vision AI analiz limiti aşıldı.' }, {
+      return NextResponse.json({ success: false, error: 'Vision AI analiz limiti aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.' }, {
         status: 429,
         headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
       });
     }
 
+    const { src } = await request.json();
+
     if (!src) {
       return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
     }
 
-    // 1. Session ve yalnızca mevcut kullanıcıya ait workspace ayarlarını çek
+    // 1. Session varsa mevcut kullanıcıya ait workspace ayarlarını çek
+    let workspaceRows: Array<{
+      user_id: string;
+      etsy_shop_id: string | null;
+      etsy_access_token: string | null;
+      openrouter_model: string | null;
+      scraping_api_key: string | null;
+      scraping_provider: string | null;
+      cloudflare_worker_url: string | null;
+    }> = [];
 
-    const workspaceRows = await sql`
-      SELECT user_id, etsy_shop_id, etsy_access_token, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces
-      WHERE user_id = ${session.id}
-      LIMIT 1
-    `;
+    if (session) {
+      workspaceRows = (await sql`
+        SELECT user_id, etsy_shop_id, etsy_access_token, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
+        FROM user_workspaces
+        WHERE user_id = ${session.id}
+        LIMIT 1
+      `) as unknown as typeof workspaceRows;
+    }
 
     // 2. Global Sistem Ayarlarını Çek (API Anahtarları, Vision Modelleri, Prompts, Etsy API Key)
     const settingsRows = await sql`
@@ -245,19 +259,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Sistem Vision AI API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
     }
 
-    // 3. Etsy Resmi API OAuth Token Çözümleme (Kullanıcı Oturumu veya Workspace Önceliğiyle)
+    // 3. Etsy Resmi API OAuth Token Çözümleme (Kullanıcı Oturumu Varsa)
     let etsyAccessToken: string | undefined = undefined;
-    const targetUserId = session.id;
-
-    try {
-      const tokenRes = await getValidEtsyToken(targetUserId);
+    if (session) {
+      try {
+        const tokenRes = await getValidEtsyToken(session.id);
         if (tokenRes.success && tokenRes.access_token) {
           etsyAccessToken = tokenRes.access_token;
           etsyApiKey = tokenRes.api_key || etsyApiKey;
           etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
         }
-    } catch (e) {
-      console.warn('[Design Analyze] Etsy token lookup failed:', e instanceof Error ? e.message : 'unknown error');
+      } catch (e) {
+        console.warn('[Design Analyze] Etsy token lookup failed:', e instanceof Error ? e.message : 'unknown error');
+      }
     }
     
     // Vision model belirleme
@@ -410,7 +424,7 @@ export async function POST(request: Request) {
       etsyAccessToken,
       etsyApiKey,
       etsySharedSecret,
-      userId: targetUserId,
+      userId: session?.id,
       apiKey: scrapingApiKey,
       provider: scrapingProvider,
       workerUrl,

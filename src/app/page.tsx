@@ -76,7 +76,20 @@ function MainContent() {
     return () => window.clearTimeout(tabTimer);
   }, []);
 
+  // If user is guest and on a hidden tab (seo or listings), redirect to mockups
+  useEffect(() => {
+    if (!user && (activeTabState === 'seo' || activeTabState === 'listings')) {
+      setActiveTabState('mockups');
+      try { localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, 'mockups'); } catch {}
+    }
+  }, [user, activeTabState]);
+
   const setActiveTab = (tab: TabKey) => {
+    // Prevent guest from navigating to protected tabs
+    if (!user && (tab === 'seo' || tab === 'listings')) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     setActiveTabState(tab);
     try {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, tab);
@@ -216,11 +229,12 @@ function MainContent() {
     }
 
     if (Math.abs(deltaX) > 80 && Math.abs(deltaX) > Math.abs(deltaY) * 2.5) {
-      const currentIndex = TAB_ORDER.indexOf(activeTab);
-      if (deltaX < 0 && currentIndex < TAB_ORDER.length - 1) {
-        setActiveTab(TAB_ORDER[currentIndex + 1]);
+      const allowedTabs = user ? TAB_ORDER : (['mockups', 'designs', 'generator'] as TabKey[]);
+      const currentIndex = allowedTabs.indexOf(activeTab);
+      if (deltaX < 0 && currentIndex < allowedTabs.length - 1) {
+        setActiveTab(allowedTabs[currentIndex + 1]);
       } else if (deltaX > 0 && currentIndex > 0) {
-        setActiveTab(TAB_ORDER[currentIndex - 1]);
+        setActiveTab(allowedTabs[currentIndex - 1]);
       }
     }
   };

@@ -114,12 +114,18 @@ export const DesignCard: React.FC<DesignCardProps> = ({
         </div>
       </div>
 
-      {/* Thumbnail Area */}
+      {/* Thumbnail Area with Dynamic Garment Simulation Background */}
       <div
-        className={`w-full h-28 sm:h-36 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950/80 border p-2 flex items-center justify-center relative mb-2 sm:mb-3 transition-colors ${
+        className={`w-full h-28 sm:h-36 rounded-xl overflow-hidden p-2 flex items-center justify-center relative mb-2 sm:mb-3 transition-colors duration-200 border ${
+          design.targetApparel === 'dark'
+            ? 'bg-white border-slate-200 shadow-inner'
+            : design.targetApparel === 'light'
+            ? 'bg-slate-950 border-slate-800 shadow-inner'
+            : 'bg-slate-200/90 dark:bg-slate-800/90 border-slate-300 dark:border-slate-700'
+        } ${
           isSelected
-            ? 'border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/20'
-            : 'border-slate-200 dark:border-slate-800'
+            ? 'ring-2 ring-amber-400/40 border-amber-400 dark:border-amber-500'
+            : ''
         }`}
       >
         <img

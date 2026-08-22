@@ -158,7 +158,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string[] | null>(keys.ETSY_FOLDER_ORDER),
       ]);
 
-    if (hasInit && (savedMockups?.length || savedDesigns?.length || savedFolders?.length)) {
+    if (hasInit) {
       return {
         mockups: savedMockups || [],
         designs: savedDesigns || [],

@@ -3,7 +3,7 @@
  * Normalizes uploaded videos (.mov, .webm, .avi, .mp4) and uploads them to binary storage.
  */
 
-import { uploadMediaToServer } from './image-optimizer';
+import { uploadMediaToServer, blobToDataUrl } from './image-optimizer';
 import { transcodeWithFFmpeg } from './ffmpeg-service';
 
 export interface OptimizedVideoResult {
@@ -78,12 +78,13 @@ export async function optimizeVideoFile(
 
         try {
           if (onProgress) onProgress(100);
-          const serverUrl = await uploadMediaToServer(compressedFile, 'video/webm');
+          const dataUrl = await blobToDataUrl(compressedFile);
+          const serverUrl = await uploadMediaToServer(dataUrl, 'video/webm');
           resolve({
-            dataUrl: serverUrl,
-            url: serverUrl,
+            dataUrl: serverUrl || dataUrl,
+            url: serverUrl || dataUrl,
             blob: compressedFile,
-            mimeType: 'webm', // Since we used webm format here natively
+            mimeType: 'video/webm',
             extension: 'webm',
             originalSize: file.size,
             optimizedSize: compressedFile.size
@@ -125,10 +126,11 @@ export async function optimizeVideoFile(
       transcodeWithFFmpeg(file, onProgress)
         .then(async (ffmpegFile) => {
           try {
-            const serverUrl = await uploadMediaToServer(ffmpegFile, 'video/mp4');
+            const dataUrl = await blobToDataUrl(ffmpegFile);
+            const serverUrl = await uploadMediaToServer(dataUrl, 'video/mp4');
             resolve({
-              dataUrl: serverUrl,
-              url: serverUrl,
+              dataUrl: serverUrl || dataUrl,
+              url: serverUrl || dataUrl,
               blob: ffmpegFile,
               mimeType: 'video/mp4',
               extension: 'mp4',

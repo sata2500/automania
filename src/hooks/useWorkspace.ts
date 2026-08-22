@@ -80,6 +80,10 @@ export function useWorkspace() {
         setActiveFolderId(data.activeFolderId || null);
         setSelectedMockupId(data.selectedMockupId || null);
         setActiveDesignFolderId(data.activeDesignFolderId || null);
+        if (data.etsyGeneratedMockups && data.etsyGeneratedMockups.length > 0) {
+          setRenderedMatches(data.etsyGeneratedMockups);
+          setHasGenerated(true);
+        }
         setInitializationError(null);
         setIsInitialized(true);
       })
@@ -93,6 +97,8 @@ export function useWorkspace() {
         setActiveFolderId(null);
         setSelectedMockupId(null);
         setActiveDesignFolderId(null);
+        setRenderedMatches([]);
+        setHasGenerated(false);
         setIsInitialized(true);
       });
     return () => { isMounted = false; };
@@ -120,6 +126,7 @@ export function useWorkspace() {
         folders,
         activeFolderId,
         selectedMockupId,
+        etsyGeneratedMockups: renderedMatches,
       }, lastSyncTimestampRef.current);
 
       if (result.conflict) {
@@ -133,7 +140,7 @@ export function useWorkspace() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
+  }, [mockups, designs, folders, activeFolderId, selectedMockupId, renderedMatches, isInitialized]);
 
   // Auto-save UI state locally
   useEffect(() => {

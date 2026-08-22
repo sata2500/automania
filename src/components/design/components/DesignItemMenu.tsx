@@ -58,7 +58,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
         top: `${position.top}px`,
         left: `${position.left}px`,
       }}
-      className="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl py-1.5 min-w-[210px] text-xs animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl py-1.5 min-w-[200px] text-xs animate-in fade-in zoom-in-95 duration-100"
     >
       {/* AI Analysis */}
       <button
@@ -67,7 +67,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
           onAnalyze(design);
         }}
         disabled={isAnalyzing}
-        className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium disabled:opacity-50"
+        className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium disabled:opacity-50 cursor-pointer"
       >
         <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
         <span>{design.analysis ? 'Analiz Sonucunu Gör' : 'Yapay Zeka ile Analiz Et'}</span>
@@ -79,7 +79,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
           onClose();
           onCrop(design);
         }}
-        className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium"
+        className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
       >
         <Crop className="w-4 h-4 text-amber-500 shrink-0" />
         <span>Tasarımı Kırp</span>
@@ -131,7 +131,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
                     className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between transition-colors ${
                       isCurrent
                         ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">

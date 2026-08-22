@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -252,9 +250,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         onDeleteFolder={handleDeleteFolder}
       />
 
-      {/* Design List Container */}
+      {/* Main Studio Design Cards Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
-        {/* Toolbar with summary and bulk action controls */}
+        {/* Action Toolbar */}
         <DesignToolbar
           designs={designs}
           filteredDesigns={filteredDesigns}
@@ -269,7 +267,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           onBulkAnalyze={handleBulkAnalyze}
         />
 
-        {/* Responsive Design Cards Grid */}
+        {/* Dynamic Responsive Design Grid */}
         <DesignGrid
           designs={filteredDesigns}
           selectedDesignIds={selectedDesignIds}

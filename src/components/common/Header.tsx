@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Top Navigation Tabs */}
             <nav aria-label="Ana navigasyon" className="hidden md:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.map(({ key, label, icon: Icon }) => {
+              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
                 return (
@@ -189,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
         aria-label="Mobil navigasyon"
         className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
       >
-        {TABS.map(({ key, shortLabel, icon: Icon }) => {
+        {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, shortLabel, icon: Icon }) => {
           const badge = getBadge(key);
           const isActive = activeTab === key;
           return (

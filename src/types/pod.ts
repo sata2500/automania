@@ -28,7 +28,7 @@ export interface MockupItem {
   id: string;
   name: string;
   src: string;
-  folderId: string;
+  folderId?: string;
   apparelType: ApparelType;
   printAreas: PrintArea[];
   opacity: number;

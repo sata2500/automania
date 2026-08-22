@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   UploadCloud,
   CheckSquare,
@@ -10,13 +10,18 @@ import {
   Video,
   Image as ImageIcon,
   Check,
+  FolderInput,
+  Folder,
+  Layers,
+  ChevronDown,
 } from 'lucide-react';
-import { MockupItem, PrintArea } from '@/types/pod';
+import { MockupItem, PrintArea, MockupFolder } from '@/types/pod';
 import { MockupItemMenu } from './MockupItemMenu';
 
 interface MockupSidebarListProps {
   filteredMockups: MockupItem[];
   allMockups: MockupItem[];
+  mockupFolders?: MockupFolder[];
   selectedMockupId: string | null;
   setSelectedMockupId: (id: string | null) => void;
   selectedIds: string[];
@@ -26,11 +31,14 @@ interface MockupSidebarListProps {
   onApplyConfigToSelected: () => void;
   onBatchDeleteRequest: () => void;
   onRequestDeleteMockup: (id: string) => void;
+  onMoveToFolder?: (mockupId: string, folderId: string | null) => void;
+  onBulkMove?: (folderId: string | null) => void;
   activePrintArea?: PrintArea;
 }
 
 export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
   filteredMockups,
+  mockupFolders = [],
   selectedMockupId,
   setSelectedMockupId,
   selectedIds,
@@ -40,7 +48,25 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
   onApplyConfigToSelected,
   onBatchDeleteRequest,
   onRequestDeleteMockup,
+  onMoveToFolder,
+  onBulkMove,
 }) => {
+  // Bulk Move Popover State
+  const [isBulkFolderMenuOpen, setIsBulkFolderMenuOpen] = useState(false);
+  const bulkFolderMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close bulk folder dropdown on outside click
+  useEffect(() => {
+    if (!isBulkFolderMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (bulkFolderMenuRef.current && !bulkFolderMenuRef.current.contains(e.target as Node)) {
+        setIsBulkFolderMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isBulkFolderMenuOpen]);
+
   // Desktop Drag & Drop
   const [draggedMockupIndex, setDraggedMockupIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -252,10 +278,57 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
           <span className="font-semibold text-amber-900 dark:text-amber-300">
             {selectedIds.length} Mockup Seçildi
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Bulk Move to Folder Popover */}
+            {onBulkMove && (
+              <div className="relative" ref={bulkFolderMenuRef}>
+                <button
+                  onClick={() => setIsBulkFolderMenuOpen(!isBulkFolderMenuOpen)}
+                  className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium rounded-lg shadow-xs flex items-center gap-1 transition-colors text-[11px] cursor-pointer"
+                  title="Seçilen mockup'ları başka bir klasöre taşı"
+                >
+                  <FolderInput className="w-3 h-3 text-indigo-500 shrink-0" />
+                  <span>Klasöre Taşı</span>
+                  <ChevronDown className={`w-2.5 h-2.5 text-slate-400 transition-transform ${isBulkFolderMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isBulkFolderMenuOpen && (
+                  <div className="absolute right-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 min-w-[190px] max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      Hedef Klasör Seçin
+                    </div>
+                    <button
+                      onClick={() => {
+                        onBulkMove(null);
+                        setIsBulkFolderMenuOpen(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Ana Klasör (Tümü)</span>
+                    </button>
+                    <div className="h-px bg-slate-100 dark:bg-slate-700 my-0.5" />
+                    {mockupFolders.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          onBulkMove(f.id);
+                          setIsBulkFolderMenuOpen(false);
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer truncate"
+                      >
+                        <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={onApplyConfigToSelected}
-              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg shadow-sm flex items-center gap-1 transition-colors text-[11px]"
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg shadow-sm flex items-center gap-1 transition-colors text-[11px] cursor-pointer"
               title="Aktif mockup'ın baskı ayarlarını seçilenlere uygula"
             >
               <Copy className="w-3 h-3" />
@@ -263,7 +336,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
             </button>
             <button
               onClick={onBatchDeleteRequest}
-              className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg shadow-sm flex items-center gap-1 transition-colors text-[11px]"
+              className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg shadow-sm flex items-center gap-1 transition-colors text-[11px] cursor-pointer"
               title="Seçilenleri Sil"
             >
               <Trash2 className="w-3 h-3" />
@@ -449,11 +522,17 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
       {menuState && (
         <MockupItemMenu
           item={menuState.item}
+          mockupFolders={mockupFolders}
           isOpen={true}
           position={menuState.position}
           onClose={() => setMenuState(null)}
           onRename={handleStartRename}
           onDelete={onRequestDeleteMockup}
+          onMoveToFolder={(id, folderId) => {
+            if (onMoveToFolder) {
+              onMoveToFolder(id, folderId);
+            }
+          }}
         />
       )}
     </div>

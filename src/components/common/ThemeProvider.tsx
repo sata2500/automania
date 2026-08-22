@@ -24,16 +24,24 @@ const THEME_STORAGE_KEY = 'automania_pod_theme_preference';
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>('system');
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('dark');
+  const [isMounted, setIsMounted] = useState(false);
 
   // On mount, read saved preference (may already be applied by blocking script)
   useEffect(() => {
-    const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-    if (saved && (saved === 'system' || saved === 'light' || saved === 'dark')) {
-      setThemeState(saved);
-    }
+    let initialTheme: Theme = 'system';
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+      if (saved && (saved === 'system' || saved === 'light' || saved === 'dark')) {
+        initialTheme = saved;
+      }
+    } catch {}
+    setThemeState(initialTheme);
+    setIsMounted(true);
   }, []);
 
   useEffect(() => {
+    if (!isMounted) return;
+
     const root = document.documentElement;
 
     const applyTheme = () => {
@@ -60,7 +68,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     applyTheme();
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {}
 
     if (theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -68,7 +78,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       mediaQuery.addEventListener('change', listener);
       return () => mediaQuery.removeEventListener('change', listener);
     }
-  }, [theme]);
+  }, [theme, isMounted]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

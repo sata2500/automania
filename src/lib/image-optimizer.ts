@@ -13,6 +13,15 @@ export interface OptimizedImageResult {
   optimizedSize: number;
 }
 
+export function blobToDataUrl(blob: Blob | File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Uploads a file or Base64 data URL directly to the server (Cloudflare R2 / Storage API).
  * Uses direct FormData server upload first, with Base64 JSON fallbacks.
@@ -42,6 +51,11 @@ export async function uploadMediaToServer(
         fileToUpload = new File([dataUrlOrFile], `upload-${Date.now()}.mp4`, { type: actualType });
       } else {
         fileToUpload = dataUrlOrFile;
+      }
+      try {
+        rawDataUrl = await blobToDataUrl(fileToUpload);
+      } catch (readErr) {
+        console.warn('[uploadMediaToServer] Failed to read file as data URL:', readErr);
       }
     } else {
       rawDataUrl = dataUrlOrFile;
@@ -103,13 +117,19 @@ export async function uploadMediaToServer(
       }
     }
 
-    // Method 3: Safety Net (Offline/Local preview fallback so user never loses their generation)
+    // Method 3: Safety Net (Offline/Local preview fallback so user never loses their data)
+    if (rawDataUrl) {
+      return rawDataUrl;
+    }
     if (typeof dataUrlOrFile === 'string') {
       return dataUrlOrFile;
     }
     return URL.createObjectURL(fileToUpload);
   } catch (err: any) {
     console.error('[uploadMediaToServer] Critical upload error:', err);
+    if (rawDataUrl) {
+      return rawDataUrl;
+    }
     if (typeof dataUrlOrFile === 'string') {
       return dataUrlOrFile;
     }
@@ -178,7 +198,8 @@ export async function optimizeMockupImage(
 }
 
 /**
- * Optimizes PNG designs while 100% preserving alpha channel transparency.
+ * Optimizes PNG/JPEG/WebP designs while 100% preserving alpha channel transparency.
+ * Automatically compresses to optimized WebP format for fast rendering, tiny file size, and high visual clarity.
  */
 export async function optimizeDesignImage(
   fileOrDataUrl: File | string,
@@ -213,12 +234,12 @@ export async function optimizeDesignImage(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Use WebP format to allow lossy compression while preserving alpha transparency
-  const quality = 0.9;
+  // Compress to WebP preserving alpha transparency
+  const quality = 0.88;
   let optimizedDataUrl = canvas.toDataURL('image/webp', quality);
   let finalMime = 'image/webp';
 
-  // Fallback to PNG if the browser does not support WebP export
+  // Fallback to PNG if browser does not support WebP canvas export
   if (!optimizedDataUrl.startsWith('data:image/webp')) {
     optimizedDataUrl = canvas.toDataURL('image/png');
     finalMime = 'image/png';
@@ -226,7 +247,7 @@ export async function optimizeDesignImage(
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload optimized binary design to server API
+  // Upload to storage / server API
   const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime);
 
   return {

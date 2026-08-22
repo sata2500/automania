@@ -100,12 +100,11 @@ export async function renderMockupWithDesign(
   // If this item is a static visual (size chart, color chart) or has no print area, return base image directly
   const isStaticAsset = mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
   if (isStaticAsset) {
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (!blob) return reject(new Error('Canvas export failed'));
-        resolve(URL.createObjectURL(blob));
-      }, format, quality);
-    });
+    let dataUrl = canvas.toDataURL(format, quality);
+    if (!dataUrl.startsWith('data:image/')) {
+      dataUrl = canvas.toDataURL('image/png');
+    }
+    return dataUrl;
   }
 
   // 2. Process design overlay for each print area cleanly
@@ -145,12 +144,11 @@ export async function renderMockupWithDesign(
     ctx.restore();
   }
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) return reject(new Error('Canvas export failed'));
-      resolve(URL.createObjectURL(blob));
-    }, format, quality);
-  });
+  let finalDataUrl = canvas.toDataURL(format, quality);
+  if (!finalDataUrl.startsWith('data:image/')) {
+    finalDataUrl = canvas.toDataURL('image/png');
+  }
+  return finalDataUrl;
 }
 
 export function generateMatchingPairs(

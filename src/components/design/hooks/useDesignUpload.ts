@@ -24,14 +24,16 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
         return;
       }
 
-      const uploadToastId = toast.progress('Tasarımlar işleniyor...', 10);
+      const uploadToastId = toast.progress('Tasarımlar optimize ediliyor...', 10);
       let uploadedCount = 0;
       const newDesigns: DesignItem[] = [];
 
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
+          // Automatic WebP compression with 100% alpha transparency preservation
           const optimized = await optimizeDesignImage(file, 2000);
+
           newDesigns.push({
             id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) + i,
             name: file.name.replace(/\.[^/.]+$/, ''),
@@ -43,11 +45,12 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
             folderId: activeDesignFolderId || undefined,
           });
           uploadedCount++;
+
           const percent = Math.round(((i + 1) / fileArray.length) * 100);
           toast.updateProgressToast(
             uploadToastId,
             percent,
-            `${i + 1}/${fileArray.length} tasarım işlendi`
+            `${i + 1}/${fileArray.length} tasarım optimize edildi`
           );
         } catch (err) {
           console.error('Tasarım optimizasyon hatası:', err);
@@ -67,7 +70,7 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
 
       toast.removeToast(uploadToastId);
       if (uploadedCount > 0) {
-        toast.success(`${uploadedCount} tasarım başarıyla yüklendi!`);
+        toast.success(`${uploadedCount} tasarım başarıyla optimize edildi ve yüklendi! 🚀`);
       }
       setIsOptimizing(false);
     },
