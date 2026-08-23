@@ -57,8 +57,8 @@ function getCurrentUserId(): string {
   return 'default_user';
 }
 
-function getStorageKeys() {
-  const userId = getCurrentUserId();
+export function getStorageKeys(overrideUserId?: string | null) {
+  const userId = overrideUserId !== undefined ? overrideUserId : getCurrentUserId();
   const prefix = userId && userId !== 'default_user' ? `user_${userId}_` : '';
   return {
     MOCKUPS: `${prefix}automania_pod_mockups_v1`,
@@ -77,6 +77,111 @@ function getStorageKeys() {
     ETSY_GENERATED_MOCKUPS: `${prefix}automania_etsy_generated_mockups_v1`,
     ETSY_FOLDER_ORDER: `${prefix}automania_etsy_folder_order_v1`,
   };
+}
+
+/**
+ * Checks if there is draft data in the guest workspace (e.g. created before signing in).
+ */
+export async function getGuestWorkspace(): Promise<AppDataPayload | null> {
+  const keys = getStorageKeys('default_user');
+  try {
+    const [mockups, designs, folders, activeFolder, selectedMockup] = await Promise.all([
+      get<MockupItem[]>(keys.MOCKUPS),
+      get<DesignItem[]>(keys.DESIGNS),
+      get<MockupFolder[]>(keys.FOLDERS),
+      get<string | null>(keys.ACTIVE_FOLDER),
+      get<string | null>(keys.SELECTED_MOCKUP),
+    ]);
+
+    if ((mockups && mockups.length > 0) || (designs && designs.length > 0)) {
+      return {
+        mockups: mockups || [],
+        designs: designs || [],
+        folders: folders || [],
+        activeFolderId: activeFolder || null,
+        selectedMockupId: selectedMockup || (mockups?.[0]?.id || null),
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to inspect guest workspace:', err);
+  }
+  return null;
+}
+
+/**
+ * Clears only the guest workspace keys from IndexedDB.
+ */
+export async function clearGuestWorkspace(): Promise<void> {
+  const keys = getStorageKeys('default_user');
+  try {
+    await Promise.all([
+      del(keys.MOCKUPS),
+      del(keys.DESIGNS),
+      del(keys.FOLDERS),
+      del(keys.ACTIVE_FOLDER),
+      del(keys.SELECTED_MOCKUP),
+      del(keys.ACTIVE_DESIGN_FOLDER),
+      del(keys.ETSY_GENERATED_MOCKUPS),
+      del(keys.ETSY_FOLDER_ORDER),
+    ]);
+  } catch (err) {
+    console.warn('Failed to clear guest workspace:', err);
+  }
+}
+
+/**
+ * Migrates local guest workspace items (mockups, designs, folders) into the signed-in user's account.
+ */
+export async function migrateGuestWorkspaceToUser(
+  currentUserPayload?: Partial<AppDataPayload>
+): Promise<AppDataPayload | null> {
+  const guestData = await getGuestWorkspace();
+  if (!guestData) return null;
+
+  const currentMockups = currentUserPayload?.mockups || [];
+  const currentDesigns = currentUserPayload?.designs || [];
+  const currentFolders = currentUserPayload?.folders || [];
+
+  // Merge folders without duplicate names
+  const mergedFolders = [...currentFolders];
+  for (const gf of guestData.folders || []) {
+    if (!mergedFolders.some(f => f.id === gf.id || f.name === gf.name)) {
+      mergedFolders.push(gf);
+    }
+  }
+
+  // Merge mockups without duplicate IDs
+  const mergedMockups = [...currentMockups];
+  for (const gm of guestData.mockups || []) {
+    if (!mergedMockups.some(m => m.id === gm.id)) {
+      mergedMockups.push(gm);
+    }
+  }
+
+  // Merge designs without duplicate IDs
+  const mergedDesigns = [...currentDesigns];
+  for (const gd of guestData.designs || []) {
+    if (!mergedDesigns.some(d => d.id === gd.id)) {
+      mergedDesigns.push(gd);
+    }
+  }
+
+  const mergedPayload: AppDataPayload = {
+    mockups: mergedMockups,
+    designs: mergedDesigns,
+    folders: mergedFolders,
+    activeFolderId: guestData.activeFolderId || currentUserPayload?.activeFolderId || null,
+    selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (mergedMockups[0]?.id || null),
+    lastUpdated: Date.now(),
+  };
+
+  // 1. Save merged state to the logged-in user's IndexedDB and Server
+  await saveAppData(mergedPayload);
+
+  // 2. Clear guest workspace so migration prompt doesn't trigger again
+  await clearGuestWorkspace();
+
+  return mergedPayload;
 }
 
 interface EtsyVariationTemplate {

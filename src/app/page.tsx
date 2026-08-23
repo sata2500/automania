@@ -15,9 +15,12 @@ import {
   clearAllAppData,
   exportAppDataFile,
   parseAppDataBackupFile,
+  migrateGuestWorkspaceToUser,
+  AppDataPayload,
 } from '@/lib/storage-service';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
+import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
@@ -196,6 +199,27 @@ function MainContent() {
     toast.success('Tüm veriler başarıyla temizlendi, boş çalışma alanı hazır.', 'Veriler Sıfırlandı');
   };
 
+  const handleMigrateGuestData = (payload?: AppDataPayload) => {
+    if (payload) {
+      setMockups(payload.mockups || []);
+      setDesigns(payload.designs || []);
+      setFolders(payload.folders || []);
+      setActiveFolderId(payload.activeFolderId || null);
+      setSelectedMockupId(payload.selectedMockupId || null);
+    } else {
+      migrateGuestWorkspaceToUser({ mockups, designs, folders }).then((merged) => {
+        if (merged) {
+          setMockups(merged.mockups || []);
+          setDesigns(merged.designs || []);
+          setFolders(merged.folders || []);
+          setActiveFolderId(merged.activeFolderId || null);
+          setSelectedMockupId(merged.selectedMockupId || null);
+          toast.success('Misafir taslaklarınız bu hesabınıza başarıyla aktarıldı!', 'Aktarım Tamamlandı');
+        }
+      });
+    }
+  };
+
   const handleDismissGuestBanner = () => {
     setIsGuestInfoDismissed(true);
     try { localStorage.setItem(STORAGE_KEYS.GUEST_BANNER_DISMISSED, 'true'); } catch {}
@@ -275,6 +299,9 @@ function MainContent() {
             </button>
           </div>
         )}
+
+        {/* Guest Data Migration Prompt for Signed-in Users */}
+        {user && <GuestMigrationBanner onMigrationComplete={handleMigrateGuestData} />}
 
         {/* Guest User Informational Banner (Dismissible & Remembered) */}
         {!user && !isGuestInfoDismissed && (
@@ -430,6 +457,7 @@ function MainContent() {
         onImportBackup={handleImportBackup}
         onLoadSampleData={handleLoadSampleData}
         onClearAllData={handleClearAllData}
+        onMigrateGuestData={() => handleMigrateGuestData()}
         onNavigateAdmin={() => {
           window.location.href = '/admin';
         }}
