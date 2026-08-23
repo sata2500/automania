@@ -21,6 +21,7 @@ import { AuthModal } from '@/components/common/AuthModal';
 import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
+import { useToast } from '@/components/common/ToastContext';
 
 const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'listings'];
 
@@ -117,6 +118,7 @@ function MainContent() {
     isPwaInfoDismissed, setIsPwaInfoDismissed,
     isPwaInstalled
   } = useWorkspace();
+  const toast = useToast();
 
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
 
@@ -132,9 +134,10 @@ function MainContent() {
         activeFolderId,
         selectedMockupId,
       });
+      toast.success('Yedek ZIP dosyası başarıyla indirildi.', 'Yedek Alındı');
     } catch (err) {
       console.error('Yedekleme sırasında hata:', err);
-      alert('Yedekleme işlemi sırasında bir hata oluştu.');
+      toast.error('Yedekleme işlemi sırasında bir hata oluştu.', 'Yedek Hatası');
     } finally {
       setIsBackupProcessing(false);
     }
@@ -152,9 +155,9 @@ function MainContent() {
       setRenderedMatches([]);
       setHasGenerated(false);
       await saveAppData(data);
-      alert('Yedek başarıyla yüklendi!');
+      toast.success('Yedek başarıyla yüklendi ve çalışma alanı güncellendi!', 'Yedek Yüklendi');
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : 'Yedek yüklenirken bir hata oluştu.');
+      toast.error(error instanceof Error ? error.message : 'Yedek yüklenirken bir hata oluştu.', 'Yükleme Hatası');
     } finally {
       setIsBackupProcessing(false);
     }
@@ -173,9 +176,10 @@ function MainContent() {
       setSelectedMockupId(data.selectedMockupId);
       setRenderedMatches([]);
       setHasGenerated(false);
+      toast.success('Örnek taslak başarıyla yüklendi!', 'Taslak Yüklendi');
     } catch (error) {
       console.error('[Workspace] Sample data load failed:', error instanceof Error ? error.message : 'unknown error');
-      alert(error instanceof Error ? error.message : 'Örnek taslak yüklenirken bir hata oluştu.');
+      toast.error(error instanceof Error ? error.message : 'Örnek taslak yüklenirken bir hata oluştu.', 'Hata');
     }
   };
 
@@ -189,6 +193,7 @@ function MainContent() {
     setRenderedMatches([]);
     setHasGenerated(false);
     setIsEmptyWorkspaceDismissed(false);
+    toast.success('Tüm veriler başarıyla temizlendi, boş çalışma alanı hazır.', 'Veriler Sıfırlandı');
   };
 
   const handleDismissGuestBanner = () => {

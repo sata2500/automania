@@ -291,8 +291,9 @@ export async function deleteBlobs(urls: string[]): Promise<void> {
  */
 export async function clearAllAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
+  const userId = getCurrentUserId();
   try {
-    // Toplayıp sileceğimiz blob'ları bulalım
+    // Toplayıp sileceğimiz remote HTTP blob'ları bulalım (base64/data URL'ler sunucuya gönderilmez)
     const [mockups, designs, generatedMockups] = await Promise.all([
       get<MockupItem[]>(keys.MOCKUPS),
       get<DesignItem[]>(keys.DESIGNS),
@@ -300,12 +301,13 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
     ]);
     
     const urlsToDelete: string[] = [];
-    if (mockups) mockups.forEach(m => { if (m.src) urlsToDelete.push(m.src); });
-    if (designs) designs.forEach(d => { if (d.src) urlsToDelete.push(d.src); });
-    if (generatedMockups) generatedMockups.forEach(item => { if (item.previewUrl) urlsToDelete.push(item.previewUrl); });
+    if (mockups) mockups.forEach(m => { if (m.src && (m.src.startsWith('http://') || m.src.startsWith('https://'))) urlsToDelete.push(m.src); });
+    if (designs) designs.forEach(d => { if (d.src && (d.src.startsWith('http://') || d.src.startsWith('https://'))) urlsToDelete.push(d.src); });
+    if (generatedMockups) generatedMockups.forEach(item => { if (item.previewUrl && (item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://'))) urlsToDelete.push(item.previewUrl); });
     
-    // Wait for server-side deletion before clearing the authoritative workspace.
-    await deleteBlobs(Array.from(new Set(urlsToDelete)));
+    if (urlsToDelete.length > 0) {
+      await deleteBlobs(Array.from(new Set(urlsToDelete))).catch(() => {});
+    }
 
     await Promise.all([
       del(keys.MOCKUPS),
@@ -339,7 +341,9 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
       set(keys.HAS_INITIALIZED, true),
     ]);
 
-    await fetch('/api/storage', { method: 'DELETE' }).catch(() => {});
+    if (userId && userId !== 'default_user') {
+      await fetch(`/api/storage?userId=${userId}`, { method: 'DELETE' }).catch(() => {});
+    }
   } catch (err) {
     console.error('Failed to clear storage:', err);
   }
@@ -486,19 +490,29 @@ export async function exportAppDataFile(payload: AppDataPayload): Promise<void> 
   const newPayload = JSON.parse(JSON.stringify(payload));
 
   const processImage = async (item: MockupItem | DesignItem) => {
-    if (item.src && item.src.startsWith('http')) {
-      try {
+    if (!item.src) return;
+    try {
+      if (item.src.startsWith('http')) {
         const response = await fetch(item.src);
         const blob = await response.blob();
-        
         const urlObj = new URL(item.src);
         const filename = urlObj.pathname.split('/').pop() || `${item.id}.png`;
-        
         imagesFolder.file(filename, blob);
         item.src = `images/${filename}`;
-      } catch (err) {
-        console.warn(`Failed to fetch image for backup: ${item.src}`, err);
+      } else if (item.src.startsWith('data:')) {
+        const parts = item.src.split(',');
+        const mime = parts[0].match(/:(.*?);/)?.[1] || 'image/webp';
+        const binary = atob(parts[1]);
+        const array = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+        const blob = new Blob([array], { type: mime });
+        const ext = mime.includes('png') ? 'png' : mime.includes('jpeg') ? 'jpg' : 'webp';
+        const filename = `${item.id}.${ext}`;
+        imagesFolder.file(filename, blob);
+        item.src = `images/${filename}`;
       }
+    } catch (err) {
+      console.warn(`Failed to process image for backup: ${item.id}`, err);
     }
   };
 
@@ -534,7 +548,7 @@ export async function parseAppDataBackupFile(file: File): Promise<AppDataPayload
     throw new Error('Geçersiz yedek dosyası biçimi.');
   }
 
-  // Upload images from zip to Vercel Blob
+  // Restore images from zip
   const processImage = async (item: MockupItem | DesignItem) => {
     if (item.src && item.src.startsWith('images/')) {
       const imgFile = loadedZip.file(item.src);
@@ -543,8 +557,22 @@ export async function parseAppDataBackupFile(file: File): Promise<AppDataPayload
           const blobData = await imgFile.async("blob");
           const ext = item.src.split('.').pop() || 'png';
           const fileToUpload = new File([blobData], `restore-${Date.now()}.${ext}`, { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-          const newUrl = await uploadMediaToServer(fileToUpload, fileToUpload.type, { requireDurable: true });
-          item.src = newUrl;
+          
+          try {
+            const newUrl = await uploadMediaToServer(fileToUpload, fileToUpload.type, { requireDurable: false });
+            if (newUrl) {
+              item.src = newUrl;
+              return;
+            }
+          } catch {}
+
+          // Fallback to local DataURL for guest/offline restoration
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blobData);
+          });
+          item.src = dataUrl;
         } catch (err) {
           console.error(`Failed to restore image ${item.src}:`, err);
         }

@@ -381,10 +381,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         title={confirmConfig.title}
         message={confirmConfig.message}
         onConfirm={() => {
-          if (confirmConfig.action) confirmConfig.action();
-          setConfirmConfig({ ...confirmConfig, isOpen: false });
+          if (confirmConfig.action) {
+            confirmConfig.action();
+          }
+          setConfirmConfig({ isOpen: false, title: '', message: '', action: null });
+          setIsAuthModalOpen(false);
         }}
-        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+        onCancel={() => setConfirmConfig({ isOpen: false, title: '', message: '', action: null })}
       />
     </div>
   );
