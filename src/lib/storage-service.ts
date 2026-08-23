@@ -169,7 +169,7 @@ export async function migrateGuestWorkspaceToUser(
     }
   }
 
-  const mergedPayload: AppDataPayload = {
+  let mergedPayload: AppDataPayload = {
     mockups: mergedMockups,
     designs: mergedDesigns,
     folders: mergedFolders,
@@ -178,10 +178,14 @@ export async function migrateGuestWorkspaceToUser(
     lastUpdated: Date.now(),
   };
 
-  // 1. Save merged state to the logged-in user's IndexedDB and Server
+  // 1. Promote temporary media to durable server URLs where possible
+  const promoted = await promoteTemporaryMediaUrls(mergedPayload);
+  mergedPayload = promoted.payload;
+
+  // 2. Save merged state to the logged-in user's IndexedDB and Server
   await saveAppData(mergedPayload);
 
-  // 2. Clear guest workspace so migration prompt doesn't trigger again
+  // 3. Clear guest workspace so migration prompt doesn't trigger again
   await clearGuestWorkspace();
 
   return mergedPayload;

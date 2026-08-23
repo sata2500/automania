@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 
 function hasTemporaryMediaUrl(value: unknown): boolean {
-  return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
+  return typeof value === 'string' && value.startsWith('blob:');
 }
 
 function payloadContainsTemporaryMedia(body: Record<string, unknown>): boolean {
