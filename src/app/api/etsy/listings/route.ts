@@ -343,7 +343,7 @@ export async function POST(req: Request) {
 
     // 3. Load keyword pool rows for SEO score evaluation of new / changed listings
     const keywordPoolRows = await sql`
-      SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, is_etsy_suggested 
+      SELECT keyword, opportunity_score, etsy_score, total_listings, competition_level, bestseller_count, is_etsy_suggested, last_evaluated_at 
       FROM keyword_pool
       WHERE opportunity_score > 0 OR etsy_score > 0
     `;

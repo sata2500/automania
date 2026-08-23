@@ -55,7 +55,38 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const [isVisionLoading, setIsVisionLoading] = useState(false);
   const [isOptimizeLoading, setIsOptimizeLoading] = useState(false);
   const [isUpdatingEtsy, setIsUpdatingEtsy] = useState(false);
+  const [isSeoScraping, setIsSeoScraping] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Re-scrape / evaluate listing tags against keyword pool
+  const handleRescrapeListingTags = async () => {
+    if (!listing?.listing_id) return;
+    setIsSeoScraping(true);
+    try {
+      const res = await fetch('/api/etsy/listings/evaluate-seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listingId: listing.listing_id, forceRescrape: true })
+      });
+      const data = await res.json();
+      if (data.success && data.results?.[0]) {
+        const item = data.results[0];
+        success(`Etiketler kelime havuzunda başarıyla güncellendi! (${data.newlyScrapedTagsCount || 0} yeni taranan etiket)`);
+        const updated = {
+          ...listing,
+          seo_score: item.seoScore,
+          seo_evaluation: item.evaluation,
+        };
+        onListingUpdated(updated);
+      } else {
+        error(data.error || 'Etiketler taranamadı.');
+      }
+    } catch (err: any) {
+      error('Bağlantı hatası: ' + err.message);
+    } finally {
+      setIsSeoScraping(false);
+    }
+  };
 
   // Sync state with incoming listing
   useEffect(() => {
@@ -382,13 +413,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   <div className="space-y-2.5">
                     <div>
                       <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-                        <span>🏷️ 13 Etiket & Long-Tail Kalitesi</span>
-                        <span>{evaluation.breakdown?.tagsScore ?? 0} / 35 Puan</span>
+                        <span>🏷️ 13 Etiket & Kelime Havuzu Kalitesi</span>
+                        <span>{evaluation.breakdown?.tagsScore ?? 0} / 40 Puan</span>
                       </div>
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.tagsScore ?? 0) / 35) * 100}%` }}
+                          style={{ width: `${((evaluation.breakdown?.tagsScore ?? 0) / 40) * 100}%` }}
                         />
                       </div>
                     </div>
@@ -409,30 +440,109 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <div>
                       <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
                         <span>📄 Açıklama & Bölüm Zenginliği</span>
-                        <span>{evaluation.breakdown?.descriptionScore ?? 0} / 15 Puan</span>
+                        <span>{evaluation.breakdown?.descriptionScore ?? 0} / 25 Puan</span>
                       </div>
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-purple-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.descriptionScore ?? 0) / 15) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-                        <span>👁️ Görsel ve SEO Metin Uyumu</span>
-                        <span>{evaluation.breakdown?.consistencyScore ?? 0} / 15 Puan</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.consistencyScore ?? 0) / 15) * 100}%` }}
+                          style={{ width: `${((evaluation.breakdown?.descriptionScore ?? 0) / 25) * 100}%` }}
                         />
                       </div>
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* TAG & KEYWORD POOL MATRIX CARD */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                      <Tag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                        <span>Etiket & Kelime Havuzu Fırsat Puanları Matrisi</span>
+                        <span className="text-[11px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700">
+                          {Array.isArray(evaluation.tagBreakdown) ? evaluation.tagBreakdown.length : (Array.isArray(listing.tags) ? listing.tags.length : 0)} / 13 Etiket
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Kelime Havuzu verileriyle 7 günlük tazelik kontrolü ve doğrudan matematiksel puanlama.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleRescrapeListingTags}
+                    disabled={isSeoScraping}
+                    className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSeoScraping ? 'animate-spin' : ''}`} />
+                    <span>{isSeoScraping ? 'Havuz Taranıyor...' : '🔄 Etiketleri Havuzda Yeniden Tara'}</span>
+                  </button>
+                </div>
+
+                {/* Tag Breakdown Grid */}
+                {(!evaluation.tagBreakdown || evaluation.tagBreakdown.length === 0) ? (
+                  <div className="text-center py-6 text-xs text-slate-500 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                    <p>Etiket analizi henüz hesaplanmadı. Lütfen yukarıdaki "Etiketleri Havuzda Yeniden Tara" butonuna tıklayın.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {evaluation.tagBreakdown.map((t: any, idx: number) => {
+                      const scoreVal = Number(t.opportunityScore || 0);
+                      const isHigh = scoreVal >= 70;
+                      const isMid = scoreVal >= 45 && scoreVal < 70;
+                      const isLow = scoreVal > 0 && scoreVal < 45;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between gap-2 text-xs"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-[10px] font-mono font-bold text-slate-500">#{idx + 1}</span>
+                              <span className="font-bold text-white truncate" title={t.keyword}>
+                                {t.keyword}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border shrink-0 ${
+                              isHigh
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                : isMid
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : isLow
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              {scoreVal > 0 ? `${scoreVal} Puan` : 'Taranmamış'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5 mt-0.5">
+                            <span className="truncate text-[10px]">
+                              {t.competitionLevel || (t.totalListings ? `${t.totalListings.toLocaleString()} İlan` : 'Havuzda Mevcut')}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {t.bestsellerCount > 0 && (
+                                <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30 px-1.5 py-0.2 rounded font-medium" title="Bestseller Kanıtı">
+                                  🔥 Bestseller
+                                </span>
+                              )}
+                              <span className={`text-[10px] font-mono px-1 rounded ${
+                                t.isValidLength ? 'text-slate-400' : 'bg-rose-500/20 text-rose-400 font-bold'
+                              }`}>
+                                {t.charLength}/20
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Strengths & Issues */}

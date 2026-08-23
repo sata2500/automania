@@ -617,7 +617,7 @@ export const EtsyListingManager: React.FC = () => {
                         : 'bg-rose-950/90 text-rose-300 border-rose-500/50'
                     }`}>
                       <TrendingUp className="w-3.5 h-3.5" />
-                      <span>SEO: {score}/100</span>
+                      <span>SEO: {score}/100 ({score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F'})</span>
                     </div>
                   </div>
 
@@ -785,7 +785,7 @@ export const EtsyListingManager: React.FC = () => {
                       <td className="p-3.5">
                         <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1 ${getScoreColor(score)}`}>
                           <TrendingUp className="w-3 h-3" />
-                          <span>{score}/100</span>
+                          <span>{score}/100 ({score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F'})</span>
                         </span>
                       </td>
 
