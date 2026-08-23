@@ -415,13 +415,6 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
 
   inFlightSyncPromise = (async () => {
     try {
-      notifySyncStatus({
-        isSyncing: true,
-        isMigrating: false,
-        message: 'Bulut hesabınız kontrol ediliyor...',
-        progress: 25,
-      });
-
       const res = await fetch('/api/storage');
       if (res.ok) {
         const serverData = await res.json();
@@ -454,7 +447,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
             notifySyncStatus({
               isSyncing: true,
               isMigrating: true,
-              message: 'Yerel verileriniz buluta aktarılıyor...',
+              message: 'Yerel verileriniz bulut hesabınıza aktarılıyor...',
               progress: 40,
             });
             let localPayload: AppDataPayload = {
@@ -472,7 +465,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
             notifySyncStatus({
               isSyncing: false,
               isMigrating: false,
-              message: 'Verileriniz bulut hesabınıza eşitlendi.',
+              message: 'Verileriniz bulut hesabınıza başarıyla aktarıldı!',
               progress: 100,
             });
             return localPayload;
@@ -541,20 +534,11 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
             try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
           }
 
-          notifySyncStatus({
-            isSyncing: false,
-            isMigrating: false,
-            message: 'Hesap verileriniz yüklendi.',
-            progress: 100,
-          });
-
           return payload;
         }
       }
-      notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 100 });
     } catch (err) {
       console.warn('Force sync from server failed:', err);
-      notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 0 });
     } finally {
       inFlightSyncPromise = null;
     }

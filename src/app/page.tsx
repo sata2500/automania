@@ -21,7 +21,7 @@ import {
 import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
-import { SyncStatusBanner } from '@/components/common/SyncStatusBanner';
+import { SyncStatusNotification } from '@/components/common/SyncStatusNotification';
 import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
@@ -306,9 +306,6 @@ function MainContent() {
 
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6">
-        {/* Real-time Cloud Sync & Migration Progress Banner */}
-        <SyncStatusBanner syncStatus={syncStatus} />
-
         {initializationError && (
           <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">
             <span>{initializationError}</span>
@@ -478,6 +475,8 @@ function MainContent() {
 
       </main>
 
+      {/* Floating Bottom-Right Migration Progress Notification */}
+      <SyncStatusNotification syncStatus={syncStatus} />
 
       {/* Auth Modal & Profile Management Modal */}
       <AuthModal
