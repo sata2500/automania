@@ -174,10 +174,22 @@ export async function GET(req: Request) {
       if (sortBy === 'score_desc') return (Number(b.seo_score) || 0) - (Number(a.seo_score) || 0);
       if (sortBy === 'score_asc') return (Number(a.seo_score) || 0) - (Number(b.seo_score) || 0);
       if (sortBy === 'views_desc') return (Number(b.views) || 0) - (Number(a.views) || 0);
+      if (sortBy === 'views_asc') return (Number(a.views) || 0) - (Number(b.views) || 0);
       if (sortBy === 'favorers_desc') return (Number(b.num_favorers) || 0) - (Number(a.num_favorers) || 0);
+      if (sortBy === 'favorers_asc') return (Number(a.num_favorers) || 0) - (Number(b.num_favorers) || 0);
+      if (sortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+      if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
       if (sortBy === 'title_asc') return (a.title || '').localeCompare(b.title || '');
+      if (sortBy === 'title_desc') return (b.title || '').localeCompare(a.title || '');
+      if (sortBy === 'oldest') {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return dateA - dateB;
+      }
       // newest default
-      return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA;
     });
 
     return NextResponse.json({

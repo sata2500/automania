@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import {
   RefreshCw,
@@ -70,8 +70,19 @@ export const EtsyListingManager: React.FC = () => {
   const [scoreFilter, setScoreFilter] = useState('all');
   const [visionFilter, setVisionFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Auto-detect view mode based on device screen width (desktop: table, mobile: grid)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.innerWidth < 768) {
+        setViewMode('grid');
+      } else {
+        setViewMode('table');
+      }
+    }
+  }, []);
 
   // Auto-sync trigger guard (run once on mount if stale)
   const hasCheckedAutoSyncRef = useRef(false);
@@ -120,14 +131,7 @@ export const EtsyListingManager: React.FC = () => {
   const fetchListings = useCallback(async (isInitial = false) => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
-      if (stateFilter !== 'all') params.set('state', stateFilter);
-      if (scoreFilter !== 'all') params.set('scoreFilter', scoreFilter);
-      if (visionFilter !== 'all') params.set('visionFilter', visionFilter);
-      if (sortBy !== 'newest') params.set('sort', sortBy);
-
-      const res = await fetch(`/api/etsy/listings?${params.toString()}`);
+      const res = await fetch('/api/etsy/listings');
       const data = await res.json();
 
       if (data.success) {
@@ -152,7 +156,7 @@ export const EtsyListingManager: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, stateFilter, scoreFilter, visionFilter, sortBy, error, triggerAutoSync]);
+  }, [error, triggerAutoSync]);
 
   useEffect(() => {
     if (initialFetchRef.current) return;
@@ -162,6 +166,88 @@ export const EtsyListingManager: React.FC = () => {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [fetchListings]);
+
+  // Instant in-memory filtering and sorting for 0ms responsive interaction
+  const filteredAndSortedListings = useMemo(() => {
+    let result = [...listings];
+
+    // 1. Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(item => {
+        const titleMatch = (item.title || '').toLowerCase().includes(q);
+        const idMatch = String(item.listing_id || '').includes(q);
+        const rawTags = Array.isArray(item.tags)
+          ? item.tags
+          : typeof item.tags === 'string'
+          ? JSON.parse(item.tags)
+          : [];
+        const tagMatch = (rawTags as string[]).some(t => String(t).toLowerCase().includes(q));
+        return titleMatch || idMatch || tagMatch;
+      });
+    }
+
+    // 2. State filter
+    if (stateFilter !== 'all') {
+      result = result.filter(item => item.state === stateFilter);
+    }
+
+    // 3. Score filter
+    if (scoreFilter !== 'all') {
+      result = result.filter(item => {
+        const sc = Number(item.seo_score || 0);
+        if (scoreFilter === 'critical') return sc < 50;
+        if (scoreFilter === 'warning') return sc >= 50 && sc < 75;
+        if (scoreFilter === 'good') return sc >= 75 && sc < 90;
+        if (scoreFilter === 'excellent') return sc >= 90;
+        return true;
+      });
+    }
+
+    // 4. Vision filter
+    if (visionFilter !== 'all') {
+      result = result.filter(item => {
+        const va = typeof item.vision_analysis === 'string'
+          ? JSON.parse(item.vision_analysis)
+          : (item.vision_analysis || {});
+        const hasVision = Boolean(va && (va.primarySubject || va.description || va.analyzedAt));
+        if (visionFilter === 'analyzed') return hasVision;
+        if (visionFilter === 'not_analyzed') return !hasVision;
+        return true;
+      });
+    }
+
+    // 5. Sorting
+    result.sort((a, b) => {
+      if (sortBy === 'score_desc') return (Number(b.seo_score) || 0) - (Number(a.seo_score) || 0);
+      if (sortBy === 'score_asc') return (Number(a.seo_score) || 0) - (Number(b.seo_score) || 0);
+      if (sortBy === 'views_desc') return (Number(b.views) || 0) - (Number(a.views) || 0);
+      if (sortBy === 'views_asc') return (Number(a.views) || 0) - (Number(b.views) || 0);
+      if (sortBy === 'favorers_desc') return (Number(b.num_favorers) || 0) - (Number(a.num_favorers) || 0);
+      if (sortBy === 'favorers_asc') return (Number(a.num_favorers) || 0) - (Number(b.num_favorers) || 0);
+      if (sortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+      if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
+      if (sortBy === 'title_asc') return (a.title || '').localeCompare(b.title || '');
+      if (sortBy === 'title_desc') return (b.title || '').localeCompare(a.title || '');
+      const getTime = (val: unknown) => {
+        if (typeof val === 'string' || typeof val === 'number') return new Date(val).getTime();
+        if (val instanceof Date) return val.getTime();
+        return 0;
+      };
+
+      if (sortBy === 'oldest') {
+        const dateA = getTime(a.updated_at || a.created_at);
+        const dateB = getTime(b.updated_at || b.created_at);
+        return dateA - dateB;
+      }
+      // default: newest
+      const dateA = getTime(a.updated_at || a.created_at);
+      const dateB = getTime(b.updated_at || b.created_at);
+      return dateB - dateA;
+    });
+
+    return result;
+  }, [listings, searchQuery, stateFilter, scoreFilter, visionFilter, sortBy]);
 
   // Manual Trigger for Etsy Synchronization
   const handleSyncEtsy = async () => {
@@ -196,10 +282,10 @@ export const EtsyListingManager: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.length === listings.length) {
+    if (selectedIds.length === filteredAndSortedListings.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(listings.map(l => l.listing_id));
+      setSelectedIds(filteredAndSortedListings.map(l => l.listing_id));
     }
   };
 
@@ -279,44 +365,16 @@ export const EtsyListingManager: React.FC = () => {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            {/* Single Primary Refresh Button */}
+          {/* Action Button: Clean Single Primary Sync Button */}
+          <div className="flex items-center gap-2 w-full lg:w-auto">
             <button
               onClick={handleSyncEtsy}
               disabled={isSyncing}
-              className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               title="Etsy'deki en güncel ilan, görüntülenme ve favori verilerini çeker (24 saatte bir otomatik güncellenir)"
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Senkronize Ediliyor...' : '🔄 Etsy Verilerini Güncelle'}</span>
-            </button>
-
-            <button
-              onClick={() => handleOpenBulkModal('vision')}
-              disabled={listings.length === 0}
-              className="flex-1 sm:flex-none px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-            >
-              <Eye className="w-4 h-4 text-indigo-400" />
-              <span>Toplu Görsel</span>
-            </button>
-
-            <button
-              onClick={() => handleOpenBulkModal('evaluate_seo')}
-              disabled={listings.length === 0}
-              className="flex-1 sm:flex-none px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-            >
-              <TrendingUp className="w-4 h-4 text-emerald-400" />
-              <span>Toplu SEO</span>
-            </button>
-
-            <button
-              onClick={() => handleOpenBulkModal('optimize')}
-              disabled={listings.length === 0}
-              className="flex-1 sm:flex-none px-3.5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Toplu AI SEO</span>
             </button>
           </div>
 
@@ -433,11 +491,17 @@ export const EtsyListingManager: React.FC = () => {
               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
             >
               <option value="newest">Sıralama: En Yeni</option>
-              <option value="score_desc">SEO: Yüksekten Düşüğe</option>
-              <option value="score_asc">SEO: Düşükten Yükseğe</option>
-              <option value="views_desc">Görüntülenme (Views)</option>
-              <option value="favorers_desc">Favoriler (Likes)</option>
-              <option value="title_asc">Başlık (A-Z)</option>
+              <option value="oldest">Sıralama: En Eski</option>
+              <option value="views_desc">👁️ En Çok Görüntülenen</option>
+              <option value="views_asc">👁️ En Az Görüntülenen</option>
+              <option value="favorers_desc">❤️ En Çok Favorilenen</option>
+              <option value="favorers_asc">❤️ En Az Favorilenen</option>
+              <option value="score_desc">📈 SEO: Yüksekten Düşüğe</option>
+              <option value="score_asc">📉 SEO: Düşükten Yükseğe</option>
+              <option value="price_desc">💵 Fiyat: Yüksekten Düşüğe</option>
+              <option value="price_asc">💵 Fiyat: Düşükten Yükseğe</option>
+              <option value="title_asc">🔤 Başlık (A-Z)</option>
+              <option value="title_desc">🔤 Başlık (Z-A)</option>
             </select>
 
             {/* View Mode Toggle */}
@@ -469,42 +533,53 @@ export const EtsyListingManager: React.FC = () => {
         </div>
 
         {/* Selection Action Bar */}
-        {listings.length > 0 && (
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+        {filteredAndSortedListings.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleSelectAll}
                 className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold"
               >
-                {selectedIds.length === listings.length ? (
+                {selectedIds.length === filteredAndSortedListings.length && filteredAndSortedListings.length > 0 ? (
                   <CheckSquare className="w-4 h-4 text-indigo-500" />
                 ) : (
                   <Square className="w-4 h-4 text-slate-400" />
                 )}
-                <span>Tümünü Seç ({selectedIds.length}/{listings.length})</span>
+                <span>Tümünü Seç ({selectedIds.length}/{filteredAndSortedListings.length})</span>
               </button>
             </div>
 
             {selectedIds.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-mono text-[11px]">{selectedIds.length} ilan seçildi:</span>
-                <button
-                  onClick={() => handleOpenBulkModal('vision')}
-                  className="px-2.5 py-1 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-lg text-xs font-semibold"
-                >
-                  👁️ Seçilileri Analiz Et
-                </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-400 font-mono text-[11px] bg-slate-800/60 px-2 py-1 rounded-md">
+                  {selectedIds.length} ilan seçildi:
+                </span>
                 <button
                   onClick={() => handleOpenBulkModal('evaluate_seo')}
-                  className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-xs font-semibold"
+                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                 >
-                  📊 Seçilileri Puanla
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>📊 Seçilileri Puanla</span>
+                </button>
+                <button
+                  onClick={() => handleOpenBulkModal('vision')}
+                  className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>👁️ Seçilileri Analiz Et</span>
                 </button>
                 <button
                   onClick={() => handleOpenBulkModal('optimize')}
-                  className="px-2.5 py-1 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg text-xs font-semibold"
+                  className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                 >
-                  🪄 Seçililere AI SEO Üret
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>🪄 Seçililere AI SEO Üret</span>
+                </button>
+                <button
+                  onClick={() => setSelectedIds([])}
+                  className="text-slate-400 hover:text-slate-200 text-xs underline ml-1"
+                >
+                  Vazgeç
                 </button>
               </div>
             )}
@@ -519,7 +594,7 @@ export const EtsyListingManager: React.FC = () => {
           <h4 className="text-sm font-bold text-slate-900 dark:text-white">İlanlar Yükleniyor...</h4>
           <p className="text-xs text-slate-500">Veritabanından önbellek kayıtları çekiliyor</p>
         </div>
-      ) : listings.length === 0 ? (
+      ) : filteredAndSortedListings.length === 0 ? (
         <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
             <ShoppingBag className="w-7 h-7" />
@@ -549,7 +624,7 @@ export const EtsyListingManager: React.FC = () => {
       ) : viewMode === 'grid' ? (
         /* GRID VIEW */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {listings.map((item) => {
+          {filteredAndSortedListings.map((item) => {
             const isSelected = selectedIds.includes(item.listing_id);
             const score = Number(item.seo_score || 0);
             const rawTags = Array.isArray(item.tags)
@@ -709,7 +784,7 @@ export const EtsyListingManager: React.FC = () => {
                 <tr>
                   <th className="p-3.5 w-10">
                     <button onClick={handleSelectAll}>
-                      {selectedIds.length === listings.length ? (
+                      {selectedIds.length === filteredAndSortedListings.length && filteredAndSortedListings.length > 0 ? (
                         <CheckSquare className="w-4 h-4 text-indigo-500" />
                       ) : (
                         <Square className="w-4 h-4 text-slate-400" />
@@ -726,7 +801,7 @@ export const EtsyListingManager: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {listings.map((item) => {
+                {filteredAndSortedListings.map((item) => {
                   const isSelected = selectedIds.includes(item.listing_id);
                   const score = Number(item.seo_score || 0);
                   const rawTags = Array.isArray(item.tags)
