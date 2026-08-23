@@ -357,12 +357,13 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       if (!selectedMockup) return;
       try {
         const oldSrc = selectedMockup.src;
-        const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp', { requireDurable: true });
-        if (oldSrc && oldSrc !== serverUrl) {
+        const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
+        const finalSrc = serverUrl || croppedDataUrl;
+        if (oldSrc && oldSrc !== finalSrc && oldSrc.startsWith('http')) {
           deleteBlobs([oldSrc]);
         }
         setMockups((prev) =>
-          prev.map((m) => (m.id === selectedMockup.id ? { ...m, src: serverUrl } : m))
+          prev.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m))
         );
         toast.success('Mockup görseli başarıyla kırpıldı ve kaydedildi!');
       } catch (err) {

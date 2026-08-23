@@ -197,8 +197,8 @@ export async function optimizeMockupImage(
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload optimized binary image to server API
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, mime, { requireDurable: true });
+  // Upload optimized binary image to server API (or fallback to local dataUrl if guest/offline)
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, mime);
 
   return {
     dataUrl: optimizedDataUrl,
@@ -261,8 +261,8 @@ export async function optimizeDesignImage(
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload optimized binary design to server API
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime, { requireDurable: true });
+  // Upload optimized binary design to server API (or fallback to local dataUrl if guest/offline)
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime);
 
   return {
     dataUrl: optimizedDataUrl,
