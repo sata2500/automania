@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, X, Clock, FileText, Hash, RefreshCw, Trophy, Tag, Layers } from 'lucide-react';
 import { DesignItem, EvaluatedKeyword } from '@/types/pod';
 
@@ -13,17 +13,62 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
   onClose,
   onReAnalyze,
 }) => {
+  const [liveKeywordsMap, setLiveKeywordsMap] = useState<Map<string, EvaluatedKeyword>>(new Map());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const rawAnalysis = analysisModalData?.analysis;
+
+  useEffect(() => {
+    if (!rawAnalysis) {
+      setLiveKeywordsMap(new Map());
+      return;
+    }
+
+    // Initialize with static analysis evaluated keywords
+    const map = new Map<string, EvaluatedKeyword>();
+    if (rawAnalysis.evaluatedKeywords && Array.isArray(rawAnalysis.evaluatedKeywords)) {
+      for (const item of rawAnalysis.evaluatedKeywords) {
+        if (item && item.keyword) {
+          map.set(item.keyword.toLowerCase(), item);
+        }
+      }
+    }
+    setLiveKeywordsMap(map);
+
+    // Fetch fresh live metrics from database keyword pool
+    const allKeywords = Array.from(new Set([
+      ...(rawAnalysis.keywords || []),
+      ...(rawAnalysis.discoveredCompetitorTags || []),
+    ]));
+
+    if (allKeywords.length > 0) {
+      setIsRefreshing(true);
+      fetch('/api/designs/analyze/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keywords: allKeywords }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.keywords)) {
+            const updatedMap = new Map(map);
+            for (const item of data.keywords) {
+              if (item && item.keyword) {
+                updatedMap.set(item.keyword.toLowerCase(), item);
+              }
+            }
+            setLiveKeywordsMap(updatedMap);
+          }
+        })
+        .catch((err) => console.warn('Failed to fetch live keyword metrics:', err))
+        .finally(() => setIsRefreshing(false));
+    }
+  }, [rawAnalysis]);
+
   if (!analysisModalData || !analysisModalData.analysis) return null;
 
   const analysis = analysisModalData.analysis;
-  const evaluatedMap = new Map<string, EvaluatedKeyword>();
-  if (analysis.evaluatedKeywords && Array.isArray(analysis.evaluatedKeywords)) {
-    for (const item of analysis.evaluatedKeywords) {
-      if (item && item.keyword) {
-        evaluatedMap.set(item.keyword.toLowerCase(), item);
-      }
-    }
-  }
+  const evaluatedMap = liveKeywordsMap;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">

@@ -22,7 +22,7 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { STORAGE_KEYS } from '@/config/constants';
-import { Sparkles, Info, User, X } from 'lucide-react';
+import { Sparkles, Info, User, X, RefreshCw } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -112,6 +112,7 @@ function MainContent() {
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized,
+    isSyncing,
     initializationError,
     retryInitialization,
     isSaving,
@@ -297,6 +298,23 @@ function MainContent() {
             >
               Tekrar dene
             </button>
+          </div>
+        )}
+
+        {/* Syncing Indicator when loading or auto-migrating */}
+        {user && (!isInitialized || isSyncing) && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/80 dark:border-indigo-500/30 dark:bg-indigo-950/40 p-3.5 text-xs text-indigo-900 dark:text-indigo-200 backdrop-blur-sm animate-fadeIn shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center animate-spin shrink-0">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </div>
+              <span className="font-semibold">
+                Yerel verileriniz bulut hesabınıza eşitleniyor, lütfen bekleyin...
+              </span>
+            </div>
+            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold shrink-0">
+              Senkronize ediliyor...
+            </span>
           </div>
         )}
 

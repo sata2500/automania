@@ -38,6 +38,7 @@ export function useWorkspace() {
   const [hasGenerated, setHasGenerated] = useState<boolean>(false);
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -71,6 +72,7 @@ export function useWorkspace() {
   // Load initial data. Always resolve initialization so a storage failure cannot leave the UI in a permanent loading state.
   useEffect(() => {
     let isMounted = true;
+    setIsSyncing(true);
     loadAppData()
       .then((data) => {
         if (!isMounted) return;
@@ -100,9 +102,12 @@ export function useWorkspace() {
         setRenderedMatches([]);
         setHasGenerated(false);
         setIsInitialized(true);
+      })
+      .finally(() => {
+        if (isMounted) setIsSyncing(false);
       });
     return () => { isMounted = false; };
-  }, [initializationAttempt]);
+  }, [initializationAttempt, user?.id]);
 
   // Auto-save data
   useEffect(() => {
@@ -200,6 +205,7 @@ export function useWorkspace() {
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized, setIsInitialized,
+    isSyncing,
     initializationError,
     retryInitialization: () => setInitializationAttempt((attempt) => attempt + 1),
     isSaving, setIsSaving,
