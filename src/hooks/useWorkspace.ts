@@ -167,6 +167,12 @@ export function useWorkspace() {
           if (dataRes.ok) {
             const serverData = await dataRes.json();
             if (serverData && Array.isArray(serverData.mockups)) {
+              const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
+              if (isServerEmpty && (mockups.length > 0 || designs.length > 0)) {
+                // Do not overwrite non-empty local workspace with an empty server state during background sync
+                isSyncFetchingRef.current = false;
+                return;
+              }
               syncedFromServerRef.current = true;
               setMockups(serverData.mockups || []);
               setDesigns(serverData.designs || []);

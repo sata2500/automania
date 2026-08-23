@@ -20,9 +20,12 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
   const promote = async (value: string, mimeType: string): Promise<string> => {
     if (!isTemporaryMediaUrl(value)) return value;
     try {
-      const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: true });
-      if (promotedUrl !== value) changed = true;
-      return promotedUrl;
+      const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: false });
+      if (promotedUrl && promotedUrl !== value && !isTemporaryMediaUrl(promotedUrl)) {
+        changed = true;
+        return promotedUrl;
+      }
+      return value;
     } catch (error) {
       console.warn('[Workspace] Temporary media promotion skipped:', error instanceof Error ? error.message : 'unknown error');
       return value;
@@ -31,7 +34,7 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
 
   const mockups = await Promise.all((payload.mockups || []).map(async (item) => ({
     ...item,
-    src: await promote(item.src, item.isVideo ? 'video/webm' : 'image/webp'),
+    src: await promote(item.src, item.isVideo ? (item.src.includes('webm') ? 'video/webm' : 'video/mp4') : 'image/webp'),
   })));
   const designs = await Promise.all((payload.designs || []).map(async (item) => ({
     ...item,
@@ -39,7 +42,7 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
   })));
   const etsyGeneratedMockups = await Promise.all((payload.etsyGeneratedMockups || []).map(async (item) => ({
     ...item,
-    previewUrl: await promote(item.previewUrl, item.isVideo ? 'video/webm' : 'image/webp'),
+    previewUrl: await promote(item.previewUrl, item.isVideo ? (item.previewUrl?.includes('webm') ? 'video/webm' : 'video/mp4') : 'image/webp'),
   })));
 
   return { payload: { ...payload, mockups, designs, etsyGeneratedMockups }, changed };
@@ -228,8 +231,38 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
     if (res.ok) {
       const serverData = await res.json();
       if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
+        const keys = getStorageKeys();
+        // Check if user has local items in IndexedDB
+        const [savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder] = await Promise.all([
+          get<MockupItem[]>(keys.MOCKUPS),
+          get<DesignItem[]>(keys.DESIGNS),
+          get<MockupFolder[]>(keys.FOLDERS),
+          get<string | null>(keys.ACTIVE_FOLDER),
+          get<string | null>(keys.SELECTED_MOCKUP),
+          get<string | null>(keys.ACTIVE_DESIGN_FOLDER)
+        ]);
+
         const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
-        if (isServerEmpty) {
+        const hasLocalUserData = (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0);
+
+        // Scenario 1: Server is empty, but local user IndexedDB has items (e.g. freshly migrated or offline items)
+        if (isServerEmpty && hasLocalUserData) {
+          let localPayload: AppDataPayload = {
+            mockups: savedMockups || [],
+            designs: savedDesigns || [],
+            folders: savedFolders || [],
+            activeFolderId: savedActiveFolder ?? null,
+            selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
+            activeDesignFolderId: savedActiveDesignFolder ?? null,
+          };
+          const promoted = await promoteTemporaryMediaUrls(localPayload);
+          localPayload = promoted.payload;
+          await saveAppData(localPayload);
+          return localPayload;
+        }
+
+        // Scenario 2: Server is empty and user IndexedDB is empty, check if guest workspace has items
+        if (isServerEmpty && !hasLocalUserData) {
           const guestData = await getGuestWorkspace();
           if (guestData && ((guestData.mockups?.length || 0) > 0 || (guestData.designs?.length || 0) > 0)) {
             const migrated = await migrateGuestWorkspaceToUser();
@@ -239,21 +272,13 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           }
         }
 
-        const keys = getStorageKeys();
-        // Preserve local UI state so user doesn't lose their place
-        const [activeFolderId, selectedMockupId, activeDesignFolderId] = await Promise.all([
-          get<string | null>(keys.ACTIVE_FOLDER),
-          get<string | null>(keys.SELECTED_MOCKUP),
-          get<string | null>(keys.ACTIVE_DESIGN_FOLDER)
-        ]);
-
         let payload: AppDataPayload = {
           mockups: serverData.mockups || [],
           designs: serverData.designs || [],
           folders: serverData.folders || [],
-          activeFolderId: activeFolderId ?? serverData.activeFolderId ?? null,
-          selectedMockupId: selectedMockupId ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
-          activeDesignFolderId: activeDesignFolderId ?? null,
+          activeFolderId: savedActiveFolder ?? serverData.activeFolderId ?? null,
+          selectedMockupId: savedSelectedMockup ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
+          activeDesignFolderId: savedActiveDesignFolder ?? null,
           modelVision: serverData.modelVision,
           modelReasoning: serverData.modelReasoning,
           modelGeneration: serverData.modelGeneration,
@@ -490,11 +515,6 @@ export async function saveAppData(
 
     // 2. If guest user (not logged in), IndexedDB is their sole permanent storage.
     if (!userId || userId === 'default_user') {
-      return { success: true };
-    }
-
-    // 3. For logged-in users, if payload contains temporary data/blob URLs, wait until assets are promoted
-    if (hasTemporaryMediaUrl(payload)) {
       return { success: true };
     }
 
