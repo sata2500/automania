@@ -300,8 +300,15 @@ function MainContent() {
           </div>
         )}
 
-        {/* Guest Data Migration Prompt for Signed-in Users */}
-        {user && <GuestMigrationBanner onMigrationComplete={handleMigrateGuestData} />}
+        {/* Guest Data Migration Prompt for Signed-in Users with existing cloud data */}
+        {user && (
+          <GuestMigrationBanner
+            currentMockups={mockups}
+            currentDesigns={designs}
+            currentFolders={folders}
+            onMigrationComplete={handleMigrateGuestData}
+          />
+        )}
 
         {/* Guest User Informational Banner (Dismissible & Remembered) */}
         {!user && !isGuestInfoDismissed && (

@@ -6,11 +6,21 @@ import { useToast } from './ToastContext';
 import { getGuestWorkspace, migrateGuestWorkspaceToUser, clearGuestWorkspace, AppDataPayload } from '@/lib/storage-service';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
+import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
+
 interface GuestMigrationBannerProps {
+  currentMockups?: MockupItem[];
+  currentDesigns?: DesignItem[];
+  currentFolders?: MockupFolder[];
   onMigrationComplete?: (payload: AppDataPayload) => void;
 }
 
-export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({ onMigrationComplete }) => {
+export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
+  currentMockups = [],
+  currentDesigns = [],
+  currentFolders = [],
+  onMigrationComplete,
+}) => {
   const { user } = useAuth();
   const toast = useToast();
   const [guestData, setGuestData] = useState<AppDataPayload | null>(null);
@@ -36,30 +46,38 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({ onMi
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, currentMockups.length, currentDesigns.length]);
 
-  if (!user || !guestData || isDismissed) return null;
+  const hasAccountData = currentMockups.length > 0 || currentDesigns.length > 0;
 
-  const mockupCount = guestData.mockups?.length || 0;
-  const designCount = guestData.designs?.length || 0;
+  // Do not show merge banner if user is logged out, no guest data, dismissed, or if account is completely empty (auto-migrated)
+  if (!user || !guestData || isDismissed || !hasAccountData) return null;
+
+  const guestMockupCount = guestData.mockups?.length || 0;
+  const guestDesignCount = guestData.designs?.length || 0;
+  const accountMockupCount = currentMockups.length;
 
   const handleMigrate = async () => {
     setIsMigrating(true);
     try {
-      const merged = await migrateGuestWorkspaceToUser();
+      const merged = await migrateGuestWorkspaceToUser({
+        mockups: currentMockups,
+        designs: currentDesigns,
+        folders: currentFolders,
+      });
       if (merged) {
         if (onMigrationComplete) {
           onMigrationComplete(merged);
         }
         setGuestData(null);
         toast.success(
-          `${mockupCount} mockup ve ${designCount} tasarım hesabınıza başarıyla aktarıldı!`,
-          'Aktarım Tamamlandı'
+          `Yerel çalışmalarınız (${guestMockupCount} Mockup) bulut hesabınızla başarıyla birleştirildi!`,
+          'Birleştirme Tamamlandı'
         );
       }
     } catch (err) {
       console.error('Migration failed:', err);
-      toast.error('Taslaklar aktarılırken bir sorun oluştu.', 'Hata');
+      toast.error('Taslaklar birleştirilirken bir sorun oluştu.', 'Hata');
     } finally {
       setIsMigrating(false);
     }
@@ -91,11 +109,11 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({ onMi
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm text-white">Yerel Çalışmalarınız Bulut Hesabınızla Birleştirilsin mi?</span>
                 <span className="bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                  {mockupCount} Mockup • {designCount} Tasarım
+                  +{guestMockupCount} Mockup • +{guestDesignCount} Tasarım
                 </span>
               </div>
               <p className="text-xs text-indigo-200/90 mt-0.5">
-                Giriş yapmadan önce hazırladığınız taslakları bulut hesabınızdaki mevcut verilerinizle birleştirebilirsiniz.
+                Bulut hesabınızda <b className="text-white">{accountMockupCount} Mockup</b> var. Giriş yapmadan önce hazırladığınız yerel taslakları bulut hesabınıza ekleyip birleştirebilirsiniz.
               </p>
             </div>
           </div>

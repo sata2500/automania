@@ -141,9 +141,25 @@ export async function migrateGuestWorkspaceToUser(
   const guestData = await getGuestWorkspace();
   if (!guestData) return null;
 
-  const currentMockups = currentUserPayload?.mockups || [];
-  const currentDesigns = currentUserPayload?.designs || [];
-  const currentFolders = currentUserPayload?.folders || [];
+  const userKeys = getStorageKeys();
+  let existingMockups = currentUserPayload?.mockups;
+  let existingDesigns = currentUserPayload?.designs;
+  let existingFolders = currentUserPayload?.folders;
+
+  if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined) {
+    const [savedMockups, savedDesigns, savedFolders] = await Promise.all([
+      get<MockupItem[]>(userKeys.MOCKUPS),
+      get<DesignItem[]>(userKeys.DESIGNS),
+      get<MockupFolder[]>(userKeys.FOLDERS),
+    ]);
+    if (existingMockups === undefined) existingMockups = savedMockups || [];
+    if (existingDesigns === undefined) existingDesigns = savedDesigns || [];
+    if (existingFolders === undefined) existingFolders = savedFolders || [];
+  }
+
+  const currentMockups = existingMockups || [];
+  const currentDesigns = existingDesigns || [];
+  const currentFolders = existingFolders || [];
 
   // Merge folders without duplicate names
   const mergedFolders = [...currentFolders];
@@ -156,7 +172,7 @@ export async function migrateGuestWorkspaceToUser(
   // Merge mockups without duplicate IDs
   const mergedMockups = [...currentMockups];
   for (const gm of guestData.mockups || []) {
-    if (!mergedMockups.some(m => m.id === gm.id)) {
+    if (!mergedMockups.some(m => m.id === gm.id || (m.src && gm.src && m.src === gm.src))) {
       mergedMockups.push(gm);
     }
   }
@@ -164,7 +180,7 @@ export async function migrateGuestWorkspaceToUser(
   // Merge designs without duplicate IDs
   const mergedDesigns = [...currentDesigns];
   for (const gd of guestData.designs || []) {
-    if (!mergedDesigns.some(d => d.id === gd.id)) {
+    if (!mergedDesigns.some(d => d.id === gd.id || (d.src && gd.src && d.src === gd.src))) {
       mergedDesigns.push(gd);
     }
   }
