@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
-import { loadAppData, saveAppData, saveUIStateToIndexedDB, updateLocalCache, getStorageKeys } from '@/lib/storage-service';
+import {
+  loadAppData,
+  saveAppData,
+  saveUIStateToIndexedDB,
+  updateLocalCache,
+  getStorageKeys,
+  subscribeSyncStatus,
+  getSyncStatus,
+  SyncStatus,
+} from '@/lib/storage-service';
 import { get } from 'idb-keyval';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { useAuth } from '@/components/common/UserAuthContext';
@@ -43,6 +52,27 @@ export function useWorkspace() {
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupProcessing, setIsBackupProcessing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
+
+  // Subscribe to live synchronization and migration status
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus((status) => {
+      setSyncStatus({ ...status });
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Prevent accidental tab closure or refresh while data migration / cloud upload is in progress
+  useEffect(() => {
+    if (!syncStatus.isMigrating) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'Verileriniz bulut hesabınıza senkronize ediliyor. Lütfen işlemin tamamlanmasını bekleyin.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [syncStatus.isMigrating]);
 
   // These values depend on browser-only APIs. Keep the first render identical
   // on the server and client, then hydrate preferences after mount.
@@ -245,6 +275,11 @@ export function useWorkspace() {
     isGuestInfoDismissed, setIsGuestInfoDismissed,
     isEmptyWorkspaceDismissed, setIsEmptyWorkspaceDismissed,
     isPwaInfoDismissed, setIsPwaInfoDismissed,
-    isPwaInstalled, setIsPwaInstalled
+    isPwaInstalled, setIsPwaInstalled,
+    syncStatus,
+    isSyncing: syncStatus.isSyncing,
+    isMigrating: syncStatus.isMigrating,
+    syncMessage: syncStatus.message,
+    syncProgress: syncStatus.progress,
   };
 }

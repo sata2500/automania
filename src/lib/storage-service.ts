@@ -3,6 +3,78 @@ import { uploadMediaToServer } from './image-optimizer';
 import { downloadBlob } from './download';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
+export interface SyncStatus {
+  isSyncing: boolean;
+  isMigrating: boolean;
+  message: string;
+  progress: number; // 0 to 100
+  current?: number;
+  total?: number;
+}
+
+type SyncStatusListener = (status: SyncStatus) => void;
+const syncStatusListeners = new Set<SyncStatusListener>();
+
+let currentSyncStatus: SyncStatus = {
+  isSyncing: false,
+  isMigrating: false,
+  message: '',
+  progress: 0,
+};
+
+let resetTimer: NodeJS.Timeout | null = null;
+
+export function getSyncStatus(): SyncStatus {
+  return currentSyncStatus;
+}
+
+export function subscribeSyncStatus(listener: SyncStatusListener): () => void {
+  syncStatusListeners.add(listener);
+  try {
+    listener(currentSyncStatus);
+  } catch (e) {
+    console.error('[SyncStatus] Initial listener call error:', e);
+  }
+  return () => {
+    syncStatusListeners.delete(listener);
+  };
+}
+
+export function notifySyncStatus(status: Partial<SyncStatus>) {
+  if (resetTimer) {
+    clearTimeout(resetTimer);
+    resetTimer = null;
+  }
+  currentSyncStatus = { ...currentSyncStatus, ...status };
+  syncStatusListeners.forEach((listener) => {
+    try {
+      listener(currentSyncStatus);
+    } catch (e) {
+      console.error('[SyncStatus] Listener error:', e);
+    }
+  });
+
+  // If sync just completed, reset state after a short celebration window
+  if (!currentSyncStatus.isSyncing && !currentSyncStatus.isMigrating && currentSyncStatus.progress === 100) {
+    resetTimer = setTimeout(() => {
+      currentSyncStatus = {
+        isSyncing: false,
+        isMigrating: false,
+        message: '',
+        progress: 0,
+      };
+      syncStatusListeners.forEach((listener) => {
+        try {
+          listener(currentSyncStatus);
+        } catch {}
+      });
+    }, 3500);
+  }
+}
+
+let inFlightMigrationPromise: Promise<AppDataPayload | null> | null = null;
+let inFlightSyncPromise: Promise<AppDataPayload | null> | null = null;
+
 function isTemporaryMediaUrl(value: unknown): value is string {
   return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
 }
@@ -17,10 +89,41 @@ function hasTemporaryMediaUrl(payload: AppDataPayload): boolean {
 
 async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ payload: AppDataPayload; changed: boolean }> {
   let changed = false;
+
+  const temporaryMockups = (payload.mockups || []).filter((item) => isTemporaryMediaUrl(item.src));
+  const temporaryDesigns = (payload.designs || []).filter((item) => isTemporaryMediaUrl(item.src));
+  const temporaryGenerated = (payload.etsyGeneratedMockups || []).filter((item) => isTemporaryMediaUrl(item.previewUrl));
+
+  const totalTemporaryItems = temporaryMockups.length + temporaryDesigns.length + temporaryGenerated.length;
+  let completedItems = 0;
+
+  if (totalTemporaryItems > 0) {
+    notifySyncStatus({
+      isSyncing: true,
+      isMigrating: true,
+      message: `Görseller bulut hesabınıza aktarılıyor (0/${totalTemporaryItems})...`,
+      progress: 15,
+      current: 0,
+      total: totalTemporaryItems,
+    });
+  }
+
   const promote = async (value: string, mimeType: string): Promise<string> => {
     if (!isTemporaryMediaUrl(value)) return value;
     try {
       const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: false });
+      completedItems++;
+      if (totalTemporaryItems > 0) {
+        const pct = Math.min(88, Math.round(15 + (completedItems / totalTemporaryItems) * 70));
+        notifySyncStatus({
+          isSyncing: true,
+          isMigrating: true,
+          message: `Görseller bulut hesabınıza aktarılıyor (${completedItems}/${totalTemporaryItems})...`,
+          progress: pct,
+          current: completedItems,
+          total: totalTemporaryItems,
+        });
+      }
       if (promotedUrl && promotedUrl !== value && !isTemporaryMediaUrl(promotedUrl)) {
         changed = true;
         return promotedUrl;
@@ -28,6 +131,7 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
       return value;
     } catch (error) {
       console.warn('[Workspace] Temporary media promotion skipped:', error instanceof Error ? error.message : 'unknown error');
+      completedItems++;
       return value;
     }
   };
@@ -140,86 +244,130 @@ export async function clearGuestWorkspace(): Promise<void> {
 export async function migrateGuestWorkspaceToUser(
   currentUserPayload?: Partial<AppDataPayload>
 ): Promise<AppDataPayload | null> {
-  const guestData = await getGuestWorkspace();
-  if (!guestData) return null;
-
-  const userKeys = getStorageKeys();
-  let existingMockups = currentUserPayload?.mockups;
-  let existingDesigns = currentUserPayload?.designs;
-  let existingFolders = currentUserPayload?.folders;
-  let existingGenerated = currentUserPayload?.etsyGeneratedMockups;
-
-  if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined || existingGenerated === undefined) {
-    const [savedMockups, savedDesigns, savedFolders, savedGenerated] = await Promise.all([
-      get<MockupItem[]>(userKeys.MOCKUPS),
-      get<DesignItem[]>(userKeys.DESIGNS),
-      get<MockupFolder[]>(userKeys.FOLDERS),
-      get<RenderedMatch[]>(userKeys.ETSY_GENERATED_MOCKUPS),
-    ]);
-    if (existingMockups === undefined) existingMockups = savedMockups || [];
-    if (existingDesigns === undefined) existingDesigns = savedDesigns || [];
-    if (existingFolders === undefined) existingFolders = savedFolders || [];
-    if (existingGenerated === undefined) existingGenerated = savedGenerated || [];
+  if (inFlightMigrationPromise) {
+    return inFlightMigrationPromise;
   }
 
-  const currentMockups = existingMockups || [];
-  const currentDesigns = existingDesigns || [];
-  const currentFolders = existingFolders || [];
-  const currentGenerated = existingGenerated || [];
+  inFlightMigrationPromise = (async () => {
+    try {
+      notifySyncStatus({
+        isSyncing: true,
+        isMigrating: true,
+        message: 'Yerel taslaklarınız taranıyor ve bulut hesabınıza aktarılıyor...',
+        progress: 10,
+      });
 
-  // Merge folders without duplicate names
-  const mergedFolders = [...currentFolders];
-  for (const gf of guestData.folders || []) {
-    if (!mergedFolders.some(f => f.id === gf.id || f.name === gf.name)) {
-      mergedFolders.push(gf);
+      const guestData = await getGuestWorkspace();
+      if (!guestData) {
+        notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 0 });
+        return null;
+      }
+
+      const userKeys = getStorageKeys();
+      let existingMockups = currentUserPayload?.mockups;
+      let existingDesigns = currentUserPayload?.designs;
+      let existingFolders = currentUserPayload?.folders;
+      let existingGenerated = currentUserPayload?.etsyGeneratedMockups;
+
+      if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined || existingGenerated === undefined) {
+        const [savedMockups, savedDesigns, savedFolders, savedGenerated] = await Promise.all([
+          get<MockupItem[]>(userKeys.MOCKUPS),
+          get<DesignItem[]>(userKeys.DESIGNS),
+          get<MockupFolder[]>(userKeys.FOLDERS),
+          get<RenderedMatch[]>(userKeys.ETSY_GENERATED_MOCKUPS),
+        ]);
+        if (existingMockups === undefined) existingMockups = savedMockups || [];
+        if (existingDesigns === undefined) existingDesigns = savedDesigns || [];
+        if (existingFolders === undefined) existingFolders = savedFolders || [];
+        if (existingGenerated === undefined) existingGenerated = savedGenerated || [];
+      }
+
+      const currentMockups = existingMockups || [];
+      const currentDesigns = existingDesigns || [];
+      const currentFolders = existingFolders || [];
+      const currentGenerated = existingGenerated || [];
+
+      // Merge folders without duplicate names
+      const mergedFolders = [...currentFolders];
+      for (const gf of guestData.folders || []) {
+        if (!mergedFolders.some(f => f.id === gf.id || f.name === gf.name)) {
+          mergedFolders.push(gf);
+        }
+      }
+
+      // Merge mockups without duplicate IDs
+      const mergedMockups = [...currentMockups];
+      for (const gm of guestData.mockups || []) {
+        if (!mergedMockups.some(m => m.id === gm.id || (m.src && gm.src && m.src === gm.src))) {
+          mergedMockups.push(gm);
+        }
+      }
+
+      // Merge designs without duplicate IDs
+      const mergedDesigns = [...currentDesigns];
+      for (const gd of guestData.designs || []) {
+        if (!mergedDesigns.some(d => d.id === gd.id || (d.src && gd.src && d.src === gd.src))) {
+          mergedDesigns.push(gd);
+        }
+      }
+
+      // Merge generated mockups without duplicate IDs
+      const mergedGenerated = [...currentGenerated];
+      for (const gg of guestData.etsyGeneratedMockups || []) {
+        if (!mergedGenerated.some(g => g.id === gg.id)) {
+          mergedGenerated.push(gg);
+        }
+      }
+
+      let mergedPayload: AppDataPayload = {
+        mockups: mergedMockups,
+        designs: mergedDesigns,
+        folders: mergedFolders,
+        etsyGeneratedMockups: mergedGenerated,
+        activeFolderId: guestData.activeFolderId || currentUserPayload?.activeFolderId || null,
+        selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (mergedMockups[0]?.id || null),
+        lastUpdated: Date.now(),
+      };
+
+      // 1. Promote temporary media to durable server URLs where possible
+      const promoted = await promoteTemporaryMediaUrls(mergedPayload);
+      mergedPayload = promoted.payload;
+
+      // 2. Save merged state to the logged-in user's IndexedDB and Server
+      notifySyncStatus({
+        isSyncing: true,
+        isMigrating: true,
+        message: 'Verileriniz bulut hesabınıza kaydediliyor...',
+        progress: 92,
+      });
+      await saveAppData(mergedPayload);
+
+      // 3. Clear guest workspace so migration prompt doesn't trigger again
+      await clearGuestWorkspace();
+
+      notifySyncStatus({
+        isSyncing: false,
+        isMigrating: false,
+        message: 'Verileriniz bulut hesabınıza başarıyla senkronize edildi!',
+        progress: 100,
+      });
+
+      return mergedPayload;
+    } catch (err) {
+      console.error('[Workspace] Migration failed:', err);
+      notifySyncStatus({
+        isSyncing: false,
+        isMigrating: false,
+        message: 'Senkronizasyon sırasında hata oluştu.',
+        progress: 0,
+      });
+      return null;
+    } finally {
+      inFlightMigrationPromise = null;
     }
-  }
+  })();
 
-  // Merge mockups without duplicate IDs
-  const mergedMockups = [...currentMockups];
-  for (const gm of guestData.mockups || []) {
-    if (!mergedMockups.some(m => m.id === gm.id || (m.src && gm.src && m.src === gm.src))) {
-      mergedMockups.push(gm);
-    }
-  }
-
-  // Merge designs without duplicate IDs
-  const mergedDesigns = [...currentDesigns];
-  for (const gd of guestData.designs || []) {
-    if (!mergedDesigns.some(d => d.id === gd.id || (d.src && gd.src && d.src === gd.src))) {
-      mergedDesigns.push(gd);
-    }
-  }
-
-  // Merge generated mockups without duplicate IDs
-  const mergedGenerated = [...currentGenerated];
-  for (const gg of guestData.etsyGeneratedMockups || []) {
-    if (!mergedGenerated.some(g => g.id === gg.id)) {
-      mergedGenerated.push(gg);
-    }
-  }
-
-  let mergedPayload: AppDataPayload = {
-    mockups: mergedMockups,
-    designs: mergedDesigns,
-    folders: mergedFolders,
-    etsyGeneratedMockups: mergedGenerated,
-    activeFolderId: guestData.activeFolderId || currentUserPayload?.activeFolderId || null,
-    selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (mergedMockups[0]?.id || null),
-    lastUpdated: Date.now(),
-  };
-
-  // 1. Promote temporary media to durable server URLs where possible
-  const promoted = await promoteTemporaryMediaUrls(mergedPayload);
-  mergedPayload = promoted.payload;
-
-  // 2. Save merged state to the logged-in user's IndexedDB and Server
-  await saveAppData(mergedPayload);
-
-  // 3. Clear guest workspace so migration prompt doesn't trigger again
-  await clearGuestWorkspace();
-
-  return mergedPayload;
+  return inFlightMigrationPromise;
 }
 
 interface EtsyVariationTemplate {
@@ -261,121 +409,159 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
     return null;
   }
 
-  try {
-    const res = await fetch('/api/storage');
-    if (res.ok) {
-      const serverData = await res.json();
-      if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
-        const keys = getStorageKeys();
-        // Check if user has local items in IndexedDB
-        const [
-          savedMockups,
-          savedDesigns,
-          savedFolders,
-          savedActiveFolder,
-          savedSelectedMockup,
-          savedActiveDesignFolder,
-          savedGeneratedMockups,
-        ] = await Promise.all([
-          get<MockupItem[]>(keys.MOCKUPS),
-          get<DesignItem[]>(keys.DESIGNS),
-          get<MockupFolder[]>(keys.FOLDERS),
-          get<string | null>(keys.ACTIVE_FOLDER),
-          get<string | null>(keys.SELECTED_MOCKUP),
-          get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
-          get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
-        ]);
+  if (inFlightSyncPromise) {
+    return inFlightSyncPromise;
+  }
 
-        const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
-        const hasLocalUserData = (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0);
+  inFlightSyncPromise = (async () => {
+    try {
+      notifySyncStatus({
+        isSyncing: true,
+        isMigrating: false,
+        message: 'Bulut hesabınız kontrol ediliyor...',
+        progress: 25,
+      });
 
-        // Scenario 1: Server is empty, but local user IndexedDB has items (e.g. freshly migrated or offline items)
-        if (isServerEmpty && hasLocalUserData) {
-          let localPayload: AppDataPayload = {
-            mockups: savedMockups || [],
-            designs: savedDesigns || [],
-            folders: savedFolders || [],
-            activeFolderId: savedActiveFolder ?? null,
-            selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
-            activeDesignFolderId: savedActiveDesignFolder ?? null,
-            etsyGeneratedMockups: savedGeneratedMockups || [],
-          };
-          const promoted = await promoteTemporaryMediaUrls(localPayload);
-          localPayload = promoted.payload;
-          await saveAppData(localPayload);
-          return localPayload;
-        }
+      const res = await fetch('/api/storage');
+      if (res.ok) {
+        const serverData = await res.json();
+        if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
+          const keys = getStorageKeys();
+          // Check if user has local items in IndexedDB
+          const [
+            savedMockups,
+            savedDesigns,
+            savedFolders,
+            savedActiveFolder,
+            savedSelectedMockup,
+            savedActiveDesignFolder,
+            savedGeneratedMockups,
+          ] = await Promise.all([
+            get<MockupItem[]>(keys.MOCKUPS),
+            get<DesignItem[]>(keys.DESIGNS),
+            get<MockupFolder[]>(keys.FOLDERS),
+            get<string | null>(keys.ACTIVE_FOLDER),
+            get<string | null>(keys.SELECTED_MOCKUP),
+            get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
+            get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
+          ]);
 
-        // Scenario 2: Server is empty and user IndexedDB is empty, check if guest workspace has items
-        if (isServerEmpty && !hasLocalUserData) {
-          const guestData = await getGuestWorkspace();
-          if (
-            guestData &&
-            ((guestData.mockups?.length || 0) > 0 ||
-              (guestData.designs?.length || 0) > 0 ||
-              (guestData.etsyGeneratedMockups?.length || 0) > 0)
-          ) {
-            const migrated = await migrateGuestWorkspaceToUser();
-            if (migrated) {
-              return migrated;
+          const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
+          const hasLocalUserData = (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0);
+
+          // Scenario 1: Server is empty, but local user IndexedDB has items (e.g. freshly migrated or offline items)
+          if (isServerEmpty && hasLocalUserData) {
+            notifySyncStatus({
+              isSyncing: true,
+              isMigrating: true,
+              message: 'Yerel verileriniz buluta aktarılıyor...',
+              progress: 40,
+            });
+            let localPayload: AppDataPayload = {
+              mockups: savedMockups || [],
+              designs: savedDesigns || [],
+              folders: savedFolders || [],
+              activeFolderId: savedActiveFolder ?? null,
+              selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
+              activeDesignFolderId: savedActiveDesignFolder ?? null,
+              etsyGeneratedMockups: savedGeneratedMockups || [],
+            };
+            const promoted = await promoteTemporaryMediaUrls(localPayload);
+            localPayload = promoted.payload;
+            await saveAppData(localPayload);
+            notifySyncStatus({
+              isSyncing: false,
+              isMigrating: false,
+              message: 'Verileriniz bulut hesabınıza eşitlendi.',
+              progress: 100,
+            });
+            return localPayload;
+          }
+
+          // Scenario 2: Server is empty and user IndexedDB is empty, check if guest workspace has items
+          if (isServerEmpty && !hasLocalUserData) {
+            const guestData = await getGuestWorkspace();
+            if (
+              guestData &&
+              ((guestData.mockups?.length || 0) > 0 ||
+                (guestData.designs?.length || 0) > 0 ||
+                (guestData.etsyGeneratedMockups?.length || 0) > 0)
+            ) {
+              const migrated = await migrateGuestWorkspaceToUser();
+              if (migrated) {
+                return migrated;
+              }
             }
           }
-        }
 
-        const serverGenerated = serverData.etsyGeneratedMockups;
-        const finalGenerated = (serverGenerated && serverGenerated.length > 0)
-          ? serverGenerated
-          : (savedGeneratedMockups || []);
+          const serverGenerated = serverData.etsyGeneratedMockups;
+          const finalGenerated = (serverGenerated && serverGenerated.length > 0)
+            ? serverGenerated
+            : (savedGeneratedMockups || []);
 
-        let payload: AppDataPayload = {
-          mockups: serverData.mockups || [],
-          designs: serverData.designs || [],
-          folders: serverData.folders || [],
-          activeFolderId: savedActiveFolder ?? serverData.activeFolderId ?? null,
-          selectedMockupId: savedSelectedMockup ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
-          activeDesignFolderId: savedActiveDesignFolder ?? null,
-          modelVision: serverData.modelVision,
-          modelReasoning: serverData.modelReasoning,
-          modelGeneration: serverData.modelGeneration,
-          etsyProductTypes: serverData.etsyProductTypes,
-          etsyUserNotes: serverData.etsyUserNotes,
-          etsyVariationTemplates: serverData.etsyVariationTemplates || [],
-          etsyDefaultTemplates: serverData.etsyDefaultTemplates || {},
-          etsyCustomSizes: serverData.etsyCustomSizes || [],
-          etsyCustomColors: serverData.etsyCustomColors || [],
-          etsyGeneratedMockups: finalGenerated,
-        };
+          let payload: AppDataPayload = {
+            mockups: serverData.mockups || [],
+            designs: serverData.designs || [],
+            folders: serverData.folders || [],
+            activeFolderId: savedActiveFolder ?? serverData.activeFolderId ?? null,
+            selectedMockupId: savedSelectedMockup ?? serverData.selectedMockupId ?? (serverData.mockups?.[0]?.id || null),
+            activeDesignFolderId: savedActiveDesignFolder ?? null,
+            modelVision: serverData.modelVision,
+            modelReasoning: serverData.modelReasoning,
+            modelGeneration: serverData.modelGeneration,
+            etsyProductTypes: serverData.etsyProductTypes,
+            etsyUserNotes: serverData.etsyUserNotes,
+            etsyVariationTemplates: serverData.etsyVariationTemplates || [],
+            etsyDefaultTemplates: serverData.etsyDefaultTemplates || {},
+            etsyCustomSizes: serverData.etsyCustomSizes || [],
+            etsyCustomColors: serverData.etsyCustomColors || [],
+            etsyGeneratedMockups: finalGenerated,
+          };
 
-        // Promote legacy temporary URLs when they are still recoverable in this browser.
-        const promoted = await promoteTemporaryMediaUrls(payload);
-        payload = promoted.payload;
-        if (promoted.changed) {
-          const syncResult = await saveAppData(payload);
-          if (!syncResult.success) {
-            console.warn('[Workspace] Promoted media could not be persisted to the server.');
+          // Promote legacy temporary URLs when they are still recoverable in this browser.
+          const promoted = await promoteTemporaryMediaUrls(payload);
+          payload = promoted.payload;
+          if (promoted.changed) {
+            const syncResult = await saveAppData(payload);
+            if (!syncResult.success) {
+              console.warn('[Workspace] Promoted media could not be persisted to the server.');
+            }
           }
-        }
 
-        // Write the fresh server data back to local IndexedDB
-        await saveToIndexedDB(payload);
+          // Write the fresh server data back to local IndexedDB
+          await saveToIndexedDB(payload);
 
-        if (serverData.modelVision) {
-          try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
-        }
-        if (serverData.modelReasoning) {
-          try { localStorage.setItem('automania_model_reasoning', serverData.modelReasoning); } catch {}
-        }
-        if (serverData.modelGeneration) {
-          try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
-        }
+          if (serverData.modelVision) {
+            try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
+          }
+          if (serverData.modelReasoning) {
+            try { localStorage.setItem('automania_model_reasoning', serverData.modelReasoning); } catch {}
+          }
+          if (serverData.modelGeneration) {
+            try { localStorage.setItem('automania_model_generation', serverData.modelGeneration); } catch {}
+          }
 
-        return payload;
+          notifySyncStatus({
+            isSyncing: false,
+            isMigrating: false,
+            message: 'Hesap verileriniz yüklendi.',
+            progress: 100,
+          });
+
+          return payload;
+        }
       }
+      notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 100 });
+    } catch (err) {
+      console.warn('Force sync from server failed:', err);
+      notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 0 });
+    } finally {
+      inFlightSyncPromise = null;
     }
-  } catch (err) {
-    console.warn('Force sync from server failed:', err);
-  }
-  return null;
+    return null;
+  })();
+
+  return inFlightSyncPromise;
 }
 
 /**
