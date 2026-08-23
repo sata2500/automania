@@ -134,10 +134,6 @@ export function useWorkspace() {
           setActiveFolderId(savedActiveFolder ?? null);
           setSelectedMockupId(savedSelectedMockup ?? (savedMockups?.[0]?.id || null));
           setActiveDesignFolderId(savedActiveDesignFolder ?? null);
-          if (savedGeneratedMockups && savedGeneratedMockups.length > 0) {
-            setRenderedMatches(savedGeneratedMockups);
-            setHasGenerated(true);
-          }
           setIsInitialized(true);
         }
       } catch (err) {
@@ -155,10 +151,6 @@ export function useWorkspace() {
         setActiveFolderId(data.activeFolderId || null);
         setSelectedMockupId(data.selectedMockupId || null);
         setActiveDesignFolderId(data.activeDesignFolderId || null);
-        if (data.etsyGeneratedMockups && data.etsyGeneratedMockups.length > 0) {
-          setRenderedMatches(data.etsyGeneratedMockups);
-          setHasGenerated(true);
-        }
         setInitializationError(null);
         setIsInitialized(true);
       } catch (error) {
@@ -194,7 +186,6 @@ export function useWorkspace() {
         folders,
         activeFolderId,
         selectedMockupId,
-        etsyGeneratedMockups: renderedMatches,
       }, lastSyncTimestampRef.current);
 
       if (result.conflict) {
@@ -208,7 +199,7 @@ export function useWorkspace() {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [mockups, designs, folders, activeFolderId, selectedMockupId, renderedMatches, isInitialized]);
+  }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
 
   // Auto-save UI state locally
   useEffect(() => {

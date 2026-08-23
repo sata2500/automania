@@ -469,7 +469,7 @@ function MainContent() {
           />
         )}
 
-        {activeTab === 'seo' && <EtsySeoHelper renderedMatches={renderedMatches} />}
+        {activeTab === 'seo' && <EtsySeoHelper />}
 
         {activeTab === 'listings' && <EtsyListingManager />}
 
