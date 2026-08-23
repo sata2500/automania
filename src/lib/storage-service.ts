@@ -112,6 +112,12 @@ export interface AppDataPayload {
  * Preserves local UI state (active folders, selected mockup) if available.
  */
 export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
+  const userId = getCurrentUserId();
+  if (!userId || userId === 'default_user') {
+    // Guest users do not have a server workspace; their single source of truth is local IndexedDB!
+    return null;
+  }
+
   try {
     const res = await fetch('/api/storage');
     if (res.ok) {
@@ -177,19 +183,22 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
 }
 
 /**
- * Loads application data, prioritizing the Server API as the Single Source of Truth.
- * If the server is offline or fails, falls back to IndexedDB.
+ * Loads application data, prioritizing the Server API as the Single Source of Truth for logged-in users.
+ * If the user is a guest or server is offline/fails, loads from IndexedDB.
  */
 export async function loadAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
+  const userId = getCurrentUserId();
 
-  // 1. Try to fetch from Server first (Single Source of Truth)
-  const serverPayload = await forceSyncFromServer();
-  if (serverPayload) {
-    return serverPayload;
+  // 1. Try to fetch from Server first ONLY if user is logged in
+  if (userId && userId !== 'default_user') {
+    const serverPayload = await forceSyncFromServer();
+    if (serverPayload) {
+      return serverPayload;
+    }
   }
 
-  // 2. Fallback to IndexedDB if Offline or Server fails
+  // 2. Fallback to IndexedDB (and Primary for Guest users)
   try {
     const [hasInit, savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder, savedEtsyProductTypes, savedEtsyUserNotes, savedEtsyVariationTemplates, savedEtsyDefaultTemplates, savedEtsyCustomSizes, savedEtsyCustomColors, savedEtsyGeneratedMockups, savedEtsyFolderOrder] =
       await Promise.all([
@@ -210,7 +219,7 @@ export async function loadAppData(): Promise<AppDataPayload> {
         get<string[] | null>(keys.ETSY_FOLDER_ORDER),
       ]);
 
-    if (hasInit) {
+    if (hasInit || (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0)) {
       return {
         mockups: savedMockups || [],
         designs: savedDesigns || [],
@@ -356,16 +365,21 @@ export async function saveAppData(
 ): Promise<{ success: boolean; conflict?: boolean; timestamp?: number }> {
   const userId = getCurrentUserId();
   try {
-    if (hasTemporaryMediaUrl(payload)) {
-      console.warn('[Workspace] Refusing to sync temporary blob/data media URLs.');
-      return { success: false };
-    }
-
-    // Save to IndexedDB (Client side instant persistence)
+    // 1. ALWAYS save to IndexedDB first (Client side instant persistence for guest & signed-in users)
     await saveToIndexedDB(payload);
 
+    // 2. If guest user (not logged in), IndexedDB is their sole permanent storage.
+    if (!userId || userId === 'default_user') {
+      return { success: true };
+    }
+
+    // 3. For logged-in users, if payload contains temporary data/blob URLs, wait until assets are promoted
+    if (hasTemporaryMediaUrl(payload)) {
+      return { success: true };
+    }
+
     // Sync to Server side API (Disk persistence)
-    const query = userId ? `?userId=${userId}` : '';
+    const query = `?userId=${userId}`;
     
     // UI state'lerini (activeFolderId, selectedMockupId) sunucuya gönderme! Sadece yerel cihazda kalsın.
     const dataPayload = Object.fromEntries(
