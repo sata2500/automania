@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
-import { deleteBlobs, saveAppData } from '@/lib/storage-service';
+import { deleteBlobs } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -366,22 +366,12 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         }
 
         if (oldSrc && oldSrc !== finalSrc && oldSrc.startsWith('http')) {
-          deleteBlobs([oldSrc]);
+          deleteBlobs([oldSrc]).catch(() => {});
         }
 
-        const updatedMockups = mockups.map((m) =>
-          m.id === selectedMockup.id ? { ...m, src: finalSrc } : m
+        setMockups((prev) =>
+          prev.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m))
         );
-        setMockups(updatedMockups);
-
-        // Instantly save to IndexedDB and server
-        saveAppData({
-          mockups: updatedMockups,
-          designs: [],
-          folders: mockupFolders,
-          activeFolderId,
-          selectedMockupId: selectedMockup.id,
-        }).catch(console.error);
 
         toast.success('Mockup görseli başarıyla kırpıldı ve kaydedildi!');
       } catch (err) {
@@ -389,7 +379,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         toast.error('Kırpılan görsel kaydedilemedi.');
       }
     },
-    [selectedMockup, mockups, mockupFolders, activeFolderId, setMockups, toast]
+    [selectedMockup, setMockups, toast]
   );
 
   // Common Settings Panel Props

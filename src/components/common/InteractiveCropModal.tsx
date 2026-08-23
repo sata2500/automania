@@ -146,7 +146,7 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-      const dataUrl = outputCanvas.toDataURL('image/png');
+      const dataUrl = outputCanvas.toDataURL('image/webp', 0.92);
       onCropComplete(dataUrl);
       onClose();
     } finally {

@@ -36,5 +36,5 @@ export async function cropImageToSquare(
   // Draw center cropped 1:1 square
   ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, targetSize, targetSize);
 
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/webp', 0.92);
 }
