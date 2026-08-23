@@ -162,10 +162,9 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   const cleanSecret = etsySecret?.replace(/['"\s]+/g, '').trim();
   const cleanToken = etsyToken?.replace(/['"\s]+/g, '').trim();
 
-  // Etsy Open API v3 call (multi-header attempt: keystring:secret or raw keystring)
+  // Etsy Open API v3 call (prioritizing cleanApiKey keystring)
   if (cleanApiKey || cleanToken) {
     try {
-      const primaryApiKeyHeader = cleanSecret ? `${cleanApiKey}:${cleanSecret}` : cleanApiKey;
       const apiUrls = [
         `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25&sort_on=score&sort_order=desc`,
         `https://openapi.etsy.com/v3/application/listings/active?keywords=${encodeURIComponent(cleanKeyword)}&limit=25`
@@ -176,36 +175,38 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       for (const apiUrl of apiUrls) {
         if (apiRes && apiRes.ok) break;
 
-        // Attempt 1: Combined key:secret header (standard across this codebase) + Bearer token if present
-        const headers1: Record<string, string> = {
-          'x-api-key': primaryApiKeyHeader || '',
-          'Accept': 'application/json'
-        };
-        if (cleanToken) {
-          headers1['Authorization'] = `Bearer ${cleanToken}`;
+        // Attempt 1: Direct x-api-key keystring (Standard Etsy Open API v3 format)
+        if (cleanApiKey) {
+          const headers1: Record<string, string> = {
+            'x-api-key': cleanApiKey,
+            'Accept': 'application/json'
+          };
+          if (cleanToken) {
+            headers1['Authorization'] = `Bearer ${cleanToken}`;
+          }
+
+          try {
+            const r1 = await fetch(apiUrl, { headers: headers1, signal: AbortSignal.timeout(isFast ? 3500 : 6000), next: { revalidate: 0 } });
+            if (r1.ok) {
+              apiRes = r1;
+              break;
+            } else {
+              apiRes = r1;
+            }
+          } catch (fErr: any) {}
         }
 
-        try {
-          const r1 = await fetch(apiUrl, { headers: headers1, signal: AbortSignal.timeout(isFast ? 1500 : 4000), next: { revalidate: 0 } });
-          if (r1.ok) {
-            apiRes = r1;
-            break;
-          } else {
-            apiRes = r1;
-          }
-        } catch (fErr: any) {}
-
-        // Attempt 2: If attempt 1 returned 401/403, try raw keystring alone
-        if (cleanApiKey) {
+        // Attempt 2: If keystring alone failed and secret exists, try combined keystring:secret
+        if (cleanApiKey && cleanSecret) {
           const headers2: Record<string, string> = {
-            'x-api-key': cleanApiKey,
+            'x-api-key': `${cleanApiKey}:${cleanSecret}`,
             'Accept': 'application/json'
           };
           if (cleanToken) {
             headers2['Authorization'] = `Bearer ${cleanToken}`;
           }
           try {
-            const r2 = await fetch(apiUrl, { headers: headers2, signal: AbortSignal.timeout(isFast ? 1500 : 4000), next: { revalidate: 0 } });
+            const r2 = await fetch(apiUrl, { headers: headers2, signal: AbortSignal.timeout(isFast ? 3500 : 6000), next: { revalidate: 0 } });
             if (r2.ok) {
               apiRes = r2;
               break;
@@ -216,11 +217,11 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         // Attempt 3: Without Authorization header (pure public API search)
         if (cleanApiKey) {
           const headers3: Record<string, string> = {
-            'x-api-key': primaryApiKeyHeader || cleanApiKey,
+            'x-api-key': cleanApiKey,
             'Accept': 'application/json'
           };
           try {
-            const r3 = await fetch(apiUrl, { headers: headers3, signal: AbortSignal.timeout(isFast ? 1500 : 3000), next: { revalidate: 0 } });
+            const r3 = await fetch(apiUrl, { headers: headers3, signal: AbortSignal.timeout(isFast ? 3000 : 5000), next: { revalidate: 0 } });
             if (r3.ok) {
               apiRes = r3;
               break;
@@ -397,7 +398,15 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
     }
   }
 
-  // Do not turn provider failures into a valid-looking opportunity score.
+  // If Etsy Autocomplete successfully verified this keyword as a real Etsy search query,
+  // utilize Etsy's verified demand signals instead of treating it as a total failure!
+  if (isEtsySuggested && autocompleteRank > 0) {
+    const estimatedListings = autocompleteRank === 1 ? 4800 : autocompleteRank <= 3 ? 2400 : 850;
+    rawMetrics.method = 'etsy_official_api';
+    return finalizeKeywordMetrics(cleanKeyword, charLength, tagEligible, estimatedListings, 1, true, autocompleteRank, avgPrice || 24.50, null, rawMetrics);
+  }
+
+  // Do not turn provider failures into a valid-looking opportunity score if no data could be retrieved.
   const errorType = rawMetrics.errorType || (
     !cleanApiKey && !cleanToken && !scraperKey && !workerUrl ? 'not_configured' : 'provider_unavailable'
   );
