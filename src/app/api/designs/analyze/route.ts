@@ -486,64 +486,68 @@ export async function POST(request: Request) {
       } catch {}
     }
 
-    // 7. Kelime Havuzu Kontrolü & Sadece Taranmamış Kelimeleri Hızlıca Puanlama
+    // 7. Kelime Havuzu Kontrolü & Sadece Taranmamış Kelimeleri Kontrollü Paralel Puanlama
     if (staleKeywords.length > 0) {
-      await Promise.allSettled(
-        staleKeywords.map(async (kw) => {
-          const existing = existingMap.get(kw);
-          try {
-            const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
-            const charLen = kw.length;
-            const tagOk = charLen <= 20;
-            const id = existing?.id || crypto.randomUUID();
+      const CHUNK_SIZE = 3;
+      for (let i = 0; i < staleKeywords.length; i += CHUNK_SIZE) {
+        const chunk = staleKeywords.slice(i, i + CHUNK_SIZE);
+        await Promise.allSettled(
+          chunk.map(async (kw) => {
+            const existing = existingMap.get(kw);
+            try {
+              const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
+              const charLen = kw.length;
+              const tagOk = charLen <= 20;
+              const id = existing?.id || crypto.randomUUID();
 
-            await sql`
-              INSERT INTO keyword_pool (
-                id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-                competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-                char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-                last_evaluated_at, created_at
-              )
-              VALUES (
-                ${id}, ${kw}, ${existing ? (existing.usage_count || 1) + 1 : 1},
-                ${scraped.opportunityScore}, ${scraped.opportunityScore}, ${scraped.totalListings},
-                ${scraped.competitionLevel}, ${scraped.bestsellerCount}, ${scraped.isEtsySuggested},
-                ${scraped.autocompleteRank}, ${charLen}, ${tagOk}, ${scraped.avgPrice},
-                ${scraped.scrapeError},
-                ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-              )
-              ON CONFLICT (keyword) DO UPDATE
-              SET 
-                usage_count = keyword_pool.usage_count + 1,
-                etsy_score = ${scraped.opportunityScore},
-                opportunity_score = ${scraped.opportunityScore},
-                total_listings = ${scraped.totalListings},
-                competition_level = ${scraped.competitionLevel},
-                bestseller_count = ${scraped.bestsellerCount},
-                is_etsy_suggested = ${scraped.isEtsySuggested},
-                autocomplete_rank = ${scraped.autocompleteRank},
-                char_length = ${charLen},
-                tag_eligible = ${tagOk},
-                avg_price = ${scraped.avgPrice},
-                last_scrape_error = ${scraped.scrapeError},
-                raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                last_evaluated_at = CURRENT_TIMESTAMP
-            `;
+              await sql`
+                INSERT INTO keyword_pool (
+                  id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
+                  competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
+                  char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
+                  last_evaluated_at, created_at
+                )
+                VALUES (
+                  ${id}, ${kw}, ${existing ? (existing.usage_count || 1) + 1 : 1},
+                  ${scraped.opportunityScore}, ${scraped.opportunityScore}, ${scraped.totalListings},
+                  ${scraped.competitionLevel}, ${scraped.bestsellerCount}, ${scraped.isEtsySuggested},
+                  ${scraped.autocompleteRank}, ${charLen}, ${tagOk}, ${scraped.avgPrice},
+                  ${scraped.scrapeError},
+                  ${JSON.stringify(scraped.rawMetrics)}::jsonb,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (keyword) DO UPDATE
+                SET 
+                  usage_count = keyword_pool.usage_count + 1,
+                  etsy_score = ${scraped.opportunityScore},
+                  opportunity_score = ${scraped.opportunityScore},
+                  total_listings = ${scraped.totalListings},
+                  competition_level = ${scraped.competitionLevel},
+                  bestseller_count = ${scraped.bestsellerCount},
+                  is_etsy_suggested = ${scraped.isEtsySuggested},
+                  autocomplete_rank = ${scraped.autocompleteRank},
+                  char_length = ${charLen},
+                  tag_eligible = ${tagOk},
+                  avg_price = ${scraped.avgPrice},
+                  last_scrape_error = ${scraped.scrapeError},
+                  raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
+                  last_evaluated_at = CURRENT_TIMESTAMP
+              `;
 
-            if (scraped.rawMetrics?.topTags && Array.isArray(scraped.rawMetrics.topTags)) {
-              for (const topTag of scraped.rawMetrics.topTags) {
-                const cleanTag = String(topTag).toLowerCase().trim();
-                if (cleanTag && cleanTag !== kw && cleanTag.length <= 20 && !uniqueKeywords.includes(cleanTag)) {
-                  discoveredTopTagsMap.set(cleanTag, (discoveredTopTagsMap.get(cleanTag) || 0) + 1);
+              if (scraped.rawMetrics?.topTags && Array.isArray(scraped.rawMetrics.topTags)) {
+                for (const topTag of scraped.rawMetrics.topTags) {
+                  const cleanTag = String(topTag).toLowerCase().trim();
+                  if (cleanTag && cleanTag !== kw && cleanTag.length <= 20 && !uniqueKeywords.includes(cleanTag)) {
+                    discoveredTopTagsMap.set(cleanTag, (discoveredTopTagsMap.get(cleanTag) || 0) + 1);
+                  }
                 }
               }
+            } catch (scrapeErr: unknown) {
+              console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr instanceof Error ? scrapeErr.message : 'unknown error');
             }
-          } catch (scrapeErr: unknown) {
-            console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr instanceof Error ? scrapeErr.message : 'unknown error');
-          }
-        })
-      );
+          })
+        );
+      }
     }
 
     // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla

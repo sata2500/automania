@@ -253,13 +253,22 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
       if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
         const keys = getStorageKeys();
         // Check if user has local items in IndexedDB
-        const [savedMockups, savedDesigns, savedFolders, savedActiveFolder, savedSelectedMockup, savedActiveDesignFolder] = await Promise.all([
+        const [
+          savedMockups,
+          savedDesigns,
+          savedFolders,
+          savedActiveFolder,
+          savedSelectedMockup,
+          savedActiveDesignFolder,
+          savedGeneratedMockups,
+        ] = await Promise.all([
           get<MockupItem[]>(keys.MOCKUPS),
           get<DesignItem[]>(keys.DESIGNS),
           get<MockupFolder[]>(keys.FOLDERS),
           get<string | null>(keys.ACTIVE_FOLDER),
           get<string | null>(keys.SELECTED_MOCKUP),
-          get<string | null>(keys.ACTIVE_DESIGN_FOLDER)
+          get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
+          get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
         ]);
 
         const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
@@ -274,6 +283,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
             activeFolderId: savedActiveFolder ?? null,
             selectedMockupId: savedSelectedMockup ?? (savedMockups?.[0]?.id || null),
             activeDesignFolderId: savedActiveDesignFolder ?? null,
+            etsyGeneratedMockups: savedGeneratedMockups || [],
           };
           const promoted = await promoteTemporaryMediaUrls(localPayload);
           localPayload = promoted.payload;
@@ -292,6 +302,11 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           }
         }
 
+        const serverGenerated = serverData.etsyGeneratedMockups;
+        const finalGenerated = (serverGenerated && serverGenerated.length > 0)
+          ? serverGenerated
+          : (savedGeneratedMockups || []);
+
         let payload: AppDataPayload = {
           mockups: serverData.mockups || [],
           designs: serverData.designs || [],
@@ -308,7 +323,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
           etsyDefaultTemplates: serverData.etsyDefaultTemplates || {},
           etsyCustomSizes: serverData.etsyCustomSizes || [],
           etsyCustomColors: serverData.etsyCustomColors || [],
-          etsyGeneratedMockups: serverData.etsyGeneratedMockups || [],
+          etsyGeneratedMockups: finalGenerated,
         };
 
         // Promote legacy temporary URLs when they are still recoverable in this browser.
