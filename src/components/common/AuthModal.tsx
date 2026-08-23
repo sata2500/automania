@@ -198,30 +198,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </span>
               </button>
 
-              {guestData && ((guestData.mockups && guestData.mockups.length > 0) || (guestData.designs && guestData.designs.length > 0)) && (
-                <button
-                  onClick={() => {
-                    setConfirmConfig({
-                      isOpen: true,
-                      title: 'Misafir Taslaklarını Aktar',
-                      message: `Giriş yapmadan önce hazırladığınız ${guestData.mockups?.length || 0} mockup ve ${guestData.designs?.length || 0} tasarım bu hesabınıza aktarılacaktır. Devam edilsin mi?`,
-                      action: () => {
-                        if (onMigrateGuestData) onMigrateGuestData();
-                      }
-                    });
-                  }}
-                  className="w-full flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 hover:from-indigo-100 dark:hover:from-indigo-900/50 border border-indigo-300 dark:border-indigo-500/50 rounded-xl text-xs text-indigo-800 dark:text-indigo-200 transition-all font-semibold cursor-pointer shadow-sm"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span>Misafir Taslaklarını Aktar ({guestData.mockups?.length || 0} Mockup)</span>
-                  </div>
-                  <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded font-bold">
-                    Aktar
-                  </span>
-                </button>
-              )}
-
               <button
                 onClick={() => {
                   setConfirmConfig({

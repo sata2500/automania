@@ -228,6 +228,17 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
     if (res.ok) {
       const serverData = await res.json();
       if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
+        const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
+        if (isServerEmpty) {
+          const guestData = await getGuestWorkspace();
+          if (guestData && ((guestData.mockups?.length || 0) > 0 || (guestData.designs?.length || 0) > 0)) {
+            const migrated = await migrateGuestWorkspaceToUser();
+            if (migrated) {
+              return migrated;
+            }
+          }
+        }
+
         const keys = getStorageKeys();
         // Preserve local UI state so user doesn't lose their place
         const [activeFolderId, selectedMockupId, activeDesignFolderId] = await Promise.all([
