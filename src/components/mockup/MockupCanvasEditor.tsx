@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
-import { deleteBlobs } from '@/lib/storage-service';
+import { deleteBlobs, saveAppData } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -357,20 +357,39 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       if (!selectedMockup) return;
       try {
         const oldSrc = selectedMockup.src;
-        const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
-        const finalSrc = serverUrl || croppedDataUrl;
+        let finalSrc = croppedDataUrl;
+        try {
+          const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
+          if (serverUrl) finalSrc = serverUrl;
+        } catch (e) {
+          console.warn('Direct R2 upload skipped or failed:', e);
+        }
+
         if (oldSrc && oldSrc !== finalSrc && oldSrc.startsWith('http')) {
           deleteBlobs([oldSrc]);
         }
-        setMockups((prev) =>
-          prev.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m))
+
+        const updatedMockups = mockups.map((m) =>
+          m.id === selectedMockup.id ? { ...m, src: finalSrc } : m
         );
+        setMockups(updatedMockups);
+
+        // Instantly save to IndexedDB and server
+        saveAppData({
+          mockups: updatedMockups,
+          designs: [],
+          folders: mockupFolders,
+          activeFolderId,
+          selectedMockupId: selectedMockup.id,
+        }).catch(console.error);
+
         toast.success('Mockup görseli başarıyla kırpıldı ve kaydedildi!');
       } catch (err) {
+        console.error('Crop save error:', err);
         toast.error('Kırpılan görsel kaydedilemedi.');
       }
     },
-    [selectedMockup, setMockups, toast]
+    [selectedMockup, mockups, mockupFolders, activeFolderId, setMockups, toast]
   );
 
   // Common Settings Panel Props

@@ -87,7 +87,10 @@ function hasTemporaryMediaUrl(payload: AppDataPayload): boolean {
   ].some(isTemporaryMediaUrl);
 }
 
-async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ payload: AppDataPayload; changed: boolean }> {
+async function promoteTemporaryMediaUrls(
+  payload: AppDataPayload,
+  onProgress?: (current: number, total: number) => void
+): Promise<{ payload: AppDataPayload; changed: boolean }> {
   let changed = false;
 
   const temporaryMockups = (payload.mockups || []).filter((item) => isTemporaryMediaUrl(item.src));
@@ -97,15 +100,8 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
   const totalTemporaryItems = temporaryMockups.length + temporaryDesigns.length + temporaryGenerated.length;
   let completedItems = 0;
 
-  if (totalTemporaryItems > 0) {
-    notifySyncStatus({
-      isSyncing: true,
-      isMigrating: true,
-      message: `Görseller bulut hesabınıza aktarılıyor (0/${totalTemporaryItems})...`,
-      progress: 15,
-      current: 0,
-      total: totalTemporaryItems,
-    });
+  if (totalTemporaryItems > 0 && onProgress) {
+    onProgress(0, totalTemporaryItems);
   }
 
   const promote = async (value: string, mimeType: string): Promise<string> => {
@@ -113,16 +109,8 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
     try {
       const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: false });
       completedItems++;
-      if (totalTemporaryItems > 0) {
-        const pct = Math.min(88, Math.round(15 + (completedItems / totalTemporaryItems) * 70));
-        notifySyncStatus({
-          isSyncing: true,
-          isMigrating: true,
-          message: `Görseller bulut hesabınıza aktarılıyor (${completedItems}/${totalTemporaryItems})...`,
-          progress: pct,
-          current: completedItems,
-          total: totalTemporaryItems,
-        });
+      if (totalTemporaryItems > 0 && onProgress) {
+        onProgress(completedItems, totalTemporaryItems);
       }
       if (promotedUrl && promotedUrl !== value && !isTemporaryMediaUrl(promotedUrl)) {
         changed = true;
@@ -132,6 +120,9 @@ async function promoteTemporaryMediaUrls(payload: AppDataPayload): Promise<{ pay
     } catch (error) {
       console.warn('[Workspace] Temporary media promotion skipped:', error instanceof Error ? error.message : 'unknown error');
       completedItems++;
+      if (totalTemporaryItems > 0 && onProgress) {
+        onProgress(completedItems, totalTemporaryItems);
+      }
       return value;
     }
   };
@@ -232,6 +223,14 @@ export async function clearGuestWorkspace(): Promise<void> {
       del(keys.ACTIVE_DESIGN_FOLDER),
       del(keys.ETSY_GENERATED_MOCKUPS),
       del(keys.ETSY_FOLDER_ORDER),
+      del('automania_pod_mockups_v1'),
+      del('automania_pod_designs_v1'),
+      del('automania_pod_folders_v1'),
+      del('automania_pod_active_folder_v1'),
+      del('automania_pod_selected_mockup_v1'),
+      del('automania_pod_active_design_folder_v1'),
+      del('automania_etsy_generated_mockups_v1'),
+      del('automania_etsy_folder_order_v1'),
     ]);
   } catch (err) {
     console.warn('Failed to clear guest workspace:', err);
@@ -250,18 +249,18 @@ export async function migrateGuestWorkspaceToUser(
 
   inFlightMigrationPromise = (async () => {
     try {
+      const guestData = await getGuestWorkspace();
+      if (!guestData) {
+        notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 0 });
+        return null;
+      }
+
       notifySyncStatus({
         isSyncing: true,
         isMigrating: true,
         message: 'Yerel taslaklarınız taranıyor ve bulut hesabınıza aktarılıyor...',
         progress: 10,
       });
-
-      const guestData = await getGuestWorkspace();
-      if (!guestData) {
-        notifySyncStatus({ isSyncing: false, isMigrating: false, message: '', progress: 0 });
-        return null;
-      }
 
       const userKeys = getStorageKeys();
       let existingMockups = currentUserPayload?.mockups;
@@ -330,7 +329,17 @@ export async function migrateGuestWorkspaceToUser(
       };
 
       // 1. Promote temporary media to durable server URLs where possible
-      const promoted = await promoteTemporaryMediaUrls(mergedPayload);
+      const promoted = await promoteTemporaryMediaUrls(mergedPayload, (curr, tot) => {
+        const pct = Math.min(88, Math.round(15 + (curr / tot) * 70));
+        notifySyncStatus({
+          isSyncing: true,
+          isMigrating: true,
+          message: `Görseller bulut hesabınıza aktarılıyor (${curr}/${tot})...`,
+          progress: pct,
+          current: curr,
+          total: tot,
+        });
+      });
       mergedPayload = promoted.payload;
 
       // 2. Save merged state to the logged-in user's IndexedDB and Server
@@ -348,7 +357,7 @@ export async function migrateGuestWorkspaceToUser(
       notifySyncStatus({
         isSyncing: false,
         isMigrating: false,
-        message: 'Verileriniz bulut hesabınıza başarıyla senkronize edildi!',
+        message: 'Verileriniz bulut hesabınıza başarıyla aktarıldı!',
         progress: 100,
       });
 
@@ -358,7 +367,7 @@ export async function migrateGuestWorkspaceToUser(
       notifySyncStatus({
         isSyncing: false,
         isMigrating: false,
-        message: 'Senkronizasyon sırasında hata oluştu.',
+        message: 'Aktarım sırasında bir hata oluştu.',
         progress: 0,
       });
       return null;
@@ -444,12 +453,6 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
 
           // Scenario 1: Server is empty, but local user IndexedDB has items (e.g. freshly migrated or offline items)
           if (isServerEmpty && hasLocalUserData) {
-            notifySyncStatus({
-              isSyncing: true,
-              isMigrating: true,
-              message: 'Yerel verileriniz bulut hesabınıza aktarılıyor...',
-              progress: 40,
-            });
             let localPayload: AppDataPayload = {
               mockups: savedMockups || [],
               designs: savedDesigns || [],
@@ -462,12 +465,6 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
             const promoted = await promoteTemporaryMediaUrls(localPayload);
             localPayload = promoted.payload;
             await saveAppData(localPayload);
-            notifySyncStatus({
-              isSyncing: false,
-              isMigrating: false,
-              message: 'Verileriniz bulut hesabınıza başarıyla aktarıldı!',
-              progress: 100,
-            });
             return localPayload;
           }
 
