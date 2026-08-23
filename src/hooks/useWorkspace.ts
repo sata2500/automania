@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
-import { loadAppData, saveAppData, saveUIStateToIndexedDB, updateLocalCache } from '@/lib/storage-service';
+import { loadAppData, saveAppData, saveUIStateToIndexedDB, updateLocalCache, getStorageKeys } from '@/lib/storage-service';
+import { get } from 'idb-keyval';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { useAuth } from '@/components/common/UserAuthContext';
 
@@ -38,7 +39,6 @@ export function useWorkspace() {
   const [hasGenerated, setHasGenerated] = useState<boolean>(false);
 
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,13 +69,56 @@ export function useWorkspace() {
     return () => window.clearTimeout(preferenceTimer);
   }, []);
 
-  // Load initial data. Always resolve initialization so a storage failure cannot leave the UI in a permanent loading state.
+  // Load initial data. Instant local IndexedDB hydration (0ms delay), then background sync.
   useEffect(() => {
     let isMounted = true;
-    setIsSyncing(true);
-    loadAppData()
-      .then((data) => {
+
+    async function initializeWorkspace() {
+      // Phase 1: Instant local cache hydration for zero-flicker UI render
+      try {
+        const keys = getStorageKeys();
+        const [
+          hasInit,
+          savedMockups,
+          savedDesigns,
+          savedFolders,
+          savedActiveFolder,
+          savedSelectedMockup,
+          savedActiveDesignFolder,
+          savedGeneratedMockups,
+        ] = await Promise.all([
+          get<boolean>(keys.HAS_INITIALIZED),
+          get<MockupItem[]>(keys.MOCKUPS),
+          get<DesignItem[]>(keys.DESIGNS),
+          get<MockupFolder[]>(keys.FOLDERS),
+          get<string | null>(keys.ACTIVE_FOLDER),
+          get<string | null>(keys.SELECTED_MOCKUP),
+          get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
+          get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
+        ]);
+
+        if (isMounted && (hasInit || (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0))) {
+          setMockups(savedMockups || []);
+          setDesigns(savedDesigns || []);
+          setFolders(savedFolders || []);
+          setActiveFolderId(savedActiveFolder ?? null);
+          setSelectedMockupId(savedSelectedMockup ?? (savedMockups?.[0]?.id || null));
+          setActiveDesignFolderId(savedActiveDesignFolder ?? null);
+          if (savedGeneratedMockups && savedGeneratedMockups.length > 0) {
+            setRenderedMatches(savedGeneratedMockups);
+            setHasGenerated(true);
+          }
+          setIsInitialized(true);
+        }
+      } catch (err) {
+        console.warn('[Workspace] Local cache hydration note:', err);
+      }
+
+      // Phase 2: Authoritative load / sync from cloud
+      try {
+        const data = await loadAppData();
         if (!isMounted) return;
+
         setMockups(data.mockups || []);
         setDesigns(data.designs || []);
         setFolders(data.folders || []);
@@ -88,24 +131,14 @@ export function useWorkspace() {
         }
         setInitializationError(null);
         setIsInitialized(true);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error('[Workspace] Initial data load failed:', error instanceof Error ? error.message : 'unknown error');
         if (!isMounted) return;
-        setInitializationError('Çalışma alanı yüklenirken bir hata oluştu. Yerel boş çalışma alanıyla devam edebilirsiniz.');
-        setMockups([]);
-        setDesigns([]);
-        setFolders([]);
-        setActiveFolderId(null);
-        setSelectedMockupId(null);
-        setActiveDesignFolderId(null);
-        setRenderedMatches([]);
-        setHasGenerated(false);
         setIsInitialized(true);
-      })
-      .finally(() => {
-        if (isMounted) setIsSyncing(false);
-      });
+      }
+    }
+
+    initializeWorkspace();
     return () => { isMounted = false; };
   }, [initializationAttempt, user?.id]);
 
@@ -205,7 +238,6 @@ export function useWorkspace() {
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized, setIsInitialized,
-    isSyncing,
     initializationError,
     retryInitialization: () => setInitializationAttempt((attempt) => attempt + 1),
     isSaving, setIsSaving,

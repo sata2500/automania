@@ -22,7 +22,7 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { STORAGE_KEYS } from '@/config/constants';
-import { Sparkles, Info, User, X, RefreshCw } from 'lucide-react';
+import { Sparkles, Info, User, X } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -112,7 +112,6 @@ function MainContent() {
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized,
-    isSyncing,
     initializationError,
     retryInitialization,
     isSaving,
@@ -149,6 +148,7 @@ function MainContent() {
 
   const handleImportBackup = async (file: File) => {
     setIsBackupProcessing(true);
+    const toastId = toast.progress('Yedek dosyanız inceleniyor ve veriler yükleniyor, lütfen bekleyin...', 15);
     try {
       const data = await parseAppDataBackupFile(file);
       setMockups(data.mockups);
@@ -156,11 +156,13 @@ function MainContent() {
       setFolders(data.folders);
       setActiveFolderId(data.activeFolderId);
       setSelectedMockupId(data.selectedMockupId);
-      setRenderedMatches([]);
-      setHasGenerated(false);
+      setRenderedMatches(data.etsyGeneratedMockups || []);
+      setHasGenerated(Boolean(data.etsyGeneratedMockups && data.etsyGeneratedMockups.length > 0));
       await saveAppData(data);
+      toast.removeToast(toastId);
       toast.success('Yedek başarıyla yüklendi ve çalışma alanı güncellendi!', 'Yedek Yüklendi');
     } catch (error: unknown) {
+      toast.removeToast(toastId);
       toast.error(error instanceof Error ? error.message : 'Yedek yüklenirken bir hata oluştu.', 'Yükleme Hatası');
     } finally {
       setIsBackupProcessing(false);
@@ -298,23 +300,6 @@ function MainContent() {
             >
               Tekrar dene
             </button>
-          </div>
-        )}
-
-        {/* Syncing Indicator when loading or auto-migrating */}
-        {user && (!isInitialized || isSyncing) && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/80 dark:border-indigo-500/30 dark:bg-indigo-950/40 p-3.5 text-xs text-indigo-900 dark:text-indigo-200 backdrop-blur-sm animate-fadeIn shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center animate-spin shrink-0">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </div>
-              <span className="font-semibold">
-                Yerel verileriniz bulut hesabınıza eşitleniyor, lütfen bekleyin...
-              </span>
-            </div>
-            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold shrink-0">
-              Senkronize ediliyor...
-            </span>
           </div>
         )}
 
