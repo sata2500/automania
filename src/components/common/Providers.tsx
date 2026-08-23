@@ -7,12 +7,12 @@ import { ToastProvider } from './ToastContext';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <UserAuthProvider>
-      <ThemeProvider>
-        <ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <UserAuthProvider>
           {children}
-        </ToastProvider>
-      </ThemeProvider>
-    </UserAuthProvider>
+        </UserAuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

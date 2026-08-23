@@ -88,21 +88,23 @@ export function getStorageKeys(overrideUserId?: string | null) {
 export async function getGuestWorkspace(): Promise<AppDataPayload | null> {
   const keys = getStorageKeys('default_user');
   try {
-    const [mockups, designs, folders, activeFolder, selectedMockup] = await Promise.all([
+    const [mockups, designs, folders, activeFolder, selectedMockup, generatedMockups] = await Promise.all([
       get<MockupItem[]>(keys.MOCKUPS),
       get<DesignItem[]>(keys.DESIGNS),
       get<MockupFolder[]>(keys.FOLDERS),
       get<string | null>(keys.ACTIVE_FOLDER),
       get<string | null>(keys.SELECTED_MOCKUP),
+      get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
     ]);
 
-    if ((mockups && mockups.length > 0) || (designs && designs.length > 0)) {
+    if ((mockups && mockups.length > 0) || (designs && designs.length > 0) || (generatedMockups && generatedMockups.length > 0)) {
       return {
         mockups: mockups || [],
         designs: designs || [],
         folders: folders || [],
         activeFolderId: activeFolder || null,
         selectedMockupId: selectedMockup || (mockups?.[0]?.id || null),
+        etsyGeneratedMockups: generatedMockups || [],
       };
     }
   } catch (err) {
@@ -133,7 +135,7 @@ export async function clearGuestWorkspace(): Promise<void> {
 }
 
 /**
- * Migrates local guest workspace items (mockups, designs, folders) into the signed-in user's account.
+ * Migrates local guest workspace items (mockups, designs, folders, generated mockups) into the signed-in user's account.
  */
 export async function migrateGuestWorkspaceToUser(
   currentUserPayload?: Partial<AppDataPayload>
@@ -145,21 +147,25 @@ export async function migrateGuestWorkspaceToUser(
   let existingMockups = currentUserPayload?.mockups;
   let existingDesigns = currentUserPayload?.designs;
   let existingFolders = currentUserPayload?.folders;
+  let existingGenerated = currentUserPayload?.etsyGeneratedMockups;
 
-  if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined) {
-    const [savedMockups, savedDesigns, savedFolders] = await Promise.all([
+  if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined || existingGenerated === undefined) {
+    const [savedMockups, savedDesigns, savedFolders, savedGenerated] = await Promise.all([
       get<MockupItem[]>(userKeys.MOCKUPS),
       get<DesignItem[]>(userKeys.DESIGNS),
       get<MockupFolder[]>(userKeys.FOLDERS),
+      get<RenderedMatch[]>(userKeys.ETSY_GENERATED_MOCKUPS),
     ]);
     if (existingMockups === undefined) existingMockups = savedMockups || [];
     if (existingDesigns === undefined) existingDesigns = savedDesigns || [];
     if (existingFolders === undefined) existingFolders = savedFolders || [];
+    if (existingGenerated === undefined) existingGenerated = savedGenerated || [];
   }
 
   const currentMockups = existingMockups || [];
   const currentDesigns = existingDesigns || [];
   const currentFolders = existingFolders || [];
+  const currentGenerated = existingGenerated || [];
 
   // Merge folders without duplicate names
   const mergedFolders = [...currentFolders];
@@ -185,10 +191,19 @@ export async function migrateGuestWorkspaceToUser(
     }
   }
 
+  // Merge generated mockups without duplicate IDs
+  const mergedGenerated = [...currentGenerated];
+  for (const gg of guestData.etsyGeneratedMockups || []) {
+    if (!mergedGenerated.some(g => g.id === gg.id)) {
+      mergedGenerated.push(gg);
+    }
+  }
+
   let mergedPayload: AppDataPayload = {
     mockups: mergedMockups,
     designs: mergedDesigns,
     folders: mergedFolders,
+    etsyGeneratedMockups: mergedGenerated,
     activeFolderId: guestData.activeFolderId || currentUserPayload?.activeFolderId || null,
     selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (mergedMockups[0]?.id || null),
     lastUpdated: Date.now(),
@@ -294,7 +309,12 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
         // Scenario 2: Server is empty and user IndexedDB is empty, check if guest workspace has items
         if (isServerEmpty && !hasLocalUserData) {
           const guestData = await getGuestWorkspace();
-          if (guestData && ((guestData.mockups?.length || 0) > 0 || (guestData.designs?.length || 0) > 0)) {
+          if (
+            guestData &&
+            ((guestData.mockups?.length || 0) > 0 ||
+              (guestData.designs?.length || 0) > 0 ||
+              (guestData.etsyGeneratedMockups?.length || 0) > 0)
+          ) {
             const migrated = await migrateGuestWorkspaceToUser();
             if (migrated) {
               return migrated;

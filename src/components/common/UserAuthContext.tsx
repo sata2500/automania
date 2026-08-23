@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { forceSyncFromServer } from '@/lib/storage-service';
 import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
+import { useToast } from './ToastContext';
 
 export interface UserProfile {
   id: string;
@@ -45,6 +46,7 @@ const AUTH_STORAGE_KEY = 'automania_pod_user_session';
 const USER_LIST_STORAGE_KEY = 'automania_pod_user_list_v1';
 
 export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const toast = useToast();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [userList, setUserList] = useState<ManagedUser[]>([]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -104,7 +106,13 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
             
             // DİKKAT: Kullanıcı oturumu doğrulandıktan hemen sonra sunucudaki en güncel çalışma alanını yerel tarayıcıya zorla eşitle!
-            await forceSyncFromServer();
+            const synced = await forceSyncFromServer();
+            try {
+              if (synced && localStorage.getItem('automania_oauth_pending')) {
+                localStorage.removeItem('automania_oauth_pending');
+                toast.success('Giriş yapıldı, verileriniz bulut hesabınıza eşitlendi!', 'Hoş Geldiniz');
+              }
+            } catch {}
             
           } catch (err) {
             console.error('Session sync error', err);
@@ -151,6 +159,8 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (data.success && data.user) {
           setUser(data.user);
           localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+          await forceSyncFromServer();
+          toast.success('Oturum açıldı, bulut hesabınız eşitlendi!', 'Hoş Geldiniz');
         } else {
           localStorage.removeItem(AUTH_STORAGE_KEY);
         }
@@ -172,6 +182,8 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loginWithGoogle = () => {
     const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+    try { localStorage.setItem('automania_oauth_pending', 'true'); } catch {}
 
     if (googleClientId) {
       const browserUrl = new URL(window.location.origin);

@@ -6,12 +6,13 @@ import { useToast } from './ToastContext';
 import { getGuestWorkspace, migrateGuestWorkspaceToUser, clearGuestWorkspace, AppDataPayload } from '@/lib/storage-service';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
+import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 
 interface GuestMigrationBannerProps {
   currentMockups?: MockupItem[];
   currentDesigns?: DesignItem[];
   currentFolders?: MockupFolder[];
+  currentGeneratedMockups?: RenderedMatch[];
   onMigrationComplete?: (payload: AppDataPayload) => void;
 }
 
@@ -19,6 +20,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   currentMockups = [],
   currentDesigns = [],
   currentFolders = [],
+  currentGeneratedMockups = [],
   onMigrationComplete,
 }) => {
   const { user } = useAuth();
@@ -36,7 +38,12 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
     let isMounted = true;
     getGuestWorkspace().then((data) => {
       if (!isMounted) return;
-      if (data && ((data.mockups && data.mockups.length > 0) || (data.designs && data.designs.length > 0))) {
+      if (
+        data &&
+        ((data.mockups && data.mockups.length > 0) ||
+          (data.designs && data.designs.length > 0) ||
+          (data.etsyGeneratedMockups && data.etsyGeneratedMockups.length > 0))
+      ) {
         setGuestData(data);
       } else {
         setGuestData(null);
@@ -46,15 +53,16 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [user, currentMockups.length, currentDesigns.length]);
+  }, [user, currentMockups.length, currentDesigns.length, currentGeneratedMockups.length]);
 
-  const hasAccountData = currentMockups.length > 0 || currentDesigns.length > 0;
+  const hasAccountData = currentMockups.length > 0 || currentDesigns.length > 0 || currentGeneratedMockups.length > 0;
 
   // Do not show merge banner if user is logged out, no guest data, dismissed, or if account is completely empty (auto-migrated)
   if (!user || !guestData || isDismissed || !hasAccountData) return null;
 
   const guestMockupCount = guestData.mockups?.length || 0;
   const guestDesignCount = guestData.designs?.length || 0;
+  const guestBatchCount = guestData.etsyGeneratedMockups?.length || 0;
   const accountMockupCount = currentMockups.length;
 
   const handleMigrate = async () => {
@@ -64,6 +72,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
         mockups: currentMockups,
         designs: currentDesigns,
         folders: currentFolders,
+        etsyGeneratedMockups: currentGeneratedMockups,
       });
       if (merged) {
         if (onMigrationComplete) {

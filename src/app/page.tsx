@@ -209,14 +209,27 @@ function MainContent() {
       setFolders(payload.folders || []);
       setActiveFolderId(payload.activeFolderId || null);
       setSelectedMockupId(payload.selectedMockupId || null);
+      if (payload.etsyGeneratedMockups && payload.etsyGeneratedMockups.length > 0) {
+        setRenderedMatches(payload.etsyGeneratedMockups);
+        setHasGenerated(true);
+      }
     } else {
-      migrateGuestWorkspaceToUser({ mockups, designs, folders }).then((merged) => {
+      migrateGuestWorkspaceToUser({
+        mockups,
+        designs,
+        folders,
+        etsyGeneratedMockups: renderedMatches,
+      }).then((merged) => {
         if (merged) {
           setMockups(merged.mockups || []);
           setDesigns(merged.designs || []);
           setFolders(merged.folders || []);
           setActiveFolderId(merged.activeFolderId || null);
           setSelectedMockupId(merged.selectedMockupId || null);
+          if (merged.etsyGeneratedMockups && merged.etsyGeneratedMockups.length > 0) {
+            setRenderedMatches(merged.etsyGeneratedMockups);
+            setHasGenerated(true);
+          }
           toast.success('Misafir taslaklarınız bu hesabınıza başarıyla aktarıldı!', 'Aktarım Tamamlandı');
         }
       });
@@ -309,6 +322,7 @@ function MainContent() {
             currentMockups={mockups}
             currentDesigns={designs}
             currentFolders={folders}
+            currentGeneratedMockups={renderedMatches}
             onMigrationComplete={handleMigrateGuestData}
           />
         )}
