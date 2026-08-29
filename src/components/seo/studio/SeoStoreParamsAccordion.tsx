@@ -64,7 +64,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
     selectedShippingProfileId, setSelectedShippingProfileId,
     shippingProfiles, selectedReadinessStateId, setSelectedReadinessStateId,
     readinessStates, setVariations,
-    taxonomyId, whoMade, setWhoMade, whenMade, setWhenMade, isSupply, setIsSupply,
+    taxonomyId, setTaxonomyId, whoMade, setWhoMade, whenMade, setWhenMade, isSupply, setIsSupply,
     productionPartnerId, setProductionPartnerId, isCustomizable, setIsCustomizable, sku, setSku,
     handleRegenerateSku,
     shopSections, selectedShopSectionId, setSelectedShopSectionId,
@@ -340,6 +340,23 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                     </div>
                   ));
                 })()}
+
+                {/* TAXONOMY ID */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    Kategori ID (Taxonomy)
+                  </label>
+                  <input 
+                    type="number" 
+                    value={taxonomyId || ''}
+                    onChange={(e) => setTaxonomyId(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Yapay zekanın seçtiği veya sizin belirlediğiniz kategori ID'si (Örn: Tişörtler için genelde 482 veya 1081 vb).
+                  </p>
+                </div>
 
                 {/* WHO MADE */}
                 <div>

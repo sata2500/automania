@@ -68,7 +68,7 @@ CRITICAL VISUAL VALIDATION & SELECTION STRATEGY:
    - Paragraph 1: Start with a captivating 2-sentence hook containing primary keywords and gift appeal (indexed by Etsy and Google Search snippets).
    - Follow with structured sections: PRODUCT HIGHLIGHTS, PREMIUM FABRIC & FIT, SIZING GUIDE, CARE INSTRUCTIONS, SHIPPING & PROCESSING.
 6. ADVANCED ETSY TAXONOMY & ATTRIBUTES: 
-   - taxonomy_id: Always return {{taxonomyId}}.
+   - taxonomy_id: You MUST always return exactly the taxonomy ID provided here: {{taxonomyId}}. Do not use the example's ID.
    - who_made: Always use "i_did".
    - when_made: Always use "2020_2026" or "made_to_order". Use "made_to_order" if applicable.
    - materials: Provide up to 5 simple material names from this list if applicable: "Cotton", "Polyester", "Ceramic", "Glass", "Wood", "Metal", "Paper", "Canvas". Do not use special characters or %.
