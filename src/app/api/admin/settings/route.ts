@@ -16,11 +16,15 @@ const ALLOWED_SETTING_KEYS = new Set([
   'openrouter_model_vision',
   'openrouter_model_reasoning',
   'openrouter_model_generation',
+  'openrouter_model_video',
   'gemini_model_vision',
   'gemini_model_reasoning',
   'gemini_model_generation',
+  'gemini_model_video',
   'ai_prompt_analyze_design',
   'ai_prompt_generate_listing',
+  'ai_prompt_generate_design',
+  'ai_prompt_generate_video',
 ]);
 
 const MAX_SETTING_VALUE_LENGTH = 100_000;

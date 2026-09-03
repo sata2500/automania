@@ -77,12 +77,27 @@ export interface DesignItem {
   id: string;
   name: string;
   src: string;
-  targetApparel: TargetApparel;
+  targetApparel?: TargetApparel;
   isSelected?: boolean;
   width: number;
   height: number;
   folderId?: string; // Optional for backward compatibility and "Tüm Tasarımlar"
-  
+
+  /** Üretimde aktif mi? (slot sistemi) */
+  isProductionActive?: boolean;
+
+  /** Oluşturulma zamanı */
+  createdAt?: number;
+
+  /** Etiketler */
+  tags?: string[];
+
+  /** Yapay zeka tarafından mı üretildi? */
+  generatedByAI?: boolean;
+
+  /** Üretimde kullanılan prompt */
+  promptUsed?: string;
+
   /** AI Analysis results for the design */
   analysis?: {
     description: string;
@@ -97,7 +112,7 @@ export interface DesignItem {
     productType?: string;
     taxonomyId?: number | null;
   };
-  
+
   /** Generated SEO Listing for the design */
   seo?: {
     title: string;

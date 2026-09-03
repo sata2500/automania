@@ -8,6 +8,7 @@ const DesignUploader = dynamic(() => import('@/components/design/DesignUploader'
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
 const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
 const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy İlan Paneli yükleniyor...</div> });
+
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
   saveAppData,
@@ -472,6 +473,8 @@ function MainContent() {
         {activeTab === 'seo' && <EtsySeoHelper />}
 
         {activeTab === 'listings' && <EtsyListingManager />}
+
+
 
       </main>
 

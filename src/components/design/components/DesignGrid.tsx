@@ -13,6 +13,8 @@ interface DesignGridProps {
   onSetProductionActive: (id: string, target: TargetApparel) => void;
   onAnalyzeClick: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
+  onRemoveBgClick?: (design: DesignItem) => void;
+  onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDeleteClick: (id: string) => void;
 }
@@ -27,6 +29,8 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
   onSetProductionActive,
   onAnalyzeClick,
   onCropClick,
+  onRemoveBgClick,
+  onRecolorClick,
   onMoveToFolder,
   onDeleteClick,
 }) => {
@@ -56,6 +60,8 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
           onSetProductionActive={onSetProductionActive}
           onAnalyzeClick={onAnalyzeClick}
           onCropClick={onCropClick}
+          onRemoveBgClick={onRemoveBgClick}
+          onRecolorClick={onRecolorClick}
           onMoveToFolder={onMoveToFolder}
           onDeleteClick={onDeleteClick}
         />

@@ -101,3 +101,20 @@ Return ONLY a valid JSON object in the following format:
     { "property_id": 469, "value_ids": [67890] }
   ]
 }`;
+
+export const DEFAULT_GENERATE_DESIGN_PROMPT = `Generate a creative and highly detailed vector-style T-shirt design based on the following concept:
+
+CONCEPT / DESCRIPTION:
+{{userPrompt}}
+
+AESTHETIC / STYLE:
+{{selectedStyle}}
+
+CRITICAL INSTRUCTIONS:
+1. BACKGROUND: The background MUST be a solid, pure bright green (chroma key green, #00FF00). DO NOT include any gradients, shadows, or other colors in the background. This is strictly required for background removal.
+2. SUBJECT: The design subject must be centered, high-contrast, and clearly defined.
+3. STYLE: The artwork should be flat vector style, suitable for screen printing or DTG printing on apparel. Do not include photorealistic elements unless specified.
+4. TYPOGRAPHY: If the concept includes text, render it clearly with bold, readable typography that matches the aesthetic.
+5. ISOLATION: Ensure the design does not blend into the green background.
+
+Output ONLY the image without any text descriptions or chat formatting.`;

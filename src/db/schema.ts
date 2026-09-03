@@ -2,6 +2,13 @@ import { pgTable, varchar, jsonb, timestamp, integer, boolean, numeric, text, bi
 
 import { sql } from 'drizzle-orm';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
+import {
+  PodTemplateMockupConfig,
+  PodTemplateVariationConfig,
+  PodTemplateSeoHints,
+  PodTemplateAutomationSchedule,
+  AutomationRunSteps,
+} from '@/types/templates';
 
 export const users = pgTable('users', {
   id: varchar('id', { length: 255 }).primaryKey(),
@@ -132,5 +139,154 @@ export const userEtsyListings = pgTable('user_etsy_listings', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+// ─── Şablon Sistemi ──────────────────────────────────────────────────────────
+
+/**
+ * POD Şablon Tablosu — Kullanıcının tasarladığı otomasyon şablonları
+ * Her şablon: mockup seçimi, varyasyonlar, SEO ipuçları ve zamanlama içerir.
+ */
+export const podTemplates = pgTable('pod_templates', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+
+  /** Mockup ve görsel konfigürasyonu */
+  mockupConfig: jsonb('mockup_config').$type<PodTemplateMockupConfig>().default({
+    printAreaMockupIds: [],
+    staticMockupIds: [],
+    videoMockupIds: [],
+    fabricType: 'all',
+    multiPrintAreaSupport: false,
+  }),
+
+  /** Varyasyon konfigürasyonu (renk/beden/fiyat/adet) */
+  variationConfig: jsonb('variation_config').$type<PodTemplateVariationConfig>().default({
+    rows: [],
+    sizes: [],
+    colors: [],
+  }),
+
+  /** SEO ipuçları ve ürün notları */
+  seoHints: jsonb('seo_hints').$type<PodTemplateSeoHints>().default({
+    productType: '',
+    targetAudience: '',
+    customNotes: '',
+    primaryNiche: '',
+  }),
+
+  /** Otomasyon zamanlama konfigürasyonu */
+  automationSchedule: jsonb('automation_schedule').$type<PodTemplateAutomationSchedule>().default({
+    enabled: false,
+    cronExpression: '0 9 * * *',
+    timezone: 'America/New_York',
+    nextRunAt: null,
+    listingsPerRun: 1,
+    publishMode: 'draft',
+  }),
+
+  /** Şablon aktif mi? (devre dışı bırakılabilir) */
+  isActive: boolean('is_active').default(true),
+
+  /** Son otomatik çalışma zamanı */
+  lastRunAt: timestamp('last_run_at'),
+
+  /** Toplam üretilen listing sayısı */
+  totalListingsGenerated: integer('total_listings_generated').default(0),
+
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  userIdIdx: index('pod_templates_user_id_idx').on(table.userId),
+  activeIdx: index('pod_templates_active_idx').on(table.isActive),
+}));
+
+/**
+ * Otomasyon Çalıştırma Kaydı — Her otomatik listing üretiminin izlenmesi
+ */
+export const automationRuns = pgTable('automation_runs', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  templateId: varchar('template_id', { length: 255 }).notNull(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+
+  /** Çalışma durumu */
+  status: varchar('status', { length: 30 }).default('pending').notNull(),
+  // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+  /** Her adımın sonucu */
+  steps: jsonb('steps').$type<AutomationRunSteps>().default({
+    designGeneration: { status: 'pending' },
+    backgroundRemoval: { status: 'pending' },
+    mockupRender: { status: 'pending' },
+    videoGeneration: { status: 'pending' },
+    seoGeneration: { status: 'pending' },
+    listingCreation: { status: 'pending' },
+  }),
+
+  /** Üretilen kaynaklar */
+  generatedDesignId: varchar('generated_design_id', { length: 255 }),
+  generatedDesignUrl: text('generated_design_url'),
+  generatedMockupUrls: jsonb('generated_mockup_urls').$type<string[]>().default([]),
+  generatedVideoUrl: text('generated_video_url'),
+  generatedSeo: jsonb('generated_seo').default({}),
+  generatedListingId: varchar('generated_listing_id', { length: 100 }),
+  etsyListingId: varchar('etsy_listing_id', { length: 100 }),
+
+  /** Hata mesajı */
+  errorMessage: text('error_message'),
+
+  /** Tetiklenme türü */
+  triggerType: varchar('trigger_type', { length: 50 }).default('manual'),
+  // 'manual' | 'scheduled' | 'cron'
+
+  createdAt: timestamp('created_at').defaultNow(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  templateIdIdx: index('automation_runs_template_id_idx').on(table.templateId),
+  userIdStatusIdx: index('automation_runs_user_status_idx').on(table.userId, table.status),
+  createdAtIdx: index('automation_runs_created_at_idx').on(table.createdAt),
+}));
+
+/**
+ * Kullanıcı Etsy Mağazaları — Çoklu mağaza desteği
+ */
+export const userEtsyShops = pgTable('user_etsy_shops', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+
+  /** Etsy mağaza kimliği ve adı */
+  shopId: varchar('shop_id', { length: 100 }).notNull(),
+  shopName: varchar('shop_name', { length: 255 }),
+  shopUrl: text('shop_url'),
+  iconUrl: text('icon_url'),
+
+  /** OAuth token'ları (bu mağaza için) */
+  accessToken: text('access_token'),
+  refreshToken: varchar('refresh_token', { length: 500 }),
+  tokenExpiresAt: timestamp('token_expires_at'),
+
+  /** PKCE flow geçici veriler */
+  pkceVerifier: varchar('pkce_verifier', { length: 500 }),
+  pkceState: varchar('pkce_state', { length: 500 }),
+
+  /** Mağaza istatistikleri (son sync'ten) */
+  totalActiveListings: integer('total_active_listings').default(0),
+  totalDraftListings: integer('total_draft_listings').default(0),
+  avgSeoScore: integer('avg_seo_score').default(0),
+
+  /** Bağlantı durumu */
+  isActive: boolean('is_active').default(true),
+  isPrimary: boolean('is_primary').default(false),
+  lastSyncedAt: timestamp('last_synced_at'),
+
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  userIdIdx: index('user_etsy_shops_user_id_idx').on(table.userId),
+  shopIdIdx: uniqueIndex('user_etsy_shops_shop_id_idx').on(table.userId, table.shopId),
+}));
 
 

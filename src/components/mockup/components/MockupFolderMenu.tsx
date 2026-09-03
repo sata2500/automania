@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Edit2, Copy, Trash2 } from 'lucide-react';
+import { Edit2, Copy, Trash2, Settings2 } from 'lucide-react';
 import { MockupFolder } from '@/types/pod';
 
 interface MockupFolderMenuProps {
@@ -10,6 +10,7 @@ interface MockupFolderMenuProps {
   onRename: (folder: MockupFolder) => void;
   onDuplicate: (folderId: string) => void;
   onDelete: (folderId: string) => void;
+  onTemplateSettings?: (folder: MockupFolder) => void;
 }
 
 export const MockupFolderMenu: React.FC<MockupFolderMenuProps> = ({
@@ -20,6 +21,7 @@ export const MockupFolderMenu: React.FC<MockupFolderMenuProps> = ({
   onRename,
   onDuplicate,
   onDelete,
+  onTemplateSettings,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -42,6 +44,22 @@ export const MockupFolderMenu: React.FC<MockupFolderMenuProps> = ({
       style={{ top: `${position.top}px`, left: `${position.left}px` }}
       className="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl py-1.5 min-w-[170px] text-xs animate-in fade-in zoom-in-95 duration-100"
     >
+      {onTemplateSettings && (
+        <>
+          <button
+            onClick={() => {
+              onClose();
+              onTemplateSettings(folder);
+            }}
+            className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left"
+          >
+            <Settings2 className="w-3.5 h-3.5 text-purple-500" />
+            <span>Şablon Ayarları</span>
+          </button>
+          <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
+        </>
+      )}
+
       <button
         onClick={() => {
           onClose();

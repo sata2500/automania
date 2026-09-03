@@ -45,7 +45,8 @@ import {
   Info,
   HelpCircle,
   ChevronDown,
-  Upload
+  Upload,
+  Video
 } from 'lucide-react';
 import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -57,7 +58,7 @@ import TaxonomyManagement from './TaxonomyManagement';
 import { AdminSettingsSection } from './AdminSettingsSection';
 import { AdminOverviewSection, type AdminGlobalStats } from './AdminOverviewSection';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
+import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT, DEFAULT_GENERATE_DESIGN_PROMPT } from '@/lib/default-prompts';
 
 export interface PromptVariable {
   tag: string;
@@ -155,6 +156,40 @@ export const PROMPT_VARIABLES_GENERATE: PromptVariable[] = [
     icon: '⚙️',
     badgeColor: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700',
   },
+];
+
+export const PROMPT_VARIABLES_DESIGN_GEN: PromptVariable[] = [
+  {
+    tag: '{{userPrompt}}',
+    label: 'Kullanıcı Promptu',
+    desc: 'Kullanıcının girdiği tasarım konsepti veya açıklaması.',
+    icon: '📝',
+    badgeColor: 'border-blue-200 bg-blue-50/80 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60',
+  },
+  {
+    tag: '{{selectedStyle}}',
+    label: 'Seçilen Stil',
+    desc: 'Tasarım için seçilen sanatsal stil (ör. Minimalist, Cottagecore, Vintage).',
+    icon: '✨',
+    badgeColor: 'border-purple-200 bg-purple-50/80 text-purple-700 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60',
+  }
+];
+
+export const PROMPT_VARIABLES_VIDEO_GEN: PromptVariable[] = [
+  {
+    tag: '{{title}}',
+    label: 'Ürün Başlığı',
+    desc: 'Oluşturulan ürünün başlığı.',
+    icon: '🏷️',
+    badgeColor: 'border-blue-200 bg-blue-50/80 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60',
+  },
+  {
+    tag: '{{designPrompt}}',
+    label: 'Tasarım Promptu',
+    desc: 'Kullanıcının girdiği tasarım açıklaması.',
+    icon: '📝',
+    badgeColor: 'border-purple-200 bg-purple-50/80 text-purple-700 dark:border-purple-800 dark:bg-purple-950/60 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60',
+  }
 ];
 
 const PromptVariablePill: React.FC<{
@@ -384,15 +419,19 @@ export const AdminDashboard: React.FC = () => {
   const [modelVision, setModelVision] = useState('');
   const [modelReasoning, setModelReasoning] = useState('');
   const [modelGeneration, setModelGeneration] = useState('');
+  const [modelVideo, setModelVideo] = useState('');
   
   const [geminiModelVision, setGeminiModelVision] = useState('');
   const [geminiModelReasoning, setGeminiModelReasoning] = useState('');
   const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
+  const [geminiModelVideo, setGeminiModelVideo] = useState('');
 
   // AI Prompts State
   const [promptAnalyzeDesign, setPromptAnalyzeDesign] = useState('');
   const [promptGenerateListing, setPromptGenerateListing] = useState('');
-  const [activePromptSubTab, setActivePromptSubTab] = useState<'both' | 'vision' | 'listing'>('both');
+  const [promptGenerateDesign, setPromptGenerateDesign] = useState('');
+  const [promptGenerateVideo, setPromptGenerateVideo] = useState('');
+  const [activePromptSubTab, setActivePromptSubTab] = useState<'both' | 'vision' | 'listing' | 'design' | 'video'>('both');
 
   // AI Tab Collapsible Sections State (Accordion)
   const [expandedAiSections, setExpandedAiSections] = useState<Record<string, boolean>>({
@@ -511,6 +550,9 @@ export const AdminDashboard: React.FC = () => {
             if (data.settings.gemini_model_vision) setGeminiModelVision(data.settings.gemini_model_vision);
             if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
+            if (data.settings.gemini_model_video) setGeminiModelVideo(data.settings.gemini_model_video);
+            
+            if (data.settings.openrouter_model_video) setModelVideo(data.settings.openrouter_model_video);
             
             if (data.settings.ai_prompt_analyze_design) {
               setPromptAnalyzeDesign(data.settings.ai_prompt_analyze_design);
@@ -521,6 +563,16 @@ export const AdminDashboard: React.FC = () => {
               setPromptGenerateListing(data.settings.ai_prompt_generate_listing);
             } else {
               setPromptGenerateListing(DEFAULT_GENERATE_LISTING_PROMPT);
+            }
+            if (data.settings.ai_prompt_generate_design) {
+              setPromptGenerateDesign(data.settings.ai_prompt_generate_design);
+            } else {
+              setPromptGenerateDesign(DEFAULT_GENERATE_DESIGN_PROMPT);
+            }
+            if (data.settings.ai_prompt_generate_video) {
+              setPromptGenerateVideo(data.settings.ai_prompt_generate_video);
+            } else {
+              setPromptGenerateVideo("");
             }
           }
         })
@@ -580,9 +632,13 @@ export const AdminDashboard: React.FC = () => {
       if (geminiModelVision) settingsToSave.gemini_model_vision = geminiModelVision;
       if (geminiModelReasoning) settingsToSave.gemini_model_reasoning = geminiModelReasoning;
       if (geminiModelGeneration) settingsToSave.gemini_model_generation = geminiModelGeneration;
+      if (geminiModelVideo) settingsToSave.gemini_model_video = geminiModelVideo;
+      if (modelVideo) settingsToSave.openrouter_model_video = modelVideo;
 
       if (promptAnalyzeDesign !== undefined) settingsToSave.ai_prompt_analyze_design = promptAnalyzeDesign;
       if (promptGenerateListing !== undefined) settingsToSave.ai_prompt_generate_listing = promptGenerateListing;
+      if (promptGenerateDesign !== undefined) settingsToSave.ai_prompt_generate_design = promptGenerateDesign;
+      if (promptGenerateVideo !== undefined) settingsToSave.ai_prompt_generate_video = promptGenerateVideo;
 
       if (Object.keys(settingsToSave).length > 0) {
         await fetch('/api/admin/settings', {
@@ -1207,8 +1263,8 @@ export const AdminDashboard: React.FC = () => {
           >
             <div className="space-y-4 pt-3">
               {activeAiProvider === 'openrouter' ? (
-                /* OpenRouter 3-Tier Model Cards */
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                /* OpenRouter 4-Tier Model Cards */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   {/* Vision Model */}
                   <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col justify-between">
                     <div>
@@ -1283,10 +1339,35 @@ export const AdminDashboard: React.FC = () => {
                       </button>
                     )}
                   </div>
+
+                  {/* Video Generation Model */}
+                  <div className="p-4 bg-orange-50/50 dark:bg-orange-950/30 rounded-2xl border border-orange-100 dark:border-orange-900/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-orange-100 dark:bg-orange-900/60 rounded-lg text-orange-600 dark:text-orange-400">
+                          <Video className="w-4 h-4" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">Video Üretim Modeli (T2V)</h4>
+                      </div>
+                      <div className="text-xs font-mono font-medium text-orange-700 dark:text-orange-400 bg-white dark:bg-slate-900 py-2 px-3 rounded-xl border border-orange-100 dark:border-orange-800 break-all shadow-2xs">
+                        {modelVideo || 'Henüz Seçilmedi'}
+                      </div>
+                    </div>
+                    {modelVideo && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(modelVideo, 'video', 'openrouter')}
+                        disabled={testingModel === modelVideo}
+                        className="mt-3 w-full py-2 bg-orange-100/70 hover:bg-orange-200 dark:bg-orange-900/40 dark:hover:bg-orange-900/70 text-orange-700 dark:text-orange-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === modelVideo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
                 </div>
               ) : (
-                /* Gemini 3-Tier Model Selectors */
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                /* Gemini 4-Tier Model Selectors */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
@@ -1391,6 +1472,36 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full py-2 bg-sky-100/70 hover:bg-sky-200 dark:bg-sky-900/40 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         {testingModel === geminiModelGeneration ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                        Bu Modeli Test Et
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                        <Video className="w-4 h-4 text-sky-500" />
+                        Video Üretim Modeli (T2V)
+                      </label>
+                      <select
+                        value={geminiModelVideo}
+                        onChange={(e) => setGeminiModelVideo(e.target.value)}
+                        className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
+                      >
+                        <option value="">Seçiniz</option>
+                        <optgroup label="Gemini Video Modelleri">
+                          <option value="gemini-4-video-preview">Gemini 4 Video Preview - Ücretli</option>
+                          <option value="luma-dream-machine">Luma Dream Machine API - Ücretli</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    {geminiModelVideo && (
+                      <button 
+                        onClick={() => handleTestSpecificModel(geminiModelVideo, 'video', 'gemini')}
+                        disabled={testingModel === geminiModelVideo}
+                        className="w-full py-2 bg-sky-100/70 hover:bg-sky-200 dark:bg-sky-900/40 dark:hover:bg-sky-900/70 text-sky-700 dark:text-sky-300 rounded-xl text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {testingModel === geminiModelVideo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                         Bu Modeli Test Et
                       </button>
                     )}
@@ -1596,6 +1707,30 @@ export const AdminDashboard: React.FC = () => {
                     <FileText className="w-3 h-3" />
                     İlan Üretimi
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePromptSubTab('design')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      activePromptSubTab === 'design'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Görsel Üretimi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePromptSubTab('video')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      activePromptSubTab === 'video'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <Video className="w-3 h-3" />
+                    Video Üretimi
+                  </button>
                 </div>
               </div>
 
@@ -1705,6 +1840,116 @@ export const AdminDashboard: React.FC = () => {
                         onChange={(e) => setPromptGenerateListing(e.target.value)}
                         placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
                         className="w-full h-64 sm:h-96 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Görsel Üretim Promptu */}
+                {(activePromptSubTab === 'both' || activePromptSubTab === 'design') && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-purple-500" />
+                          <span>3. Görsel Üretim Promptu (AI Design Generator)</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Tasarım üretilirken modelin kullanacağı sistem yönergeleri (arka plan kısıtlamaları, stil talimatları).
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPromptGenerateDesign(DEFAULT_GENERATE_DESIGN_PROMPT);
+                          toast.info('Görsel Üretim promptu varsayılana döndürüldü.');
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                      </button>
+                    </div>
+
+                    {/* Değişken Kapsülleri */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-purple-500" />
+                          Desteklenen Değişken Kapsülleri (İmlecin olduğu konuma eklemek için tıklayın):
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {PROMPT_VARIABLES_DESIGN_GEN.map((v) => (
+                          <PromptVariablePill
+                            key={v.tag}
+                            variable={v}
+                            onClick={() => insertVariable(setPromptGenerateDesign, promptGenerateDesign, v.tag, 'design_prompt_textarea', v.label)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <textarea
+                        id="design_prompt_textarea"
+                        value={promptGenerateDesign}
+                        onChange={(e) => setPromptGenerateDesign(e.target.value)}
+                        placeholder="Eğer boş bırakırsanız sistem varsayılan promptu kullanır..."
+                        className="w-full h-48 sm:h-56 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Video Üretim Promptu */}
+                {(activePromptSubTab === 'both' || activePromptSubTab === 'video') && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Video className="w-4 h-4 text-orange-500" />
+                          <span>4. Video Üretim Promptu (AI Video Generator)</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Tasarım için ürün tanıtım veya mock-up kullanım videosu üretilirken modele verilen talimatlar.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setPromptGenerateVideo('');
+                          toast.info('Video Üretim promptu sıfırlandı.');
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                      >
+                        <RotateCcw className="w-3 h-3" /> Varsayılana Sıfırla
+                      </button>
+                    </div>
+
+                    {/* Değişken Kapsülleri */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-orange-500" />
+                          Desteklenen Değişken Kapsülleri (İmlecin olduğu konuma eklemek için tıklayın):
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {PROMPT_VARIABLES_VIDEO_GEN.map((v) => (
+                          <PromptVariablePill
+                            key={v.tag}
+                            variable={v}
+                            onClick={() => insertVariable(setPromptGenerateVideo, promptGenerateVideo, v.tag, 'video_prompt_textarea', v.label)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <textarea
+                        id="video_prompt_textarea"
+                        value={promptGenerateVideo}
+                        onChange={(e) => setPromptGenerateVideo(e.target.value)}
+                        placeholder="Video üretimi için prompt yazın..."
+                        className="w-full h-48 sm:h-56 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-mono custom-scrollbar transition-all leading-relaxed"
                       />
                     </div>
                   </div>

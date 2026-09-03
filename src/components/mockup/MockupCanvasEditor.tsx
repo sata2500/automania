@@ -4,6 +4,7 @@ import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteBlobs } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
+import { useAuth } from '@/components/common/UserAuthContext';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 
@@ -14,6 +15,7 @@ import { MockupCanvasWorkspace } from './components/MockupCanvasWorkspace';
 import { MockupSettingsPanel } from './components/MockupSettingsPanel';
 import { MockupMobileDrawer } from './components/MockupMobileDrawer';
 import { MockupFolderModal } from './components/MockupFolderModal';
+import { MockupFolderTemplatePanel } from './components/MockupFolderTemplatePanel';
 
 // Hooks
 import { useMockupDraft } from './hooks/useMockupDraft';
@@ -42,6 +44,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   setSelectedMockupId,
 }) => {
   const toast = useToast();
+  const { user } = useAuth();
 
   // Filter mockup folders (exclude design folders)
   const mockupFolders = folders.filter((f) => f.type !== 'design');
@@ -76,6 +79,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     message: '',
     onConfirm: () => {},
   });
+
+  // Template Panel State
+  const [templatePanelFolder, setTemplatePanelFolder] = useState<MockupFolder | null>(null);
 
   // Folder Modal State (Create / Rename)
   const [folderModalState, setFolderModalState] = useState<{
@@ -417,6 +423,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         onOpenRenameFolderModal={handleOpenRenameFolderModal}
         onDuplicateFolder={handleDuplicateFolder}
         onDeleteFolder={handleDeleteFolder}
+        onTemplateSettings={user ? (folder) => setTemplatePanelFolder(folder) : undefined}
       />
 
       {/* 2. Mobile Segmented Switcher (Visible only on mobile < lg) */}
@@ -544,6 +551,15 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }))
         }
       />
+
+      {/* Template Settings Panel — yalnızca oturum açmış kullanıcılar için */}
+      {user && templatePanelFolder && (
+        <MockupFolderTemplatePanel
+          folder={templatePanelFolder}
+          isOpen={true}
+          onClose={() => setTemplatePanelFolder(null)}
+        />
+      )}
     </div>
   );
 };

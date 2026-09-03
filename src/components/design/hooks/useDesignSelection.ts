@@ -66,10 +66,10 @@ export function useDesignSelection({
         }
 
         const slotTaken = prev.some(
-          (d) => d.id !== id && d.isSelected && d.targetApparel === design.targetApparel
+          (d) => d.id !== id && d.isSelected && design.targetApparel && d.targetApparel === design.targetApparel
         );
 
-        if (slotTaken) {
+        if (slotTaken && design.targetApparel) {
           warnSlot(design.targetApparel);
           return prev;
         }

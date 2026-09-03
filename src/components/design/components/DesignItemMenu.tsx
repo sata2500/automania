@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight } from 'lucide-react';
+import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight, Eraser } from 'lucide-react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 
 interface DesignItemMenuProps {
@@ -11,6 +11,8 @@ interface DesignItemMenuProps {
   onClose: () => void;
   onAnalyze: (design: DesignItem) => void;
   onCrop: (design: DesignItem) => void;
+  onRemoveBg?: (design: DesignItem) => void;
+  onRecolor?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDelete: (id: string) => void;
 }
@@ -24,6 +26,8 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
   onClose,
   onAnalyze,
   onCrop,
+  onRemoveBg,
+  onRecolor,
   onMoveToFolder,
   onDelete,
 }) => {
@@ -84,6 +88,46 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
         <Crop className="w-4 h-4 text-amber-500 shrink-0" />
         <span>Tasarımı Kırp</span>
       </button>
+
+      {/* Remove Background */}
+      {onRemoveBg && (
+        <button
+          onClick={() => {
+            onClose();
+            onRemoveBg(design);
+          }}
+          className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
+        >
+          <Eraser className="w-4 h-4 text-teal-500 shrink-0" />
+          <span>Arka Planı Kaldır</span>
+        </button>
+      )}
+
+      {/* Recolor Options */}
+      {onRecolor && (
+        <>
+          <button
+            onClick={() => {
+              onClose();
+              onRecolor(design, 'dark_garment'); // Koyu kumaş için siyahları beyaz yap
+            }}
+            className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-sky-500 shrink-0" />
+            <span>Koyu Kumaş İçin Uyarla</span>
+          </button>
+          <button
+            onClick={() => {
+              onClose();
+              onRecolor(design, 'light_garment'); // Açık kumaş için beyazları siyah yap
+            }}
+            className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-slate-800 dark:text-slate-400 shrink-0" />
+            <span>Açık Kumaş İçin Uyarla</span>
+          </button>
+        </>
+      )}
 
       {/* Move to Folder Toggle / Submenu */}
       {designFolders.length > 0 && (

@@ -28,11 +28,11 @@ interface HeaderProps {
 }
 
 const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.ElementType }[] = [
-  { key: 'mockups',   label: "1. Mockup'lar",   shortLabel: "Mockup'lar",   icon: ImageIcon },
-  { key: 'designs',   label: '2. Tasarımlar',   shortLabel: 'Tasarımlar',   icon: Palette   },
-  { key: 'generator', label: '3. Toplu Üretim', shortLabel: 'Toplu Üretim', icon: Sparkles  },
-  { key: 'seo',       label: '4. Etsy SEO',     shortLabel: 'SEO',          icon: Tag       },
-  { key: 'listings',  label: '5. Etsy İlanlarım', shortLabel: 'İlanlarım',  icon: ShoppingBag },
+  { key: 'mockups',   label: "1. Mockup'lar",      shortLabel: "Mockup'lar",   icon: ImageIcon   },
+  { key: 'designs',   label: '2. Tasarımlar',      shortLabel: 'Tasarımlar',   icon: Palette     },
+  { key: 'generator', label: '3. Toplu Üretim',    shortLabel: 'Toplu Üretim', icon: Sparkles    },
+  { key: 'seo',       label: '4. Etsy SEO',        shortLabel: 'SEO',          icon: Tag         },
+  { key: 'listings',  label: '5. Etsy İlanlarım',  shortLabel: 'İlanlarım',    icon: ShoppingBag },
 ];
 
 
@@ -98,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Top Navigation Tabs */}
             <nav aria-label="Ana navigasyon" className="hidden md:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, icon: Icon }) => {
+              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, shortLabel: _s, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
                 return (
@@ -189,9 +189,8 @@ export const Header: React.FC<HeaderProps> = ({
         aria-label="Mobil navigasyon"
         className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
       >
-        {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, shortLabel, icon: Icon }) => {
+        {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, shortLabel, icon: Icon }) => { const isActive = activeTab === key;
           const badge = getBadge(key);
-          const isActive = activeTab === key;
           return (
             <button
               key={key}

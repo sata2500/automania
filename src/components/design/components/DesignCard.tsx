@@ -17,6 +17,8 @@ interface DesignCardProps {
   onSetProductionActive: (id: string, target: TargetApparel) => void;
   onAnalyzeClick: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
+  onRemoveBgClick?: (design: DesignItem) => void;
+  onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDeleteClick: (id: string) => void;
 }
@@ -31,6 +33,8 @@ export const DesignCard: React.FC<DesignCardProps> = ({
   onSetProductionActive,
   onAnalyzeClick,
   onCropClick,
+  onRemoveBgClick,
+  onRecolorClick,
   onMoveToFolder,
   onDeleteClick,
 }) => {
@@ -200,6 +204,8 @@ export const DesignCard: React.FC<DesignCardProps> = ({
           onClose={() => setMenuPosition(null)}
           onAnalyze={onAnalyzeClick}
           onCrop={onCropClick}
+          onRemoveBg={onRemoveBgClick}
+          onRecolor={onRecolorClick}
           onMoveToFolder={onMoveToFolder}
           onDelete={onDeleteClick}
         />

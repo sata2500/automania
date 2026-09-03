@@ -18,6 +18,7 @@ import { DesignToolbar } from './components/DesignToolbar';
 import { DesignGrid } from './components/DesignGrid';
 import { DesignAnalysisModal } from './components/DesignAnalysisModal';
 import { DesignFolderModal } from './components/DesignFolderModal';
+import { AIDesignGeneratorModal } from './components/AIDesignGeneratorModal';
 
 interface DesignUploaderProps {
   designs: DesignItem[];
@@ -38,6 +39,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 }) => {
   const toast = useToast();
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
+
+  // AI Design Generator Modal
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
   // Folder Modals State
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -217,6 +221,77 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     toast.success(`Tasarım kırpıldı ve ${optimized.mimeType === 'image/webp' ? 'WebP' : optimized.mimeType} olarak optimize edildi.`);
   };
 
+  // --- Remove Background Handler ---
+  const handleRemoveBgClick = async (design: DesignItem) => {
+    if (!design.src) return;
+
+    const toastId = toast.progress('Arka plan kaldırılıyor...');
+    try {
+      const response = await fetch('/api/designs/remove-bg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: design.src }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Arka plan kaldırılamadı');
+
+      const bgSrc = data.bgRemovedUrl || `data:image/png;base64,${data.pngBase64}`;
+
+      setDesigns((prev) =>
+        prev.map((d) =>
+          d.id === design.id
+            ? { ...d, src: bgSrc }
+            : d
+        )
+      );
+
+      toast.removeToast(toastId);
+      toast.success('Arka plan başarıyla kaldırıldı!');
+    } catch (err: any) {
+      toast.removeToast(toastId);
+      toast.error(err.message || 'Arka plan kaldırılırken hata oluştu.');
+    }
+  };
+
+  // --- Recolor Handler ---
+  const handleRecolorClick = async (design: DesignItem, mode: 'light_garment' | 'dark_garment') => {
+    if (!design.src) return;
+
+    const actionText = mode === 'dark_garment' ? 'Açık renk versiyonu (Koyu Kumaş) oluşturuluyor...' : 'Koyu renk versiyonu (Açık Kumaş) oluşturuluyor...';
+    const toastId = toast.progress(actionText);
+
+    try {
+      const response = await fetch('/api/designs/recolor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: design.src, mode }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Renk dönüşümü yapılamadı');
+
+      const recoloredUrl = data.recoloredUrl;
+
+      // Yeni bir tasarım objesi oluştur
+      const newDesign: DesignItem = {
+        ...design,
+        id: crypto.randomUUID(),
+        name: `${design.name} (${mode === 'dark_garment' ? 'Açık' : 'Koyu'} Versiyon)`,
+        src: recoloredUrl,
+        createdAt: new Date().toISOString(),
+      };
+
+      setDesigns((prev) => [...prev, newDesign]);
+
+      toast.removeToast(toastId);
+      toast.success('Tasarım başarıyla dönüştürüldü!');
+    } catch (err: any) {
+      toast.removeToast(toastId);
+      toast.error(err.message || 'Renk dönüşümü sırasında hata oluştu.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Upload Zone */}
@@ -227,6 +302,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onFileChange={(e) => e.target.files && handleFiles(e.target.files)}
+        onAIGenerate={() => setIsAIModalOpen(true)}
       />
 
       {/* Folder Selection Bar */}
@@ -285,6 +361,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
             }
           }}
           onCropClick={(design) => setCropTargetDesign(design)}
+          onRemoveBgClick={handleRemoveBgClick}
+          onRecolorClick={handleRecolorClick}
           onMoveToFolder={handleMoveToFolder}
           onDeleteClick={deleteDesign}
         />
@@ -325,6 +403,18 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         setFolderInputName={setFolderInputName}
         onClose={() => setIsFolderModalOpen(false)}
         onSave={handleSaveFolder}
+      />
+
+      {/* AI Design Generator Modal */}
+      <AIDesignGeneratorModal
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        activeDesignFolderId={activeDesignFolderId}
+        designFolders={designFolders}
+        onDesignsAdded={(newDesigns) => {
+          setDesigns((prev) => [...prev, ...newDesigns]);
+          toast.success(`${newDesigns.length} AI tasarımı kütüphaneye eklendi!`);
+        }}
       />
     </div>
   );

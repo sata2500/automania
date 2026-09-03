@@ -13,6 +13,7 @@ interface MockupFolderBarProps {
   onOpenRenameFolderModal: (folder: MockupFolder) => void;
   onDuplicateFolder: (folderId: string) => void;
   onDeleteFolder: (folderId: string) => void;
+  onTemplateSettings?: (folder: MockupFolder) => void;
 }
 
 export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
@@ -25,6 +26,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
   onOpenRenameFolderModal,
   onDuplicateFolder,
   onDeleteFolder,
+  onTemplateSettings,
 }) => {
   // Desktop Drag & Drop
   const [draggedFolderIndex, setDraggedFolderIndex] = useState<number | null>(null);
@@ -253,6 +255,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
           onRename={onOpenRenameFolderModal}
           onDuplicate={onDuplicateFolder}
           onDelete={onDeleteFolder}
+          onTemplateSettings={onTemplateSettings}
         />
       )}
     </div>
