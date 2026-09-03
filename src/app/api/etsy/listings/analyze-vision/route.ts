@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
@@ -197,7 +197,7 @@ export async function POST(req: Request) {
     }
 
     const visionModel = activeAiProvider === 'gemini'
-      ? (dbGeminiVisionModel || 'gemini-1.5-flash')
+      ? (dbGeminiVisionModel || 'gemini-3.8-flash')
       : (dbVisionModel || 'google/gemini-2.0-flash-001');
 
     // 2. Fetch target listings from DB
@@ -246,24 +246,52 @@ export async function POST(req: Request) {
         let rawAiContent = '';
 
         if (activeAiProvider === 'gemini') {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: visionModel });
+          const ai = new GoogleGenAI({ apiKey });
           let geminiMimeType = mimeType.toLowerCase();
           if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(geminiMimeType)) {
             geminiMimeType = 'image/jpeg';
           }
 
-          const result = await model.generateContent([
-            VISION_PROMPT,
-            {
-              inlineData: {
-                mimeType: geminiMimeType,
-                data: base64Data
+          const candidates = Array.from(new Set([
+            visionModel,
+            'gemini-3.8-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite'
+          ]));
+
+          for (const m of candidates) {
+            try {
+              const result = await ai.models.generateContent({
+                model: m,
+                contents: [
+                  {
+                    role: 'user',
+                    parts: [
+                      { text: VISION_PROMPT },
+                      {
+                        inlineData: {
+                          mimeType: geminiMimeType,
+                          data: base64Data
+                        }
+                      }
+                    ]
+                  }
+                ],
+                config: {
+                  responseMimeType: 'application/json',
+                  temperature: 0.7,
+                }
+              });
+              const txt = result.text?.trim();
+              if (txt) {
+                rawAiContent = txt;
+                break;
               }
+            } catch (err: unknown) {
+              console.warn(`[Listing Vision] Model '${m}' failed:`, err instanceof Error ? err.message : err);
+              continue;
             }
-          ]);
-          const resp = await result.response;
-          rawAiContent = resp.text();
+          }
         } else {
           const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',

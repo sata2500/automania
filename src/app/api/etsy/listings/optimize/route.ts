@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo } from '@/lib/seasonality';
 
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     }
 
     const seoModel = activeAiProvider === 'gemini'
-      ? (dbGeminiReasoningModel || 'gemini-1.5-pro')
+      ? (dbGeminiReasoningModel || 'gemini-3.8-flash')
       : (dbReasoningModel || 'google/gemma-4-26b-a4b-it:free');
 
     // 2. Seasonality & Shopping Wave Context
@@ -168,14 +168,36 @@ Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-conv
         let rawAiContent = '';
 
         if (activeAiProvider === 'gemini') {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: seoModel });
-          const result = await model.generateContent([
-            systemPrompt,
-            userContent
-          ]);
-          const resp = await result.response;
-          rawAiContent = resp.text();
+          const ai = new GoogleGenAI({ apiKey });
+          const candidates = Array.from(new Set([
+            seoModel,
+            'gemini-3.8-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite'
+          ]));
+
+          for (const m of candidates) {
+            try {
+              const result = await ai.models.generateContent({
+                model: m,
+                contents: [
+                  { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userContent}` }] }
+                ],
+                config: {
+                  responseMimeType: 'application/json',
+                  temperature: 0.7,
+                }
+              });
+              const txt = result.text?.trim();
+              if (txt) {
+                rawAiContent = txt;
+                break;
+              }
+            } catch (err: unknown) {
+              console.warn(`[Listing Optimize] Model '${m}' failed:`, err instanceof Error ? err.message : err);
+              continue;
+            }
+          }
         } else {
           const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',

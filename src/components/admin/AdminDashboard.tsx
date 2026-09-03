@@ -696,6 +696,7 @@ export const AdminDashboard: React.FC = () => {
             : 'https://openrouter.ai/api/v1/chat/completions',
           model: modelId,
           messages,
+          role,
           max_tokens: 30,
         }),
       });
@@ -1380,17 +1381,13 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini 3 Serisi">
-                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
-                        </optgroup>
-                        <optgroup label="Gemini 2.5 Serisi">
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        <optgroup label="Gemini 3 Serisi (Multimodal & Vision)">
+                          <option value="gemini-3.8-flash">Gemini 3.8 Flash (En Yeni & En Zeki)</option>
+                          <option value="gemini-3.7-flash">Gemini 3.7 Flash (Yüksek Hız & Çoklu Yetenek)</option>
+                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Dengeli & Kararlı)</option>
+                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Geniş Bağlam)</option>
+                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Hızlı / 0.7s)</option>
+                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Gelişmiş Mantık)</option>
                         </optgroup>
                       </select>
                     </div>
@@ -1418,17 +1415,13 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini 3 Serisi">
-                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Preview) (Ücretsiz)</option>
-                        </optgroup>
-                        <optgroup label="Gemini 2.5 Serisi">
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ücretsiz)</option>
-                          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Ücretsiz)</option>
-                          <option value="gemini-2.5-pro">Gemini 2.5 Pro (Ücretsiz)</option>
+                        <optgroup label="Gemini 3 Serisi (SEO & Metin Üretimi)">
+                          <option value="gemini-3.8-flash">Gemini 3.8 Flash (En Yeni & Üstün Akıl Yürütme)</option>
+                          <option value="gemini-3.7-flash">Gemini 3.7 Flash (Yüksek Hız & Ajan Desteği)</option>
+                          <option value="gemini-3.6-flash">Gemini 3.6 Flash (Dengeli & Güvenilir)</option>
+                          <option value="gemini-3.5-flash">Gemini 3.5 Flash (Geniş Bağlam)</option>
+                          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Hızlı / 0.7s)</option>
+                          <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Derin Mantık & Kod)</option>
                         </optgroup>
                       </select>
                     </div>
@@ -1456,12 +1449,11 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini Image Modelleri">
-                          <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2) - Ücretli</option>
-                          <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image - Ücretli</option>
-                          <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana Pro) - Ücretli</option>
-                          <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image - Ücretli</option>
-                          <option value="imagen-4.0-generate">Imagen 4.0 - Ücretli</option>
+                        <optgroup label="Google Görsel Modelleri (T2I)">
+                          <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2)</option>
+                          <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana 2 Pro)</option>
+                          <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image (Hızlı)</option>
+                          <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
                         </optgroup>
                       </select>
                     </div>
@@ -1489,9 +1481,10 @@ export const AdminDashboard: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
-                        <optgroup label="Gemini Video Modelleri">
-                          <option value="gemini-4-video-preview">Gemini 4 Video Preview - Ücretli</option>
-                          <option value="luma-dream-machine">Luma Dream Machine API - Ücretli</option>
+                        <optgroup label="Google Veo Video Modelleri (T2V)">
+                          <option value="veo-3.1-fast-generate-preview">Google Veo 3.1 Fast (Hız Odaklı)</option>
+                          <option value="veo-3.1-generate-preview">Google Veo 3.1 (Yüksek Kalite)</option>
+                          <option value="veo-3.1-lite-generate-preview">Google Veo 3.1 Lite (Ekonomik)</option>
                         </optgroup>
                       </select>
                     </div>

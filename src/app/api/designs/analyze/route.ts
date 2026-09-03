@@ -7,7 +7,7 @@ import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
 import fs from 'fs/promises';
@@ -286,7 +286,7 @@ export async function POST(request: Request) {
     } catch {}
     
     if (activeAiProvider === 'gemini') {
-      visionModel = dbGeminiVisionModel || 'gemini-1.5-flash';
+      visionModel = dbGeminiVisionModel || 'gemini-3.8-flash';
     } else {
       if (dbVisionModel) {
         visionModel = dbVisionModel;
@@ -332,20 +332,53 @@ export async function POST(request: Request) {
     let content = '';
 
     if (activeAiProvider === 'gemini') {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: visionModel });
-      
-      const inlineData = {
-        mimeType: geminiMimeType,
-        data: base64Data
-      };
-      
-      const result = await model.generateContent([
-        prompt,
-        { inlineData }
-      ]);
-      const response = await result.response;
-      content = response.text();
+      const ai = new GoogleGenAI({ apiKey });
+      const candidates = Array.from(new Set([
+        visionModel,
+        'gemini-3.8-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash-lite'
+      ]));
+
+      let lastErr: unknown = null;
+      for (const m of candidates) {
+        try {
+          const res = await ai.models.generateContent({
+            model: m,
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: geminiMimeType,
+                      data: base64Data
+                    }
+                  }
+                ]
+              }
+            ],
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.7,
+            }
+          });
+          const txt = res.text?.trim();
+          if (txt) {
+            content = txt;
+            break;
+          }
+        } catch (err: unknown) {
+          lastErr = err;
+          console.warn(`[Design Analyze] Model '${m}' failed:`, err instanceof Error ? err.message : err);
+          continue;
+        }
+      }
+
+      if (!content) {
+        throw lastErr || new Error('Gemini görsel analiz modeli yanıt vermedi.');
+      }
     } else {
       const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',

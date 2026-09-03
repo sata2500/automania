@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql, { db } from '@/lib/db';
 import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
 
     // Override with global setting if present
     if (activeAiProvider === 'gemini') {
-      seoModel = dbGeminiReasoningModel || 'gemini-1.5-pro';
+      seoModel = dbGeminiReasoningModel || 'gemini-3.8-flash';
     } else {
       if (dbReasoningModel) {
         seoModel = dbReasoningModel;
@@ -270,12 +270,42 @@ export async function POST(req: Request) {
     let content = '';
 
     if (activeAiProvider === 'gemini') {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: seoModel });
-      
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      content = response.text();
+      const ai = new GoogleGenAI({ apiKey });
+      const candidates = Array.from(new Set([
+        seoModel,
+        'gemini-3.8-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash-lite'
+      ]));
+
+      let lastErr: unknown = null;
+      for (const m of candidates) {
+        try {
+          const res = await ai.models.generateContent({
+            model: m,
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              maxOutputTokens: 8192,
+              temperature: 0.7,
+            }
+          });
+          const txt = res.text?.trim();
+          if (txt) {
+            content = txt;
+            seoModel = m;
+            break;
+          }
+        } catch (err: unknown) {
+          lastErr = err;
+          console.warn(`[Generate Listing] Model '${m}' failed:`, err instanceof Error ? err.message : err);
+          continue;
+        }
+      }
+
+      if (!content) {
+        throw lastErr || new Error('Gemini model yanıt vermedi.');
+      }
     } else {
       const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',

@@ -108,8 +108,8 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
     : (settings['gemini_model_generation'] ?? process.env.AI_IMAGE_MODEL ?? 'gemini-3.1-flash-image');
 
   const textModel = provider === 'openrouter'
-    ? (settings['openrouter_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-2.5-flash')
-    : (settings['gemini_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-2.5-flash');
+    ? (settings['openrouter_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash')
+    : (settings['gemini_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash');
 
   return {
     provider,
@@ -242,19 +242,41 @@ async function generateTextGoogle(
   options: GenerateTextOptions
 ): Promise<string> {
   const client = getGoogleClient(config.googleApiKey);
+  const primaryModel = config.textModel || 'gemini-3.8-flash';
 
-  const response = await client.models.generateContent({
-    model: options.jsonOutput ? 'gemini-2.5-flash' : config.textModel,
-    contents: options.prompt,
-    config: {
-      systemInstruction: options.systemInstruction,
-      maxOutputTokens: options.maxOutputTokens ?? 2048,
-      temperature: options.temperature ?? 0.7,
-      responseMimeType: options.jsonOutput ? 'application/json' : 'text/plain',
-    },
-  });
+  // Model havuzu: Seçilen model hata verirse (503 / 429 / 404), güvenilir alternatiflere otomatik fallback
+  const fallbackCandidates = Array.from(new Set([
+    primaryModel,
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite'
+  ]));
 
-  return response.text ?? '';
+  let lastError: unknown = null;
+
+  for (const modelToTry of fallbackCandidates) {
+    try {
+      const response = await client.models.generateContent({
+        model: modelToTry,
+        contents: options.prompt,
+        config: {
+          systemInstruction: options.systemInstruction,
+          maxOutputTokens: options.maxOutputTokens ?? 8192,
+          temperature: options.temperature ?? 0.7,
+          responseMimeType: options.jsonOutput ? 'application/json' : 'text/plain',
+        },
+      });
+
+      return response.text ?? '';
+    } catch (err: unknown) {
+      lastError = err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Google AI Text] Model '${modelToTry}' failed: ${errMsg.slice(0, 100)}. Trying fallback candidate...`);
+      continue;
+    }
+  }
+
+  throw lastError || new Error('Google metin üretimi tüm aday modellerle başarısız oldu.');
 }
 
 async function generateTextOpenRouter(
@@ -372,7 +394,8 @@ export function getGoogleImageModels() {
   return [
     { id: 'gemini-3.1-flash-image', name: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
     { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro Image (Nano Banana 2 Pro)' },
-    { id: 'gemini-3.1-flash-image-lite', name: 'Gemini 3.1 Flash Image Lite (En Hızlı)' },
+    { id: 'gemini-3.1-flash-lite-image', name: 'Gemini 3.1 Flash-Lite Image (Hızlı)' },
+    { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image' },
   ];
 }
 
