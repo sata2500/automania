@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     await updateRunState({
       status: 'running',
-      startedAt: new Date().toISOString(),
+      startedAt: new Date(),
       steps: {
         ...steps,
         designGeneration: { status: 'running', startedAt: new Date().toISOString() }
@@ -74,15 +74,15 @@ export async function POST(req: NextRequest) {
       console.error('[Automation] Failed to fetch custom prompt template', e);
     }
 
-    const basePrompt = template.seoHints.customNotes 
+    const basePrompt = template.seoHints?.customNotes 
       ? template.seoHints.customNotes 
-      : `Creative design for ${template.seoHints.primaryNiche}, tailored for ${template.seoHints.targetAudience}`;
+      : `Creative design for ${template.seoHints?.primaryNiche || 'apparel'}, tailored for ${template.seoHints?.targetAudience || 'everyone'}`;
       
     let finalPrompt = basePrompt;
     if (systemPromptTemplate.trim()) {
       finalPrompt = systemPromptTemplate
         .replace(/\{\{userPrompt\}\}/g, basePrompt)
-        .replace(/\{\{selectedStyle\}\}/g, template.seoHints.primaryNiche);
+        .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '');
     }
 
     // 4. Generate Design
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
 
     const generatedMockupUrls: string[] = [];
 
-    if (template.mockupConfig.printAreaMockupIds && template.mockupConfig.printAreaMockupIds.length > 0) {
+    if (template.mockupConfig?.printAreaMockupIds && template.mockupConfig.printAreaMockupIds.length > 0) {
       try {
         const { renderDesignOnMockup } = await import('@/lib/backend-render');
         const [workspaceForMockups] = await db
@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
 
       const finalVideoPrompt = videoPromptTemplate
         .replace(/\{\{userPrompt\}\}/g, basePrompt)
-        .replace(/\{\{selectedStyle\}\}/g, template.seoHints.primaryNiche);
+        .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '');
 
       // AI Provider ayarlarından video modeli de geliyor
       const generatedVideo = await generateVideo(config, { prompt: finalVideoPrompt });
@@ -248,7 +248,7 @@ export async function POST(req: NextRequest) {
     
     await updateRunState({
       status: 'completed',
-      completedAt: new Date().toISOString(),
+      completedAt: new Date(),
       steps
     });
 
@@ -262,7 +262,7 @@ export async function POST(req: NextRequest) {
         .set({
           status: 'failed',
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          completedAt: new Date().toISOString(),
+          completedAt: new Date(),
         })
         .where(eq(automationRuns.id, reqBody.runId));
     }

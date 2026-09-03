@@ -662,7 +662,7 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleTestSpecificModel = async (modelId: string, role: 'vision' | 'reasoning' | 'generation', provider: 'openrouter' | 'gemini' = 'openrouter') => {
+  const handleTestSpecificModel = async (modelId: string, role: 'vision' | 'reasoning' | 'generation' | 'video', provider: 'openrouter' | 'gemini' = 'openrouter') => {
     setTestingModel(modelId);
     const startTime = Date.now();
 

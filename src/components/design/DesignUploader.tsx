@@ -279,7 +279,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         id: crypto.randomUUID(),
         name: `${design.name} (${mode === 'dark_garment' ? 'Açık' : 'Koyu'} Versiyon)`,
         src: recoloredUrl,
-        createdAt: new Date().toISOString(),
+        createdAt: Date.now(),
       };
 
       setDesigns((prev) => [...prev, newDesign]);
