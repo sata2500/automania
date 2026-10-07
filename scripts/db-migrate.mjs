@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '..', '.env.local') });
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -50,6 +50,7 @@ async function main() {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_default_templates JSONB DEFAULT '{}'::jsonb`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_custom_sizes JSONB DEFAULT '[]'::jsonb`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_custom_colors JSONB DEFAULT '[]'::jsonb`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_generated_mockups JSONB DEFAULT '[]'::jsonb`;
 
     // Ensure app_settings table exists
     await sql`

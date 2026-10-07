@@ -14,12 +14,6 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Serwist generates this service worker during production builds.
     "public/sw.js",
-    // One-off diagnostics are retained for history but are not application code.
-    "test.mjs",
-    "temp_check_urls.js",
-    "fix_mime.js",
-    "refactor.js",
-    "get-etsy-data.js",
     "scratch/**",
   ]),
 ]);

@@ -43,6 +43,10 @@ next-env.d.ts
 # local persistent database
 .data/
 
+# generated service worker (built by @serwist/next)
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker-*.js
 
-.vercel
-.env*
+# local scratch files
+/scratch/
