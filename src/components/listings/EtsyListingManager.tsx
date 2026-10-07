@@ -138,13 +138,13 @@ export const EtsyListingManager: React.FC = () => {
     }
   }, [error, triggerAutoSync]);
 
+  // İlk yükleme bir kez ve hemen başlatılır. (Önceki zamanlayıcı + bayrak deseni, efekt yeniden
+  // çalıştığında zamanlayıcıyı iptal edip bayrak nedeniyle tekrar denemediği için ekranı
+  // "Yükleniyor" durumunda bırakabiliyordu.)
   useEffect(() => {
     if (initialFetchRef.current) return;
     initialFetchRef.current = true;
-    const timer = window.setTimeout(() => {
-      void fetchListings(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    void fetchListings(true);
   }, [fetchListings]);
 
   // Instant in-memory filtering and sorting for 0ms responsive interaction

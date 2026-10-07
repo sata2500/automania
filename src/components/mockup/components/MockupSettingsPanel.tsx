@@ -179,7 +179,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
                 </label>
                 <button
                   onClick={onAddArea}
-                  className="px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg flex items-center gap-1 transition-colors"
+                  className="px-2 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg flex items-center gap-1 shrink-0 whitespace-nowrap transition-colors"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Alan Ekle</span>

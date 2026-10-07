@@ -1316,7 +1316,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                 </div>
 
                 {/* Sub-tab switcher for mobile/desktop ergonomics */}
-                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-start sm:self-auto shrink-0">
+                <div className="flex flex-wrap items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-stretch sm:self-auto max-w-full">
                   <button
                     type="button"
                     onClick={() => setActivePromptSubTab('both')}

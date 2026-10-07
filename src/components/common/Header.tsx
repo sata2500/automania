@@ -97,8 +97,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Desktop Top Navigation Tabs */}
-            <nav aria-label="Ana navigasyon" className="hidden md:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, shortLabel: _s, icon: Icon }) => {
+            <nav aria-label="Ana navigasyon" className="hidden lg:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
+              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, shortLabel, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
                 return (
@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
                     key={key}
                     onClick={() => setActiveTab(key)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex items-center space-x-2 px-2.5 xl:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
                       isActive
                         ? key === 'generator'
                           ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
@@ -123,7 +123,8 @@ export const Header: React.FC<HeaderProps> = ({
                           : ''
                       }`}
                     />
-                    <span>{label}</span>
+                    <span className="xl:hidden">{shortLabel}</span>
+                    <span className="hidden xl:inline">{label}</span>
                     {badge !== null && (
                       <span
                         className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full font-bold ${
@@ -187,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Floating Bottom Navigation Bar for Mobile */}
       <nav
         aria-label="Mobil navigasyon"
-        className="md:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
+        className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
       >
         {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, shortLabel, icon: Icon }) => { const isActive = activeTab === key;
           const badge = getBadge(key);
