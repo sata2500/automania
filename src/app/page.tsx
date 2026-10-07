@@ -8,6 +8,7 @@ const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanva
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Tasarımlar yükleniyor...</div> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
 const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
+const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Otomasyon şablonları yükleniyor...</div> });
 const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy İlan Paneli yükleniyor...</div> });
 
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
@@ -25,11 +26,17 @@ import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { SyncStatusNotification } from '@/components/common/SyncStatusNotification';
 import { STORAGE_KEYS } from '@/config/constants';
-import { Sparkles, Info, User, X } from 'lucide-react';
+import { Sparkles, Info, User, X, LayoutTemplate } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useToast } from '@/components/common/ToastContext';
 
 const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'listings'];
+
+type GeneratorView = 'manual' | 'templates';
+const GENERATOR_VIEWS: { key: GeneratorView; label: string; icon: React.ElementType }[] = [
+  { key: 'manual', label: 'Manuel Üretim', icon: Sparkles },
+  { key: 'templates', label: 'Otomasyon Şablonları', icon: LayoutTemplate },
+];
 
 
 /**
@@ -70,6 +77,7 @@ function MainContent() {
   const { user, setIsAuthModalOpen } = useAuth();
   const router = useRouter();
   const [activeTabState, setActiveTabState] = useState<TabKey>('mockups');
+  const [generatorView, setGeneratorView] = useState<GeneratorView>('manual');
 
   useEffect(() => {
     const tabTimer = window.setTimeout(() => {
@@ -457,7 +465,37 @@ function MainContent() {
           />
         )}
 
-        {activeTab === 'generator' && (
+        {activeTab === 'generator' && user && (
+          <div role="tablist" aria-label="Üretim modu" className="flex w-full sm:w-auto sm:inline-flex items-center gap-1 mb-5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60">
+            {GENERATOR_VIEWS.map(({ key, label, icon: Icon }) => {
+              const isActive = generatorView === key;
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setGeneratorView(key)}
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? key === 'templates'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
+                        : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {activeTab === 'generator' && user && generatorView === 'templates' && (
+          <TemplatesManager mockups={mockups} />
+        )}
+
+        {activeTab === 'generator' && (!user || generatorView === 'manual') && (
           <BatchPreviewGrid
             mockups={mockups}
             designs={designs}

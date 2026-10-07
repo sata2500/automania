@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutTemplate,
   Plus,
@@ -10,15 +10,13 @@ import {
   Pause,
   Clock,
   CheckCircle2,
-  
-  
-  
-  
+  XCircle,
+  Rocket,
   BarChart3,
   RefreshCw,
   Loader2,
 } from 'lucide-react';
-import { PodTemplate, PodTemplateInput } from '@/types/templates';
+import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from '@/types/templates';
 import { MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
@@ -27,29 +25,145 @@ interface TemplatesManagerProps {
   mockups: MockupItem[];
 }
 
+const POLL_INTERVAL_MS = 4000;
+const ACTIVE_RUN_STATUSES = new Set<AutomationRun['status']>(['pending', 'running']);
+
+const STEP_LABELS: Record<AutomationStepName, string> = {
+  designGeneration: 'Tasarım üretimi',
+  backgroundRemoval: 'Arka plan kaldırma',
+  mockupRender: 'Mockup oluşturma',
+  videoGeneration: 'Video üretimi',
+  seoGeneration: 'SEO içeriği',
+  listingCreation: 'Etsy ilanı',
+};
+
+/** Çalışan bir run'ın kullanıcıya gösterilecek mevcut adımı. */
+function describeRunProgress(run: AutomationRun): string {
+  if (run.status === 'pending') return 'Sırada bekliyor...';
+  const steps = run.steps ? (Object.entries(run.steps) as Array<[AutomationStepName, { status: string }]>) : [];
+  const running = steps.find(([, step]) => step.status === 'running');
+  return running ? `${STEP_LABELS[running[0]]}...` : 'Çalışıyor...';
+}
+
+function formatRunDate(value: string | null): string {
+  if (!value) return '';
+  return new Date(value).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   const toast = useToast();
+  const { error: showError, success: showSuccess } = toast;
   const [templates, setTemplates] = useState<PodTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<PodTemplate | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [startingId, setStartingId] = useState<string | null>(null);
+  /** Şablon başına en son otomasyon çalıştırması. */
+  const [latestRuns, setLatestRuns] = useState<Record<string, AutomationRun>>({});
+  const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const stopPolling = useCallback((templateId: string) => {
+    clearTimeout(pollTimers.current[templateId]);
+    delete pollTimers.current[templateId];
+  }, []);
+
+  useEffect(() => {
+    const timers = pollTimers.current;
+    return () => Object.values(timers).forEach(clearTimeout);
+  }, []);
+
+  // Devam eden bir çalıştırmayı bitene kadar takip et
+  const pollRun = useCallback((templateId: string, runId: string) => {
+    stopPolling(templateId);
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/automation/poll/${runId}`);
+        if (!res.ok) throw new Error('Durum alınamadı.');
+        const { run } = (await res.json()) as { run: AutomationRun };
+        setLatestRuns(prev => ({ ...prev, [templateId]: run }));
+        if (ACTIVE_RUN_STATUSES.has(run.status)) {
+          pollTimers.current[templateId] = setTimeout(tick, POLL_INTERVAL_MS);
+          return;
+        }
+        delete pollTimers.current[templateId];
+        if (run.status === 'completed') {
+          showSuccess('Otomasyon tamamlandı. Üretilen görseller hazır.');
+          setTemplates(prev => prev.map(t => t.id === templateId
+            ? { ...t, lastRunAt: run.completedAt ?? t.lastRunAt, totalListingsGenerated: (t.totalListingsGenerated ?? 0) + 1 }
+            : t));
+        } else if (run.status === 'failed') {
+          showError(run.errorMessage || 'Otomasyon başarısız oldu.');
+        }
+      } catch {
+        // Geçici ağ hatalarında takibi bırakma; bir sonraki denemede tekrar sorulur.
+        pollTimers.current[templateId] = setTimeout(tick, POLL_INTERVAL_MS * 2);
+      }
+    };
+    pollTimers.current[templateId] = setTimeout(tick, POLL_INTERVAL_MS);
+  }, [showError, showSuccess, stopPolling]);
 
   // Şablonları yükle
   const loadTemplates = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch('/api/templates');
+      const [res, runsRes] = await Promise.all([
+        fetch('/api/templates'),
+        fetch('/api/automation/run').catch(() => null),
+      ]);
       if (!res.ok) throw new Error('Şablonlar yüklenemedi.');
       const data = await res.json();
       setTemplates(data.templates ?? []);
+
+      // Çalıştırma geçmişi isteğe bağlıdır; alınamazsa şablonlar yine gösterilir.
+      if (runsRes?.ok) {
+        const { runs } = (await runsRes.json()) as { runs: AutomationRun[] };
+        const latest: Record<string, AutomationRun> = {};
+        for (const run of runs ?? []) {
+          if (!latest[run.templateId]) latest[run.templateId] = run; // en yeniden eskiye sıralı
+        }
+        setLatestRuns(latest);
+        Object.values(latest)
+          .filter(run => ACTIVE_RUN_STATUSES.has(run.status))
+          .forEach(run => pollRun(run.templateId, run.id));
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Şablonlar yüklenirken hata oluştu.');
+      showError(err instanceof Error ? err.message : 'Şablonlar yüklenirken hata oluştu.');
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [showError, pollRun]);
+
+  // Şablonu şimdi çalıştır
+  const handleRunNow = async (template: PodTemplate) => {
+    try {
+      setStartingId(template.id);
+      const res = await fetch('/api/automation/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: template.id, triggerType: 'manual' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && typeof data.runId === 'string') {
+        toast.info('Bu şablon zaten çalışıyor; ilerlemesi takip ediliyor.');
+        pollRun(template.id, data.runId);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || 'Otomasyon başlatılamadı.');
+      const now = new Date().toISOString();
+      setLatestRuns(prev => ({
+        ...prev,
+        [template.id]: { id: data.runId, templateId: template.id, status: 'pending', createdAt: now } as AutomationRun,
+      }));
+      toast.info(`"${template.name}" için otomasyon başlatıldı.`);
+      pollRun(template.id, data.runId);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Otomasyon başlatılamadı.');
+    } finally {
+      setStartingId(null);
+    }
+  };
 
   useEffect(() => {
     loadTemplates();
@@ -63,6 +177,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Şablon silinemedi.');
       setTemplates(prev => prev.filter(t => t.id !== id));
+      stopPolling(id);
       toast.success(`"${name}" şablonu silindi.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Silme işlemi başarısız.');
@@ -156,12 +271,12 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
       {/* Başlık */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center shadow">
               <LayoutTemplate className="w-4 h-4 text-white" />
             </div>
             Otomasyon Şablonları
-          </h1>
+          </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Her şablon, kur-ve-unut mantığıyla otomatik listing üretir. Mockupları, varyasyonları, SEO ipuçlarını ve zamanlamayı bir kere ayarlayın — gerisini sistem halleder.
           </p>
@@ -252,6 +367,9 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
             const isDeleting = deletingId === template.id;
             const isToggling = togglingId === template.id;
             const variationCount = template.variationConfig?.rows?.filter(r => r.enabled)?.length ?? 0;
+            const latestRun = latestRuns[template.id];
+            const isRunActive = latestRun ? ACTIVE_RUN_STATUSES.has(latestRun.status) : false;
+            const isStarting = startingId === template.id;
 
             return (
               <div
@@ -356,8 +474,65 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                   </div>
                 )}
 
+                {/* Son otomasyon çalıştırması */}
+                {latestRun && (
+                  <div
+                    className={`flex items-start gap-2 mb-4 px-3 py-2 rounded-xl border text-xs ${
+                      isRunActive
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
+                        : latestRun.status === 'completed'
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300'
+                    }`}
+                  >
+                    {isRunActive ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 mt-px" />
+                    ) : latestRun.status === 'completed' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-px" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">
+                        {isRunActive
+                          ? describeRunProgress(latestRun)
+                          : latestRun.status === 'completed'
+                          ? `Son çalıştırma başarılı · ${formatRunDate(latestRun.completedAt)}`
+                          : `Son çalıştırma başarısız · ${formatRunDate(latestRun.completedAt ?? latestRun.createdAt)}`}
+                      </p>
+                      {latestRun.status === 'failed' && latestRun.errorMessage && (
+                        <p className="mt-0.5 break-words opacity-80 line-clamp-2">{latestRun.errorMessage}</p>
+                      )}
+                      {latestRun.status === 'completed' && (latestRun.generatedMockupUrls?.length ?? 0) > 0 && (
+                        <div className="mt-2 flex gap-1.5 overflow-x-auto">
+                          {latestRun.generatedMockupUrls.slice(0, 6).map(url => (
+                            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                              <img src={url} alt="Üretilen mockup" loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-emerald-200 dark:border-emerald-500/30 bg-white" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Aksiyonlar */}
-                <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  {/* Şimdi çalıştır */}
+                  <button
+                    onClick={() => handleRunNow(template)}
+                    disabled={!template.isActive || isRunActive || isStarting}
+                    title={!template.isActive ? 'Pasif şablonlar çalıştırılamaz' : undefined}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isStarting || isRunActive ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Rocket className="w-3 h-3" />
+                    )}
+                    {isRunActive ? 'Çalışıyor' : 'Şimdi Çalıştır'}
+                  </button>
+
                   {/* Aktif/Pasif Toggle */}
                   <button
                     onClick={() => handleToggleActive(template)}
