@@ -266,3 +266,70 @@ Raporun eleştirel tonu, projedeki iyi işleri gölgelememeli:
 - Audit log'larda secret redaction mevcut.
 - Bileşenlerin hook'lara ayrılmaya başlanması (`useDesignUpload`, `useMockupTransform`, `useBatchGenerator`) doğru yönde bir refactor.
 - SQLite yerel çalışma modu, geliştiricilerin harici servis olmadan çalışabilmesini sağlıyor.
+
+---
+
+## 10. Uygulama Durumu (güncelleme)
+
+Bu rapordaki öneriler `ccr-df6a23e5-md3ays` dalında uygulanmıştır. Son durum:
+
+| Kontrol | Önce | Sonra |
+|---|---|---|
+| TypeScript | ✅ (2 dosyada `@ts-nocheck`) | ✅ (`@ts-nocheck` yok) |
+| Birim testleri | 44 | 188 |
+| E2E testleri | yok | 3 (Playwright, CI'da) |
+| ESLint | 514 sorun (314 hata) | 0 hata, 33 uyarı |
+| `npm audit --omit=dev` | 7 açık (1 kritik) | 0 |
+| CI | yok | type-check, lint, test, audit, build, E2E |
+
+### Tamamlanan maddeler
+
+| # | Madde | Durum |
+|---|---|---|
+| 1 | Otomasyon iç token fallback'i | ✅ Kaldırıldı; `after()` + atomik çalıştırma talebi |
+| 2 | SSRF + çerez sızıntısı | ✅ `media-source.ts` (sahiplik kontrollü okuma, allowlist, boyut/zaman sınırı) |
+| 3 | AI uç noktalarında istek sınırı | ✅ Kullanıcı başına kota, Redis destekli |
+| 4 | `getAuthoritativeSession` | ✅ Tüm route'larda; otomatik kapsam testi |
+| 5 | Bağımlılık açıkları | ✅ |
+| 6 | CI | ✅ |
+| 7 | Gizli değerlerin şifrelenmesi | ✅ AES-256-GCM (`DATA_ENCRYPTION_KEY`) |
+| 8 | Etsy token yenileme yarışı | ✅ |
+| 9 | `GET /api/storage` hata yanıtı | ✅ 503 |
+| 10 | Kullanılmayan bağımlılık / betik temizliği | ✅ |
+| 11 | Drizzle migration'ları | ✅ İdempotent baseline + PGlite testleri |
+| 12 | Paylaşımlı rate limit + CSP | ✅ Upstash/KV; nonce tabanlı CSP (tarayıcıda doğrulandı) |
+| 13 | zod doğrulaması, `any` azaltma | ✅ Şablonlar ve çalışma alanı kaydı; `any` 216 → ~2 (gerekçeli) |
+| 14 | Büyük bileşenlerin bölünmesi | 🟡 `AdminDashboard` 2.215 → 590 satır; `EtsySeoContext` tiplenip düzenlendi, bölünmedi |
+| 15 | README, `.env.example`, hata izleme | ✅ (`instrumentation.ts`, isteğe bağlı webhook) |
+| 16 | Kuyruk/zamanlanmış otomasyon | ✅ Saatlik cron uç noktası + GitHub Actions tetikleyici |
+| 17 | E2E testleri | ✅ |
+| 18 | JSONB → ayrı tablolar, i18n | ⏸ Bilinçli olarak ertelendi (aşağıya bakın) |
+
+### İnceleme sırasında bulunup düzeltilen ek hatalar
+
+- **Etsy yayın uç noktası**, kullanıcının bağlantısı yoksa ortamdaki `ETSY_ACCESS_TOKEN`'a düşüyordu: herhangi bir kullanıcı site sahibinin mağazasına ilan açabilirdi.
+- **Görsel analiz uç noktaları** misafirlere açıktı, her URL'yi çekiyor, başka kullanıcıların R2 dosyalarını okuyabiliyor ve `public/` altında yol manipülasyonuna açıktı.
+- **SEO stüdyosu**, anahtar kelime metriklerini yalnızca adminlere açık uç noktadan çekiyor; normal kullanıcılara sabit kodlanmış sahte skorlar gösteriyordu.
+- **Çalışma alanı kaydı**, kısmi kayıtlarda AI model tercihlerini, aktif klasörü ve seçili mockup'ı siliyordu.
+- **Otomasyon**, var olmayan `printArea` alanını okuduğu için mockup adımını hep atlıyordu; çıktıları kullanıcının erişemeyeceği anahtarlarla yüklüyordu.
+- **Video üretimi** yanlış SDK imzasıyla durum sorguluyordu.
+- **`@ts-nocheck`** tarafından gizlenen iki `ReferenceError` (`deleteBlobs`, `toast`).
+- **R2 temizliği**, otomasyon çıktılarını ve henüz kaydedilmemiş yeni yüklemeleri silebiliyordu.
+- **Cloudflare Worker** açık bir kazıma proxy'siydi; anahtar kelime kazıyıcı başka kullanıcıların Etsy token'larını ödünç alıyordu.
+- Toplu ilan işlemleri, her şey başarısız olsa bile "başarılı" diyordu. CSV dışa aktarımı formül enjeksiyonuna açıktı.
+
+### Sizin yapmanız gerekenler (dağıtım öncesi)
+
+1. Vercel'e yeni ortam değişkenlerini ekleyin: `DATA_ENCRYPTION_KEY`, `INTERNAL_API_TOKEN`, `CRON_SECRET` (her biri ≥ 32 karakter). Önerilen: `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`, `CLOUDFLARE_WORKER_SECRET`.
+2. `npm run db:migrate` çalıştırın (baseline migration mevcut şemayı bozmadan tamamlar).
+3. `npm run db:encrypt-secrets` ile önce raporu görün, ardından `-- --apply` ile mevcut token ve anahtarları şifreleyin. **`DATA_ENCRYPTION_KEY`'i kaybetmeyin**; kaybolursa şifreli değerler okunamaz (Etsy'ye yeniden bağlanmak gerekir).
+4. Cloudflare Worker'ı `scripts/cloudflare-worker.js` ile güncelleyin ve Worker ortamına `WORKER_SECRET` ekleyin.
+5. Zamanlanmış otomasyon için GitHub repository secret'ları ekleyin: `AUTOMATION_APP_URL`, `CRON_SECRET`.
+6. Ortamda `ETSY_ACCESS_TOKEN` / `ETSY_SHOP_ID` tanımlıysa artık kullanılmadıkları için kaldırabilirsiniz.
+
+### Ertelenen maddeler ve nedenleri
+
+- **Çalışma alanını JSONB dizilerinden ayrı tablolara taşımak:** İstemci senkronizasyonu (IndexedDB, misafir → hesap taşıma, çakışma kontrolü) ve canlı veri göçü birlikte değişmeli. Bu, canlı veritabanına erişimle ve kademeli bir göç planıyla yapılmalı.
+- **Çoklu dil (i18n):** Arayüzdeki tüm Türkçe metinlerin sözlüğe taşınmasını gerektirir. İngilizce desteği planlanıyorsa ayrı bir iş olarak ele alınmalı.
+- **`EtsySeoContext` bölünmesi ve kalan 33 hook uyarısı:** Bunların çoğu sayfa yüklenirken veri çeken efektler. Davranış değişikliği riski nedeniyle, ilgili akışlar için E2E testleri genişletildikten sonra ele alınmalı.
+- **Otomasyonda SEO ve ilan oluşturma adımları:** Şu an "atlandı" olarak işaretleniyor. Otomatik ilan açmak gerçek mağazayı etkilediği için ürün kararı gerektiriyor.
