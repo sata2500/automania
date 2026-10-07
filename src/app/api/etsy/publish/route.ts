@@ -230,14 +230,16 @@ export async function POST(req: Request) {
     const taxonomyId = Number(taxonomy_id);
     const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
 
+    // Yalnızca isteği yapan kullanıcının kendi Etsy bağlantısı kullanılır. Ortamdaki genel
+    // bir token'a düşmek, bağlantısı olmayan kullanıcıların başka bir mağazaya ilan açmasına yol açardı.
     const tokenRes = await getValidEtsyToken(session.id);
-    const etsyAccessToken = tokenRes.access_token || process.env.ETSY_ACCESS_TOKEN;
-    const etsyShopId = tokenRes.shop_id || process.env.ETSY_SHOP_ID;
+    const etsyAccessToken = tokenRes.success ? tokenRes.access_token : undefined;
+    const etsyShopId = tokenRes.success ? tokenRes.shop_id : undefined;
     const etsyApiKey = tokenRes.api_key || process.env.ETSY_API_KEY;
     const etsySharedSecret = tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET;
 
     // Draft preview is safe without OAuth; live publication must never be simulated.
-    if (!tokenRes.success && (!etsyAccessToken || !etsyShopId)) {
+    if (!etsyAccessToken || !etsyShopId) {
       if (state === 'active') {
         return NextResponse.json({
           success: false,

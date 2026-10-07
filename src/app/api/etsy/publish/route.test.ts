@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sessionMock } = vi.hoisted(() => ({
+const { sessionMock, tokenMock } = vi.hoisted(() => ({
   sessionMock: vi.fn(),
+  tokenMock: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-server', () => ({ getAuthoritativeSession: sessionMock }));
@@ -18,7 +19,7 @@ vi.mock('@/lib/etsy-publish-mode', () => ({
     input.confirmLivePublish === true && input.confirmationPhrase === 'YAYINLA',
 }));
 vi.mock('@/lib/db', () => ({ default: vi.fn() }));
-vi.mock('@/lib/etsy-token-manager', () => ({ getValidEtsyToken: vi.fn() }));
+vi.mock('@/lib/etsy-token-manager', () => ({ getValidEtsyToken: tokenMock }));
 vi.mock('@/lib/r2', () => ({
   isR2Configured: () => false,
   getR2Client: vi.fn(),
@@ -74,5 +75,23 @@ describe('POST /api/etsy/publish live guards', () => {
     expect(response.status).toBe(400);
     expect(body).toEqual({ success: false, error: 'Canlı yayın için açık kullanıcı onayı gereklidir.' });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to a global Etsy token for users without their own connection', async () => {
+    process.env.ETSY_LIVE_PUBLISH_ENABLED = 'false';
+    vi.stubEnv('ETSY_ACCESS_TOKEN', 'owner-shop-token');
+    vi.stubEnv('ETSY_SHOP_ID', '999');
+    tokenMock.mockResolvedValue({ success: false, error: 'Etsy hesabı bağlı değil.' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const response = await POST(request({
+      publishMode: 'draft', state: 'draft', title: 'Test', description: 'Desc', price: 20, quantity: 1,
+      taxonomy_id: 482, tags: ['tag'], variations: [],
+    }));
+    const body = await response.json();
+
+    expect(body).toMatchObject({ success: true, simulated: true });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 });
