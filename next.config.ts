@@ -51,6 +51,11 @@ const nextConfig: NextConfig = {
   // Don't expose Next.js version in response headers
   poweredByHeader: false,
 
+  // Admin › Veritabanı Bakımı migration dosyalarını çalışma zamanında diskten okur.
+  outputFileTracingIncludes: {
+    '/api/admin/db-maintenance': ['./drizzle/**/*'],
+  },
+
   // Strict mode catches potential issues early in development
   reactStrictMode: true,
   turbopack: {},

@@ -10,6 +10,7 @@ import {
   Trash2,
   Search,
 } from 'lucide-react';
+import { AdminDbMaintenanceCard } from './AdminDbMaintenanceCard';
 
 type SampleStats = {
   mockupsCount: number;
@@ -194,6 +195,8 @@ export function AdminSettingsSection({
             <span>Çöp Verileri Temizle (Örnek Şablonlar Korunur)</span>
           </button>
         </div>
+
+        <AdminDbMaintenanceCard />
       </div>
     </div>
   );

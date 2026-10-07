@@ -78,6 +78,8 @@ Uygulama `http://localhost:3000` adresinde açılır. Ortam değişkenlerinin ta
 
 İstek sırasında tablo/kolon oluşturan kod yoktur; şema yalnızca migration'larla değişir.
 
+**Admin panelinden:** "Uygulama Ayarları & Bakım" sekmesindeki **Veritabanı Bakımı** kartı bekleyen migration'ları ve düz metin gizli değerleri gösterir. Bu işlemleri `ONAYLA` yazarak buradan da çalıştırabilirsiniz. İşlemler yalnızca adminlere açıktır, aynı anda yalnızca biri çalışabilir ve her çalıştırma audit log'a yazılır. Çalıştırmadan önce Neon'da bir yedek (branch) almanız önerilir.
+
 ## Güvenlik notları
 
 - Her API route'u bir yetki kontrolü içermek zorundadır; `src/app/api/route-auth.test.ts` bunu tüm route'lar için otomatik doğrular.
