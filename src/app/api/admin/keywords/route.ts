@@ -122,7 +122,7 @@ export async function GET(req: Request) {
         shopId: etsyWorkspace[0]?.etsy_shop_id || (hasApiKey ? 'Etsy Developer API' : null)
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Keywords API GET Error:', error);
     return NextResponse.json({ success: false, error: 'Sunucu hatası oluştu.' }, { status: 500 });
   }
@@ -147,7 +147,7 @@ export async function DELETE(req: Request) {
     `;
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Keywords API DELETE Error:', error);
     return NextResponse.json({ success: false, error: 'Sunucu hatası oluştu.' }, { status: 500 });
   }

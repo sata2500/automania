@@ -1,9 +1,10 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
-import { filterSafeKeywords, sanitizeEtsyTags } from '@/lib/trademark-shield';
+import { sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo } from '@/lib/seasonality';
 import { loadSettingRows } from '@/lib/app-settings';
 
@@ -254,9 +255,9 @@ Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-conv
           await new Promise(r => setTimeout(r, 200));
         }
 
-      } catch (err: any) {
+      } catch (err) {
         console.error(`Optimization error on listing ${listingIdStr}:`, err);
-        errors.push(`İlan #${listingIdStr}: ${err.message}`);
+        errors.push(`İlan #${listingIdStr}: ${getErrorMessage(err)}`);
       }
     }
 
@@ -267,8 +268,8 @@ Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-conv
       errors: errors.length > 0 ? errors : undefined
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('AI SEO Optimize API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

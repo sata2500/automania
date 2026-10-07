@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';

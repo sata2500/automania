@@ -1,8 +1,8 @@
-// @ts-nocheck
 'use client';
+import { getErrorMessage } from '@/lib/errors';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useToast } from '@/components/common/ToastContext';
-import { loadAppData, saveAppData } from '@/lib/storage-service';
+import { deleteBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, RenderedMatch } from '@/types/pod';
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 
@@ -40,15 +40,15 @@ function extractCleanNiche(design: DesignItem): string {
       return quoteMatch[1].trim();
     }
     // Extract key subject words from description
-    const words = desc.replace(/[^\w\s]/gi, ' ').split(/\s+/).filter(w => w.length > 2 && !['this', 'that', 'with', 'from', 'your', 'have', 'featuring', 'design', 'tshirt', 'shirt', 'apparel', 'market', 'etsy', 'graphic', 'illustration', 'vector', 'image', 'photo', 'picture'].includes(w.toLowerCase()));
+    const words = desc.replace(/[^\w\s]/gi, ' ').split(/\s+/).filter((w: string) => w.length > 2 && !['this', 'that', 'with', 'from', 'your', 'have', 'featuring', 'design', 'tshirt', 'shirt', 'apparel', 'market', 'etsy', 'graphic', 'illustration', 'vector', 'image', 'photo', 'picture'].includes(w.toLowerCase()));
     if (words.length >= 2) {
-      return words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      return words.slice(0, 3).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
     }
   }
 
   // 3. Try using top 2 keywords from AI vision analysis
   if (analysis.keywords && analysis.keywords.length > 0) {
-    return analysis.keywords.slice(0, 2).map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
+    return analysis.keywords.slice(0, 2).map((k: string) => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
   }
 
   // 4. Only fallback to raw name if it is NOT a generic camera / ChatGPT / AI export filename
@@ -64,9 +64,8 @@ function extractCleanNiche(design: DesignItem): string {
 
 
 
-const EtsySeoContext = createContext<any>(null);
 
-export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: React.ReactNode, renderedMatches?: any[] }) => {
+function useEtsySeoState(renderedMatches: RenderedMatch[]) {
 
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
@@ -509,8 +508,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       appData.etsyUserNotes = userNotes;
       await saveAppData(appData);
       toast.success('Özel Ürün Markaları ve Kullanıcı Talimatları Veritabanına Kaydedildi!');
-    } catch (e: any) {
-      toast.error('Kaydetme hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Kaydetme hatası: ' + getErrorMessage(e));
     } finally {
       setIsSavingSettings(false);
     }
@@ -549,8 +548,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       appData.etsyCustomSizes = newSizes;
       await saveAppData(appData);
       toast.success('Özel beden kalıcı olarak kaydedildi.');
-    } catch (e: any) {
-      toast.error('Kaydedilemedi: ' + e.message);
+    } catch (e) {
+      toast.error('Kaydedilemedi: ' + getErrorMessage(e));
     }
   };
 
@@ -563,8 +562,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       appData.etsyCustomSizes = newSizes;
       await saveAppData(appData);
       toast.success('Özel beden silindi.');
-    } catch (e: any) {
-      toast.error('Silinemedi: ' + e.message);
+    } catch (e) {
+      toast.error('Silinemedi: ' + getErrorMessage(e));
     }
   };
 
@@ -584,8 +583,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       appData.etsyCustomColors = newColors;
       await saveAppData(appData);
       toast.success('Özel renk kalıcı olarak kaydedildi.');
-    } catch (e: any) {
-      toast.error('Kaydedilemedi: ' + e.message);
+    } catch (e) {
+      toast.error('Kaydedilemedi: ' + getErrorMessage(e));
     }
   };
 
@@ -598,8 +597,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       appData.etsyCustomColors = newColors;
       await saveAppData(appData);
       toast.success('Özel renk silindi.');
-    } catch (e: any) {
-      toast.error('Silinemedi: ' + e.message);
+    } catch (e) {
+      toast.error('Silinemedi: ' + getErrorMessage(e));
     }
   };
 
@@ -858,7 +857,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
           });
           kwList = [...kwList, ...themeMatches];
         }
-      } catch (e) {}
+      } catch {}
 
       // Fallback to raw design keywords if DB fetch fails
       if (kwList.length === 0 && designKeywords.length > 0) {
@@ -970,7 +969,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
              const defaultMap = appData.etsyDefaultTemplates || {};
              const templateId = defaultMap[data.listing.taxonomy_id];
              if (templateId) {
-               const template = (appData.etsyVariationTemplates || []).find((t: any) => t.id === templateId);
+               const template = ((appData.etsyVariationTemplates || []) as Array<{ id: string; variations?: VariationRow[] }>)
+                 .find((t) => t.id === templateId);
                if (template) {
                  setVariations(template.variations || []);
                }
@@ -1010,8 +1010,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       } else {
         toast.error(data.error || 'İçerik üretilirken hata oluştu.');
       }
-    } catch (e: any) {
-      toast.error('Bağlantı hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Bağlantı hatası: ' + getErrorMessage(e));
     } finally {
       setIsGenerating(false);
     }
@@ -1042,7 +1042,7 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     try {
       const appData = await loadAppData();
       setSavedTemplates(appData.etsyVariationTemplates || []);
-    } catch (e) {}
+    } catch {}
   };
 
   const handleBulkSync = async () => {
@@ -1091,8 +1091,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       } else {
         toast.error('Toplu güncelleme başarısız: ' + data.error);
       }
-    } catch (e: any) {
-      toast.error('Bağlantı hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Bağlantı hatası: ' + getErrorMessage(e));
     } finally {
       setIsSyncing(false);
     }
@@ -1118,8 +1118,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       toast.success(`"${templateSaveName.trim()}" şablon olarak kaydedildi!`);
       setIsSaveTemplateModalOpen(false);
       setTemplateSaveName('');
-    } catch (err: any) {
-      toast.error('Şablon kaydedilemedi: ' + err.message);
+    } catch (err) {
+      toast.error('Şablon kaydedilemedi: ' + getErrorMessage(err));
     } finally {
       setIsSavingTemplate(false);
     }
@@ -1130,8 +1130,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       const appData = await loadAppData();
       setSavedTemplates(appData.etsyVariationTemplates || []);
       setIsLoadTemplateModalOpen(true);
-    } catch (err: any) {
-      toast.error('Şablonlar yüklenemedi: ' + err.message);
+    } catch (err) {
+      toast.error('Şablonlar yüklenemedi: ' + getErrorMessage(err));
     }
   };
 
@@ -1148,8 +1148,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       await saveAppData(appData);
       setSavedTemplates(appData.etsyVariationTemplates);
       toast.success('Şablon silindi.');
-    } catch (err: any) {
-      toast.error('Şablon silinemedi: ' + err.message);
+    } catch (err) {
+      toast.error('Şablon silinemedi: ' + getErrorMessage(err));
     }
   };
 
@@ -1165,8 +1165,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
         toast.error(data.error || 'İlanlar çekilemedi.');
         setShowListingsModal(false);
       }
-    } catch (e: any) {
-      toast.error('Bağlantı hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Bağlantı hatası: ' + getErrorMessage(e));
       setShowListingsModal(false);
     } finally {
       setIsFetchingListings(false);
@@ -1218,8 +1218,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       } else {
         toast.error(data.error || 'Varyasyonlar çekilemedi.');
       }
-    } catch (e: any) {
-      toast.error('Bağlantı hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Bağlantı hatası: ' + getErrorMessage(e));
     } finally {
       setIsFetchingInventory(false);
     }
@@ -1363,8 +1363,8 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
       } else {
         toast.error(data.error || 'İlan aktarılırken hata oluştu.');
       }
-    } catch (e: any) {
-      toast.error('Bağlantı hatası: ' + e.message);
+    } catch (e) {
+      toast.error('Bağlantı hatası: ' + getErrorMessage(e));
     } finally {
       setIsPublishing(false);
     }
@@ -1471,6 +1471,15 @@ export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: 
     handlePublishToEtsy
   };
 
+  return contextValue;
+}
+
+export type EtsySeoContextValue = ReturnType<typeof useEtsySeoState>;
+
+const EtsySeoContext = createContext<EtsySeoContextValue | null>(null);
+
+export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: React.ReactNode; renderedMatches?: RenderedMatch[] }) => {
+  const contextValue = useEtsySeoState(renderedMatches);
   return (
     <EtsySeoContext.Provider value={contextValue}>
       {children}

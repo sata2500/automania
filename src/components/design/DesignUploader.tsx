@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import { getErrorMessage } from '@/lib/errors';
+import React, { useState } from 'react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -248,9 +249,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       toast.removeToast(toastId);
       toast.success('Arka plan başarıyla kaldırıldı!');
-    } catch (err: any) {
+    } catch (err) {
       toast.removeToast(toastId);
-      toast.error(err.message || 'Arka plan kaldırılırken hata oluştu.');
+      toast.error(getErrorMessage(err) || 'Arka plan kaldırılırken hata oluştu.');
     }
   };
 
@@ -286,9 +287,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       toast.removeToast(toastId);
       toast.success('Tasarım başarıyla dönüştürüldü!');
-    } catch (err: any) {
+    } catch (err) {
       toast.removeToast(toastId);
-      toast.error(err.message || 'Renk dönüşümü sırasında hata oluştu.');
+      toast.error(getErrorMessage(err) || 'Renk dönüşümü sırasında hata oluştu.');
     }
   };
 

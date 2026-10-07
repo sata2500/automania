@@ -1,8 +1,8 @@
-// @ts-nocheck
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
-import { Tag, Copy, Sparkles, Check, FileText, ShoppingBag, Layers, DollarSign, Send, RefreshCw, AlertTriangle, CheckCircle, Image as ImageIcon, ChevronRight, MousePointerClick, Filter, X, Folder, Edit2, Trash2, GripVertical, ChevronDown, Settings, Info } from 'lucide-react';
+import { Sparkles, ShoppingBag, Layers, Send, AlertTriangle, CheckCircle, Image as ChevronDown, Settings, Info } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { useToast } from '@/components/common/ToastContext';
 
 const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: any, selectedValues: number[], onChange: (vals: number[]) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -70,6 +70,7 @@ export const EtsyPublisher = () => {
     savedTemplates, setVariations, defaultTemplates, setDefaultTemplates
   } = useEtsySeo();
 
+  const toast = useToast();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSetDefaultTemplate = async (templateId: string) => {
@@ -89,7 +90,7 @@ export const EtsyPublisher = () => {
         body: JSON.stringify({ etsyDefaultTemplates: newDefaults })
       });
       toast.success(`Bu şablon geçerli kategori (${taxonomyId}) için varsayılan olarak ayarlandı!`);
-    } catch (e) {
+    } catch {
       toast.error('Varsayılan şablon kaydedilirken hata oluştu.');
     }
   };

@@ -16,9 +16,9 @@
 
 import React, { useState, useCallback } from 'react';
 import {
-  X, Sparkles, Loader2, Download, CheckCircle2,
+  X, Sparkles, Loader2, CheckCircle2,
   AlertCircle, RefreshCw, Eraser, ImagePlus,
-  Wand2, Info
+  Info
 } from 'lucide-react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';

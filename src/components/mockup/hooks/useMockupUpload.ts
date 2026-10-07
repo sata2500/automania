@@ -73,7 +73,7 @@ export function useMockupUpload({
       toast.info('Video formatı desteklenmiyor. FFmpeg WASM motoru ile okunuyor (Lütfen bekleyin)...');
       try {
         return await getDurationWithFFmpeg(file);
-      } catch (ffErr) {
+      } catch {
         throw new Error('Video süresi hem tarayıcı hem FFmpeg tarafından okunamadı.');
       }
     }
@@ -123,7 +123,7 @@ export function useMockupUpload({
                 );
                 continue;
               }
-            } catch (e) {
+            } catch {
               toast.error(
                 `'${file.name}' okunamadı: FFmpeg motoru bile bu video formatını çözümleyemedi.`
               );

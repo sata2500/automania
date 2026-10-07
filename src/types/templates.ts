@@ -4,7 +4,6 @@
  * POD şablonları, otomasyon çalıştırmaları ve Etsy mağaza yönetimi için tip tanımları.
  */
 
-import { ApparelType } from './pod';
 
 // ─── Şablon Yapılandırma Tipleri ─────────────────────────────────────────────
 

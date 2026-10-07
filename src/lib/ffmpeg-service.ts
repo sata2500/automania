@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
@@ -39,13 +40,13 @@ export const getDurationWithFFmpeg = async (file: File): Promise<number> => {
     
     ffmpeg.exec(['-i', fileName]).then(async () => {
       ffmpeg.off('log', logHandler);
-      try { ffmpeg.terminate(); } catch (e) {}
+      try { ffmpeg.terminate(); } catch {}
       if (duration > 0) resolve(duration);
       else reject(new Error("Duration could not be extracted via FFmpeg"));
     }).catch(async () => {
       // ffprobe/ffmpeg without output file throws an error by default but gives the metadata
       ffmpeg.off('log', logHandler);
-      try { ffmpeg.terminate(); } catch (e) {}
+      try { ffmpeg.terminate(); } catch {}
       if (duration > 0) resolve(duration);
       else reject(new Error("Duration could not be extracted via FFmpeg"));
     });
@@ -107,7 +108,7 @@ export const transcodeWithFFmpeg = async (file: File, onProgress?: (p: number) =
     const blob = new Blob([data.buffer], { type: 'video/mp4' });
     const finalName = file.name.includes('.') ? file.name.replace(/\.[^/.]+$/, "") + ".mp4" : "video.mp4";
     return new File([blob], finalName, { type: 'video/mp4' });
-  } catch (err: any) {
-    throw new Error(err.message || 'Dönüştürülen video dosyası okunamadı.');
+  } catch (err) {
+    throw new Error(getErrorMessage(err) || 'Dönüştürülen video dosyası okunamadı.');
   }
 };

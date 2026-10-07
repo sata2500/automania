@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { db } from '@/lib/db';
+import sql from '@/lib/db';
 import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
 import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
           seoModel = raw;
         }
       }
-    } catch(e) {}
+    } catch {}
 
     // Override with global setting if present
     if (activeAiProvider === 'gemini') {
@@ -336,7 +336,7 @@ export async function POST(req: Request) {
     let parsedResult;
     try {
       parsedResult = JSON.parse(content);
-    } catch (e) {
+    } catch {
       throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
     }
 

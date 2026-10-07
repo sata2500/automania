@@ -1,9 +1,10 @@
 'use client';
+import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   RefreshCw, Trash2, Search, Download, CheckSquare, Square, 
   ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Tag, 
-  Trophy, Sparkles, ShieldAlert, Globe, Info, Zap, DollarSign
+  Trophy, Sparkles, ShieldAlert, Globe, Info, Zap
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -100,7 +101,7 @@ export default function KeywordPoolManagement() {
           setEtsyStatus(data.etsyStatus);
         }
       }
-    } catch (e) {
+    } catch {
       toast.error('Kelimeler yüklenirken hata oluştu.');
     } finally {
       setIsLoading(false);
@@ -143,7 +144,7 @@ export default function KeywordPoolManagement() {
       } else {
         toast.error(data.error || 'Silme işlemi başarısız.');
       }
-    } catch (e) {
+    } catch {
       toast.error('Hata oluştu.');
     }
   };
@@ -166,8 +167,8 @@ export default function KeywordPoolManagement() {
       } else {
         toast.error(data.error || 'Değerlendirme başarısız.');
       }
-    } catch (e: any) {
-      toast.error('Hata: ' + e.message);
+    } catch (e) {
+      toast.error('Hata: ' + getErrorMessage(e));
     } finally {
       setEvaluatingSingleId(null);
     }
@@ -189,8 +190,8 @@ export default function KeywordPoolManagement() {
       } else {
         toast.error(data.error || 'Silme başarısız.');
       }
-    } catch (e: any) {
-      toast.error('Hata: ' + e.message);
+    } catch (e) {
+      toast.error('Hata: ' + getErrorMessage(e));
     }
   };
 
@@ -287,8 +288,8 @@ export default function KeywordPoolManagement() {
         fetchKeywords();
         await new Promise(r => setTimeout(r, 600));
       }
-    } catch (e: any) {
-      toast.error('Toplu tarama sırasında bir hata oluştu: ' + e.message);
+    } catch (e) {
+      toast.error('Toplu tarama sırasında bir hata oluştu: ' + getErrorMessage(e));
     } finally {
       setIsBulkRunning(false);
     }
@@ -394,8 +395,8 @@ export default function KeywordPoolManagement() {
       URL.revokeObjectURL(url);
       
       toast.success(`Harika! Toplam ${allKeywords.length} kelime Excel uyumlu CSV olarak indirildi.`);
-    } catch (e: any) {
-      toast.error('CSV dışa aktarılırken hata oluştu: ' + (e?.message || ''));
+    } catch (e) {
+      toast.error('CSV dışa aktarılırken hata oluştu: ' + (getErrorMessage(e) || ''));
     } finally {
       setIsExporting(false);
     }
@@ -534,8 +535,8 @@ export default function KeywordPoolManagement() {
           toast.error(data.result?.scrapeError || 'Sunucu testinde hata alındı.');
         }
       }
-    } catch (e: any) {
-      toast.error('Test sırasında hata oluştu: ' + e.message);
+    } catch (e) {
+      toast.error('Test sırasında hata oluştu: ' + getErrorMessage(e));
     } finally {
       setIsTestingScraper(false);
     }

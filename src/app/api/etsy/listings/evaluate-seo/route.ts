@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -136,8 +137,8 @@ export async function POST(req: Request) {
           `;
 
           newlyScrapedCount++;
-        } catch (scrapeErr: any) {
-          console.warn(`[Listing SEO Tag Scrape] Warning for tag "${tag}":`, scrapeErr.message);
+        } catch (scrapeErr) {
+          console.warn(`[Listing SEO Tag Scrape] Warning for tag "${tag}":`, getErrorMessage(scrapeErr));
         }
       }
     }
@@ -190,8 +191,8 @@ export async function POST(req: Request) {
       results
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('SEO Evaluation API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

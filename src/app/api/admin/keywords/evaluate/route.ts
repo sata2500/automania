@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
@@ -112,9 +113,9 @@ export async function POST(req: Request) {
 
         // 350ms throttle to respect rate limits
         await new Promise(resolve => setTimeout(resolve, 350));
-      } catch (e: any) {
+      } catch (e) {
         console.error(`Error scraping keyword ${item.keyword}:`, e);
-        errors.push(`"${item.keyword}": ${e.message}`);
+        errors.push(`"${item.keyword}": ${getErrorMessage(e)}`);
       }
     }
 

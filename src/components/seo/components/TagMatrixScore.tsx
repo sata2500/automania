@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { ShieldCheck, Tag, Sparkles, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
+import { ShieldCheck, Sparkles, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
 import { isTrademarkViolator } from '@/lib/trademark-shield';
 
 interface TagMatrixScoreProps {

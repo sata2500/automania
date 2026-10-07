@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { useState, useCallback } from 'react';
 import { DesignItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -56,9 +57,9 @@ export function useDesignAnalysis({
         } else {
           toast.error(`Analiz hatası: ${data.error || 'Bilinmeyen hata'}`);
         }
-      } catch (e: any) {
+      } catch (e) {
         console.error('Tasarım analiz hatası:', e);
-        toast.error(`Analiz hatası: ${e.message || 'Sunucu hatası oluştu.'}`);
+        toast.error(`Analiz hatası: ${getErrorMessage(e) || 'Sunucu hatası oluştu.'}`);
       } finally {
         setAnalyzingIds((prev) => prev.filter((id) => id !== designId));
       }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
@@ -31,8 +32,8 @@ export async function GET(req: Request) {
 
     const data = await sectionsRes.json();
     return NextResponse.json({ success: true, sections: data.results || [] });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Etsy Shop Sections Fetch Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

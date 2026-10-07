@@ -44,7 +44,7 @@ export async function GET(request: Request) {
           parsedModels.reasoning = data.openrouterModel;
         }
       }
-    } catch(e) {}
+    } catch {}
 
     return NextResponse.json({
       mockups: data.mockups || [],

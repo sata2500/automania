@@ -1,5 +1,6 @@
 'use client';
 
+import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -17,12 +18,12 @@ import {
   Check,
   Tag,
   FileText,
-  Layers,
-  Palette,
+  
+  
   Flame,
-  ShieldCheck,
+  
   TrendingUp,
-  Maximize2
+  
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -81,8 +82,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       } else {
         error(data.error || 'Etiketler taranamadı.');
       }
-    } catch (err: any) {
-      error('Bağlantı hatası: ' + err.message);
+    } catch (err) {
+      error('Bağlantı hatası: ' + getErrorMessage(err));
     } finally {
       setIsSeoScraping(false);
     }
@@ -189,8 +190,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         onListingUpdated(updated);
         success('Kapak görseli Vision AI ile başarıyla analiz edildi!');
       }
-    } catch (err: any) {
-      error(err.message || 'Vision analizinde hata oluştu.');
+    } catch (err) {
+      error(getErrorMessage(err) || 'Vision analizinde hata oluştu.');
     } finally {
       setIsVisionLoading(false);
     }
@@ -220,8 +221,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         onListingUpdated(updated);
         success('AI SEO başlık, etiket ve açıklama başarıyla üretildi!');
       }
-    } catch (err: any) {
-      error(err.message || 'AI optimizasyonunda hata oluştu.');
+    } catch (err) {
+      error(getErrorMessage(err) || 'AI optimizasyonunda hata oluştu.');
     } finally {
       setIsOptimizeLoading(false);
     }
@@ -263,8 +264,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
       onListingUpdated(updated);
       success('🎉 İlan Etsy mağazanızda canlı olarak güncellendi!');
-    } catch (err: any) {
-      error(err.message || 'Etsy güncellemesinde hata oluştu.');
+    } catch (err) {
+      error(getErrorMessage(err) || 'Etsy güncellemesinde hata oluştu.');
     } finally {
       setIsUpdatingEtsy(false);
     }

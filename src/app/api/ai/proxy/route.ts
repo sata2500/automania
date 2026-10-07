@@ -1,6 +1,5 @@
 import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 

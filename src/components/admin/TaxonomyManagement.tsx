@@ -1,10 +1,11 @@
 'use client';
 
+import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   RefreshCw, Search, CheckCircle2, XCircle, FolderTree, 
-  Sparkles, Layers, Tag, ChevronRight, Check, AlertTriangle,
-  SlidersHorizontal, Info, ArrowUpRight
+  Sparkles, ChevronRight, Check, 
+  
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -62,7 +63,7 @@ export default function TaxonomyManagement() {
       } else {
         toast.error('Kategoriler alınırken hata: ' + (data.error || 'Bilinmeyen hata'));
       }
-    } catch (e: any) {
+    } catch {
       toast.error('Kategoriler yüklenirken sunucu hatası oluştu.');
     } finally {
       setLoading(false);
@@ -93,8 +94,8 @@ export default function TaxonomyManagement() {
           } else {
             toast.error(`Senkronizasyon hatası: ${data.error}`);
           }
-        } catch (e: any) {
-          toast.error('Bağlantı hatası: ' + e.message);
+        } catch (e) {
+          toast.error('Bağlantı hatası: ' + getErrorMessage(e));
         } finally {
           setSyncing(false);
         }
@@ -118,7 +119,7 @@ export default function TaxonomyManagement() {
         throw new Error(data.error);
       }
       toast.info(`Kategori #${id} ${nextStatus ? 'Aktifleştirildi' : 'Pasife Alındı'}.`);
-    } catch (e) {
+    } catch {
       // Revert on error
       setCategories(prev => prev.map(c => c.id === id ? { ...c, isActive: currentStatus } : c));
       toast.error('Kategori durumu güncellenemedi.');
@@ -142,7 +143,7 @@ export default function TaxonomyManagement() {
           await Promise.all(updates);
           toast.success('Popüler POD kategorileri başarıyla aktifleştirildi!');
           fetchCategories();
-        } catch (e) {
+        } catch {
           toast.error('Kategoriler aktifleştirilirken bir hata oluştu.');
         }
       }

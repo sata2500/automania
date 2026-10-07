@@ -8,7 +8,7 @@ import {
   FolderInput,
   Folder,
   ChevronDown,
-  FolderArchive,
+  
   Layers,
 } from 'lucide-react';
 import { TargetApparel, MockupFolder, DesignItem } from '@/types/pod';

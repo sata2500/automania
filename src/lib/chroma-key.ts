@@ -83,11 +83,9 @@ export async function removeGreenBackground(
 ): Promise<ChromaKeyResult> {
   const startTime = Date.now();
 
-  const {
-    threshold = 80,
-    feather = 40,
-    keyColor = { r: 0, g: 255, b: 0 },
-  } = options;
+  // Not: Mevcut algoritma HSV tabanlı sabit yeşil aralığı kullanır; `options`
+  // içindeki threshold/feather/keyColor değerleri şu an dikkate alınmaz.
+  void options;
 
   // Input'u Buffer'a çevir
   const buffer: Buffer = typeof input === 'string'

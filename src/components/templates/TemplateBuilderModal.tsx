@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   ChevronRight,
@@ -13,7 +13,7 @@ import {
   Check,
   Save,
   AlertCircle,
-  Info,
+  
 } from 'lucide-react';
 import { PodTemplate, PodTemplateInput } from '@/types/templates';
 import { MockupItem } from '@/types/pod';

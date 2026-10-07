@@ -10,10 +10,10 @@ import {
   Pause,
   Clock,
   CheckCircle2,
-  AlertCircle,
-  Zap,
-  Settings,
-  ChevronRight,
+  
+  
+  
+  
   BarChart3,
   RefreshCw,
   Loader2,

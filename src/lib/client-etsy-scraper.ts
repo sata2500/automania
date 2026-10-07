@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 export interface ClientScrapeResult {
   id: string;
   keyword: string;
@@ -58,8 +59,8 @@ export async function scrapeEtsyFromBrowser(id: string, keyword: string): Promis
         rawMetrics: { method: 'error', error: errorMsg }
       };
     }
-  } catch (e: any) {
-    const errorMsg = `Kazıma Bağlantı Hatası: ${e.message}`;
+  } catch (e) {
+    const errorMsg = `Kazıma Bağlantı Hatası: ${getErrorMessage(e)}`;
     return {
       id,
       keyword: cleanKeyword,

@@ -16,6 +16,18 @@ const eslintConfig = defineConfig([
     "public/sw.js",
     "scratch/**",
   ]),
+  {
+    rules: {
+      // `_` ile başlayan parametre/değişkenler kasıtlı olarak kullanılmıyor demektir.
+      "@typescript-eslint/no-unused-vars": ["error", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

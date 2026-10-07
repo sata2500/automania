@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { Plus, Trash2, DollarSign, Package, Palette, Hash, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, DollarSign, Palette, Hash } from 'lucide-react';
 import { PodTemplateVariationConfig, TemplateVariationRow } from '@/types/templates';
 
 interface VariationSectionProps {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { podTemplates } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PodTemplateInput } from '@/types/templates';
 
 /**

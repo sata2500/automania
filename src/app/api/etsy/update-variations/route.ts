@@ -1,5 +1,5 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
               readiness_state_id = currentInv.products[0].offerings[0].readiness_state_id;
             }
           }
-        } catch (e) {
+        } catch {
           console.warn('Failed to fetch existing inventory for', listingId);
         }
 
@@ -121,15 +121,15 @@ export async function POST(req: Request) {
           console.warn(`Update failed for ${listingId}:`, errText);
           results.push({ listingId, success: false, error: errText });
         }
-      } catch (e: any) {
-        results.push({ listingId, success: false, error: e.message });
+      } catch (e) {
+        results.push({ listingId, success: false, error: getErrorMessage(e) });
       }
     }
 
     return NextResponse.json({ success: true, results });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Etsy Bulk Update Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

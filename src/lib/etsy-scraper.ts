@@ -1,3 +1,4 @@
+import { getErrorMessage, isAbortError } from '@/lib/errors';
 export interface ScrapingResult {
   keyword: string;
   charLength: number;
@@ -109,7 +110,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         topSuggestions: suggestions.slice(0, 5)
       };
     }
-  } catch (nativeSuggestErr: any) {
+  } catch {
     // Autocomplete timeout or block is non-fatal
   }
 
@@ -144,8 +145,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           }
         }
       }
-    } catch (e: any) {
-      console.warn('Could not dynamically load Etsy credentials from DB:', e.message);
+    } catch (e) {
+      console.warn('Could not dynamically load Etsy credentials from DB:', getErrorMessage(e));
     }
   }
 
@@ -184,7 +185,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
             } else {
               apiRes = r1;
             }
-          } catch (fErr: any) {}
+          } catch {}
         }
 
         // Attempt 2: If keystring alone failed and secret exists, try combined keystring:secret
@@ -202,7 +203,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
               apiRes = r2;
               break;
             }
-          } catch (rErr) {}
+          } catch {}
         }
 
         // Attempt 3: Without Authorization header (pure public API search)
@@ -217,7 +218,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
               apiRes = r3;
               break;
             }
-          } catch (rErr) {}
+          } catch {}
         }
       }
 
@@ -282,8 +283,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
         );
         console.warn(`Etsy Open API returned status ${apiRes.status} for "${cleanKeyword}"`);
       }
-    } catch (apiErr: any) {
-      markProviderError(apiErr?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
+    } catch (apiErr) {
+      markProviderError(isAbortError(apiErr) ? 'network_timeout' : 'provider_unavailable');
       console.warn(`Etsy Open API error for "${cleanKeyword}"`);
     }
   }
@@ -350,8 +351,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           { status: searchRes.status, retryAfterSeconds: getRetryAfterSeconds(searchRes) },
         );
       }
-    } catch (scraperErr: any) {
-      markProviderError(scraperErr?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
+    } catch (scraperErr) {
+      markProviderError(isAbortError(scraperErr) ? 'network_timeout' : 'provider_unavailable');
     }
   }
 
@@ -384,8 +385,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
           { status: workerRes.status, retryAfterSeconds: getRetryAfterSeconds(workerRes) },
         );
       }
-    } catch (e: any) {
-      markProviderError(e?.name === 'TimeoutError' ? 'network_timeout' : 'provider_unavailable');
+    } catch (e) {
+      markProviderError(isAbortError(e) ? 'network_timeout' : 'provider_unavailable');
     }
   }
 

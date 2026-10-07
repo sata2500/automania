@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -5,7 +6,7 @@ import { checkRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { loadSettingRows } from '@/lib/app-settings';
-import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
+import { loadVisionImage } from '@/lib/media-source';
 
 export const maxDuration = 60;
 
@@ -256,9 +257,9 @@ export async function POST(req: Request) {
           await new Promise(r => setTimeout(r, 200));
         }
 
-      } catch (err: any) {
+      } catch (err) {
         console.error(`Vision analysis error on listing ${listingIdStr}:`, err);
-        errors.push(`İlan #${listingIdStr}: ${err.message}`);
+        errors.push(`İlan #${listingIdStr}: ${getErrorMessage(err)}`);
       }
     }
 
@@ -269,8 +270,8 @@ export async function POST(req: Request) {
       errors: errors.length > 0 ? errors : undefined
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Vision Analyze API Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

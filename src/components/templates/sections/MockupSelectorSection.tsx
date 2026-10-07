@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Image as ImageIcon, Video, Check, AlertCircle, Info, GripVertical } from 'lucide-react';
-import { MockupItem, ApparelType } from '@/types/pod';
+import { Image as ImageIcon, Video, Check, Info } from 'lucide-react';
+import { MockupItem } from '@/types/pod';
 import { PodTemplateMockupConfig } from '@/types/templates';
 
 interface MockupSelectorSectionProps {

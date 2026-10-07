@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextRequest, NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
@@ -53,9 +54,9 @@ export async function GET(request: NextRequest) {
     }, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Admin Sample Data GET Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -174,7 +175,7 @@ export function isProtectedUrl(url: string): boolean {
 `;
       const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
       fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
-    } catch (fsErr) {
+    } catch {
       // Ignored on serverless environments (read-only file system)
     }
 
@@ -189,9 +190,9 @@ export function isProtectedUrl(url: string): boolean {
     }, {
       headers: { 'Cache-Control': 'no-store' }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Admin Sample Data POST Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -243,7 +244,7 @@ export function isProtectedUrl(url: string): boolean {
 `;
       const sampleFilePath = path.join(process.cwd(), 'src', 'lib', 'sample-data.ts');
       fs.writeFileSync(sampleFilePath, sampleDataCode, 'utf8');
-    } catch (fsErr) {
+    } catch {
       // Ignored on serverless environments
     }
 
@@ -258,8 +259,8 @@ export function isProtectedUrl(url: string): boolean {
     }, {
       headers: { 'Cache-Control': 'no-store' }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Admin Sample Data DELETE Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

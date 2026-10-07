@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   CheckCircle2, Sparkles, Layers, Hash, RefreshCw, ChevronDown, 
-  ChevronUp, SlidersHorizontal, Settings2 
+  ChevronUp, SlidersHorizontal 
 } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { useToast } from '@/components/common/ToastContext';

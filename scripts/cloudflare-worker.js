@@ -56,7 +56,7 @@ export default {
           autocompleteRank = foundIdx + 1;
         }
       }
-    } catch (nativeErr) {
+    } catch {
       // Fallback to Google Suggest
       try {
         const suggestUrl = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent('etsy ' + cleanKeyword)}`;
@@ -106,7 +106,7 @@ export default {
       } else {
         throw new Error(`Etsy Direct Status ${searchRes.status}`);
       }
-    } catch (directErr) {
+    } catch {
       // Fallback Engine: Bing site:etsy.com/listing search (100% Real SERP Indexing)
       methodUsed = 'bing_etsy_index';
       try {
@@ -139,7 +139,7 @@ export default {
         } else {
           scrapeError = 'Bing Index Fallback Blocked';
         }
-      } catch (bingErr) {
+      } catch {
         scrapeError = 'Kazıma Bağlantı Engeli';
       }
     }

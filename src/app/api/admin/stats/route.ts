@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db'; // Re-exported raw sql client
 import { requireAdmin } from '@/lib/auth-server';
@@ -88,9 +89,9 @@ export async function GET() {
         'Expires': '0',
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Admin Stats Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { 
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { 
       status: 500,
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     });

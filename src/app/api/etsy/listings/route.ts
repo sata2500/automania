@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -48,8 +49,8 @@ export async function GET(req: Request) {
             console.warn(`[Etsy Listings] Inventory fetch returned ${invRes.status}:`, await invRes.text().catch(() => ''));
           }
         }
-      } catch (invErr: any) {
-        console.warn('[Etsy Listings] Inventory fetch exception:', invErr.message);
+      } catch (invErr) {
+        console.warn('[Etsy Listings] Inventory fetch exception:', getErrorMessage(invErr));
       }
 
       const rows = await sql`
@@ -207,9 +208,9 @@ export async function GET(req: Request) {
       }
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Etsy Listings Fetch Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -541,8 +542,8 @@ export async function POST(req: Request) {
       message
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Etsy Listings Sync Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

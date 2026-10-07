@@ -1,5 +1,6 @@
 'use client';
 
+import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
@@ -10,28 +11,28 @@ import {
   RefreshCw,
   Trash2,
   CheckCircle2,
-  AlertCircle,
+  
   Activity,
-  Layers,
-  Palette,
+  
+  
   FolderTree,
-  Eye,
-  EyeOff,
+  
+  
   Sparkles,
   Server,
-  HardDrive,
+  
   RotateCcw,
-  SlidersHorizontal,
+  
   LayoutDashboard,
   Users,
   Settings,
-  UserCheck,
+  
   Globe,
   Lock,
-  ChevronRight,
-  Sparkle,
-  Radio,
-  FileCode2,
+  
+  
+  
+  
   Check,
   Search,
   Image as ImageIcon,
@@ -43,15 +44,14 @@ import {
   Tag,
   Plus,
   Info,
-  HelpCircle,
+  
   ChevronDown,
-  Upload,
+  
   Video
 } from 'lucide-react';
-import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
-import { loadSampleAppData, saveAppData, loadAppData } from '@/lib/storage-service';
+import { saveAppData, loadAppData } from '@/lib/storage-service';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import KeywordPoolManagement from './KeywordPoolManagement';
 import TaxonomyManagement from './TaxonomyManagement';
@@ -338,7 +338,7 @@ export const AdminDashboard: React.FC = () => {
           toast.error(data.message || data.error || 'İstatistikler alınamadı.');
         }
       }
-    } catch (err: any) {
+    } catch {
       if (showToast) {
         toast.error('İstatistikler yüklenirken bağlantı hatası oluştu.');
       }
@@ -377,7 +377,7 @@ export const AdminDashboard: React.FC = () => {
       if (data.success && data.stats) {
         setSampleStats(data.stats);
       }
-    } catch (err) {}
+    } catch {}
   };
 
   useEffect(() => {
@@ -393,14 +393,14 @@ export const AdminDashboard: React.FC = () => {
       if (savedTab && ['overview', 'ai', 'keywords', 'taxonomy', 'users', 'settings'].includes(savedTab)) {
         setActiveSubTab(savedTab);
       }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   const handleSubTabChange = (tab: AdminSubTab) => {
     setActiveSubTab(tab);
     try {
       localStorage.setItem('automania_admin_subtab_v1', tab);
-    } catch (e) {}
+    } catch {}
   };
 
   // 3-Tier Model System & Global Settings
@@ -517,7 +517,7 @@ export const AdminDashboard: React.FC = () => {
       if (data && data.success && data.data.data) {
         setOpenRouterModels(data.data.data);
       }
-    } catch (e) {
+    } catch {
       toast.error('OpenRouter modelleri çekilirken hata oluştu.');
     } finally {
       setIsLoadingModels(false);
@@ -657,7 +657,7 @@ export const AdminDashboard: React.FC = () => {
       });
 
       toast.success('Yapay Zeka ve API ayarları başarıyla kaydedildi! 📱💻');
-    } catch (e) {
+    } catch {
       toast.error('Ayarlar kaydedilirken bir hata oluştu.');
     }
   };
@@ -724,7 +724,7 @@ export const AdminDashboard: React.FC = () => {
         const errMsg = errorData.error?.message || `HTTP ${res.status}`;
         toast.error(`Test Başarısız (${modelId}): ${errMsg}`);
       }
-    } catch (e) {
+    } catch {
       toast.error(`Bağlantı hatası oluştu.`);
     } finally {
       setTestingModel(null);
@@ -748,7 +748,7 @@ export const AdminDashboard: React.FC = () => {
         setDbHealthResult({ ok: false, latencyMs });
         toast.error('Veritabanı sunucusuna erişilemedi.');
       }
-    } catch (e) {
+    } catch {
       toast.error('Veritabanı bağlantı testi sırasında hata oluştu.');
     } finally {
       setIsTestingDb(false);
@@ -770,7 +770,7 @@ export const AdminDashboard: React.FC = () => {
           } else {
             toast.error('Depolama temizleme işlemi başarısız oldu.');
           }
-        } catch (err) {
+        } catch {
           toast.error('Sistem temizleme sırasında bir hata oluştu.');
         }
       }
@@ -793,8 +793,8 @@ export const AdminDashboard: React.FC = () => {
           } else {
             toast.error(data.error || 'Örnek taslak güncellenirken hata oluştu.');
           }
-        } catch (e: any) {
-          toast.error('İşlem sırasında bir hata oluştu: ' + (e.message || 'Bilinmeyen hata'));
+        } catch (e) {
+          toast.error('İşlem sırasında bir hata oluştu: ' + (getErrorMessage(e) || 'Bilinmeyen hata'));
         } finally {
           setIsUpdatingSampleData(false);
         }
@@ -818,8 +818,8 @@ export const AdminDashboard: React.FC = () => {
           } else {
             toast.error(data.error || 'Sıfırlama sırasında hata oluştu.');
           }
-        } catch (e: any) {
-          toast.error('Hata: ' + e.message);
+        } catch (e) {
+          toast.error('Hata: ' + getErrorMessage(e));
         } finally {
           setIsUpdatingSampleData(false);
         }

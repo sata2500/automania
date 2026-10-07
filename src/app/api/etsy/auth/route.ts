@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
@@ -64,8 +65,8 @@ export async function GET(req: Request) {
 
     return response;
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Etsy Auth Route Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

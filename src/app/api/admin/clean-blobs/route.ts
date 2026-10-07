@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
@@ -73,8 +74,8 @@ export async function POST(_request: Request) {
       headers: { 'Cache-Control': 'no-store' },
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('[Clean R2] Error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });
   }
 }

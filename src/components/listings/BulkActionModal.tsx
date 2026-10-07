@@ -1,5 +1,6 @@
 'use client';
 
+import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -7,7 +8,7 @@ import {
   Eye,
   TrendingUp,
   CheckCircle2,
-  AlertCircle,
+  
   Loader2
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
@@ -129,8 +130,8 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
             errors.push(...data.errors);
           }
         }
-      } catch (err: any) {
-        errors.push(`Ağ Hatası: ${err.message}`);
+      } catch (err) {
+        errors.push(`Ağ Hatası: ${getErrorMessage(err)}`);
       }
 
       setProcessedCount(completed);
