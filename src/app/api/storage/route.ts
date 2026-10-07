@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { userWorkspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthoritativeSession } from '@/lib/auth-server';
+import { workspaceSaveSchema, type WorkspaceSaveInput } from '@/lib/validation/storage';
+import { formatValidationError } from '@/lib/validation/templates';
 
 type WorkspaceInsert = typeof userWorkspaces.$inferInsert;
 
@@ -10,7 +12,7 @@ function hasTemporaryMediaUrl(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('blob:');
 }
 
-function payloadContainsTemporaryMedia(body: Record<string, unknown>): boolean {
+function payloadContainsTemporaryMedia(body: WorkspaceSaveInput): boolean {
   const mockups = Array.isArray(body.mockups) ? body.mockups : [];
   const designs = Array.isArray(body.designs) ? body.designs : [];
   const generatedMockups = Array.isArray(body.etsyGeneratedMockups) ? body.etsyGeneratedMockups : [];
@@ -78,7 +80,11 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const body = await request.json() as Record<string, unknown>;
+    const parsedBody = workspaceSaveSchema.safeParse(await request.json().catch(() => null));
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: formatValidationError(parsedBody.error) }, { status: 400 });
+    }
+    const body = parsedBody.data;
     const userId = session.id;
 
     if (payloadContainsTemporaryMedia(body)) {
@@ -89,40 +95,16 @@ export async function POST(request: Request) {
       }, { status: 422 });
     }
 
-    const hasMockups = Array.isArray(body.mockups);
-    const hasDesigns = Array.isArray(body.designs);
-    const hasFolders = Array.isArray(body.folders);
-    const hasProductTypes = body.etsyProductTypes !== undefined;
-    const hasUserNotes = body.etsyUserNotes !== undefined;
-
-    const mockupsJson = body.mockups || [];
-    const designsJson = body.designs || [];
-    const foldersJson = body.folders || [];
-    const activeFolderId = body.activeFolderId || null;
-    const selectedMockupId = body.selectedMockupId || null;
-    const etsyProductTypes = body.etsyProductTypes || null;
-    const etsyUserNotes = body.etsyUserNotes || null;
-    const hasVariationTemplates = Array.isArray(body.etsyVariationTemplates);
-    const variationTemplatesJson = hasVariationTemplates ? body.etsyVariationTemplates : [];
-    const hasDefaultTemplates = body.etsyDefaultTemplates !== undefined;
-    const defaultTemplatesJson = hasDefaultTemplates ? body.etsyDefaultTemplates : {};
-    const hasCustomSizes = Array.isArray(body.etsyCustomSizes);
-    const customSizesJson = hasCustomSizes ? body.etsyCustomSizes : [];
-    const hasCustomColors = Array.isArray(body.etsyCustomColors);
-    const customColorsJson = hasCustomColors ? body.etsyCustomColors : [];
-    const hasGeneratedMockups = Array.isArray(body.etsyGeneratedMockups);
-    const generatedMockupsJson = hasGeneratedMockups ? body.etsyGeneratedMockups : [];
-    
-    const hasModelUpdate = body.modelVision !== undefined || body.modelReasoning !== undefined || body.modelGeneration !== undefined;
+    // Kısmi kayıt: yalnızca gövdede gönderilen alanlar güncellenir.
+    const has = (key: keyof WorkspaceSaveInput) => body[key] !== undefined;
+    const hasModelUpdate = has('modelVision') || has('modelReasoning') || has('modelGeneration');
     const openRouterModel = hasModelUpdate ? JSON.stringify({
       vision: body.modelVision || null,
       reasoning: body.modelReasoning || null,
       generation: body.modelGeneration || null
     }) : null;
 
-    const lastKnownServerTimestamp = typeof body.lastKnownServerTimestamp === 'number' && Number.isFinite(body.lastKnownServerTimestamp)
-      ? body.lastKnownServerTimestamp
-      : null;
+    const lastKnownServerTimestamp = body.lastKnownServerTimestamp ?? null;
 
     // 1. Optimistic Concurrency Control
     if (lastKnownServerTimestamp) {
@@ -144,37 +126,37 @@ export async function POST(request: Request) {
     // Prepare data to insert/update
     const insertData = {
       userId,
-      mockups: mockupsJson,
-      designs: designsJson,
-      folders: foldersJson,
-      activeFolderId,
-      selectedMockupId,
+      mockups: body.mockups ?? [],
+      designs: body.designs ?? [],
+      folders: body.folders ?? [],
+      activeFolderId: body.activeFolderId ?? null,
+      selectedMockupId: body.selectedMockupId ?? null,
       openrouterModel: openRouterModel,
-      etsyProductTypes,
-      etsyUserNotes,
-      etsyVariationTemplates: variationTemplatesJson,
-      etsyDefaultTemplates: defaultTemplatesJson,
-      etsyCustomSizes: customSizesJson,
-      etsyCustomColors: customColorsJson,
-      etsyGeneratedMockups: generatedMockupsJson,
+      etsyProductTypes: body.etsyProductTypes || null,
+      etsyUserNotes: body.etsyUserNotes || null,
+      etsyVariationTemplates: body.etsyVariationTemplates ?? [],
+      etsyDefaultTemplates: body.etsyDefaultTemplates ?? {},
+      etsyCustomSizes: body.etsyCustomSizes ?? [],
+      etsyCustomColors: body.etsyCustomColors ?? [],
+      etsyGeneratedMockups: body.etsyGeneratedMockups ?? [],
       updatedAt: new Date()
-    } as WorkspaceInsert;
+    } as unknown as WorkspaceInsert;
 
-    // Prepare update data, ignoring nulls for things not provided
+    // Güncellemede yalnızca gönderilen alanlar yazılır; gönderilmeyenler korunur.
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
-    if (hasMockups) updateData.mockups = mockupsJson;
-    if (hasDesigns) updateData.designs = designsJson;
-    if (hasFolders) updateData.folders = foldersJson;
-    if (activeFolderId !== undefined) updateData.activeFolderId = activeFolderId;
-    if (selectedMockupId !== undefined) updateData.selectedMockupId = selectedMockupId;
-    if (openRouterModel !== undefined) updateData.openrouterModel = openRouterModel;
-    if (hasProductTypes) updateData.etsyProductTypes = etsyProductTypes;
-    if (hasUserNotes) updateData.etsyUserNotes = etsyUserNotes;
-    if (hasVariationTemplates) updateData.etsyVariationTemplates = variationTemplatesJson;
-    if (hasDefaultTemplates) updateData.etsyDefaultTemplates = defaultTemplatesJson;
-    if (hasCustomSizes) updateData.etsyCustomSizes = customSizesJson;
-    if (hasCustomColors) updateData.etsyCustomColors = customColorsJson;
-    if (hasGeneratedMockups) updateData.etsyGeneratedMockups = generatedMockupsJson;
+    if (has('mockups')) updateData.mockups = body.mockups;
+    if (has('designs')) updateData.designs = body.designs;
+    if (has('folders')) updateData.folders = body.folders;
+    if (has('activeFolderId')) updateData.activeFolderId = body.activeFolderId;
+    if (has('selectedMockupId')) updateData.selectedMockupId = body.selectedMockupId;
+    if (hasModelUpdate) updateData.openrouterModel = openRouterModel;
+    if (has('etsyProductTypes')) updateData.etsyProductTypes = body.etsyProductTypes || null;
+    if (has('etsyUserNotes')) updateData.etsyUserNotes = body.etsyUserNotes || null;
+    if (has('etsyVariationTemplates')) updateData.etsyVariationTemplates = body.etsyVariationTemplates;
+    if (has('etsyDefaultTemplates')) updateData.etsyDefaultTemplates = body.etsyDefaultTemplates;
+    if (has('etsyCustomSizes')) updateData.etsyCustomSizes = body.etsyCustomSizes;
+    if (has('etsyCustomColors')) updateData.etsyCustomColors = body.etsyCustomColors;
+    if (has('etsyGeneratedMockups')) updateData.etsyGeneratedMockups = body.etsyGeneratedMockups;
 
     await db.insert(userWorkspaces)
       .values(insertData)

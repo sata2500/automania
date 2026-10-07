@@ -51,3 +51,45 @@ describe('GET /api/storage', () => {
     expect(body.mockups).toBeUndefined();
   });
 });
+
+describe('POST /api/storage partial saves', () => {
+  function mockInsert() {
+    const onConflictDoUpdate = vi.fn(async () => undefined);
+    const values = vi.fn(() => ({ onConflictDoUpdate }));
+    dbMock.insert.mockReturnValue({ values });
+    dbMock.select.mockImplementation(() => ({
+      from: () => ({ where: async () => [{ updatedAt: new Date('2026-10-07T00:00:00Z') }] }),
+    }));
+    return { values, onConflictDoUpdate };
+  }
+
+  function post(body: unknown) {
+    return POST(new Request('http://localhost/api/storage', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }));
+  }
+
+  it('only updates the fields that were sent', async () => {
+    getSessionMock.mockResolvedValue({ id: 'user-test' });
+    const { onConflictDoUpdate } = mockInsert();
+
+    const response = await post({ etsyDefaultTemplates: { '482': 'tmpl-1' } });
+
+    expect(response.status).toBe(200);
+    const [{ set }] = onConflictDoUpdate.mock.calls[0] as unknown as [{ set: Record<string, unknown> }];
+    expect(set.etsyDefaultTemplates).toEqual({ '482': 'tmpl-1' });
+    // Gönderilmeyen alanlar (AI modelleri, aktif klasör, seçili mockup) korunmalı
+    expect(set).not.toHaveProperty('openrouterModel');
+    expect(set).not.toHaveProperty('activeFolderId');
+    expect(set).not.toHaveProperty('selectedMockupId');
+    expect(set).not.toHaveProperty('mockups');
+  });
+
+  it('rejects malformed payloads', async () => {
+    getSessionMock.mockResolvedValue({ id: 'user-test' });
+    const response = await post({ mockups: 'not-an-array' });
+    expect(response.status).toBe(400);
+  });
+});

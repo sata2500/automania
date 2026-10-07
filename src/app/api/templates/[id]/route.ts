@@ -1,9 +1,9 @@
+import { formatValidationError, templateUpdateSchema } from '@/lib/validation/templates';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { podTemplates } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { eq, and } from 'drizzle-orm';
-import { PodTemplateInput } from '@/types/templates';
 
 /**
  * GET /api/templates/[id]
@@ -55,41 +55,17 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body: Partial<PodTemplateInput> = await req.json();
-
-    // Validasyon
-    if (body.name !== undefined && !body.name?.trim()) {
-      return NextResponse.json(
-        { error: 'Şablon adı boş olamaz.' },
-        { status: 400 }
-      );
+    const parsed = templateUpdateSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: formatValidationError(parsed.error) }, { status: 400 });
     }
-
-    if (body.mockupConfig) {
-      const totalImages =
-        (body.mockupConfig.printAreaMockupIds?.length ?? 0) +
-        (body.mockupConfig.staticMockupIds?.length ?? 0);
-      const totalVideos = body.mockupConfig.videoMockupIds?.length ?? 0;
-
-      if (totalImages > 20) {
-        return NextResponse.json(
-          { error: 'Etsy limiti: maksimum 20 görsel yüklenebilir.' },
-          { status: 400 }
-        );
-      }
-      if (totalVideos > 2) {
-        return NextResponse.json(
-          { error: 'Etsy limiti: maksimum 2 video yüklenebilir.' },
-          { status: 400 }
-        );
-      }
-    }
+    const body = parsed.data;
 
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
     };
 
-    if (body.name !== undefined) updateData.name = body.name.trim();
+    if (body.name !== undefined) updateData.name = body.name;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.mockupConfig !== undefined) updateData.mockupConfig = body.mockupConfig;
     if (body.variationConfig !== undefined) updateData.variationConfig = body.variationConfig;
