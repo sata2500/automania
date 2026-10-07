@@ -10,27 +10,42 @@
  *  5. seoGeneration     — 2026 Etsy SEO içeriği üretimi
  *  6. listingCreation   — Etsy'de taslak/aktif listing oluşturma
  *
- * Vercel timeout kısıtı nedeniyle bu route sadece run kaydını oluşturur
- * ve ilk adımı (designGeneration) başlatır. Kalan adımlar
- * GET /api/automation/poll/[runId] SSE endpoint'i üzerinden takip edilir.
+ * Run kaydı oluşturulup yanıt hemen döner; pipeline `after()` ile aynı fonksiyon
+ * çağrısı içinde, yanıt gönderildikten sonra çalışır (maxDuration sınırı içinde).
+ * İlerleme GET /api/automation/poll/[runId] ile takip edilir.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
-import { getSession } from '@/lib/auth-server';
-import { eq, and } from 'drizzle-orm';
+import { getAuthoritativeSession } from '@/lib/auth-server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { executeAutomationRun } from '@/lib/automation-runner';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { AutomationRunSteps } from '@/types/templates';
+
+export const maxDuration = 300;
+
+const ALLOWED_TRIGGER_TYPES = new Set(['manual', 'scheduled']);
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session?.id) {
+    const session = await getAuthoritativeSession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { templateId, triggerType = 'manual' } = body;
+    const rateLimit = consumeRateLimit(`automation:run:${session.id}`, 5, 60 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ error: 'Otomasyon çalıştırma limiti aşıldı. Lütfen daha sonra tekrar deneyin.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const templateId = typeof body.templateId === 'string' ? body.templateId : '';
+    const triggerType = ALLOWED_TRIGGER_TYPES.has(body.triggerType) ? body.triggerType : 'manual';
 
     if (!templateId) {
       return NextResponse.json({ error: 'templateId zorunludur.' }, { status: 400 });
@@ -50,7 +65,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Şablon pasif durumda.' }, { status: 400 });
     }
 
-    // Yeni run kaydı oluştur
+    // Aynı şablon için eşzamanlı ikinci bir çalıştırmayı engelle
+    const [activeRun] = await db
+      .select({ id: automationRuns.id })
+      .from(automationRuns)
+      .where(and(
+        eq(automationRuns.templateId, templateId),
+        eq(automationRuns.userId, session.id),
+        inArray(automationRuns.status, ['pending', 'running']),
+      ))
+      .limit(1);
+    if (activeRun) {
+      return NextResponse.json({ error: 'Bu şablon için zaten devam eden bir çalıştırma var.', runId: activeRun.id }, { status: 409 });
+    }
+
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
     const initialSteps: AutomationRunSteps = {
@@ -62,39 +90,25 @@ export async function POST(req: NextRequest) {
       listingCreation:   { status: 'pending' as const },
     };
 
-    const [run] = await db
-      .insert(automationRuns)
-      .values({
-        id: runId,
-        templateId,
-        userId: session.id,
-        status: 'pending',
-        steps: initialSteps,
-        triggerType,
-      })
-      .returning();
+    await db.insert(automationRuns).values({
+      id: runId,
+      templateId,
+      userId: session.id,
+      status: 'pending',
+      steps: initialSteps,
+      triggerType,
+    });
 
-    // Pipeline'ı arka planda başlat (fire-and-forget)
-    // Vercel Edge'de uzun işlem yapamayız — /api/automation/execute endpoint'ine POST at
-    const executeUrl = new URL('/api/automation/execute', req.url);
-
-    // Arka plan isteği (non-blocking)
-    fetch(executeUrl.toString(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Internal auth token (güvenlik için)
-        'X-Internal-Token': process.env.INTERNAL_API_TOKEN ?? 'dev-internal',
-      },
-      body: JSON.stringify({ runId, templateId, userId: session.id }),
-    }).catch(err => {
-      console.error('[Automation] Execute endpoint hatası:', err);
+    const userId = session.id;
+    after(async () => {
+      await executeAutomationRun({ runId, templateId, userId });
     });
 
     return NextResponse.json({
       runId,
       status: 'pending',
-      message: 'Otomasyon başlatıldı. İlerlemeyi /api/automation/poll/' + runId + ' üzerinden takip edin.',
+      pollUrl: `/api/automation/poll/${runId}`,
+      message: 'Otomasyon başlatıldı.',
     });
   } catch (error) {
     console.error('[POST /api/automation/run] Error:', error);
@@ -111,30 +125,22 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session?.id) {
+    const session = await getAuthoritativeSession();
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const templateId = searchParams.get('templateId');
+    const templateId = req.nextUrl.searchParams.get('templateId');
+    const condition = templateId
+      ? and(eq(automationRuns.userId, session.id), eq(automationRuns.templateId, templateId))
+      : eq(automationRuns.userId, session.id);
 
-    let query = db
+    const runs = await db
       .select()
       .from(automationRuns)
-      .where(eq(automationRuns.userId, session.id));
-
-    if (templateId) {
-      query = db
-        .select()
-        .from(automationRuns)
-        .where(and(
-          eq(automationRuns.userId, session.id),
-          eq(automationRuns.templateId, templateId)
-        ));
-    }
-
-    const runs = await query.limit(50);
+      .where(condition)
+      .orderBy(desc(automationRuns.createdAt))
+      .limit(50);
 
     return NextResponse.json({ runs });
   } catch (error) {
