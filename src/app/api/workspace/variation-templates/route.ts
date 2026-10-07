@@ -9,12 +9,12 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { userWorkspaces } from '@/db/schema';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { eq } from 'drizzle-orm';
 
 export async function GET() {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

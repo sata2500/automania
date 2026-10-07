@@ -7,13 +7,21 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { sql } from '@/lib/db';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
+
+export const maxDuration = 120;
+
+const MAX_PROMPT_LENGTH = 4000;
+const MAX_IMAGES_PER_REQUEST = 4;
+// Kullanıcı başına saatlik görsel üretim kotası (en maliyetli AI işlemi)
+const IMAGE_QUOTA_PER_HOUR = 40;
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -31,8 +39,27 @@ export async function POST(req: NextRequest) {
       numberOfImages?: number;
     };
 
-    if (!prompt?.trim()) {
+    if (typeof prompt !== 'string' || !prompt.trim()) {
       return NextResponse.json({ error: 'Prompt zorunludur.' }, { status: 400 });
+    }
+    if (prompt.length > MAX_PROMPT_LENGTH || (typeof selectedStyle === 'string' && selectedStyle.length > 500)) {
+      return NextResponse.json({ error: 'Prompt çok uzun.' }, { status: 400 });
+    }
+
+    const requested = Number(numberOfImages);
+    const count = Number.isFinite(requested)
+      ? Math.min(Math.max(1, Math.floor(requested)), MAX_IMAGES_PER_REQUEST)
+      : 1;
+
+    // Her görsel kotadan bir birim düşer.
+    for (let i = 0; i < count; i++) {
+      const rateLimit = consumeRateLimit(`ai:generate-image:${session.id}`, IMAGE_QUOTA_PER_HOUR, 60 * 60_000);
+      if (!rateLimit.allowed) {
+        return NextResponse.json({ error: 'Saatlik görsel üretim limitine ulaşıldı. Lütfen daha sonra tekrar deneyin.' }, {
+          status: 429,
+          headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+        });
+      }
     }
 
     const config = await loadAIConfig();
@@ -60,11 +87,10 @@ export async function POST(req: NextRequest) {
     if (systemPromptTemplate.trim()) {
       finalPrompt = systemPromptTemplate
         .replace(/\{\{userPrompt\}\}/g, prompt)
-        .replace(/\{\{selectedStyle\}\}/g, selectedStyle);
+        .replace(/\{\{selectedStyle\}\}/g, typeof selectedStyle === 'string' ? selectedStyle : '');
     }
 
     // Birden fazla görsel için paralel istek
-    const count = Math.min(Math.max(1, numberOfImages), 4); // max 4
     const requests = Array.from({ length: count }, () =>
       generateImage(config, { prompt: finalPrompt, greenBackground })
     );
@@ -93,8 +119,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ images, count: images.length });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Bilinmeyen hata';
     console.error('[POST /api/designs/generate] Error:', error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Görsel üretilirken bir hata oluştu.' }, { status: 500 });
   }
 }

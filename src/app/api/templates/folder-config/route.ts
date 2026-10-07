@@ -13,12 +13,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { podTemplates } from '@/db/schema';
-import { getSession } from '@/lib/auth-server';
+import { getAuthoritativeSession } from '@/lib/auth-server';
 import { eq, and } from 'drizzle-orm';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
+    const session = await getAuthoritativeSession();
     if (!session?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
