@@ -3,6 +3,17 @@ import { NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
+type VariationInput = {
+  size?: string;
+  color?: string;
+  sku?: string;
+  price?: number;
+  quantity?: number;
+  enabled?: boolean;
+};
+
+const MAX_LISTINGS_PER_REQUEST = 100;
+
 export async function POST(req: Request) {
   try {
     const session = await getAuthoritativeSession();
@@ -11,10 +22,13 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { listingIds, variations } = body;
+    const { listingIds, variations } = body as { listingIds?: unknown; variations?: VariationInput[] };
 
     if (!Array.isArray(listingIds) || listingIds.length === 0) {
       return NextResponse.json({ success: false, error: 'En az bir ilan ID si gereklidir.' }, { status: 400 });
+    }
+    if (listingIds.length > MAX_LISTINGS_PER_REQUEST || !listingIds.every((id) => /^\d+$/.test(String(id)))) {
+      return NextResponse.json({ success: false, error: `Geçersiz ilan listesi (en fazla ${MAX_LISTINGS_PER_REQUEST} sayısal ID).` }, { status: 400 });
     }
 
     if (!Array.isArray(variations) || variations.length === 0) {
@@ -26,7 +40,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: tokenRes.error }, { status: tokenRes.error?.includes('dolmuş') ? 401 : 400 });
     }
 
-    const { access_token: etsy_access_token, shop_id: etsy_shop_id, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
+    const { access_token: etsy_access_token, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
 
     const headers = {
       'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
@@ -47,7 +61,7 @@ export async function POST(req: Request) {
     if (hasColor) usedProperties.push(514); // 514 is custom property 2
 
     // Format the payload based on our known structure
-    const productsPayload = variations.map((v: any, idx: number) => {
+    const productsPayload = variations.map((v) => {
       // Create properties dynamically based on size/color presence
       const propertyValues = [];
       if (hasSize) {

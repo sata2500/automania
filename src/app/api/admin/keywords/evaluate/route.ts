@@ -29,8 +29,8 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    let { ids, limit = 20 } = body;
-    limit = Math.min(20, Math.max(1, Number(limit) || 20));
+    const { ids } = body;
+    const limit = Math.min(20, Math.max(1, Number(body.limit) || 20));
     if (ids !== undefined && (!Array.isArray(ids) || ids.length > 20)) {
       return NextResponse.json({ success: false, error: 'Tek istekte en fazla 20 keyword değerlendirilebilir.' }, { status: 400 });
     }
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     // If specific IDs are provided, evaluate those. Otherwise pick oldest evaluated
     if (ids && Array.isArray(ids) && ids.length > 0) {
       const rows = await sql`
-        SELECT id, keyword FROM keyword_pool WHERE id = ANY(${ids as any})
+        SELECT id, keyword FROM keyword_pool WHERE id = ANY(${ids})
       `;
       targetKeywords = rows as { id: string, keyword: string }[];
     } else {

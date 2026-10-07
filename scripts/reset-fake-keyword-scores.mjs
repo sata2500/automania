@@ -30,7 +30,7 @@ async function resetFakeKeywordScores() {
       return;
     }
 
-    const resetRes = await sql`
+    await sql`
       UPDATE keyword_pool 
       SET 
         total_listings = 0,

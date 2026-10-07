@@ -62,7 +62,7 @@ export const transcodeWithFFmpeg = async (file: File, onProgress?: (p: number) =
   
   await ffmpeg.writeFile(inputName, await fetchFile(file));
   
-  let progressHandler: any;
+  let progressHandler: ((event: { progress: number; time: number }) => void) | undefined;
   if (onProgress) {
     progressHandler = ({ progress }: { progress: number, time: number }) => {
       // progress is a float between 0 and 1
@@ -104,8 +104,8 @@ export const transcodeWithFFmpeg = async (file: File, onProgress?: (p: number) =
       console.warn("FFmpeg file cleanup warning:", e);
     }
 
-    // @ts-ignore
-    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
+    const blob = new Blob([bytes], { type: 'video/mp4' });
     const finalName = file.name.includes('.') ? file.name.replace(/\.[^/.]+$/, "") + ".mp4" : "video.mp4";
     return new File([blob], finalName, { type: 'video/mp4' });
   } catch (err) {

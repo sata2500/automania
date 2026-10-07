@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   try {
     const session = await getAuthoritativeSession();
     if (!session) {

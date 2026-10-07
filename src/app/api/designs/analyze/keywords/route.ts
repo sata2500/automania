@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
-import { getAuthoritativeSession } from '@/lib/auth-server';
 import { EvaluatedKeyword } from '@/types/pod';
+
+const MAX_KEYWORDS = 200;
 
 export async function POST(req: Request) {
   try {
-    const session = await getAuthoritativeSession();
-    // Allow both guest sessions and authenticated users to read keyword metrics
+    // Herkese açık: misafirler de anahtar kelime havuzu metriklerini okuyabilir (gizli veri içermez).
 
     const body = await req.json();
     const keywords: string[] = Array.isArray(body?.keywords)
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, keywords: [] });
     }
 
-    const uniqueKeywords = Array.from(new Set(keywords));
+    const uniqueKeywords = Array.from(new Set(keywords)).slice(0, MAX_KEYWORDS);
 
     const rows = await sql`
       SELECT 

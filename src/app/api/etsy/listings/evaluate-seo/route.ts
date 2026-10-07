@@ -1,6 +1,6 @@
 import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import sql, { type DbRow } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { listingId, listingIds, all = false, forceRescrape = false } = body;
 
-    let listings: any[] = [];
+    let listings: DbRow[] = [];
 
     if (all) {
       listings = await sql`
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
       listings = await sql`
         SELECT * FROM user_etsy_listings 
-        WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds as any})
+        WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})
       `;
     }
 
@@ -63,10 +63,10 @@ export async function POST(req: Request) {
     const existingPoolRows = allUniqueTags.length > 0 ? await sql`
       SELECT id, keyword, opportunity_score, etsy_score, total_listings, competition_level, bestseller_count, is_etsy_suggested, last_evaluated_at
       FROM keyword_pool
-      WHERE keyword = ANY(${allUniqueTags as any})
+      WHERE keyword = ANY(${allUniqueTags})
     ` : [];
 
-    const poolMapByKeyword = new Map<string, any>();
+    const poolMapByKeyword = new Map<string, DbRow>();
     for (const row of existingPoolRows) {
       if (row.keyword) {
         poolMapByKeyword.set(row.keyword.toLowerCase().trim(), row);
@@ -147,10 +147,10 @@ export async function POST(req: Request) {
     const keywordPoolRows = await sql`
       SELECT keyword, opportunity_score, etsy_score, total_listings, competition_level, bestseller_count, is_etsy_suggested, last_evaluated_at 
       FROM keyword_pool
-      WHERE opportunity_score > 0 OR etsy_score > 0 OR keyword = ANY(${allUniqueTags as any})
+      WHERE opportunity_score > 0 OR etsy_score > 0 OR keyword = ANY(${allUniqueTags})
     `;
 
-    const results: any[] = [];
+    const results: Array<Record<string, unknown>> = [];
 
     // 6. Run mathematical SEO evaluation for each listing
     for (const item of listings) {

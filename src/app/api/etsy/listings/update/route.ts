@@ -53,7 +53,7 @@ export async function PATCH(req: Request) {
     };
 
     // Prepare Etsy update payload (only send provided non-null fields)
-    const patchBody: Record<string, any> = {};
+    const patchBody: Record<string, unknown> = {};
 
     if (typeof title === 'string' && title.trim()) {
       patchBody.title = title.trim().slice(0, 140);

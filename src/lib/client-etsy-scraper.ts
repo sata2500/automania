@@ -12,7 +12,7 @@ export interface ClientScrapeResult {
   opportunityScore: number;
   avgPrice: number;
   scrapeError: string | null;
-  rawMetrics?: any;
+  rawMetrics?: Record<string, unknown>;
 }
 
 export async function scrapeEtsyFromBrowser(id: string, keyword: string): Promise<ClientScrapeResult> {

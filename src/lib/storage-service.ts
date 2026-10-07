@@ -79,14 +79,6 @@ function isTemporaryMediaUrl(value: unknown): value is string {
   return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
 }
 
-function hasTemporaryMediaUrl(payload: AppDataPayload): boolean {
-  return [
-    ...(payload.mockups || []).map((item) => item.src),
-    ...(payload.designs || []).map((item) => item.src),
-    ...(payload.etsyGeneratedMockups || []).map((item) => item.previewUrl),
-  ].some(isTemporaryMediaUrl);
-}
-
 async function promoteTemporaryMediaUrls(
   payload: AppDataPayload,
   onProgress?: (current: number, total: number) => void

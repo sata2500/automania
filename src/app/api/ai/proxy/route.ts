@@ -25,6 +25,8 @@ function allowedChatEndpoint(provider: AiProvider, endpoint: unknown): string | 
   return null;
 }
 
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
 async function getApiKey(provider: AiProvider): Promise<string | null> {
   const settingKey = provider === 'gemini' ? 'gemini_api_key' : 'openrouter_api_key';
   const envKey = provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.OPENROUTER_API_KEY;
@@ -167,11 +169,11 @@ export async function POST(req: Request) {
       // Vision veya Metin Testi
       try {
         const lastMsg = body.messages[body.messages.length - 1];
-        let contents: any = 'Ping Test. Respond with: OK';
+        let contents: string | Array<{ role: string; parts: GeminiPart[] }> = 'Ping Test. Respond with: OK';
 
         if (Array.isArray(lastMsg?.content)) {
           // Multimodal parts
-          const parts: any[] = [];
+          const parts: GeminiPart[] = [];
           for (const item of lastMsg.content) {
             if (item.type === 'text') {
               parts.push({ text: item.text });

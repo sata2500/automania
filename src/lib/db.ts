@@ -9,4 +9,7 @@ export const db = drizzle(client, { schema });
 // Keep the raw sql export for backwards compatibility where needed
 export const sql = client;
 
+/** Ham `sql` sorgularının döndürdüğü satır tipi. */
+export type DbRow = Awaited<ReturnType<typeof client>>[number];
+
 export default client;

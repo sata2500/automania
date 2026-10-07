@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     // 2. Fetch target listings from DB
     const listings = await sql`
       SELECT * FROM user_etsy_listings 
-      WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds as any})
+      WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})
     `;
 
     if (listings.length === 0) {
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       WHERE opportunity_score > 0 OR etsy_score > 0
     `;
 
-    const results: any[] = [];
+    const results: Array<Record<string, unknown>> = [];
     const errors: string[] = [];
 
     for (const listing of listings) {

@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest';
 const PUBLIC_ROUTES = new Set([
   'auth/logout/route.ts',
   'auth/google/callback/route.ts',
+  // Yalnızca herkese açık anahtar kelime metriklerini okur (misafir SEO analizi).
+  'designs/analyze/keywords/route.ts',
 ]);
 
 const AUTH_GUARDS = [

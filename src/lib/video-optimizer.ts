@@ -120,7 +120,7 @@ export async function optimizeVideoFile(
       });
     };
 
-    video.onerror = (err) => {
+    video.onerror = () => {
       cleanup();
       console.log("Native video decode failed, starting FFmpeg transcoding...");
       transcodeWithFFmpeg(file, onProgress)

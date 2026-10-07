@@ -28,7 +28,6 @@ export async function GET(req: Request) {
     const sortOrder = order.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
     let data;
-    let count;
 
     const searchPattern = `%${search.toLowerCase()}%`;
 
@@ -91,7 +90,7 @@ export async function GET(req: Request) {
     const countRes = await sql`
       SELECT COUNT(*) as total FROM keyword_pool ${whereClause}
     `;
-    count = parseInt(countRes[0].total, 10);
+    const count = parseInt(countRes[0].total, 10);
 
     const [etsyWorkspace, etsySettings] = await Promise.all([
       sql`
@@ -143,7 +142,7 @@ export async function DELETE(req: Request) {
     }
 
     await sql`
-      DELETE FROM keyword_pool WHERE id = ANY(${ids as any})
+      DELETE FROM keyword_pool WHERE id = ANY(${ids})
     `;
 
     return NextResponse.json({ success: true });

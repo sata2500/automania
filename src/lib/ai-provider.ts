@@ -203,10 +203,10 @@ async function generateImageOpenRouter(
   }
 
   const data = await res.json();
-  return (data.data ?? []).map((item: any) => ({
-    data: item.b64_json ?? item.url,
-    mimeType: 'image/png',
-  }));
+  return ((data.data ?? []) as Array<{ b64_json?: string; url?: string }>)
+    .map((item) => item.b64_json ?? item.url)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .map((value) => ({ data: value, mimeType: 'image/png' }));
 }
 
 /**
@@ -283,7 +283,7 @@ async function generateTextOpenRouter(
   config: AIProviderConfig,
   options: GenerateTextOptions
 ): Promise<string> {
-  const messages: any[] = [];
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
   if (options.systemInstruction) {
     messages.push({ role: 'system', content: options.systemInstruction });
   }
@@ -330,7 +330,7 @@ export async function generateVideo(
   const client = getGoogleClient(config.googleApiKey);
 
   // Video üretimi başlat
-  let operation = await (client.models as any).generateVideos({
+  let operation = await client.models.generateVideos({
     model: config.videoModel,
     prompt: options.prompt,
     config: {
@@ -346,7 +346,7 @@ export async function generateVideo(
 
   while (!operation.done && attempts < maxAttempts) {
     await new Promise(r => setTimeout(r, 10_000)); // 10sn bekle
-    operation = await (client.operations as any).get(operation);
+    operation = await client.operations.getVideosOperation({ operation });
     attempts++;
   }
 
@@ -363,10 +363,14 @@ export async function generateVideo(
     throw new Error('Video üretimi başarısız: Yanıt boş.');
   }
 
-  return {
-    uri: generatedVideo.video.uri ?? generatedVideo.video.name,
-    mimeType: generatedVideo.video.mimeType ?? 'video/mp4',
-  };
+  const mimeType = generatedVideo.video.mimeType ?? 'video/mp4';
+  const uri = generatedVideo.video.uri
+    ?? (generatedVideo.video.videoBytes ? `data:${mimeType};base64,${generatedVideo.video.videoBytes}` : undefined);
+  if (!uri) {
+    throw new Error('Video üretimi başarısız: Yanıtta video adresi yok.');
+  }
+
+  return { uri, mimeType };
 }
 
 // ─── Kullanılabilir Modeller ──────────────────────────────────────────────────
@@ -381,7 +385,7 @@ export async function fetchOpenRouterImageModels(apiKey: string): Promise<{id: s
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.data ?? []).map((m: any) => ({ id: m.id, name: m.name ?? m.id }));
+    return ((data.data ?? []) as Array<{ id: string; name?: string }>).map((m) => ({ id: m.id, name: m.name ?? m.id }));
   } catch {
     return [];
   }

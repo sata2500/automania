@@ -9,7 +9,7 @@ import { PodTemplateInput } from '@/types/templates';
  * GET /api/templates
  * Kullanıcının tüm şablonlarını döner.
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const session = await getAuthoritativeSession();
     if (!session?.id) {

@@ -5,6 +5,11 @@ import { requireAdmin } from '@/lib/auth-server';
 import { SAMPLE_MOCKUPS, SAMPLE_DESIGNS, DEFAULT_FOLDERS } from '@/lib/sample-data';
 import fs from 'fs';
 import path from 'path';
+import { parseJsonArray } from '@/lib/json-utils';
+import type { DesignItem, MockupFolder, MockupItem } from '@/types/pod';
+
+type LegacyMockup = Partial<MockupItem> & { isVideo?: boolean; mimeType?: string };
+type LegacyDesign = Partial<DesignItem> & { apparelType?: string };
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,7 +18,7 @@ export const revalidate = 0;
  * GET /api/admin/sample-data
  * Returns the current global sample data statistics from database (with fallback to static constants).
  */
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await requireAdmin();
     if (!session) {
@@ -27,18 +32,14 @@ export async function GET(request: NextRequest) {
       WHERE user_id = 'user-default'
     `;
 
-    let folders: any[] = DEFAULT_FOLDERS;
-    let mockups: any[] = SAMPLE_MOCKUPS;
-    let designs: any[] = SAMPLE_DESIGNS;
+    let folders: MockupFolder[] = DEFAULT_FOLDERS;
+    let mockups: LegacyMockup[] = SAMPLE_MOCKUPS;
+    let designs: LegacyDesign[] = SAMPLE_DESIGNS;
 
     if (rows.length > 0) {
-      const parse = (v: any) => {
-        try { return typeof v === 'string' ? JSON.parse(v) : (Array.isArray(v) ? v : []); }
-        catch { return []; }
-      };
-      folders = parse(rows[0].folders);
-      mockups = parse(rows[0].mockups);
-      designs = parse(rows[0].designs);
+      folders = parseJsonArray<MockupFolder>(rows[0].folders);
+      mockups = parseJsonArray<LegacyMockup>(rows[0].mockups);
+      designs = parseJsonArray<LegacyDesign>(rows[0].designs);
     }
 
     return NextResponse.json({
@@ -71,9 +72,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let folders: any[] = [];
-    let mockups: any[] = [];
-    let designs: any[] = [];
+    let folders: MockupFolder[] = [];
+    let mockups: LegacyMockup[] = [];
+    let designs: LegacyDesign[] = [];
 
     const body = await request.json().catch(() => ({}));
 
@@ -95,18 +96,13 @@ export async function POST(request: NextRequest) {
           error: 'Çalışma alanınızda kayıtlı herhangi bir veri bulunamadı. Lütfen önce çalışma alanınıza mockup ve tasarımlarınızı ekleyin.',
         }, { status: 400 });
       }
-
-      const parse = (v: any) => {
-        try { return typeof v === 'string' ? JSON.parse(v) : (Array.isArray(v) ? v : []); }
-        catch { return []; }
-      };
-      folders = parse(rows[0].folders);
-      mockups = parse(rows[0].mockups);
-      designs = parse(rows[0].designs);
+      folders = parseJsonArray<MockupFolder>(rows[0].folders);
+      mockups = parseJsonArray<LegacyMockup>(rows[0].mockups);
+      designs = parseJsonArray<LegacyDesign>(rows[0].designs);
     }
 
     // Normalize types
-    const cleanMockups = mockups.map((m: any) => ({
+    const cleanMockups = mockups.map((m) => ({
       id: m.id,
       name: m.name,
       src: m.src,
@@ -121,7 +117,7 @@ export async function POST(request: NextRequest) {
       mimeType: m.mimeType,
     }));
 
-    const cleanDesigns = designs.map((d: any) => ({
+    const cleanDesigns = designs.map((d) => ({
       id: d.id,
       name: d.name,
       src: d.src,
@@ -200,7 +196,7 @@ export function isProtectedUrl(url: string): boolean {
  * DELETE /api/admin/sample-data
  * Clears the global sample data template.
  */
-export async function DELETE(request: NextRequest) {
+export async function DELETE(_request: NextRequest) {
   try {
     const session = await requireAdmin();
     if (!session) {

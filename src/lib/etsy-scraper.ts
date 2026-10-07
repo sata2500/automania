@@ -28,9 +28,16 @@ export interface ScrapingResult {
     errorType?: 'provider_rate_limited' | 'bot_blocked' | 'network_timeout' | 'provider_unavailable' | 'invalid_response' | 'not_configured';
     retryable?: boolean;
     retryAfterSeconds?: number;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
+
+type EtsySearchListing = {
+  price?: { amount?: number; divisor?: number; currency_code?: string };
+  num_favorers?: number;
+  views?: number;
+  tags?: string[];
+};
 
 export interface ScrapingOptions {
   etsyAccessToken?: string;
@@ -51,11 +58,9 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   const isFast = Boolean(options?.fastMode);
 
   let totalListings = 0;
-  const competitionLevel = 'Bilinmiyor';
   let bestsellerCount = 0;
   let isEtsySuggested = false;
   let autocompleteRank = 0;
-  const opportunityScore = 0;
   let avgPrice = 0;
   let scrapeError: string | null = null;
   const rawMetrics: ScrapingResult['rawMetrics'] = {};
@@ -94,7 +99,7 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
     if (suggestRes.ok) {
       const suggestData = await suggestRes.json();
       const suggestions: string[] = (suggestData.results || [])
-        .map((r: any) => (r.query || r.term || '').toLowerCase())
+        .map((r: { query?: string; term?: string }) => (r.query || r.term || '').toLowerCase())
         .filter(Boolean);
 
       const foundIdx = suggestions.findIndex(s => s === cleanKeyword || s.includes(cleanKeyword));
@@ -223,14 +228,14 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
       }
 
       if (apiRes && apiRes.ok) {
-        const data = await apiRes.json();
+        const data = (await apiRes.json()) as { count?: number; results?: EtsySearchListing[] };
         totalListings = typeof data.count === 'number' ? data.count : 0;
         rawMetrics.method = 'etsy_official_api';
 
         if (data.results && Array.isArray(data.results) && data.results.length > 0) {
           // Calculate Real Average Price
           const prices = data.results
-            .map((item: any) => item.price?.amount ? item.price.amount / (item.price.divisor || 100) : 0)
+            .map((item) => item.price?.amount ? item.price.amount / (item.price.divisor || 100) : 0)
             .filter((p: number) => p > 0 && p < 1000);
           
           if (prices.length > 0) {
@@ -240,13 +245,13 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
 
           // Count High Engagement / Bestseller proxy items
           const highEngagementItems = data.results.filter(
-            (i: any) => (i.num_favorers || 0) >= 50 || (i.views || 0) >= 300
+            (i) => (i.num_favorers || 0) >= 50 || (i.views || 0) >= 300
           ).length;
           bestsellerCount = highEngagementItems;
 
           // Extract Co-occurring Ranks / Top Tags from real Etsy listings (filtered to <= 20 chars)
           const tagMap: Record<string, number> = {};
-          data.results.forEach((item: any) => {
+          data.results.forEach((item) => {
             (item.tags || []).forEach((t: string) => {
               const cleanTag = t.toLowerCase().trim();
               if (cleanTag && cleanTag !== cleanKeyword && cleanTag.length <= 20) {
@@ -260,8 +265,8 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
             .slice(0, 10)
             .map(([t]) => t);
 
-          const totalViews = data.results.reduce((a: number, b: any) => a + (b.views || 0), 0);
-          const totalFavs = data.results.reduce((a: number, b: any) => a + (b.num_favorers || 0), 0);
+          const totalViews = data.results.reduce((a: number, b) => a + (b.views || 0), 0);
+          const totalFavs = data.results.reduce((a: number, b) => a + (b.num_favorers || 0), 0);
 
           rawMetrics.topTags = topTags;
           rawMetrics.avgViews = Math.round(totalViews / data.results.length);
@@ -361,7 +366,12 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   if (workerUrl) {
     try {
       const proxyTarget = `${workerUrl.replace(/\/$/, '')}?q=${encodeURIComponent(cleanKeyword)}`;
-      const workerRes = await fetch(proxyTarget, { signal: AbortSignal.timeout(3000), next: { revalidate: 0 } });
+      const workerSecret = process.env.CLOUDFLARE_WORKER_SECRET;
+      const workerRes = await fetch(proxyTarget, {
+        signal: AbortSignal.timeout(3000),
+        next: { revalidate: 0 },
+        headers: workerSecret ? { 'x-worker-secret': workerSecret } : undefined,
+      });
       if (workerRes.ok) {
         const workerData = await workerRes.json();
         if (workerData.success && workerData.totalListings > 0 && workerData.methodUsed !== 'bing_etsy_index' && workerData.methodUsed !== 'ddg_etsy_index') {

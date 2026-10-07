@@ -3,8 +3,21 @@
  * Deploy this code to your Cloudflare Worker: https://automania-etsy-proxy.salihtanriseven25.workers.dev
  */
 
-export default {
-  async fetch(request, env, ctx) {
+/**
+ * Güvenlik: Worker ortamında WORKER_SECRET tanımlanırsa yalnızca
+ * `x-worker-secret` başlığında aynı değeri gönderen istekler (Automania sunucusu,
+ * CLOUDFLARE_WORKER_SECRET) kabul edilir. Tanımlanmazsa Worker herkese açık bir
+ * kazıma proxy'si olarak kötüye kullanılabilir.
+ */
+const worker = {
+  async fetch(request, env) {
+    if (env && env.WORKER_SECRET && request.headers.get('x-worker-secret') !== env.WORKER_SECRET) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -241,3 +254,5 @@ export default {
     );
   },
 };
+
+export default worker;

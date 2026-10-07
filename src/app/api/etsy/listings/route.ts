@@ -1,6 +1,6 @@
 import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import sql, { type DbRow } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
@@ -138,7 +138,7 @@ export async function GET(req: Request) {
     const isStale = total === 0 || !lastSyncedAt || hoursSinceLastSync >= 24;
 
     // Filter in-memory for fast instantaneous client responsiveness
-    const filtered = allRows.filter((r: any) => {
+    const filtered = allRows.filter((r) => {
       // Search
       if (search) {
         const titleMatch = (r.title || '').toLowerCase().includes(search);
@@ -170,7 +170,7 @@ export async function GET(req: Request) {
     });
 
     // Sorting
-    filtered.sort((a: any, b: any) => {
+    filtered.sort((a, b) => {
       if (sortBy === 'score_desc') return (Number(b.seo_score) || 0) - (Number(a.seo_score) || 0);
       if (sortBy === 'score_asc') return (Number(a.seo_score) || 0) - (Number(b.seo_score) || 0);
       if (sortBy === 'views_desc') return (Number(b.views) || 0) - (Number(a.views) || 0);
@@ -218,15 +218,26 @@ export async function GET(req: Request) {
  * Helper to fetch all paginated listings for a specific state from Etsy OpenAPI v3.
  * Supports intelligent delta termination for large shops while ensuring complete sync for standard shops.
  */
+/** Etsy OpenAPI v3 listing yanıtı (yalnızca kullanılan alanlar). */
+type EtsyApiListing = {
+  listing_id: number | string;
+  updated_timestamp?: number;
+  last_modified_timestamp?: number;
+  state_timestamp?: number;
+  // Etsy yanıtı çok sayıda isteğe bağlı alan içerir; yalnızca okunarak DB'ye eşlenir.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+};
+
 async function fetchAllListingsForState(
   shopId: string,
   state: string,
-  headers: any,
+  headers: Record<string, string>,
   mode: 'smart' | 'full',
-  existingMap: Map<string, any>,
+  existingMap: Map<string, DbRow>,
   maxTimestampInDb: number
-): Promise<{ listings: any[]; totalInEtsy: number }> {
-  const listings: any[] = [];
+): Promise<{ listings: EtsyApiListing[]; totalInEtsy: number }> {
+  const listings: EtsyApiListing[] = [];
   let offset = 0;
   const limit = 100;
   let totalInEtsy = 0;
@@ -244,7 +255,7 @@ async function fetchAllListingsForState(
 
     const data = await res.json();
     totalInEtsy = Number(data.count) || totalInEtsy;
-    const pageResults = Array.isArray(data.results) ? data.results : [];
+    const pageResults: EtsyApiListing[] = Array.isArray(data.results) ? data.results : [];
     
     if (pageResults.length === 0) break;
 
@@ -253,7 +264,7 @@ async function fetchAllListingsForState(
     // Smart Delta optimization for stores with >300 listings:
     // If all items on subsequent pages are older than DB cache, we can safely terminate early.
     if (totalInEtsy > 300 && mode === 'smart' && maxTimestampInDb > 0 && offset > 0) {
-      const allOlderAndCached = pageResults.every((item: any) => {
+      const allOlderAndCached = pageResults.every((item) => {
         const itemTs = Number(item.updated_timestamp || item.last_modified_timestamp || item.state_timestamp || 0);
         const ex = existingMap.get(String(item.listing_id));
         return ex && Number(ex.etsy_updated_timestamp || 0) >= itemTs;
@@ -324,7 +335,7 @@ export async function POST(req: Request) {
     `;
 
     let maxTimestampInDb = 0;
-    const existingMap = new Map<string, any>();
+    const existingMap = new Map<string, DbRow>();
     for (const row of existingDbRows) {
       existingMap.set(String(row.listing_id), row);
       const ts = Number(row.etsy_updated_timestamp || 0);

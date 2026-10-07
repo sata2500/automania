@@ -81,8 +81,8 @@ async function refreshAllKeywords() {
 
       // 250ms throttle between keywords to stay well within Etsy rate limits (10 req/sec)
       await new Promise(r => setTimeout(r, 250));
-    } catch (e: any) {
-      console.log(`⚠️ ERROR: ${e.message}`);
+    } catch (e) {
+      console.log(`⚠️ ERROR: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

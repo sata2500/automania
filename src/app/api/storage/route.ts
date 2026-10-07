@@ -4,6 +4,8 @@ import { userWorkspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 
+type WorkspaceInsert = typeof userWorkspaces.$inferInsert;
+
 function hasTemporaryMediaUrl(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('blob:');
 }
@@ -19,7 +21,7 @@ function payloadContainsTemporaryMedia(body: Record<string, unknown>): boolean {
   ].some(hasTemporaryMediaUrl);
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const session = await getAuthoritativeSession();
     if (!session) {
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
 
     // 2. Perform Save
     // Prepare data to insert/update
-    const insertData: any = {
+    const insertData = {
       userId,
       mockups: mockupsJson,
       designs: designsJson,
@@ -156,10 +158,10 @@ export async function POST(request: Request) {
       etsyCustomColors: customColorsJson,
       etsyGeneratedMockups: generatedMockupsJson,
       updatedAt: new Date()
-    };
+    } as WorkspaceInsert;
 
     // Prepare update data, ignoring nulls for things not provided
-    const updateData: any = { updatedAt: new Date() };
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (hasMockups) updateData.mockups = mockupsJson;
     if (hasDesigns) updateData.designs = designsJson;
     if (hasFolders) updateData.folders = foldersJson;
@@ -178,7 +180,7 @@ export async function POST(request: Request) {
       .values(insertData)
       .onConflictDoUpdate({
         target: userWorkspaces.userId,
-        set: updateData
+        set: updateData as Partial<WorkspaceInsert>
       });
 
     // Fetch the exact Postgres timestamp that was just saved
@@ -195,7 +197,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(_request: Request) {
   try {
     const session = await getAuthoritativeSession();
     if (!session) {

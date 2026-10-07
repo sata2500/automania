@@ -8,6 +8,24 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadSettingRows } from '@/lib/app-settings';
 
+type KeywordMetricsRow = {
+  keyword: string;
+  opportunity_score?: number | null;
+  etsy_score?: number | null;
+  total_listings?: number | null;
+  bestseller_count?: number | null;
+  autocomplete_rank?: number | null;
+  tag_eligible?: boolean | null;
+  avg_price?: string | number | null;
+  raw_metrics?: unknown;
+};
+type ShopSection = { shop_section_id: number | string; title: string };
+type TaxonomyProperty = {
+  name: string;
+  property_id: number;
+  possible_values?: Array<{ name: string; value_id: number }>;
+};
+
 export async function POST(req: Request) {
   try {
     const session = await getAuthoritativeSession();
@@ -98,13 +116,13 @@ export async function POST(req: Request) {
 
     // Extract input keyword strings & apply Trademark Safety Shield
     const rawInputKeywords: string[] = keywords
-      .map((k: any) => (typeof k === 'string' ? k.trim() : (k?.keyword || '').trim()))
+      .map((k: string | { keyword?: string }) => (typeof k === 'string' ? k.trim() : (k?.keyword || '').trim()))
       .filter(Boolean);
     const { safe: safeInputKeywords, removed: trademarkRemovedKeywords } = filterSafeKeywords(rawInputKeywords);
     const uniqueInputKeywords = Array.from(new Set(safeInputKeywords.map(k => k.toLowerCase())));
 
     // Direct Database Keyword Pool Enrichment (Real Etsy Metrics & Co-Occurring Competitor Tags)
-    const dbKeywordsMap = new Map<string, any>();
+    const dbKeywordsMap = new Map<string, KeywordMetricsRow>();
     const coOccurringTagsList: string[] = [];
 
     if (uniqueInputKeywords.length > 0) {
@@ -113,11 +131,11 @@ export async function POST(req: Request) {
           SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, 
                  autocomplete_rank, tag_eligible, avg_price, raw_metrics
           FROM keyword_pool
-          WHERE LOWER(keyword) = ANY(${uniqueInputKeywords as any})
+          WHERE LOWER(keyword) = ANY(${uniqueInputKeywords})
         `;
 
         for (const row of dbKeywords) {
-          dbKeywordsMap.set(row.keyword.toLowerCase(), row);
+          dbKeywordsMap.set(String(row.keyword).toLowerCase(), row as KeywordMetricsRow);
 
           // Extract competitor co-occurring tags from raw_metrics.topTags
           const rm = typeof row.raw_metrics === 'string' ? JSON.parse(row.raw_metrics) : (row.raw_metrics || {});
@@ -149,17 +167,17 @@ export async function POST(req: Request) {
       .slice(0, 15);
 
     // Query DB for evaluated metrics of competitor co-occurring sub-keywords
-    const dbCoOccurringMap = new Map<string, any>();
+    const dbCoOccurringMap = new Map<string, KeywordMetricsRow>();
     if (rankedCoOccurringTags.length > 0) {
       try {
         const dbCoRows = await sql`
           SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, 
                  autocomplete_rank, tag_eligible, avg_price
           FROM keyword_pool
-          WHERE LOWER(keyword) = ANY(${rankedCoOccurringTags as any})
+          WHERE LOWER(keyword) = ANY(${rankedCoOccurringTags})
         `;
         for (const row of dbCoRows) {
-          dbCoOccurringMap.set(row.keyword.toLowerCase(), row);
+          dbCoOccurringMap.set(String(row.keyword).toLowerCase(), row as KeywordMetricsRow);
         }
       } catch (e) {
         console.warn('Error fetching co-occurring metrics from DB:', e);
@@ -244,9 +262,9 @@ export async function POST(req: Request) {
       keywords: formattedKeywords || 'None provided',
       coOccurringTags: formattedCoOccurring,
       taxonomyId: String(taxonomyId || 482),
-      shopSections: shopSections && Array.isArray(shopSections) ? shopSections.map((s: any) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
-      taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? taxonomyProperties.map((p: any) => 
-        `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${p.possible_values.map((v: any) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
+      shopSections: shopSections && Array.isArray(shopSections) ? (shopSections as ShopSection[]).map((s) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
+      taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? (taxonomyProperties as TaxonomyProperty[]).map((p) => 
+        `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${(p.possible_values || []).map((v) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
       ).join('\n   ') : 'None'
     };
 

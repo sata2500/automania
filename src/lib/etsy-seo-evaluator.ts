@@ -68,6 +68,23 @@ export interface SeoEvaluationResult {
   evaluatedAt: string;
 }
 
+/** Anahtar kelime havuzu satırı (veritabanı snake_case veya API camelCase). */
+export type KeywordPoolInputRow = {
+  keyword?: string | null;
+  opportunity_score?: number | string | null;
+  etsy_score?: number | string | null;
+  total_listings?: number | string | null;
+  totalListings?: number | string | null;
+  competition_level?: string | null;
+  competitionLevel?: string | null;
+  bestseller_count?: number | string | null;
+  bestsellerCount?: number | string | null;
+  is_etsy_suggested?: boolean | null;
+  isEtsySuggested?: boolean | null;
+  last_evaluated_at?: string | Date | null;
+  lastEvaluatedAt?: string | Date | null;
+};
+
 /**
  * Calculates a comprehensive 0-100 SEO score for an Etsy listing.
  */
@@ -76,12 +93,11 @@ export function evaluateEtsyListingSeo(params: {
   description?: string | null;
   tags?: string[] | null;
   visionAnalysis?: VisionAnalysisData | null;
-  keywordPoolRows?: any[];
+  keywordPoolRows?: KeywordPoolInputRow[];
 }): SeoEvaluationResult {
   const title = (params.title || '').trim();
   const description = (params.description || '').trim();
   const rawTags = (params.tags || []).map(t => String(t).trim()).filter(Boolean);
-  const vision = params.visionAnalysis || {};
   const poolRows = params.keywordPoolRows || [];
 
   const issues: SeoIssue[] = [];
@@ -96,11 +112,11 @@ export function evaluateEtsyListingSeo(params: {
         lastEval && (Date.now() - new Date(lastEval).getTime() <= 7 * 24 * 60 * 60 * 1000)
       );
 
-      poolMap.set(row.keyword.toLowerCase().trim(), {
-        keyword: row.keyword,
+      poolMap.set(String(row.keyword).toLowerCase().trim(), {
+        keyword: String(row.keyword),
         opportunityScore: Number(row.opportunity_score || row.etsy_score || 0),
         totalListings: Number(row.total_listings || row.totalListings || 0),
-        competitionLevel: row.competition_level || row.competitionLevel || 'Bilinmiyor',
+        competitionLevel: String(row.competition_level || row.competitionLevel || 'Bilinmiyor'),
         bestsellerCount: Number(row.bestseller_count || row.bestsellerCount || 0),
         isEtsySuggested: Boolean(row.is_etsy_suggested || row.isEtsySuggested),
         lastEvaluatedAt: lastEval,
@@ -146,7 +162,6 @@ export function evaluateEtsyListingSeo(params: {
   }
 
   // B. Tag Character Length & Long-Tail Usage (Max 10 pts)
-  let validLengthCount = 0;
   let overLengthCount = 0;
 
   const tagBreakdown: TagMetricBreakdown[] = [];
@@ -161,9 +176,7 @@ export function evaluateEtsyListingSeo(params: {
     const isValidLength = len <= 20;
     const isMultiWord = cleanTag.includes(' ') || cleanTag.includes('-');
 
-    if (isValidLength) {
-      validLengthCount++;
-    } else {
+    if (!isValidLength) {
       overLengthCount++;
     }
 

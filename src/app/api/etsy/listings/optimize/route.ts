@@ -88,14 +88,14 @@ export async function POST(req: Request) {
     // 4. Fetch target listings from DB
     const listings = await sql`
       SELECT * FROM user_etsy_listings 
-      WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds as any})
+      WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})
     `;
 
     if (listings.length === 0) {
       return NextResponse.json({ success: false, error: 'Belirtilen ilanlar veritabanında bulunamadı.' }, { status: 404 });
     }
 
-    const results: any[] = [];
+    const results: Array<Record<string, unknown>> = [];
     const errors: string[] = [];
 
     for (const item of listings) {
