@@ -65,7 +65,8 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Storage GET Error:', error);
-    return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+    // Boş bir 200 yanıtı istemcinin buluttaki veriyi boş sanıp üzerine yazmasına yol açabilir.
+    return NextResponse.json({ error: 'Çalışma alanı yüklenemedi.' }, { status: 503, headers: { 'Retry-After': '5' } });
   }
 }
 

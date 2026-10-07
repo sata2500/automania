@@ -6,6 +6,7 @@ import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/l
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { loadSettingRows } from '@/lib/app-settings';
 
 export async function POST(req: Request) {
   try {
@@ -39,11 +40,7 @@ export async function POST(req: Request) {
     `;
 
     // Get API Key and Models from app_settings or env
-    const settingsRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN ('active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing')
-    `;
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing']);
     
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;

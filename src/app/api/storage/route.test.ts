@@ -13,7 +13,7 @@ vi.mock('@/lib/db', () => ({ db: dbMock, default: vi.fn() }));
 vi.mock('@/db/schema', () => ({ userWorkspaces: { userId: 'user_id', updatedAt: 'updated_at' } }));
 vi.mock('drizzle-orm', () => ({ eq: vi.fn() }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 describe('POST /api/storage', () => {
   it('rejects temporary media URLs before mutating the workspace', async () => {
@@ -33,5 +33,21 @@ describe('POST /api/storage', () => {
     expect(response.status).toBe(422);
     expect(body).toMatchObject({ success: false, code: 'TEMPORARY_MEDIA_URL' });
     expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/storage', () => {
+  it('returns a 5xx instead of an empty workspace when the database fails', async () => {
+    getSessionMock.mockResolvedValue({ id: 'user-test' });
+    dbMock.select.mockImplementation(() => ({
+      from: () => ({ where: () => Promise.reject(new Error('db down')) }),
+    }));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await GET(new Request('http://localhost/api/storage'));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.mockups).toBeUndefined();
   });
 });

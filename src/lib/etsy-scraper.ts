@@ -121,31 +121,22 @@ export async function scrapeEtsyKeywordData(keyword: string, options?: ScrapingO
   // Auto-resolve Etsy credentials from DB if missing in options
   if (!etsyApiKey || !etsyToken) {
     try {
-      const sqlModule = await import('@/lib/db');
-      const sql = sqlModule.default;
-
       if (!etsyApiKey) {
-        const settingsRows = await sql`
-          SELECT setting_key, setting_value 
-          FROM app_settings 
-          WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')
-        `;
+        const { loadSettingRows } = await import('@/lib/app-settings');
+        const settingsRows = await loadSettingRows(['etsy_keystring', 'etsy_shared_secret']);
         for (const r of settingsRows) {
           if (r.setting_key === 'etsy_keystring' && r.setting_value) etsyApiKey = r.setting_value;
           if (r.setting_key === 'etsy_shared_secret' && r.setting_value) etsySecret = r.setting_value;
         }
       }
 
-      if (!etsyToken) {
-        const targetUser = options?.userId;
-        const wsQuery = targetUser
-          ? sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE user_id = ${targetUser} LIMIT 1`
-          : sql`SELECT user_id, etsy_access_token FROM user_workspaces WHERE etsy_access_token IS NOT NULL ORDER BY updated_at DESC LIMIT 1`;
-
-        const wsRows = await wsQuery;
-        if (wsRows.length > 0 && wsRows[0].user_id) {
+      // Yalnızca isteği yapan kullanıcının kendi token'ı kullanılır; başka kullanıcıların
+      // Etsy hesaplarına ait token'lar asla ödünç alınmaz (Etsy API anahtarı tek başına yeterlidir).
+      const targetUser = options?.userId;
+      if (!etsyToken && targetUser) {
+        {
           const { getValidEtsyToken } = await import('@/lib/etsy-token-manager');
-          const tokenRes = await getValidEtsyToken(wsRows[0].user_id);
+          const tokenRes = await getValidEtsyToken(targetUser);
           if (tokenRes.success && tokenRes.access_token) {
             etsyToken = tokenRes.access_token;
             etsyApiKey = tokenRes.api_key || etsyApiKey;

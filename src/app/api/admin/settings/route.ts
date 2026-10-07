@@ -3,6 +3,7 @@ import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
 import { maskSettingValue, shouldPreserveSecretValue } from '@/lib/setting-security';
 import { writeAuditLog } from '@/lib/audit-log';
+import { encodeSettingValue, loadSettingRows } from '@/lib/app-settings';
 
 const ALLOWED_SETTING_KEYS = new Set([
   'active_ai_provider',
@@ -39,11 +40,10 @@ export async function GET(_request: NextRequest) {
     const session = await requireAdmin();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const rows = await sql`SELECT setting_key, setting_value FROM app_settings`;
+    const rows = await loadSettingRows();
     const settings: Record<string, string> = {};
     for (const row of rows) {
-      const key = String(row.setting_key || '');
-      settings[key] = maskSettingValue(key, row.setting_value);
+      settings[row.setting_key] = maskSettingValue(row.setting_key, row.setting_value);
     }
 
     return NextResponse.json({ settings });
@@ -79,17 +79,17 @@ export async function POST(request: NextRequest) {
       // Masked or empty secret values mean “leave the existing secret unchanged”.
       if (shouldPreserveSecretValue(key, rawValue)) continue;
 
+      const storedValue = encodeSettingValue(key, rawValue);
       await sql`
         INSERT INTO app_settings (id, setting_key, setting_value)
-        VALUES (${key}, ${key}, ${rawValue})
+        VALUES (${key}, ${key}, ${storedValue})
         ON CONFLICT (setting_key)
         DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
       `;
       changedKeys.push(key);
 
-      if (key === 'scraping_api_key') {
-        await sql`UPDATE user_workspaces SET scraping_api_key = ${rawValue} WHERE user_id = ${session.id}`.catch(() => {});
-      } else if (key === 'scraping_provider') {
+      // scraping_api_key yalnızca (şifreli) global ayar olarak saklanır; kullanıcı satırına kopyalanmaz.
+      if (key === 'scraping_provider') {
         await sql`UPDATE user_workspaces SET scraping_provider = ${rawValue} WHERE user_id = ${session.id}`.catch(() => {});
       } else if (key === 'cloudflare_worker_url') {
         await sql`UPDATE user_workspaces SET cloudflare_worker_url = ${rawValue} WHERE user_id = ${session.id}`.catch(() => {});

@@ -78,7 +78,7 @@ export interface GeneratedVideo {
 
 // ─── Config Loader ───────────────────────────────────────────────────────────
 
-import { sql } from '@/lib/db';
+import { loadSettingRows } from '@/lib/app-settings';
 
 /**
  * Admin DB'den AI provider konfigürasyonunu okur.
@@ -88,7 +88,7 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
   const settings: Record<string, string> = {};
   
   try {
-    const rows = await sql`SELECT setting_key, setting_value FROM app_settings`;
+    const rows = await loadSettingRows();
     for (const row of rows) {
       if (row.setting_key && row.setting_value) {
         settings[row.setting_key] = row.setting_value;

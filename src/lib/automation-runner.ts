@@ -12,6 +12,7 @@ import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeGreenBackground } from '@/lib/chroma-key';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
+import { loadSetting } from '@/lib/app-settings';
 import { loadImageForUser } from '@/lib/media-source';
 import type { DesignItem, MockupItem } from '@/types/pod';
 import type { AutomationRunSteps } from '@/types/templates';
@@ -28,8 +29,7 @@ export type AutomationRunOutcome =
 
 async function loadPromptSetting(key: string): Promise<string> {
   try {
-    const rows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = ${key}`;
-    return rows.length > 0 && rows[0].setting_value ? String(rows[0].setting_value) : '';
+    return (await loadSetting(key)) ?? '';
   } catch (error) {
     console.error(`[Automation] Failed to load prompt setting ${key}`, error);
     return '';

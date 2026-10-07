@@ -14,6 +14,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import type { EvaluatedKeyword } from '@/types/pod';
+import { loadSettingRows } from '@/lib/app-settings';
 
 export const maxDuration = 60; // Allow up to 60s for vision AI + synchronous Etsy keyword & competitor tag evaluation
 
@@ -194,16 +195,14 @@ export async function POST(request: Request) {
     let workspaceRows: Array<{
       user_id: string;
       etsy_shop_id: string | null;
-      etsy_access_token: string | null;
       openrouter_model: string | null;
-      scraping_api_key: string | null;
       scraping_provider: string | null;
       cloudflare_worker_url: string | null;
     }> = [];
 
     if (session) {
       workspaceRows = (await sql`
-        SELECT user_id, etsy_shop_id, etsy_access_token, openrouter_model, scraping_api_key, scraping_provider, cloudflare_worker_url 
+        SELECT user_id, etsy_shop_id, openrouter_model, scraping_provider, cloudflare_worker_url 
         FROM user_workspaces
         WHERE user_id = ${session.id}
         LIMIT 1
@@ -211,21 +210,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Global Sistem Ayarlarını Çek (API Anahtarları, Vision Modelleri, Prompts, Etsy API Key)
-    const settingsRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN (
-        'active_ai_provider', 
-        'openrouter_api_key', 
-        'openrouter_model_vision', 
-        'gemini_api_key', 
-        'gemini_model_vision', 
-        'ai_prompt_analyze_design',
-        'etsy_keystring',
-        'etsy_shared_secret',
-        'scraping_api_key'
-      )
-    `;
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision', 'ai_prompt_analyze_design', 'etsy_keystring', 'etsy_shared_secret', 'scraping_api_key']);
     
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;
@@ -235,7 +220,7 @@ export async function POST(request: Request) {
     let customPrompt: string | null = null;
     let etsyApiKey = process.env.ETSY_API_KEY;
     let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
-    let scrapingApiKey = workspaceRows[0]?.scraping_api_key || process.env.SCRAPER_API_KEY || '';
+    let scrapingApiKey = process.env.SCRAPER_API_KEY || '';
     const scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
     const workerUrl = (workspaceRows.length > 0 ? workspaceRows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
     
@@ -248,7 +233,7 @@ export async function POST(request: Request) {
       if (row.setting_key === 'ai_prompt_analyze_design') customPrompt = row.setting_value;
       if (row.setting_key === 'etsy_keystring' && row.setting_value) etsyApiKey = row.setting_value;
       if (row.setting_key === 'etsy_shared_secret' && row.setting_value) etsySharedSecret = row.setting_value;
-      if (row.setting_key === 'scraping_api_key' && row.setting_value && !scrapingApiKey) scrapingApiKey = row.setting_value;
+      if (row.setting_key === 'scraping_api_key' && row.setting_value) scrapingApiKey = row.setting_value;
     }
 
     const apiKey = activeAiProvider === 'gemini' 

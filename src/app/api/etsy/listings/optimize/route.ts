@@ -5,6 +5,7 @@ import { consumeRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo } from '@/lib/seasonality';
+import { loadSettingRows } from '@/lib/app-settings';
 
 export const maxDuration = 60;
 
@@ -42,18 +43,7 @@ export async function POST(req: Request) {
     }
 
     // 1. Fetch AI Model Settings from app_settings
-    const settingsRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN (
-        'active_ai_provider', 
-        'openrouter_api_key', 
-        'openrouter_model_reasoning', 
-        'gemini_api_key', 
-        'gemini_model_reasoning',
-        'ai_prompt_generate_listing'
-      )
-    `;
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing']);
 
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;

@@ -1,3 +1,4 @@
+import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -30,8 +31,7 @@ async function getApiKey(provider: AiProvider): Promise<string | null> {
   const envKey = provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.OPENROUTER_API_KEY;
 
   try {
-    const rows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = ${settingKey} LIMIT 1`;
-    const configuredKey = rows?.[0]?.setting_value;
+    const configuredKey = await loadSetting(settingKey);
     if (typeof configuredKey === 'string' && configuredKey.trim()) {
       return configuredKey.trim();
     }

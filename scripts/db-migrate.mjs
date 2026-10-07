@@ -41,7 +41,8 @@ async function main() {
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS cloudflare_worker_url VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_verifier VARCHAR(500)`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_pkce_state VARCHAR(500)`;
-    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_refresh_token VARCHAR(500)`;
+    await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_refresh_token TEXT`;
+    await sql`ALTER TABLE user_workspaces ALTER COLUMN etsy_refresh_token TYPE TEXT`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_token_expires_at TIMESTAMP`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_access_token TEXT`;
     await sql`ALTER TABLE user_workspaces ADD COLUMN IF NOT EXISTS etsy_shop_id VARCHAR(200)`;

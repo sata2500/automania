@@ -1,8 +1,10 @@
 import type { NextRequest } from 'next/server';
+import { storeEtsyTokens } from '@/lib/etsy-token-manager';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
+import { loadSettingRows } from '@/lib/app-settings';
 
 export async function GET(req: NextRequest) {
   try {
@@ -66,16 +68,12 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Fetch Etsy Keystring & Shared Secret from global app_settings
-    const settingsRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret')
-    `;
+    const settingsRows = await loadSettingRows(['etsy_keystring', 'etsy_shared_secret']);
     let etsyApiKey = process.env.ETSY_API_KEY;
     let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
     for (const row of settingsRows) {
-      if (row.setting_key === 'etsy_keystring') etsyApiKey = row.setting_value;
-      if (row.setting_key === 'etsy_shared_secret') etsySharedSecret = row.setting_value;
+      if (row.setting_key === 'etsy_keystring' && row.setting_value) etsyApiKey = row.setting_value;
+      if (row.setting_key === 'etsy_shared_secret' && row.setting_value) etsySharedSecret = row.setting_value;
     }
 
     if (!etsyApiKey) {
@@ -139,17 +137,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. Save tokens and shop_id to database
-    await sql`
-      UPDATE user_workspaces 
-      SET 
-        etsy_access_token = ${access_token},
-        etsy_refresh_token = ${refresh_token},
-        etsy_token_expires_at = ${expiresAt.toISOString()},
-        etsy_shop_id = ${shopId},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ${session.id}
-    `;
+    // 6. Save tokens (encrypted) and shop_id to database
+    await storeEtsyTokens({
+      userId: session.id,
+      accessToken: access_token,
+      refreshToken: refresh_token,
+      expiresAt,
+      shopId,
+    });
+    // PKCE state/verifier tek kullanımlıktır.
+    await sql`UPDATE user_workspaces SET etsy_pkce_state = NULL, etsy_pkce_verifier = NULL WHERE user_id = ${session.id}`;
 
     // 7. Redirect back with success flag
     const response = NextResponse.redirect(getRedirectUrl(`etsy_success=true`));

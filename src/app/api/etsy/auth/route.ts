@@ -1,3 +1,4 @@
+import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import sql from '@/lib/db';
@@ -14,12 +15,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
 
     // 1. Fetch Etsy Keystring from global app_settings
-    const settingsRows = await sql`
-      SELECT setting_value 
-      FROM app_settings 
-      WHERE setting_key = 'etsy_keystring'
-    `;
-    const etsyApiKey = settingsRows[0]?.setting_value || process.env.ETSY_API_KEY;
+    const etsyApiKey = (await loadSetting('etsy_keystring')) || process.env.ETSY_API_KEY;
 
     if (!etsyApiKey) {
       return NextResponse.json({ 

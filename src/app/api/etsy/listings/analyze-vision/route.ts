@@ -9,6 +9,7 @@ import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } fr
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
+import { loadSettingRows } from '@/lib/app-settings';
 
 export const maxDuration = 60;
 
@@ -162,17 +163,7 @@ export async function POST(req: Request) {
     }
 
     // 1. Fetch AI Model Settings from app_settings
-    const settingsRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN (
-        'active_ai_provider', 
-        'openrouter_api_key', 
-        'openrouter_model_vision', 
-        'gemini_api_key', 
-        'gemini_model_vision'
-      )
-    `;
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision']);
 
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;

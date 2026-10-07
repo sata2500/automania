@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql, { ensureKeywordPoolColumns } from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
-import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
 
@@ -36,41 +36,8 @@ export async function POST(req: Request) {
     }
 
     // 1. Fetch Etsy OAuth Token & Shop credentials from user_workspaces
-    const workspaceRows = await sql`
-      SELECT user_id, etsy_shop_id, scraping_api_key, scraping_provider, cloudflare_worker_url 
-      FROM user_workspaces
-      WHERE user_id = ${session.id}
-      LIMIT 1
-    `;
-
-    // 2. Fetch App Settings
-    const appSettingRows = await sql`
-      SELECT setting_key, setting_value 
-      FROM app_settings 
-      WHERE setting_key IN ('etsy_keystring', 'etsy_shared_secret', 'scraping_api_key')
-    `;
-
-    let etsyApiKey = process.env.ETSY_API_KEY;
-    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
-    let scrapingApiKey = workspaceRows[0]?.scraping_api_key || process.env.SCRAPER_API_KEY || '';
-    const scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
-    const workerUrl = workspaceRows[0]?.cloudflare_worker_url || process.env.CLOUDFLARE_WORKER_URL;
-
-    for (const r of appSettingRows) {
-      if (r.setting_key === 'etsy_keystring' && r.setting_value) etsyApiKey = r.setting_value;
-      if (r.setting_key === 'etsy_shared_secret' && r.setting_value) etsySharedSecret = r.setting_value;
-      if (r.setting_key === 'scraping_api_key' && r.setting_value && !scrapingApiKey) scrapingApiKey = r.setting_value;
-    }
-
-    let etsyAccessToken: string | undefined = undefined;
-    if (workspaceRows.length > 0 && workspaceRows[0].user_id) {
-      const tokenRes = await getValidEtsyToken(workspaceRows[0].user_id);
-      if (tokenRes.success && tokenRes.access_token) {
-        etsyAccessToken = tokenRes.access_token;
-        etsyApiKey = tokenRes.api_key || etsyApiKey;
-        etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
-      }
-    }
+    const { etsyAccessToken, etsyApiKey, etsySharedSecret, scrapingApiKey, scrapingProvider, workerUrl } =
+      await loadScraperCredentials(session.id);
 
     let targetKeywords: { id: string, keyword: string }[] = [];
 
