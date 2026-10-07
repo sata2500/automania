@@ -7,12 +7,13 @@
  */
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeGreenBackground } from '@/lib/chroma-key';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { loadSetting } from '@/lib/app-settings';
+import { getConfiguredSecret } from '@/lib/internal-auth';
 import { loadImageForUser } from '@/lib/media-source';
 import type { DesignItem, MockupItem } from '@/types/pod';
 import type { AutomationRunSteps } from '@/types/templates';
@@ -222,4 +223,81 @@ export async function failStaleAutomationRuns(olderThanMinutes = 30): Promise<nu
     RETURNING id
   `;
   return rows.length;
+}
+
+const INITIAL_STEPS: AutomationRunSteps = {
+  designGeneration: { status: 'pending' },
+  backgroundRemoval: { status: 'pending' },
+  mockupRender: { status: 'pending' },
+  videoGeneration: { status: 'pending' },
+  seoGeneration: { status: 'pending' },
+  listingCreation: { status: 'pending' },
+};
+
+export type CreateRunResult =
+  | { ok: true; runId: string }
+  | { ok: false; reason: 'not_found' | 'inactive' | 'already_running'; runId?: string };
+
+/** Bir şablon için 'pending' durumunda yeni bir çalıştırma kaydı oluşturur. */
+export async function createAutomationRun(input: {
+  templateId: string;
+  userId: string;
+  triggerType: 'manual' | 'scheduled';
+  allowConcurrent?: boolean;
+}): Promise<CreateRunResult> {
+  const [template] = await db
+    .select({ id: podTemplates.id, isActive: podTemplates.isActive })
+    .from(podTemplates)
+    .where(and(eq(podTemplates.id, input.templateId), eq(podTemplates.userId, input.userId)));
+  if (!template) return { ok: false, reason: 'not_found' };
+  if (!template.isActive) return { ok: false, reason: 'inactive' };
+
+  if (!input.allowConcurrent) {
+    const [activeRun] = await db
+      .select({ id: automationRuns.id })
+      .from(automationRuns)
+      .where(and(
+        eq(automationRuns.templateId, input.templateId),
+        eq(automationRuns.userId, input.userId),
+        inArray(automationRuns.status, ['pending', 'running']),
+      ))
+      .limit(1);
+    if (activeRun) return { ok: false, reason: 'already_running', runId: activeRun.id };
+  }
+
+  const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  await db.insert(automationRuns).values({
+    id: runId,
+    templateId: input.templateId,
+    userId: input.userId,
+    status: 'pending',
+    steps: INITIAL_STEPS,
+    triggerType: input.triggerType,
+  });
+  return { ok: true, runId };
+}
+
+/**
+ * Bekleyen çalıştırmayı işletir. INTERNAL_API_TOKEN tanımlıysa her çalıştırma
+ * `/api/automation/execute` üzerinden kendi fonksiyon çağrısında (kendi süre
+ * sınırıyla) çalışır; tanımlı değilse aynı süreç içinde çalıştırılır.
+ */
+export async function dispatchAutomationRun(input: AutomationRunInput, appOrigin: string): Promise<void> {
+  const token = getConfiguredSecret('INTERNAL_API_TOKEN');
+  if (!token) {
+    await executeAutomationRun(input);
+    return;
+  }
+  try {
+    const res = await fetch(new URL('/api/automation/execute', appOrigin), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Token': token },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok && res.status !== 409) {
+      console.error('[Automation] Execute dispatch failed', { runId: input.runId, status: res.status });
+    }
+  } catch (error) {
+    console.error('[Automation] Execute dispatch error', { runId: input.runId, error: error instanceof Error ? error.message : error });
+  }
 }

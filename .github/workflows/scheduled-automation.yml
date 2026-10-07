@@ -1,0 +1,30 @@
+name: Scheduled automation
+
+# Şablon zamanlamaları saat bazındadır. Vercel Hobby planı yalnızca günlük cron
+# desteklediği için tetikleyici GitHub Actions üzerinden saatte bir çalışır.
+# Gerekli repository secret'ları: AUTOMATION_APP_URL (ör. https://automania.example)
+# ve CRON_SECRET (Vercel ortamındaki CRON_SECRET ile aynı, en az 32 karakter).
+on:
+  schedule:
+    - cron: '2 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger due automation templates
+        env:
+          APP_URL: ${{ secrets.AUTOMATION_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "AUTOMATION_APP_URL / CRON_SECRET tanımlı değil; atlanıyor."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL%/}/api/cron/automation"

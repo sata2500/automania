@@ -56,6 +56,8 @@ const cases: Array<{ name: string; path: string; init?: RequestInit; expected: n
   { name: 'automation poll GET', path: '/api/automation/poll/run-test', expected: 401 },
   { name: 'automation execute without token', path: '/api/automation/execute', init: json({}), expected: 401 },
   { name: 'automation execute legacy dev token', path: '/api/automation/execute', init: { ...json({}), headers: { 'Content-Type': 'application/json', 'X-Internal-Token': 'dev-internal' } }, expected: 401 },
+  { name: 'cron automation without secret', path: '/api/cron/automation', expected: 401 },
+  { name: 'cron automation wrong secret', path: '/api/cron/automation', init: { headers: { Authorization: 'Bearer wrong' } }, expected: 401 },
   { name: 'templates GET', path: '/api/templates', expected: 401 },
   { name: 'job status GET', path: '/api/jobs/job-test', expected: 401 },
   { name: 'users GET', path: '/api/users', expected: 403 },

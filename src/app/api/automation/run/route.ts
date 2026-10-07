@@ -17,12 +17,11 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
-import { automationRuns, podTemplates } from '@/db/schema';
+import { automationRuns } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { executeAutomationRun } from '@/lib/automation-runner';
-import { eq, and, desc, inArray } from 'drizzle-orm';
-import { AutomationRunSteps } from '@/types/templates';
+import { createAutomationRun, executeAutomationRun } from '@/lib/automation-runner';
+import { eq, and, desc } from 'drizzle-orm';
 
 export const maxDuration = 300;
 
@@ -51,54 +50,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'templateId zorunludur.' }, { status: 400 });
     }
 
-    // Şablonu doğrula
-    const [template] = await db
-      .select()
-      .from(podTemplates)
-      .where(and(eq(podTemplates.id, templateId), eq(podTemplates.userId, session.id)));
-
-    if (!template) {
-      return NextResponse.json({ error: 'Şablon bulunamadı.' }, { status: 404 });
+    const created = await createAutomationRun({ templateId, userId: session.id, triggerType });
+    if (!created.ok) {
+      if (created.reason === 'not_found') return NextResponse.json({ error: 'Şablon bulunamadı.' }, { status: 404 });
+      if (created.reason === 'inactive') return NextResponse.json({ error: 'Şablon pasif durumda.' }, { status: 400 });
+      return NextResponse.json({ error: 'Bu şablon için zaten devam eden bir çalıştırma var.', runId: created.runId }, { status: 409 });
     }
 
-    if (!template.isActive) {
-      return NextResponse.json({ error: 'Şablon pasif durumda.' }, { status: 400 });
-    }
-
-    // Aynı şablon için eşzamanlı ikinci bir çalıştırmayı engelle
-    const [activeRun] = await db
-      .select({ id: automationRuns.id })
-      .from(automationRuns)
-      .where(and(
-        eq(automationRuns.templateId, templateId),
-        eq(automationRuns.userId, session.id),
-        inArray(automationRuns.status, ['pending', 'running']),
-      ))
-      .limit(1);
-    if (activeRun) {
-      return NextResponse.json({ error: 'Bu şablon için zaten devam eden bir çalıştırma var.', runId: activeRun.id }, { status: 409 });
-    }
-
-    const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-    const initialSteps: AutomationRunSteps = {
-      designGeneration:  { status: 'pending' as const },
-      backgroundRemoval: { status: 'pending' as const },
-      mockupRender:      { status: 'pending' as const },
-      videoGeneration:   { status: 'pending' as const },
-      seoGeneration:     { status: 'pending' as const },
-      listingCreation:   { status: 'pending' as const },
-    };
-
-    await db.insert(automationRuns).values({
-      id: runId,
-      templateId,
-      userId: session.id,
-      status: 'pending',
-      steps: initialSteps,
-      triggerType,
-    });
-
+    const runId = created.runId;
     const userId = session.id;
     after(async () => {
       await executeAutomationRun({ runId, templateId, userId });
