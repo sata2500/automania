@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -78,11 +79,14 @@ const themeScript = `
 
 import { Providers } from '@/components/common/Providers';
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Proxy her istek için bir CSP nonce'u üretir; satır içi betikler bu nonce ile çalışır.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="tr"
@@ -93,8 +97,7 @@ export default function RootLayout({
     >
       <head>
         {/* Blocking theme script — prevents flash of unstyled content (FOUC) */}
-        { }
-        <Script id="automania-theme-init" strategy="beforeInteractive">
+        <Script id="automania-theme-init" strategy="beforeInteractive" nonce={nonce}>
           {themeScript}
         </Script>
       </head>

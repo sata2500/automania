@@ -26,7 +26,7 @@ vi.mock('@/lib/r2', () => ({
   extractKeyFromUrlOrKey: vi.fn(),
 }));
 vi.mock('@/lib/upload-security', () => ({ isOwnedUploadName: vi.fn(() => false) }));
-vi.mock('@/lib/request-rate-limit', () => ({ consumeRateLimit: vi.fn(() => ({ allowed: true, retryAfterSeconds: 0 })) }));
+vi.mock('@/lib/request-rate-limit', () => ({ checkRateLimit: vi.fn(async () => ({ allowed: true, retryAfterSeconds: 0 })) }));
 vi.mock('@/lib/audit-log', () => ({ writeAuditLog: vi.fn() }));
 
 import { POST } from './route';

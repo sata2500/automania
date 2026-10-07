@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo } from '@/lib/seasonality';
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`ai:etsy-optimize:${session.id}`, 10, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`ai:etsy-optimize:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Etsy SEO AI optimize limiti aşıldı.' }, {
         status: 429,

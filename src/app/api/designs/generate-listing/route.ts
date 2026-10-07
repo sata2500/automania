@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadSettingRows } from '@/lib/app-settings';
 
 export async function POST(req: Request) {
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const session = await getAuthoritativeSession();
     if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-    const rateLimit = consumeRateLimit(`ai:generate-listing:${session.id}`, 10, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`ai:generate-listing:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'AI listing üretim limiti aşıldı.' }, {
         status: 429,

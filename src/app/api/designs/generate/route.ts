@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { sql } from '@/lib/db';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 120;
 
@@ -52,14 +52,12 @@ export async function POST(req: NextRequest) {
       : 1;
 
     // Her görsel kotadan bir birim düşer.
-    for (let i = 0; i < count; i++) {
-      const rateLimit = consumeRateLimit(`ai:generate-image:${session.id}`, IMAGE_QUOTA_PER_HOUR, 60 * 60_000);
-      if (!rateLimit.allowed) {
-        return NextResponse.json({ error: 'Saatlik görsel üretim limitine ulaşıldı. Lütfen daha sonra tekrar deneyin.' }, {
-          status: 429,
-          headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
-        });
-      }
+    const rateLimit = await checkRateLimit(`ai:generate-image:${session.id}`, IMAGE_QUOTA_PER_HOUR, 60 * 60_000, count);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ error: 'Saatlik görsel üretim limitine ulaşıldı. Lütfen daha sonra tekrar deneyin.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
     }
 
     const config = await loadAIConfig();

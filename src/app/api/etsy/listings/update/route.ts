@@ -3,7 +3,7 @@ import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 60;
 
@@ -18,7 +18,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`etsy:update:${session.id}`, 20, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`etsy:update:${session.id}`, 20, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Etsy güncelleme limiti aşıldı.' }, {
         status: 429,

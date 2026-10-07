@@ -3,7 +3,7 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { recolorDesign } from '@/lib/recolor';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadImageForUser, MediaSourceError } from '@/lib/media-source';
 
 export const maxDuration = 60;
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`image:recolor:${session.id}`, 30, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`image:recolor:${session.id}`, 30, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Renk dönüştürme limiti aşıldı. Lütfen biraz sonra tekrar deneyin.' }, {
         status: 429,

@@ -13,7 +13,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { extractKeyFromUrlOrKey, getBucketName, getPublicBaseUrl, getR2Client, isR2Configured } from '@/lib/r2';
-import { isOwnedUploadName, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/upload-security';
+import { detectMimeFromMagicBytes, isOwnedUploadName, MAX_IMAGE_UPLOAD_BYTES } from '@/lib/upload-security';
 
 export const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024;
 const REMOTE_FETCH_TIMEOUT_MS = 15_000;
@@ -219,5 +219,45 @@ export async function loadImageForUser(
 
     case 'remote':
       return readRemote(source.url, maxBytes);
+  }
+}
+
+const VISION_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
+/**
+ * Görseli yükler ve AI vision modellerinin kabul ettiği bir biçimde döner.
+ * PNG/JPEG/WebP/GIF dışındaki biçimler (ör. SVG demo görselleri) PNG'ye dönüştürülür.
+ * `userId` null ise (misafir) yalnızca data URL'leri ve paketlenmiş demo görselleri kabul edilir.
+ */
+export async function loadVisionImage(
+  userId: string | null,
+  src: string,
+  options: { appOrigin?: string; maxBytes?: number } = {},
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  let buffer: Buffer;
+  if (userId) {
+    buffer = await loadImageForUser(userId, src, options);
+  } else {
+    let kind: MediaSource['kind'] | null = null;
+    try {
+      kind = classifyMediaSource(src, options.appOrigin).kind;
+    } catch {
+      kind = null;
+    }
+    if (kind !== 'data' && kind !== 'demo') {
+      throw new MediaSourceError('Bu görseli analiz etmek için giriş yapmalısınız.', 401);
+    }
+    // Misafirlerin demo/data görselleri için sahiplik kontrolü gerekmez; userId yerine sabit bir değer kullanılır.
+    buffer = await loadImageForUser('guest', src, options);
+  }
+
+  const detected = detectMimeFromMagicBytes(buffer);
+  if (detected && VISION_MIME_TYPES.has(detected)) return { buffer, mimeType: detected };
+
+  try {
+    const { default: sharp } = await import('sharp');
+    return { buffer: await sharp(buffer).png().toBuffer(), mimeType: 'image/png' };
+  } catch {
+    throw new MediaSourceError('Görsel biçimi desteklenmiyor.', 415);
   }
 }

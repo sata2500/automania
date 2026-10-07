@@ -9,7 +9,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
 import { isOwnedUploadName } from '@/lib/upload-security';
 import { validateEtsyDraftPreflight } from '@/lib/etsy-preflight';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { writeAuditLog } from '@/lib/audit-log';
 import {
   hasExplicitLivePublishConfirmation,
@@ -192,7 +192,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const rateLimit = consumeRateLimit(
+    const rateLimit = await checkRateLimit(
       `etsy:publish:${state}:${session.id}`,
       state === 'active' ? 2 : 5,
       state === 'active' ? 30 * 60_000 : 10 * 60_000,

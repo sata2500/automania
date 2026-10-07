@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
     const session = await requireAdmin();
     if (!session) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-    const rateLimit = consumeRateLimit(`admin:keywords:bulk-update:${session.id}`, 10, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`admin:keywords:bulk-update:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Toplu keyword güncelleme limiti aşıldı.' }, {
         status: 429,

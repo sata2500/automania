@@ -3,7 +3,7 @@ import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     // This is an application-level guard for expensive provider calls, not an
     // Etsy quota claim. A request evaluates at most 20 keywords sequentially.
-    const rateLimit = consumeRateLimit(`scraper:evaluate:${session.id}`, 10, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`scraper:evaluate:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({
         success: false,

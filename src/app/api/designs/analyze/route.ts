@@ -6,15 +6,11 @@ import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
-import fs from 'fs/promises';
-import fsSync from 'fs';
-import path from 'path';
 import type { EvaluatedKeyword } from '@/types/pod';
 import { loadSettingRows } from '@/lib/app-settings';
+import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
 
 export const maxDuration = 60; // Allow up to 60s for vision AI + synchronous Etsy keyword & competitor tag evaluation
 
@@ -34,139 +30,6 @@ type KeywordPoolRow = EvaluatedKeyword & {
   last_evaluated_at?: string | Date | null;
 };
 
-async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  // 1. Data URL (Base64)
-  const base64Match = src.match(/^data:([^;]+);base64,([\s\S]+)$/);
-  if (base64Match) {
-    const rawMime = base64Match[1].split(';')[0].trim().toLowerCase();
-    const cleanBase64 = base64Match[2].replace(/\s+/g, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
-    return { buffer, mimeType: rawMime || 'image/png' };
-  }
-
-  // 2. Cloudflare R2 Proxy Path (/api/r2/...) or explicit R2 key
-  if (src.startsWith('/api/r2/') || src.startsWith('api/r2/')) {
-    const key = extractKeyFromUrlOrKey(src);
-    if (isR2Configured() && key) {
-      try {
-        const client = getR2Client();
-        const bucket = getBucketName();
-        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-        if (res.Body) {
-          const bytes = await res.Body.transformToByteArray();
-          const ext = path.extname(key).toLowerCase();
-          const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp')).split(';')[0].trim();
-          return { buffer: Buffer.from(bytes), mimeType };
-        }
-      } catch (r2Err) {
-        console.warn('[Analyze API] Direct R2 get failed, trying local fallback:', r2Err);
-      }
-    }
-    const localFallbackPath = path.join(process.cwd(), '.data', 'uploads', path.basename(key));
-    if (fsSync.existsSync(localFallbackPath)) {
-      const buffer = await fs.readFile(localFallbackPath);
-      const ext = path.extname(key).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
-      return { buffer, mimeType };
-    }
-  }
-
-  // 3. Local Uploads (/api/uploads/...)
-  if (src.startsWith('/api/uploads/')) {
-    const filename = path.basename(src);
-    const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
-    if (fsSync.existsSync(filePath)) {
-      const buffer = await fs.readFile(filePath);
-      const ext = path.extname(filename).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
-      return { buffer, mimeType };
-    }
-  }
-
-  // 4. Sample Uploads (/sample-uploads/...)
-  if (src.startsWith('/sample-uploads/')) {
-    const rel = src.replace(/^\/sample-uploads\//, '');
-    const filePath = path.join(process.cwd(), 'public', 'sample-uploads', rel);
-    if (fsSync.existsSync(filePath)) {
-      const buffer = await fs.readFile(filePath);
-      const ext = path.extname(rel).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
-      return { buffer, mimeType };
-    }
-  }
-
-  // 5. Generic Local Path (starts with /)
-  if (src.startsWith('/')) {
-    const cleanPath = src.split('?')[0];
-    const filename = path.basename(cleanPath);
-    
-    // Check .data/uploads first
-    const dataUploadsPath = path.join(process.cwd(), '.data', 'uploads', filename);
-    if (fsSync.existsSync(dataUploadsPath)) {
-      const buffer = await fs.readFile(dataUploadsPath);
-      const ext = path.extname(filename).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
-      return { buffer, mimeType };
-    }
-
-    // Check public directory
-    const publicPath = path.join(process.cwd(), 'public', cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
-    if (fsSync.existsSync(publicPath)) {
-      const buffer = await fs.readFile(publicPath);
-      const ext = path.extname(cleanPath).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp';
-      return { buffer, mimeType };
-    }
-  }
-
-  // 6. Remote URL (http:// or https:// - e.g. Cloudflare R2 Public URL or CDN)
-  if (src.startsWith('http://') || src.startsWith('https://')) {
-    // If it's an R2 URL and R2 is configured, try direct S3 fetch first for performance & speed
-    if (isR2Configured()) {
-      try {
-        const key = extractKeyFromUrlOrKey(src);
-        if (key) {
-          const client = getR2Client();
-          const bucket = getBucketName();
-          const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-          if (res.Body) {
-            const bytes = await res.Body.transformToByteArray();
-            const ext = path.extname(key).toLowerCase();
-            const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/webp')).split(';')[0].trim();
-            return { buffer: Buffer.from(bytes), mimeType };
-          }
-        }
-      } catch {}
-    }
-
-    try {
-      const imgRes = await fetch(src);
-      if (imgRes.ok) {
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const rawMime = imgRes.headers.get('content-type') || 'image/png';
-        const mimeType = rawMime.split(';')[0].trim().toLowerCase();
-        return { buffer, mimeType: mimeType.startsWith('image/') ? mimeType : 'image/png' };
-      }
-    } catch (err) {
-      console.warn('[Analyze API] Remote image fetch error:', err);
-    }
-  }
-
-  // 7. Raw Base64 string without data: prefix
-  if (src.length > 100 && !src.startsWith('http') && !src.startsWith('/')) {
-    const clean = src.replace(/\s+/g, '');
-    try {
-      const buffer = Buffer.from(clean, 'base64');
-      if (buffer.length > 50) {
-        return { buffer, mimeType: 'image/png' };
-      }
-    } catch {}
-  }
-
-  return null;
-}
-
 export async function POST(request: Request) {
   try {
     const session = await getAuthoritativeSession();
@@ -177,7 +40,7 @@ export async function POST(request: Request) {
       'guest';
 
     const rateLimitKey = session ? `ai:design-analyze:${session.id}` : `ai:design-analyze:guest:${clientIp}`;
-    const rateLimit = consumeRateLimit(rateLimitKey, 15, 10 * 60_000);
+    const rateLimit = await checkRateLimit(rateLimitKey, 15, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Vision AI analiz limiti aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.' }, {
         status: 429,
@@ -190,6 +53,22 @@ export async function POST(request: Request) {
     if (!src) {
       return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
     }
+
+    // Görseli sahiplik doğrulamasıyla yükle (misafirler yalnızca data URL / demo görselleri)
+    let resolvedImage: { buffer: Buffer; mimeType: string };
+    try {
+      resolvedImage = await loadVisionImage(session?.id ?? null, String(src), { appOrigin: new URL(request.url).origin });
+    } catch (error) {
+      if (error instanceof MediaSourceError) {
+        return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+      }
+      console.error('[Analyze API] Image load failed:', error);
+      return NextResponse.json({
+        success: false,
+        error: 'Görsel dosyası depolama alanından okunamadı veya yükleme henüz tamamlanmadı. Lütfen görseli kontrol edip tekrar deneyin.'
+      }, { status: 400 });
+    }
+
 
     // 1. Session varsa mevcut kullanıcıya ait workspace ayarlarını çek
     let workspaceRows: Array<{
@@ -293,15 +172,6 @@ export async function POST(request: Request) {
       prompt = customPrompt;
     }
     prompt = prompt.replace('{{taxonomyHint}}', taxonomyHint);
-
-    // Görseli Cloudflare R2 / Disk / Remote URL / Data URL üzerinden Buffer ve Base64 olarak çözümle
-    const resolvedImage = await resolveImageBuffer(src);
-    if (!resolvedImage || !resolvedImage.buffer || resolvedImage.buffer.length < 50) {
-      return NextResponse.json({
-        success: false,
-        error: 'Görsel dosyası depolama alanından (Cloudflare R2 / Disk) okunamadı veya yükleme henüz tamamlanmadı. Lütfen görseli kontrol edip tekrar deneyin.'
-      }, { status: 400 });
-    }
 
     const { buffer, mimeType } = resolvedImage;
     const base64Data = buffer.toString('base64');

@@ -2,7 +2,7 @@ import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 const OPENROUTER_CHAT_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`ai:chat:${session.id}`, 20, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`ai:chat:${session.id}`, 20, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'AI istek limiti aşıldı.' }, {
         status: 429,
@@ -256,7 +256,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`ai:models:${session.id}`, 30, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`ai:models:${session.id}`, 30, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'AI model listesi istek limiti aşıldı.' }, {
         status: 429,

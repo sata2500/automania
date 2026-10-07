@@ -68,7 +68,11 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
+            value: 'DENY',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains',
           },
           {
             key: 'Referrer-Policy',
@@ -81,12 +85,13 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Additional headers for API routes
-        source: '/api/(.*)',
+        // API yanıtları kişiye özeldir; ara önbelleklerde saklanmamalı.
+        // (Medya uç noktaları kendi private önbellek başlıklarını belirler.)
+        source: '/api/((?!r2/|uploads/).*)',
         headers: [
           {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
+            key: 'Cache-Control',
+            value: 'private, no-store',
           },
         ],
       },

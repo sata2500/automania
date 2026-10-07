@@ -1,70 +1,73 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { consumeRateLimit } from '@/lib/request-rate-limit';
 
-// In-memory rate limiting store for API protection
-const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 120; // max 120 requests per minute
+// Kaba IP bazlı koruma (süreç içi). Maliyetli uç noktalar ayrıca kullanıcı bazlı,
+// paylaşımlı `checkRateLimit` ile sınırlandırılır.
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 120;
 
-export function proxy(request: NextRequest) {
-  // 1. Rate Limiting for API routes
-  const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-  if (ip !== 'unknown' && request.nextUrl.pathname.startsWith('/api/')) {
-    const now = Date.now();
-    let limitData = rateLimitMap.get(ip);
-    if (!limitData || (now - limitData.lastReset > RATE_LIMIT_WINDOW_MS)) {
-      limitData = { count: 0, lastReset: now };
-    }
-    
-    limitData.count++;
-    rateLimitMap.set(ip, limitData);
+export function getClientIp(request: NextRequest): string | null {
+  // Vercel ve çoğu proxy, istemci IP'sini listenin başına yazar.
+  const forwarded = request.headers.get('x-forwarded-for');
+  const first = forwarded?.split(',')[0]?.trim();
+  return first || request.headers.get('x-real-ip')?.trim() || null;
+}
 
-    if (limitData.count > MAX_REQUESTS_PER_WINDOW) {
-      return new NextResponse(JSON.stringify({ error: 'Too Many Requests' }), {
-        status: 429,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-  }
-
-  // 2. CSP & Nonce
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  
-  const cspHeader = `
+export function buildContentSecurityPolicy(nonce: string, isDev: boolean): string {
+  return `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' https: http:;
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ''};
     style-src 'self' 'unsafe-inline';
-    img-src 'self' blob: data: https: http:;
-    media-src 'self' blob: data: https: http:;
-    font-src 'self' data: https:;
-    connect-src 'self' blob: data: https: http: wss: ws:;
+    img-src 'self' blob: data: https:;
+    media-src 'self' blob: data: https:;
+    font-src 'self' data:;
+    connect-src 'self' blob: data: https:${isDev ? ' ws:' : ''};
+    worker-src 'self' blob:;
+    manifest-src 'self';
     object-src 'none';
     base-uri 'self';
     form-action 'self';
     frame-ancestors 'none';
-    upgrade-insecure-requests;
+    ${isDev ? '' : 'upgrade-insecure-requests;'}
   `.replace(/\s{2,}/g, ' ').trim();
+}
+
+export function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    const ip = getClientIp(request);
+    if (ip) {
+      const limit = consumeRateLimit(`ip:${ip}`, MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_MS);
+      if (!limit.allowed) {
+        return NextResponse.json({ error: 'Too Many Requests' }, {
+          status: 429,
+          headers: { 'Retry-After': String(limit.retryAfterSeconds) },
+        });
+      }
+    }
+    return NextResponse.next();
+  }
+
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const cspHeader = buildContentSecurityPolicy(nonce, process.env.NODE_ENV === 'development');
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', cspHeader);
 
-  const response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
-
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', cspHeader);
-
   return response;
 }
 
-// For backwards-compatibility with middleware naming
-export const middleware = proxy;
-
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
+    {
+      source: '/((?!_next/static|_next/image|favicon.ico|sw.js|workers/|demo/|icon-|manifest.json|sitemap.xml|robots.txt).*)',
+      missing: [
+        { type: 'header', key: 'next-router-prefetch' },
+        { type: 'header', key: 'purpose', value: 'prefetch' },
+      ],
+    },
   ],
 };

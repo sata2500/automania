@@ -11,7 +11,7 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { removeGreenBackground, evaluateChromaKeyQuality } from '@/lib/chroma-key';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadImageForUser, MAX_REMOTE_IMAGE_BYTES, MediaSourceError } from '@/lib/media-source';
 
 export const maxDuration = 60;
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`image:remove-bg:${session.id}`, 30, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`image:remove-bg:${session.id}`, 30, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Arka plan kaldırma limiti aşıldı. Lütfen biraz sonra tekrar deneyin.' }, {
         status: 429,

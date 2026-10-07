@@ -68,3 +68,19 @@ describe('loadImageForUser', () => {
     expect(buffer.byteLength).toBeGreaterThan(0);
   });
 });
+
+describe('loadVisionImage', () => {
+  it('lets guests analyse bundled demo assets (converted from SVG to PNG)', async () => {
+    const { loadVisionImage } = await import('./media-source');
+    const image = await loadVisionImage(null, '/demo/design-sun.svg');
+    expect(image.mimeType).toBe('image/png');
+    expect(image.buffer.subarray(1, 4).toString()).toBe('PNG');
+  });
+
+  it('requires a session for storage and remote images', async () => {
+    const { loadVisionImage } = await import('./media-source');
+    await expect(loadVisionImage(null, '/api/r2/user-abc-file.png')).rejects.toMatchObject({ status: 401 });
+    await expect(loadVisionImage(null, 'https://i.etsystatic.com/x.jpg')).rejects.toMatchObject({ status: 401 });
+    await expect(loadVisionImage(null, 'https://example.com/x.png')).rejects.toMatchObject({ status: 401 });
+  });
+});

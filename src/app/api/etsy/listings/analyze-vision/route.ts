@@ -1,118 +1,13 @@
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
-import fs from 'fs/promises';
-import fsSync from 'fs';
-import path from 'path';
 import { loadSettingRows } from '@/lib/app-settings';
+import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
 
 export const maxDuration = 60;
-
-async function resolveImageBuffer(src: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  const base64Match = src.match(/^data:([^;]+);base64,([\s\S]+)$/);
-  if (base64Match) {
-    const rawMime = base64Match[1].split(';')[0].trim().toLowerCase();
-    const cleanBase64 = base64Match[2].replace(/\s+/g, '');
-    const buffer = Buffer.from(cleanBase64, 'base64');
-    return { buffer, mimeType: rawMime || 'image/jpeg' };
-  }
-
-  if (src.startsWith('/api/r2/') || src.startsWith('api/r2/')) {
-    const key = extractKeyFromUrlOrKey(src);
-    if (isR2Configured() && key) {
-      try {
-        const client = getR2Client();
-        const bucket = getBucketName();
-        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-        if (res.Body) {
-          const bytes = await res.Body.transformToByteArray();
-          const ext = path.extname(key).toLowerCase();
-          const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : 'image/jpeg')).split(';')[0].trim();
-          return { buffer: Buffer.from(bytes), mimeType };
-        }
-      } catch (r2Err) {
-        console.warn('[Vision API] Direct R2 get failed:', r2Err);
-      }
-    }
-    const localFallbackPath = path.join(process.cwd(), '.data', 'uploads', path.basename(key));
-    if (fsSync.existsSync(localFallbackPath)) {
-      const buffer = await fs.readFile(localFallbackPath);
-      const ext = path.extname(key).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
-      return { buffer, mimeType };
-    }
-  }
-
-  if (src.startsWith('/api/uploads/')) {
-    const filename = path.basename(src);
-    const filePath = path.join(process.cwd(), '.data', 'uploads', filename);
-    if (fsSync.existsSync(filePath)) {
-      const buffer = await fs.readFile(filePath);
-      const ext = path.extname(filename).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
-      return { buffer, mimeType };
-    }
-  }
-
-  if (src.startsWith('/')) {
-    const cleanPath = src.split('?')[0];
-    const filename = path.basename(cleanPath);
-    const dataUploadsPath = path.join(process.cwd(), '.data', 'uploads', filename);
-    if (fsSync.existsSync(dataUploadsPath)) {
-      const buffer = await fs.readFile(dataUploadsPath);
-      const ext = path.extname(filename).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
-      return { buffer, mimeType };
-    }
-
-    const publicPath = path.join(process.cwd(), 'public', cleanPath.startsWith('/') ? cleanPath.substring(1) : cleanPath);
-    if (fsSync.existsSync(publicPath)) {
-      const buffer = await fs.readFile(publicPath);
-      const ext = path.extname(cleanPath).toLowerCase();
-      const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
-      return { buffer, mimeType };
-    }
-  }
-
-  if (src.startsWith('http://') || src.startsWith('https://')) {
-    if (isR2Configured()) {
-      try {
-        const key = extractKeyFromUrlOrKey(src);
-        if (key) {
-          const client = getR2Client();
-          const bucket = getBucketName();
-          const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-          if (res.Body) {
-            const bytes = await res.Body.transformToByteArray();
-            const ext = path.extname(key).toLowerCase();
-            const mimeType = (res.ContentType || (ext === '.png' ? 'image/png' : 'image/jpeg')).split(';')[0].trim();
-            return { buffer: Buffer.from(bytes), mimeType };
-          }
-        }
-      } catch {}
-    }
-
-    try {
-      const imgRes = await fetch(src);
-      if (imgRes.ok) {
-        const arrayBuffer = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const rawMime = imgRes.headers.get('content-type') || 'image/jpeg';
-        const mimeType = rawMime.split(';')[0].trim().toLowerCase();
-        return { buffer, mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg' };
-      }
-    } catch (err) {
-      console.warn('[Vision API] Remote image fetch error:', err);
-    }
-  }
-
-  return null;
-}
 
 const VISION_PROMPT = `You are a professional Etsy E-Commerce Visual Merchandising and Image Analysis AI.
 Carefully inspect this product listing cover image and extract key design attributes in STRICT JSON format:
@@ -136,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`ai:etsy-vision:${session.id}`, 10, 10 * 60_000);
+    const rateLimit = await checkRateLimit(`ai:etsy-vision:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Etsy Vision AI analiz limiti aşıldı.' }, {
         status: 429,
@@ -225,10 +120,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        const resolvedImage = await resolveImageBuffer(imageUrl);
-        if (!resolvedImage || !resolvedImage.buffer || resolvedImage.buffer.length < 50) {
-          throw new Error(`Görsel dosyası depolama alanından okunamadı.`);
-        }
+        const resolvedImage = await loadVisionImage(session.id, String(imageUrl));
 
         const { buffer, mimeType } = resolvedImage;
         const base64Data = buffer.toString('base64');

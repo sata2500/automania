@@ -19,7 +19,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { consumeRateLimit } from '@/lib/request-rate-limit';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 import { executeAutomationRun } from '@/lib/automation-runner';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { AutomationRunSteps } from '@/types/templates';
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const rateLimit = consumeRateLimit(`automation:run:${session.id}`, 5, 60 * 60_000);
+    const rateLimit = await checkRateLimit(`automation:run:${session.id}`, 5, 60 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Otomasyon çalıştırma limiti aşıldı. Lütfen daha sonra tekrar deneyin.' }, {
         status: 429,
