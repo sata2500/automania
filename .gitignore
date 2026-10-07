@@ -51,3 +51,7 @@ next-env.d.ts
 
 # local scratch files
 /scratch/
+
+# playwright
+/test-results/
+/playwright-report/

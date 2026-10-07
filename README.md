@@ -62,6 +62,7 @@ Uygulama `http://localhost:3000` adresinde açılır. Ortam değişkenlerinin ta
 | `npm run lint` | ESLint |
 | `npm test` | Vitest birim testleri (PGlite ile migration testleri dahil) |
 | `npm run test:sqlite` | Yerel SQLite çalışma zamanı testi |
+| `npm run test:e2e` | Playwright uçtan uca testleri (önce `npm run build`; `E2E_BASE_URL` ile çalışan bir sunucu da hedeflenebilir) |
 | `npm run test:smoke` | Çalışan sunucuya karşı yetkisiz erişim testleri (`SMOKE_BASE_URL`) |
 | `npm run verify` | type-check + test + sqlite + build |
 | `npm run db:migrate` | `drizzle/` altındaki migration'ları uygular |
@@ -107,4 +108,4 @@ Tasarım ve mockup görselleri kaydedilmeden önce tarayıcıda en fazla 2000 pi
 1. `.env.example` içindeki değişkenleri Vercel proje ayarlarına ekleyin (en azından `DATABASE_URL`, `JWT_SECRET`, `DATA_ENCRYPTION_KEY`, Google OAuth ve R2).
 2. Google OAuth ve Etsy uygulamalarında geri dönüş adreslerini kaydedin: `https://<alan-adı>/api/auth/google/callback` ve `https://<alan-adı>/api/etsy/callback`.
 3. Her deploy öncesinde veya sonrasında `npm run db:migrate` çalıştırın.
-4. GitHub Actions CI (`.github/workflows/ci.yml`) her PR'da type-check, lint, test, bağımlılık denetimi ve build adımlarını çalıştırır.
+4. GitHub Actions CI (`.github/workflows/ci.yml`) her PR'da type-check, lint, birim testleri, bağımlılık denetimi, build ve Playwright E2E testlerini çalıştırır.

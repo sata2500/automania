@@ -20,7 +20,8 @@
     "verify:local": "npm run verify && npm run test:smoke",
     "db:sqlite:init": "tsx scripts/init-sqlite.ts",
     "db:encrypt-secrets": "tsx scripts/encrypt-secrets.ts",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1114.0",
@@ -47,6 +48,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
