@@ -115,7 +115,6 @@ export function useWorkspace() {
           savedActiveFolder,
           savedSelectedMockup,
           savedActiveDesignFolder,
-          savedGeneratedMockups,
         ] = await Promise.all([
           get<boolean>(keys.HAS_INITIALIZED),
           get<MockupItem[]>(keys.MOCKUPS),
@@ -124,7 +123,6 @@ export function useWorkspace() {
           get<string | null>(keys.ACTIVE_FOLDER),
           get<string | null>(keys.SELECTED_MOCKUP),
           get<string | null>(keys.ACTIVE_DESIGN_FOLDER),
-          get<RenderedMatch[] | null>(keys.ETSY_GENERATED_MOCKUPS),
         ]);
 
         if (isMounted && (hasInit || (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0))) {

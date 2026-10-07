@@ -202,7 +202,7 @@ export const SeoAiCopySection: React.FC = () => {
                   </span>
                 </div>
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 scrollbar-thin">
-                  {enrichedKeywords.map((kw: any, i: number) => {
+                  {enrichedKeywords.map((kw, i) => {
                     const isSelected = selectedTags.includes(kw.keyword);
                     return (
                       <div key={i} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs">
@@ -210,14 +210,14 @@ export const SeoAiCopySection: React.FC = () => {
                           {kw.keyword}
                         </span>
                         <div className="flex items-center gap-2 shrink-0">
-                          {kw.total_listings > 0 && (
+                          {(kw.total_listings ?? 0) > 0 && (
                             <span className="text-[10px] text-slate-500">
-                              {kw.total_listings.toLocaleString('tr-TR')} İlan
+                              {(kw.total_listings ?? 0).toLocaleString('tr-TR')} İlan
                             </span>
                           )}
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
-                            kw.opportunity_score >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
-                            kw.opportunity_score >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
+                            (kw.opportunity_score ?? 0) >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
+                            (kw.opportunity_score ?? 0) >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
                             'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}>
                             {kw.opportunity_score}/100
@@ -260,10 +260,10 @@ export const SeoAiCopySection: React.FC = () => {
                   </span>
                 </div>
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 scrollbar-thin">
-                  {coOccurringTags.map((item: any, i: number) => {
+                  {coOccurringTags.map((item, i) => {
                     const tagStr = typeof item === 'string' ? item : (item?.keyword || '');
-                    const tagScore = typeof item === 'object' ? item.opportunity_score : (enrichedKeywords?.find((k: any) => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.opportunity_score || null);
-                    const tagListings = typeof item === 'object' ? item.total_listings : (enrichedKeywords?.find((k: any) => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.total_listings || null);
+                    const tagScore = typeof item === 'object' ? item.opportunity_score : (enrichedKeywords?.find((k) => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.opportunity_score || null);
+                    const tagListings = typeof item === 'object' ? item.total_listings : (enrichedKeywords?.find((k) => k.keyword?.toLowerCase() === tagStr.toLowerCase())?.total_listings || null);
                     const isAlreadySelected = selectedTags.includes(tagStr);
                     const isEligible = tagStr.length <= 20;
 

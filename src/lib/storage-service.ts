@@ -1,7 +1,7 @@
 import { get, set, del } from 'idb-keyval';
 import { uploadMediaToServer } from './image-optimizer';
 import { downloadBlob } from './download';
-import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
+import { MockupItem, DesignItem, MockupFolder, RenderedMatch, EtsyVariationTemplate } from '@/types/pod';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -369,13 +369,6 @@ export async function migrateGuestWorkspaceToUser(
   })();
 
   return inFlightMigrationPromise;
-}
-
-interface EtsyVariationTemplate {
-  id: string;
-  name: string;
-  updatedAt: string;
-  variations: unknown[];
 }
 
 export interface AppDataPayload {

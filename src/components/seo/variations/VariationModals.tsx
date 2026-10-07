@@ -60,7 +60,7 @@ export const VariationModals: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {etsyListings.map((listing: any) => (
+                  {etsyListings.map((listing) => (
                     <div key={listing.listing_id} className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col justify-between transition-shadow hover:shadow-md">
                       <div>
                         <div className="text-xs font-bold text-slate-800 dark:text-slate-200 line-clamp-2 mb-2">
@@ -68,7 +68,7 @@ export const VariationModals: React.FC = () => {
                         </div>
                         <div className="flex gap-2 text-[10px] mb-3">
                           <span className={`px-2 py-0.5 rounded-full font-bold ${listing.state === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
-                            {listing.state.toUpperCase()}
+                            {(listing.state ?? '').toUpperCase()}
                           </span>
                           <span className="text-slate-500">ID: {listing.listing_id}</span>
                         </div>
@@ -157,11 +157,11 @@ export const VariationModals: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {savedTemplates.map((t: any) => (
+                  {savedTemplates.map((t) => (
                     <div key={t.id} className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center bg-slate-50 dark:bg-slate-950/30 gap-2">
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{t.name}</h4>
-                        <p className="text-xs text-slate-500 mt-1">{t.variations?.length || 0} Varyasyon • {new Date(t.updatedAt).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-500 mt-1">{t.variations?.length || 0} Varyasyon • {t.updatedAt ? new Date(t.updatedAt).toLocaleDateString() : '—'}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
@@ -222,7 +222,7 @@ export const VariationModals: React.FC = () => {
                   className="w-full text-sm border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900 focus:ring-emerald-500 focus:border-emerald-500 px-3 py-2.5 transition-colors"
                 >
                   <option value="current">Mevcut Tablodaki Varyasyonlar ({variations.length} varyasyon)</option>
-                  {savedTemplates.map((t: any) => (
+                  {savedTemplates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.variations?.length || 0} varyasyon)
                     </option>
@@ -247,7 +247,7 @@ export const VariationModals: React.FC = () => {
                       type="button"
                       onClick={() => {
                         if (selectedListingsForSync.length === etsyListings.length) setSelectedListingsForSync([]);
-                        else setSelectedListingsForSync(etsyListings.map((l: any) => l.listing_id));
+                        else setSelectedListingsForSync(etsyListings.map((l) => l.listing_id));
                       }}
                       className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
                     >
@@ -255,19 +255,19 @@ export const VariationModals: React.FC = () => {
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
-                    {etsyListings.map((listing: any) => (
+                    {etsyListings.map((listing) => (
                       <label key={listing.listing_id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${selectedListingsForSync.includes(listing.listing_id) ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50'}`}>
                         <input
                           type="checkbox"
                           checked={selectedListingsForSync.includes(listing.listing_id)}
                           onChange={(e) => {
-                            if (e.target.checked) setSelectedListingsForSync((prev: any[]) => [...prev, listing.listing_id]);
-                            else setSelectedListingsForSync((prev: any[]) => prev.filter((id: any) => id !== listing.listing_id));
+                            if (e.target.checked) setSelectedListingsForSync((prev) => [...prev, listing.listing_id]);
+                            else setSelectedListingsForSync((prev) => prev.filter((id) => id !== listing.listing_id));
                           }}
                           className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-600 focus:ring-2"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={listing.title}>{listing.title}</p>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={listing.title ?? undefined}>{listing.title}</p>
                           <div className="flex gap-2 text-[10px] mt-1 text-slate-500">
                             <span className="uppercase">{listing.state}</span>
                             <span>ID: {listing.listing_id}</span>

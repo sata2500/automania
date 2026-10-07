@@ -83,8 +83,14 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
               <h3 className="font-bold text-slate-900 dark:text-white text-base">
                 Tasarım Analizi & Etsy Puanları
               </h3>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 flex items-center gap-1">
                 Yapay zeka çıkarımları ve Etsy resmi API pazar metrikleri
+                {isRefreshing && (
+                  <span className="inline-flex items-center gap-1 text-indigo-500" role="status">
+                    <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" />
+                    güncelleniyor…
+                  </span>
+                )}
               </p>
             </div>
           </div>

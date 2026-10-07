@@ -48,7 +48,7 @@ export const VariationTableView: React.FC = () => {
               <th className="p-2.5 border-r border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 w-24">
                 <select 
                   value={statusFilter} 
-                  onChange={e => setStatusFilter(e.target.value as any)}
+                  onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
                   className="w-full bg-transparent border-none outline-none font-bold text-[11px] uppercase tracking-wider cursor-pointer text-slate-700 dark:text-slate-300"
                 >
                   <option value="all">Durum</option>
@@ -85,15 +85,15 @@ export const VariationTableView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono bg-white dark:bg-slate-900">
-            {filteredVariations.map((row: any, idx: number) => {
+            {filteredVariations.map((row, idx) => {
               // Sürükleme efekti kontrolü
               let isPriceHighlighted = false;
               let isQtyHighlighted = false;
               let isStatusHighlighted = false;
               
               if (dragState.isDragging && dragState.startRowId && dragState.endRowId) {
-                const startIdx = filteredVariations.findIndex((v: any) => v.id === dragState.startRowId);
-                const endIdx = filteredVariations.findIndex((v: any) => v.id === dragState.endRowId);
+                const startIdx = filteredVariations.findIndex((v) => v.id === dragState.startRowId);
+                const endIdx = filteredVariations.findIndex((v) => v.id === dragState.endRowId);
                 const currentIdx = idx;
                 if (startIdx !== -1 && endIdx !== -1) {
                   const min = Math.min(startIdx, endIdx);
@@ -118,7 +118,7 @@ export const VariationTableView: React.FC = () => {
                         checked={row.enabled}
                         onChange={(e) => {
                           const val = e.target.checked;
-                          setVariations((prev: any[]) => prev.map((v: any) => v.id === row.id ? { ...v, enabled: val } : v));
+                          setVariations((prev) => prev.map((v) => v.id === row.id ? { ...v, enabled: val } : v));
                         }}
                         className="rounded text-indigo-600 w-4 h-4 cursor-pointer"
                       />
@@ -150,7 +150,7 @@ export const VariationTableView: React.FC = () => {
                         value={row.price}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
-                          setVariations((prev: any[]) => prev.map((v: any) => v.id === row.id ? { ...v, price: val } : v));
+                          setVariations((prev) => prev.map((v) => v.id === row.id ? { ...v, price: val } : v));
                         }}
                         className="w-20 px-2 py-1.5 bg-transparent border-none text-center font-bold text-emerald-600 dark:text-emerald-400 outline-none hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 rounded transition-colors"
                       />
@@ -175,7 +175,7 @@ export const VariationTableView: React.FC = () => {
                         value={row.quantity}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10) || 0;
-                          setVariations((prev: any[]) => prev.map((v: any) => v.id === row.id ? { ...v, quantity: val } : v));
+                          setVariations((prev) => prev.map((v) => v.id === row.id ? { ...v, quantity: val } : v));
                         }}
                         className="w-16 px-2 py-1.5 bg-transparent border-none text-center font-semibold text-slate-700 dark:text-slate-300 outline-none hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 rounded transition-colors"
                       />

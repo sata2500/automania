@@ -7,6 +7,22 @@ import {
   Trophy, Sparkles, ShieldAlert, Globe, Info, Zap
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
+import { parseJsonObject } from '@/lib/json-utils';
+
+// Ham Etsy metrikleri (raw_metrics JSONB); alanlar kaynağa göre değişebilir.
+type RawKeywordMetrics = {
+  topTags?: string[];
+  autocomplete?: { topSuggestions?: string[] };
+  avgViews?: number;
+  avgFavorites?: number;
+  sampleSize?: number;
+  currencyCode?: string;
+  method?: string;
+  errorType?: string;
+  retryable?: boolean;
+  retryAfterSeconds?: number;
+  [key: string]: unknown;
+};
 
 interface Keyword {
   id: string;
@@ -23,7 +39,7 @@ interface Keyword {
   tag_eligible: boolean | null;
   avg_price: number | null;
   last_scrape_error: string | null;
-  raw_metrics?: any;
+  raw_metrics?: RawKeywordMetrics | string | null;
   created_at: string;
   last_evaluated_at: string | null;
 }
@@ -62,7 +78,7 @@ export default function KeywordPoolManagement() {
   // Test Modal
   const [showTestModal, setShowTestModal] = useState(false);
   const [testKeyword, setTestKeyword] = useState('vintage shirt');
-  const [testResult, setTestResult] = useState<any>(null);
+  const [testResult, setTestResult] = useState<unknown>(null);
   const [isTestingScraper, setIsTestingScraper] = useState(false);
   const [testMode, setTestMode] = useState<'server' | 'browser'>('server');
 
@@ -75,10 +91,6 @@ export default function KeywordPoolManagement() {
     return () => clearTimeout(handler);
   }, [search]);
 
-  useEffect(() => {
-    fetchKeywords();
-    setSelectedIds(new Set());
-  }, [page, sortBy, order, debouncedSearch, filter]);
 
   const fetchKeywords = async () => {
     setIsLoading(true);
@@ -107,6 +119,11 @@ export default function KeywordPoolManagement() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchKeywords();
+    setSelectedIds(new Set());
+  }, [page, sortBy, order, debouncedSearch, filter]);
 
   const handleSelect = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -341,9 +358,11 @@ export default function KeywordPoolManagement() {
         'Oluşturulma Tarihi'
       ];
 
-      const escapeCell = (val: any) => {
+      const escapeCell = (val: unknown) => {
         if (val === null || val === undefined) return '""';
-        const str = String(val).replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
+        let str = String(val).replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
+        // CSV/formül enjeksiyonunu önle: Excel'in formül olarak yorumlayacağı başlangıçlar
+        if (/^[=+\-@\t]/.test(str)) str = `'${str}`;
         return `"${str}"`;
       };
 
@@ -402,13 +421,8 @@ export default function KeywordPoolManagement() {
     }
   };
 
-  const parseRawMetrics = (rm: any) => {
-    if (!rm) return {};
-    if (typeof rm === 'string') {
-      try { return JSON.parse(rm); } catch { return {}; }
-    }
-    return rm;
-  };
+  const parseRawMetrics = (rm: Keyword['raw_metrics']): RawKeywordMetrics =>
+    parseJsonObject<RawKeywordMetrics>(rm, {});
 
   const formatDateSafe = (d: string | null | undefined) => {
     if (!d) return null;
@@ -421,7 +435,7 @@ export default function KeywordPoolManagement() {
     }
   };
 
-  const toSafeNum = (val: any, fallback = 0): number => {
+  const toSafeNum = (val: unknown, fallback = 0): number => {
     if (val === null || val === undefined) return fallback;
     if (typeof val === 'number') return isNaN(val) ? fallback : val;
     const parsed = parseFloat(String(val));
@@ -1042,9 +1056,9 @@ export default function KeywordPoolManagement() {
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  🏷️ "{activeDetailsKeyword.keyword}" Analiz Detayları
+                  🏷️ &quot;{activeDetailsKeyword.keyword}&quot; Analiz Detayları
                 </h4>
-                <p className="text-xs text-slate-500">Etsy'de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
+                <p className="text-xs text-slate-500">Etsy&apos;de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
               </div>
               <button 
                 onClick={() => setActiveDetailsKeyword(null)}
@@ -1185,7 +1199,7 @@ export default function KeywordPoolManagement() {
                  </div>
                </div>
 
-              {testResult && (
+              {testResult !== null && (
                 <div className="mt-4 bg-slate-950 text-slate-100 p-3 sm:p-4 rounded-xl font-mono text-[11px] sm:text-xs overflow-x-auto max-h-60 sm:max-h-80 space-y-2">
                   <div className="text-emerald-400 font-bold">--- CANLI ETSY TEST RAPORU ---</div>
                   <pre>{JSON.stringify(testResult, null, 2)}</pre>

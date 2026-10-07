@@ -77,6 +77,11 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
       if (uploadedCount > 0) {
         const savedMb = (savedBytesTotal / (1024 * 1024)).toFixed(1);
         toast.success(`${uploadedCount} tasarım başarıyla optimize edildi ve yüklendi! (${savedMb} MB tasarruf) 🚀`);
+        if (fallbackImageCount > 0 && webpImageCount === 0) {
+          toast.info(`Tarayıcınız WebP kodlamayı desteklemediği için ${fallbackImageCount} görsel PNG/JPEG olarak kaydedildi.`);
+        } else if (fallbackImageCount > 0) {
+          toast.info(`${fallbackImageCount} görsel WebP yerine PNG/JPEG olarak kaydedildi.`);
+        }
       }
       setIsOptimizing(false);
     },

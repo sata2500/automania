@@ -33,7 +33,6 @@ import {
   
   
   
-  Check,
   Search,
   Image as ImageIcon,
   FileText,
@@ -301,6 +300,17 @@ const MODEL_VISION_STORAGE = 'automania_model_vision';
 const MODEL_REASONING_STORAGE = 'automania_model_reasoning';
 const MODEL_GENERATION_STORAGE = 'automania_model_generation';
 
+type ScrapingProvider = 'scraperapi' | 'scrapingbee' | 'zenrows';
+
+type OpenRouterModel = {
+  id: string;
+  name?: string;
+  context_length: number;
+  pricing?: Record<string, string>;
+  architecture?: { input_modalities?: string[]; output_modalities?: string[] };
+  supported_parameters?: string[];
+};
+
 export const AdminDashboard: React.FC = () => {
   const toast = useToast();
   const { user } = useAuth();
@@ -412,7 +422,7 @@ export const AdminDashboard: React.FC = () => {
   const [etsySharedSecret, setEtsySharedSecret] = useState('');
 
   // Scraping & Proxy Settings
-  const [scrapingProvider, setScrapingProvider] = useState<'scraperapi' | 'scrapingbee' | 'zenrows'>('scraperapi');
+  const [scrapingProvider, setScrapingProvider] = useState<ScrapingProvider>('scraperapi');
   const [scrapingApiKey, setScrapingApiKey] = useState('');
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState('');
   
@@ -450,7 +460,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   // OpenRouter Dynamic Models State
-  const [openRouterModels, setOpenRouterModels] = useState<any[]>([]);
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -458,9 +468,6 @@ export const AdminDashboard: React.FC = () => {
   const [testingModel, setTestingModel] = useState<string | null>(null);
   const [testResponseData, setTestResponseData] = useState<{model: string, content: string, imageUrl?: string} | null>(null);
 
-  // Sync / Maintenance state
-  const [isSyncingDb, setIsSyncingDb] = useState(false);
-  const [dbStatus, setDbStatus] = useState<'connected' | 'checking' | 'error'>('connected');
 
   useEffect(() => {
     try {
@@ -484,21 +491,17 @@ export const AdminDashboard: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            let updated = false;
             if (data.modelVision && data.modelVision !== modelVision) {
               setModelVision(data.modelVision);
               localStorage.setItem(MODEL_VISION_STORAGE, data.modelVision);
-              updated = true;
             }
             if (data.modelReasoning && data.modelReasoning !== modelReasoning) {
               setModelReasoning(data.modelReasoning);
               localStorage.setItem(MODEL_REASONING_STORAGE, data.modelReasoning);
-              updated = true;
             }
             if (data.modelGeneration && data.modelGeneration !== modelGeneration) {
               setModelGeneration(data.modelGeneration);
               localStorage.setItem(MODEL_GENERATION_STORAGE, data.modelGeneration);
-              updated = true;
             }
           }
         }
@@ -539,7 +542,7 @@ export const AdminDashboard: React.FC = () => {
             if (data.settings.etsy_keystring) setEtsyKeystring(data.settings.etsy_keystring);
             if (data.settings.etsy_shared_secret) setEtsySharedSecret(data.settings.etsy_shared_secret);
 
-            if (data.settings.scraping_provider) setScrapingProvider(data.settings.scraping_provider as any);
+            if (data.settings.scraping_provider) setScrapingProvider(data.settings.scraping_provider as ScrapingProvider);
             if (data.settings.scraping_api_key) setScrapingApiKey(data.settings.scraping_api_key);
             if (data.settings.cloudflare_worker_url) setCloudflareWorkerUrl(data.settings.cloudflare_worker_url);
             
@@ -613,7 +616,7 @@ export const AdminDashboard: React.FC = () => {
       localStorage.setItem(MODEL_GENERATION_STORAGE, modelGeneration);
 
       // Save global settings via Admin API
-      const settingsToSave: any = {};
+      const settingsToSave: Record<string, string> = {};
       if (activeAiProvider) settingsToSave.active_ai_provider = activeAiProvider;
       if (openRouterApiKey !== undefined) settingsToSave.openrouter_api_key = openRouterApiKey;
       if (geminiApiKey !== undefined) settingsToSave.gemini_api_key = geminiApiKey;
@@ -666,7 +669,7 @@ export const AdminDashboard: React.FC = () => {
     setTestingModel(modelId);
     const startTime = Date.now();
 
-    let messages: any[] = [];
+    let messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = [];
     if (role === 'vision') {
       messages = [
         {
@@ -1192,7 +1195,7 @@ export const AdminDashboard: React.FC = () => {
                   </label>
                   <select
                     value={scrapingProvider}
-                    onChange={(e) => setScrapingProvider(e.target.value as any)}
+                    onChange={(e) => setScrapingProvider(e.target.value as ScrapingProvider)}
                     className="w-full px-3.5 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 cursor-pointer"
                   >
                     <option value="scraperapi">ScraperAPI (scraperapi.com - 5.000 İstek/Ay Ücretsiz)</option>
@@ -1535,7 +1538,7 @@ export const AdminDashboard: React.FC = () => {
 
                 <div className="h-[380px] overflow-y-auto custom-scrollbar border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {openRouterModels
-                    .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .filter(m => (m.name ?? m.id).toLowerCase().includes(searchQuery.toLowerCase()) || m.id.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map((model) => {
                       const isFree = parseFloat(model.pricing?.prompt || "1") === 0 && parseFloat(model.pricing?.completion || "1") === 0;
                       const hasVision = model.architecture?.input_modalities?.includes('image');
@@ -2068,14 +2071,6 @@ export const AdminDashboard: React.FC = () => {
   );
 };
 
-function CloudSyncBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold rounded-md border border-emerald-200 dark:border-emerald-800">
-      <Check className="w-3 h-3" />
-      Bulut Senkronize
-    </span>
-  );
-}
 
 function UserManagementSection() {
   const { userList, updateUserRole, toggleUserBlock, deleteUser } = useAuth();

@@ -86,7 +86,7 @@ export const BatchHeader: React.FC<BatchHeaderProps> = ({
             title="Görselleri Etsy Yöneticisi sayfasına gönderir"
           >
             <CloudUpload className="w-3.5 h-3.5" />
-            <span>Etsy'ye Gönder</span>
+            <span>Etsy&apos;ye Gönder</span>
           </button>
         )}
 

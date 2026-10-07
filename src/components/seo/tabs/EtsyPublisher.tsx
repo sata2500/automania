@@ -1,10 +1,12 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, ShoppingBag, Layers, Send, AlertTriangle, CheckCircle, Image as ChevronDown, Settings, Info } from 'lucide-react';
+import type { EtsyTaxonomyProperty } from '@/types/etsy';
+import { formatReturnPolicy } from '@/lib/etsy-format';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { useToast } from '@/components/common/ToastContext';
 
-const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: any, selectedValues: number[], onChange: (vals: number[]) => void }) => {
+const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: EtsyTaxonomyProperty, selectedValues: number[], onChange: (vals: number[]) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   
@@ -32,7 +34,7 @@ const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { prop
       </button>
       {isOpen && (
         <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg shadow-xl">
-          {propItem.possible_values?.map((v: any) => (
+          {propItem.possible_values?.map((v) => (
             <label key={v.value_id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
               <input 
                 type="checkbox" 
@@ -60,7 +62,6 @@ export const EtsyPublisher = () => {
     activeTab, etsyConnected, selectedShippingProfileId, setSelectedShippingProfileId,
     shippingProfiles, selectedReadinessStateId, setSelectedReadinessStateId,
     readinessStates, isPublishing, handlePublishToEtsy, publishResult,
-    generatedTitle, generatedDescription, selectedTags, basePrice, variations,
     taxonomyId, whoMade, setWhoMade, whenMade, setWhenMade, isSupply, setIsSupply, materials, styles,
     productionPartnerId, setProductionPartnerId, isCustomizable, setIsCustomizable, sku, setSku,
     shopSections, selectedShopSectionId, setSelectedShopSectionId,
@@ -128,7 +129,7 @@ export const EtsyPublisher = () => {
             ) : (
               <>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Oluşturulan başlık, açıklama, 13 altın etiket, varyasyon tablosu ve AI tarafından bulunan gelişmiş mağaza özellikleri tek tıkla Etsy'ye aktarılır.
+                  Oluşturulan başlık, açıklama, 13 altın etiket, varyasyon tablosu ve AI tarafından bulunan gelişmiş mağaza özellikleri tek tıkla Etsy&apos;ye aktarılır.
                 </p>
 
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50 mb-4">
@@ -192,13 +193,13 @@ export const EtsyPublisher = () => {
                     <div className="flex gap-2">
                       <select 
                         onChange={(e) => {
-                          const t = savedTemplates?.find((st: any) => st.id === e.target.value);
+                          const t = savedTemplates?.find((st) => st.id === e.target.value);
                           if (t) setVariations(t.variations || []);
                         }}
                         className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       >
                         <option value="">-- Şablon Seçin --</option>
-                        {savedTemplates?.map((t: any) => {
+                        {savedTemplates?.map((t) => {
                           const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
                           return (
                             <option key={t.id} value={t.id}>
@@ -207,17 +208,6 @@ export const EtsyPublisher = () => {
                           );
                         })}
                       </select>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const selectEl = document.querySelector('select[aria-label="template-select"]') as HTMLSelectElement;
-                          // But we didn't add aria-label, so we can just use the currently selected value if we track it in state.
-                          // Actually, let's just make the button appear next to the select, but how to know which one is selected?
-                        }}
-                        className="hidden"
-                      >
-                        Varsayılan Yap
-                      </button>
                     </div>
                     <p className="text-[10px] text-slate-500 mt-1">Bu alandan bir şablon seçerseniz mevcut varyasyon listeniz üzerine yazılır. Kategoriye özel varsayılan yapmak için gelişmiş ayarları kullanabilirsiniz.</p>
                   </div>
@@ -233,7 +223,7 @@ export const EtsyPublisher = () => {
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
                     >
                       <option value="">Seçim Yapılmadı (Boş)</option>
-                      {shopSections.map((s: any) => (
+                      {shopSections.map((s) => (
                         <option key={s.shop_section_id} value={s.shop_section_id}>
                           {s.title}
                         </option>
@@ -252,15 +242,15 @@ export const EtsyPublisher = () => {
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
                       <option value="">Seçim Yapılmadı (Boş)</option>
-                      {returnPolicies.map((r: any) => (
+                      {returnPolicies.map((r) => (
                         <option key={r.return_policy_id} value={r.return_policy_id}>
-                          {r.title || `Policy ID: ${r.return_policy_id}`}
+                          {formatReturnPolicy(r)}
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {availableTaxonomyProperties?.map((prop: any) => (
+                  {availableTaxonomyProperties?.map((prop) => (
                     <div key={prop.property_id}>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-purple-500" />
@@ -271,7 +261,7 @@ export const EtsyPublisher = () => {
                             propItem={prop} 
                             selectedValues={selectedTaxonomyProperties[prop.property_id] || []}
                             onChange={(vals) => {
-                              setSelectedTaxonomyProperties((prev: any) => ({
+                              setSelectedTaxonomyProperties((prev) => ({
                                 ...prev,
                                 [prop.property_id]: vals
                               }));
@@ -282,7 +272,7 @@ export const EtsyPublisher = () => {
                             value={selectedTaxonomyProperties[prop.property_id]?.[0]?.toString() || ""}
                             onChange={(e) => {
                               const val = e.target.value;
-                              setSelectedTaxonomyProperties((prev: any) => ({
+                              setSelectedTaxonomyProperties((prev) => ({
                                 ...prev,
                                 [prop.property_id]: val ? [parseInt(val, 10)] : []
                               }));
@@ -290,7 +280,7 @@ export const EtsyPublisher = () => {
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
                           >
                             <option value="">Seçim Yapılmadı (Boş)</option>
-                            {prop.possible_values?.map((v: any) => (
+                            {prop.possible_values?.map((v) => (
                               <option key={v.value_id} value={v.value_id}>
                                 {v.name}
                               </option>
@@ -334,7 +324,7 @@ export const EtsyPublisher = () => {
                               className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
                             >
                               <option value="">-- Şablon Seçin --</option>
-                              {savedTemplates?.map((t: any) => (
+                              {savedTemplates?.map((t) => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                               ))}
                             </select>
@@ -416,7 +406,7 @@ export const EtsyPublisher = () => {
                         <div className="md:col-span-2 mt-2 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg flex gap-3">
                           <Info className="w-5 h-5 text-blue-500 shrink-0" />
                           <p className="text-xs text-blue-800 dark:text-blue-300">
-                            <strong>Bilgi:</strong> Bahsettiğiniz yeni <em>"How does your shop produce this item?"</em> ve <em>"What tools are used to make this item?"</em> (Creativity Standards) ayarları şu an Etsy'nin dışa açık (Public V3) API'si tarafından doğrudan desteklenmemektedir. Bu sebeple şu an için maalesef API üzerinden otomatik işaretlenemiyorlar. Etsy API güncellemesi yayınladığı an sisteme entegre edilecektir. Şimdilik bu iki alanı Etsy panelinden manuel işaretlemeniz gerekmektedir.
+                            <strong>Bilgi:</strong> Bahsettiğiniz yeni <em>&quot;How does your shop produce this item?&quot;</em> ve <em>&quot;What tools are used to make this item?&quot;</em> (Creativity Standards) ayarları şu an Etsy&apos;nin dışa açık (Public V3) API&apos;si tarafından doğrudan desteklenmemektedir. Bu sebeple şu an için maalesef API üzerinden otomatik işaretlenemiyorlar. Etsy API güncellemesi yayınladığı an sisteme entegre edilecektir. Şimdilik bu iki alanı Etsy panelinden manuel işaretlemeniz gerekmektedir.
                           </p>
                         </div>
                       </div>
@@ -432,7 +422,7 @@ export const EtsyPublisher = () => {
                     className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     <Send className={`w-4 h-4 ${isPublishing ? 'animate-spin' : ''}`} />
-                    🚀 Etsy'ye Taslak (Draft) Olarak Aktar
+                    🚀 Etsy&apos;ye Taslak (Draft) Olarak Aktar
                   </button>
 
                 </div>

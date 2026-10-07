@@ -34,7 +34,6 @@ interface MockupSettingsPanelProps {
   onCopyConfig: () => void;
   onPasteConfig: () => void;
   onOpenCropModal: () => void;
-  onUpdateExportAspectRatio?: (ratio: 'original' | 'square') => void;
 }
 
 export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
@@ -56,7 +55,6 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
   onCopyConfig,
   onPasteConfig,
   onOpenCropModal,
-  onUpdateExportAspectRatio,
 }) => {
   if (!selectedMockup) {
     return (

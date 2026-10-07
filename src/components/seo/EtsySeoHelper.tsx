@@ -24,7 +24,7 @@ const EtsySeoContent = () => {
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full uppercase font-mono">v3 Canlı</span>
               </h2>
               <p className="text-xs text-slate-300 mt-1">
-                Yapay Zeka SEO Metin Yazarı ile başlık, açıklama ve 13 altın etiket üretin; kargo/mağaza ayarları ve varyasyon fiyatlarıyla doğrudan Etsy'ye aktarın.
+                Yapay Zeka SEO Metin Yazarı ile başlık, açıklama ve 13 altın etiket üretin; kargo/mağaza ayarları ve varyasyon fiyatlarıyla doğrudan Etsy&apos;ye aktarın.
               </p>
             </div>
           </div>
@@ -67,9 +67,9 @@ const EtsySeoContent = () => {
   );
 };
 
-export const EtsySeoHelper: React.FC<{ renderedMatches?: any[] }> = ({ renderedMatches = [] }) => {
+export const EtsySeoHelper: React.FC = () => {
   return (
-    <EtsySeoProvider renderedMatches={renderedMatches}>
+    <EtsySeoProvider>
       <EtsySeoContent />
     </EtsySeoProvider>
   );

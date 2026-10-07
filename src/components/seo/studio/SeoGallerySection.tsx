@@ -43,7 +43,7 @@ export const SeoGallerySection: React.FC = () => {
   }
 
   const currentFolderMockups = selectedFolderId
-    ? dbGeneratedMockups.filter((m: any) => m.folderId === selectedFolderId)
+    ? dbGeneratedMockups.filter((m) => m.folderId === selectedFolderId)
     : [];
 
   return (
@@ -56,16 +56,16 @@ export const SeoGallerySection: React.FC = () => {
         </label>
         {selectedFolderId && (
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-500/20 truncate max-w-full">
-            Seçili Klasör: {foldersWithMockups.find((f: any) => f.id === selectedFolderId)?.name}
+            Seçili Klasör: {foldersWithMockups.find((f) => f.id === selectedFolderId)?.name}
           </span>
         )}
       </div>
 
       {/* Folders Horizontal Scrollable List */}
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-        {foldersWithMockups.map((folder: any) => {
+        {foldersWithMockups.map((folder) => {
           const isSelected = selectedFolderId === folder.id;
-          const thumbnailMockup = dbGeneratedMockups.find((m: any) => m.folderId === folder.id && !m.isVideo);
+          const thumbnailMockup = dbGeneratedMockups.find((m) => m.folderId === folder.id && !m.isVideo);
           return (
             <div
               key={folder.id}
@@ -171,7 +171,7 @@ export const SeoGallerySection: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2.5">
             <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
               <GripVertical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span>Etsy'ye Gönderilecek Görseller ({currentFolderMockups.length} Adet)</span>
+              <span>Etsy&apos;ye Gönderilecek Görseller ({currentFolderMockups.length} Adet)</span>
             </label>
             <span className="text-[10px] text-slate-400 hidden sm:inline">
               Sürükleyip veya oklarla sıralayabilirsiniz
@@ -179,7 +179,7 @@ export const SeoGallerySection: React.FC = () => {
           </div>
 
           <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-            {currentFolderMockups.map((mockup: any, idx: number, arr: any[]) => {
+            {currentFolderMockups.map((mockup, idx, arr) => {
               const isDragged = draggedMockupId === mockup.id;
               return (
                 <div

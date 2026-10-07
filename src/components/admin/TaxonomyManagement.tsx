@@ -372,7 +372,7 @@ export default function TaxonomyManagement() {
                           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
-                          Etsy'den Kategorileri İndir
+                          Etsy&apos;den Kategorileri İndir
                         </button>
                       </div>
                     )}

@@ -207,7 +207,7 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
             </span>
           ) : (
             <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-bold">
-              <AlertTriangle className="w-3.5 h-3.5" /> Yüksek Tekrar ({analysis.shirtCount} kez "shirt/tee" geçiyor)
+              <AlertTriangle className="w-3.5 h-3.5" /> Yüksek Tekrar ({analysis.shirtCount} kez &quot;shirt/tee&quot; geçiyor)
             </span>
           )}
         </div>

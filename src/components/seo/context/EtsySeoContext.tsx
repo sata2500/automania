@@ -1,25 +1,32 @@
 'use client';
 import { getErrorMessage } from '@/lib/errors';
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { useToast } from '@/components/common/ToastContext';
 import { deleteBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
-import { DesignItem, RenderedMatch } from '@/types/pod';
+import { DesignItem, EtsyVariationRow, EtsyVariationTemplate, EvaluatedKeyword, RenderedMatch } from '@/types/pod';
+import type {
+  EtsyInventoryProduct,
+  EtsyListingPropertyValue,
+  EtsyReadinessState,
+  EtsyReturnPolicy,
+  EtsyShippingProfile,
+  EtsyShopSection,
+  EtsyTaxonomyProperty,
+  ListingBatchResult,
+  StoredEtsyListing,
+} from '@/types/etsy';
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 
-interface VariationRow {
-  id: string;
-  size: string;
-  color: string;
-  price: number;
-  quantity: number;
-  sku: string;
-  enabled: boolean;
-}
+type VariationRow = EtsyVariationRow;
+
+export type KeywordCandidate = Partial<EvaluatedKeyword> & { keyword: string };
+
+type SavedVariationTemplate = EtsyVariationTemplate;
 
 function extractCleanNiche(design: DesignItem): string {
   if (!design) return '';
 
-  const analysis = (design.analysis || {}) as any;
+  const analysis: Partial<NonNullable<DesignItem['analysis']>> = design.analysis || {};
 
   // 1. Prioritize explicit primarySubject / niche from AI analysis
   if (analysis.primarySubject) {
@@ -65,29 +72,28 @@ function extractCleanNiche(design: DesignItem): string {
 
 
 
-function useEtsySeoState(renderedMatches: RenderedMatch[]) {
+type SeoTab = 'studio' | 'variations' | 'publish';
+const SEO_TAB_STORAGE_KEY = 'automania_seo_active_tab';
+
+function readSavedSeoTab(): SeoTab {
+  try {
+    const saved = localStorage.getItem(SEO_TAB_STORAGE_KEY);
+    if (saved === 'studio' || saved === 'variations' || saved === 'publish') return saved;
+  } catch {
+    // localStorage erişilemiyor (gizli mod vb.)
+  }
+  return 'studio';
+}
+
+function useEtsySeoState() {
 
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<'studio' | 'variations' | 'publish'>('studio');
-  const isTabInitialized = useRef(false);
+  // EtsySeoHelper yalnızca istemcide render edilir (ssr: false), bu yüzden ilk değer doğrudan okunabilir.
+  const [activeTab, setActiveTab] = useState<SeoTab>(readSavedSeoTab);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('automania_seo_active_tab');
-      if (saved === 'studio' || saved === 'variations' || saved === 'publish') {
-        setActiveTab(saved);
-      }
-    } catch {}
-    // Bir sonraki tick'te initialized olduğunu kabul et
-    setTimeout(() => {
-      isTabInitialized.current = true;
-    }, 50);
-  }, []);
-
-  useEffect(() => {
-    if (!isTabInitialized.current) return;
-    try {
-      localStorage.setItem('automania_seo_active_tab', activeTab);
+      localStorage.setItem(SEO_TAB_STORAGE_KEY, activeTab);
     } catch {}
   }, [activeTab]);
 
@@ -99,7 +105,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
   const [sizes, setSizes] = useState<string[]>([]);
   const [colors, setColors] = useState<string[]>([]);
   const [variations, setVariations] = useState<VariationRow[]>([]);
-  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [savedTemplates, setSavedTemplates] = useState<SavedVariationTemplate[]>([]);
   const [defaultTemplates, setDefaultTemplates] = useState<Record<number, string>>({});
   const [basePrice, setBasePrice] = useState<number>(24.99);
 
@@ -116,8 +122,8 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
   const [generatedTitle, setGeneratedTitle] = useState('');
   const [generatedDescription, setGeneratedDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [enrichedKeywords, setEnrichedKeywords] = useState<any[]>([]);
-  const [coOccurringTags, setCoOccurringTags] = useState<string[]>([]);
+  const [enrichedKeywords, setEnrichedKeywords] = useState<KeywordCandidate[]>([]);
+  const [coOccurringTags, setCoOccurringTags] = useState<Array<string | KeywordCandidate>>([]);
   const [taxonomyId, setTaxonomyId] = useState<number>(1081);
   const [whoMade, setWhoMade] = useState<string>('someone_else');
   const [whenMade, setWhenMade] = useState<string>('made_to_order');
@@ -161,6 +167,9 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
     }
     return arr;
   }, [dbGeneratedMockups, folderOrder]);
+
+  const [savedCustomSizes, setSavedCustomSizes] = useState<string[]>([]);
+  const [savedCustomColors, setSavedCustomColors] = useState<string[]>([]);
 
   // Load user designs on mount
   useEffect(() => {
@@ -529,8 +538,6 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
   const [newGenSizeInput, setNewGenSizeInput] = useState('');
   const [newGenColorInput, setNewGenColorInput] = useState('');
 
-  const [savedCustomSizes, setSavedCustomSizes] = useState<string[]>([]);
-  const [savedCustomColors, setSavedCustomColors] = useState<string[]>([]);
 
   const handleAddCustomSize = async () => {
     const trimmed = newGenSizeInput.trim();
@@ -708,7 +715,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
     startRowId: string | null;
     endRowId: string | null;
     field: 'price' | 'quantity' | 'enabled' | null;
-    value: any;
+    value: number | boolean | null;
   }>({
     isDragging: false,
     startRowId: null,
@@ -719,80 +726,82 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
 
   // Publishing state
   const [isPublishing, setIsPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<any>(null);
+  const [publishResult, setPublishResult] = useState<Record<string, unknown> | null>(null);
   
   // Etsy Integration state
   const [etsyConnected, setEtsyConnected] = useState(false);
-  const [shippingProfiles, setShippingProfiles] = useState<any[]>([]);
+  const [shippingProfiles, setShippingProfiles] = useState<EtsyShippingProfile[]>([]);
   const [selectedShippingProfileId, setSelectedShippingProfileId] = useState<string>('');
   
-  const [readinessStates, setReadinessStates] = useState<any[]>([]);
+  const [readinessStates, setReadinessStates] = useState<EtsyReadinessState[]>([]);
   const [selectedReadinessStateId, setSelectedReadinessStateId] = useState<string>('');
 
-  const [shopSections, setShopSections] = useState<any[]>([]);
+  const [shopSections, setShopSections] = useState<EtsyShopSection[]>([]);
   const [selectedShopSectionId, setSelectedShopSectionId] = useState<string>('');
 
-  const [returnPolicies, setReturnPolicies] = useState<any[]>([]);
+  const [returnPolicies, setReturnPolicies] = useState<EtsyReturnPolicy[]>([]);
   const [selectedReturnPolicyId, setSelectedReturnPolicyId] = useState<string>('');
 
   const [shouldAutoRenew, setShouldAutoRenew] = useState<boolean>(false);
 
-  const [availableTaxonomyProperties, setAvailableTaxonomyProperties] = useState<any[]>([]);
+  const [availableTaxonomyProperties, setAvailableTaxonomyProperties] = useState<EtsyTaxonomyProperty[]>([]);
   const [selectedTaxonomyProperties, setSelectedTaxonomyProperties] = useState<Record<number, number[]>>({});
 
-  const fetchEtsyStoreData = useCallback(async () => {
-    try {
-      const res = await fetch('/api/etsy/shipping-profiles');
-      const data = await res.json();
-      if (data.connected) {
-        setEtsyConnected(true);
-        if (data.profiles && data.profiles.length > 0) {
-          setShippingProfiles(data.profiles);
-          setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
-        }
-        if (data.readinessStates && data.readinessStates.length > 0) {
-          setReadinessStates(data.readinessStates);
-          setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
-        }
-        // Fetch shop sections
-        fetch('/api/etsy/shop-sections')
-          .then(s => s.json())
-          .then(sData => {
-            if (sData.success && sData.sections) {
-              setShopSections(sData.sections);
-            }
-          })
-          .catch(() => {});
-        // Fetch return policies
-        fetch('/api/etsy/return-policies')
-          .then(r => r.json())
-          .then(rData => {
-            if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
-              setReturnPolicies(rData.returnPolicies);
-              setSelectedReturnPolicyId(prev => prev || rData.returnPolicies[0].return_policy_id.toString());
-            }
-          })
-          .catch(() => {});
-        // Fetch listings in background for total count
-        fetch('/api/etsy/listings')
-          .then(l => l.json())
-          .then(lData => {
-            if (lData.success && lData.listings) {
-              setEtsyListings(lData.listings);
-            }
-          })
-          .catch(() => {});
-      } else {
-        setEtsyConnected(false);
-      }
-    } catch (err) {
-      console.warn('Error fetching Etsy store settings:', err);
-    }
-  }, []);
+  const [etsyListings, setEtsyListings] = useState<StoredEtsyListing[]>([]);
 
+  // Etsy mağaza ayarlarını (kargo, hazırlık süresi, bölümler, iade politikaları) sekme değiştikçe yenile
   useEffect(() => {
-    fetchEtsyStoreData();
-  }, [fetchEtsyStoreData, activeTab]);
+    const loadEtsyStoreData = async () => {
+      try {
+        const res = await fetch('/api/etsy/shipping-profiles');
+        const data = await res.json();
+        if (data.connected) {
+          setEtsyConnected(true);
+          if (data.profiles && data.profiles.length > 0) {
+            setShippingProfiles(data.profiles);
+            setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
+          }
+          if (data.readinessStates && data.readinessStates.length > 0) {
+            setReadinessStates(data.readinessStates);
+            setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
+          }
+          // Fetch shop sections
+          fetch('/api/etsy/shop-sections')
+            .then(s => s.json())
+            .then(sData => {
+              if (sData.success && sData.sections) {
+                setShopSections(sData.sections);
+              }
+            })
+            .catch(() => {});
+          // Fetch return policies
+          fetch('/api/etsy/return-policies')
+            .then(r => r.json())
+            .then(rData => {
+              if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
+                setReturnPolicies(rData.returnPolicies);
+                setSelectedReturnPolicyId(prev => prev || rData.returnPolicies[0].return_policy_id.toString());
+              }
+            })
+            .catch(() => {});
+          // Fetch listings in background for total count
+          fetch('/api/etsy/listings')
+            .then(l => l.json())
+            .then(lData => {
+              if (lData.success && lData.listings) {
+                setEtsyListings(lData.listings);
+              }
+            })
+            .catch(() => {});
+        } else {
+          setEtsyConnected(false);
+        }
+      } catch (err) {
+        console.warn('Error fetching Etsy store settings:', err);
+      }
+    };
+    void loadEtsyStoreData();
+  }, [activeTab]);
 
   // Fetch taxonomy properties when taxonomyId is available and etsy is connected
   useEffect(() => {
@@ -833,74 +842,47 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
       // 2. Extract design's own AI vision analysis keywords
       const designKeywords = selectedDesign.analysis?.keywords || [];
 
-      // 3. Query DB Keyword Pool to fetch real scores for design keywords
-      let kwList: any[] = [];
-      try {
-        const kwRes = await fetch('/api/admin/keywords?limit=100&sortBy=opportunity_score&order=desc');
-        const kwData = await kwRes.json();
-        if (kwData.success && Array.isArray(kwData.keywords) && kwData.keywords.length > 0) {
-          const dbPoolMap = new Map(kwData.keywords.map((k: any) => [k.keyword.toLowerCase(), k]));
-          
-          // Map design's AI keywords to DB pool metrics
-          kwList = designKeywords.map(kStr => {
-            const lower = kStr.toLowerCase();
-            if (dbPoolMap.has(lower)) {
-              return dbPoolMap.get(lower);
-            }
-            return { keyword: kStr, opportunity_score: 75, total_listings: 1500, tag_eligible: kStr.length <= 20 };
+      // 3. Tasarım anahtar kelimelerinin gerçek metriklerini (varsa) havuzdan oku.
+      //    Metriği olmayan kelimeler skor uydurulmadan gönderilir.
+      let kwList: KeywordCandidate[] = designKeywords.map((kStr) => ({ keyword: kStr, tag_eligible: kStr.length <= 20 }));
+      if (designKeywords.length > 0) {
+        try {
+          const kwRes = await fetch('/api/designs/analyze/keywords', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keywords: designKeywords }),
           });
-
-          // Also merge top DB keywords matching design theme
-          const themeMatches = kwData.keywords.filter((k: any) => {
-            const kLower = k.keyword.toLowerCase();
-            return designKeywords.some(dk => kLower.includes(dk.toLowerCase()) || dk.toLowerCase().includes(kLower));
-          });
-          kwList = [...kwList, ...themeMatches];
+          const kwData = (await kwRes.json()) as { success?: boolean; keywords?: EvaluatedKeyword[] };
+          if (kwData.success && Array.isArray(kwData.keywords)) {
+            const dbPoolMap = new Map(kwData.keywords.map((k) => [k.keyword.toLowerCase(), k]));
+            kwList = kwList.map((candidate) => dbPoolMap.get(candidate.keyword.toLowerCase()) ?? candidate);
+          }
+        } catch {
+          // Metrikler alınamazsa ham anahtar kelimelerle devam edilir.
         }
-      } catch {}
-
-      // Fallback to raw design keywords if DB fetch fails
-      if (kwList.length === 0 && designKeywords.length > 0) {
-        kwList = designKeywords.map(kStr => ({ keyword: kStr, opportunity_score: 80, tag_eligible: kStr.length <= 20 }));
       }
 
       // 4. Anti-contamination filter (e.g. remove 'dog' if design is rabbit)
-      if (isRabbit) {
-        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('dog') && !k.keyword.toLowerCase().includes('cat'));
-      } else if (isDog) {
-        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('cat') && !k.keyword.toLowerCase().includes('rabbit'));
-      } else if (isCat) {
-        kwList = kwList.filter((k: any) => !k.keyword.toLowerCase().includes('dog') && !k.keyword.toLowerCase().includes('rabbit'));
-      }
-
-      // Fallback keywords if DB pool is empty or completely filtered out
-      if (kwList.length === 0) {
-        kwList = [
-          { keyword: `${niche.slice(0,12)} shirt`, opportunity_score: 91, total_listings: 1200, is_etsy_suggested: true, autocomplete_rank: 1 },
-          { keyword: 'grow through quote', opportunity_score: 88, total_listings: 2400, is_etsy_suggested: true, autocomplete_rank: 2 },
-          { keyword: 'wildflower shirt', opportunity_score: 85, total_listings: 1800, is_etsy_suggested: true, autocomplete_rank: 3 },
-          { keyword: 'botanical shirt', opportunity_score: 82, total_listings: 4500, is_etsy_suggested: true, autocomplete_rank: 4 },
-          { keyword: 'cottagecore shirt', opportunity_score: 95, total_listings: 950, is_etsy_suggested: true, autocomplete_rank: 1 },
-          { keyword: 'self care gift', opportunity_score: 89, total_listings: 1400, is_etsy_suggested: true, autocomplete_rank: 2 },
-          { keyword: 'inspirational tee', opportunity_score: 87, total_listings: 1900, is_etsy_suggested: true, autocomplete_rank: 3 }
-        ];
+      const excludeTerms = isRabbit ? ['dog', 'cat'] : isDog ? ['cat', 'rabbit'] : isCat ? ['dog', 'rabbit'] : [];
+      if (excludeTerms.length > 0) {
+        kwList = kwList.filter((k) => !excludeTerms.some((term) => k.keyword.toLowerCase().includes(term)));
       }
 
       // We now receive taxonomyId directly from the analyze step (saved in selectedDesign.analysis)
       const predictedTaxonomyId = selectedDesign.analysis?.taxonomyId || 482;
 
-      let fetchedTaxonomyProperties = [];
+      let fetchedTaxonomyProperties: EtsyTaxonomyProperty[] = [];
       try {
         const propRes = await fetch(`/api/etsy/taxonomy-properties?taxonomy_id=${predictedTaxonomyId}`);
         const propData = await propRes.json();
         if (propData.success && propData.properties) {
           // Filter to only include useful properties that AI can choose from,
           // avoiding huge lists like 'Size', 'Color', and 'Primary color' / 'Secondary color' which are handled in variations
-          fetchedTaxonomyProperties = propData.properties.filter((p: any) => 
+          fetchedTaxonomyProperties = (propData.properties as EtsyTaxonomyProperty[]).filter((p) => 
             p.name !== 'Size' && p.name !== 'Color' && p.name !== 'Width' && p.name !== 'Length' && p.name !== 'Capacity' &&
             p.name.toLowerCase() !== 'primary color' && p.name.toLowerCase() !== 'secondary color' &&
             !p.name.toLowerCase().startsWith('custom') &&
-            p.possible_values && p.possible_values.length > 0
+            Boolean(p.possible_values && p.possible_values.length > 0)
           );
           setAvailableTaxonomyProperties(fetchedTaxonomyProperties);
         }
@@ -954,7 +936,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
         
         if (data.listing.taxonomy_properties_values) {
           const formattedProps: Record<number, number[]> = {};
-          data.listing.taxonomy_properties_values.forEach((p: any) => {
+          (data.listing.taxonomy_properties_values as EtsyListingPropertyValue[]).forEach((p) => {
             if (p.property_id && p.value_ids && p.value_ids.length > 0) {
               formattedProps[p.property_id] = p.value_ids;
             }
@@ -1018,7 +1000,6 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
   };
   // --- ETSY LISTING TEMPLATES ---
   const [showListingsModal, setShowListingsModal] = useState(false);
-  const [etsyListings, setEtsyListings] = useState<any[]>([]);
   const [isFetchingListings, setIsFetchingListings] = useState(false);
   const [isFetchingInventory, setIsFetchingInventory] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -1077,15 +1058,15 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
       
       const data = await res.json();
       if (data.success) {
-        const successCount = data.results.filter((r: any) => r.success).length;
-        const failCount = data.results.filter((r: any) => !r.success).length;
+        const successCount = (data.results as ListingBatchResult[]).filter((r) => r.success).length;
+        const failCount = (data.results as ListingBatchResult[]).filter((r) => !r.success).length;
         
         if (failCount === 0) {
           toast.success(`Seçilen ${successCount} ilanın varyasyonları başarıyla güncellendi!`);
           setIsBulkSyncModalOpen(false);
           setSelectedListingsForSync([]);
         } else {
-          const firstError = data.results.find((r: any) => !r.success)?.error || 'Bilinmeyen hata';
+          const firstError = (data.results as ListingBatchResult[]).find((r) => !r.success)?.error || 'Bilinmeyen hata';
           toast.error(`${successCount} başarılı, ${failCount} başarısız işlem. Hata detayı: ${firstError}`);
         }
       } else {
@@ -1135,7 +1116,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
     }
   };
 
-  const handleLoadTemplate = (template: any) => {
+  const handleLoadTemplate = (template: SavedVariationTemplate) => {
     setVariations(template.variations || []);
     setIsLoadTemplateModalOpen(false);
     toast.success(`"${template.name}" başarıyla yüklendi!`);
@@ -1173,7 +1154,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
     }
   };
 
-  const handleSelectListingTemplate = async (listingId: number) => {
+  const handleSelectListingTemplate = async (listingId: number | string) => {
     setIsFetchingInventory(true);
     try {
       const res = await fetch(`/api/etsy/listings?listing_id=${listingId}`);
@@ -1181,14 +1162,14 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
       if (data.success && data.inventory) {
         const products = data.inventory.products || [];
         const newVars: VariationRow[] = [];
-        products.forEach((prod: any) => {
+        (products as EtsyInventoryProduct[]).forEach((prod) => {
           if (prod.is_deleted) return;
           const pv = prod.property_values || [];
-          const sizeProp = pv.find((p: any) => p.property_name.toLowerCase() === 'size' || p.property_id === 513 || p.property_id === 504);
-          const colorProp = pv.find((p: any) => p.property_name.toLowerCase() === 'color' || p.property_id === 514 || p.property_id === 489);
+          const sizeProp = pv.find((p) => p.property_name?.toLowerCase() === 'size' || p.property_id === 513 || p.property_id === 504);
+          const colorProp = pv.find((p) => p.property_name?.toLowerCase() === 'color' || p.property_id === 514 || p.property_id === 489);
           
-          const size = sizeProp ? sizeProp.values[0] : 'N/A';
-          const color = colorProp ? colorProp.values[0] : 'N/A';
+          const size = sizeProp?.values?.[0] ?? 'N/A';
+          const color = colorProp?.values?.[0] ?? 'N/A';
           
           const offering = prod.offerings && prod.offerings[0];
           const price = offering?.price?.amount ? offering.price.amount / offering.price.divisor : 24.99;
@@ -1201,7 +1182,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
             price,
             quantity,
             sku: '', // Kullanıcı SKU'ların gelmesini ve gösterilmesini istemiyor
-            enabled: offering ? offering.is_enabled : true
+            enabled: offering?.is_enabled ?? true
           });
         });
 
@@ -1239,7 +1220,7 @@ function useEtsySeoState(renderedMatches: RenderedMatch[]) {
 
 
   // Drag to fill events
-  const handleDragStart = (rowId: string, field: 'price' | 'quantity' | 'enabled', value: any) => {
+  const handleDragStart = (rowId: string, field: 'price' | 'quantity' | 'enabled', value: number | boolean) => {
     setDragState({
       isDragging: true,
       startRowId: rowId,
@@ -1478,8 +1459,8 @@ export type EtsySeoContextValue = ReturnType<typeof useEtsySeoState>;
 
 const EtsySeoContext = createContext<EtsySeoContextValue | null>(null);
 
-export const EtsySeoProvider = ({ children, renderedMatches = [] }: { children: React.ReactNode; renderedMatches?: RenderedMatch[] }) => {
-  const contextValue = useEtsySeoState(renderedMatches);
+export const EtsySeoProvider = ({ children }: { children: React.ReactNode }) => {
+  const contextValue = useEtsySeoState();
   return (
     <EtsySeoContext.Provider value={contextValue}>
       {children}

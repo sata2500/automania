@@ -125,7 +125,7 @@ export const MockupItemMenu: React.FC<MockupItemMenuProps> = ({
         className="w-full px-3.5 py-2 flex items-center gap-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-left font-medium cursor-pointer"
       >
         <Trash2 className="w-3.5 h-3.5" />
-        <span>Mockup'ı Sil</span>
+        <span>Mockup&apos;ı Sil</span>
       </button>
     </div>
   );

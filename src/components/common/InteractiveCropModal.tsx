@@ -44,36 +44,6 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
   }, [isOpen, onClose]);
 
   // Load image once when modal opens or src changes
-  useEffect(() => {
-    if (!isOpen || !imageSrc) return;
-
-    let isMounted = true;
-
-    // Create reusable preview canvas once
-    if (!previewCanvasRef.current) {
-      previewCanvasRef.current = document.createElement('canvas');
-      previewCanvasRef.current.width = PREVIEW_SIZE;
-      previewCanvasRef.current.height = PREVIEW_SIZE;
-    }
-
-    loadImage(imageSrc).then((img) => {
-      if (!isMounted) return;
-      loadedImgRef.current = img;
-
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      setIsWide(w > h);
-      setIsTall(h > w);
-
-      drawPreview(img, offsetX, offsetY);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, imageSrc]);
-
   /**
    * Low-resolution preview render — reuses existing canvas, no new allocations.
    * Called on every slider change (fast, ~300×300px).
@@ -106,6 +76,37 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
     },
     []
   );
+
+  useEffect(() => {
+    if (!isOpen || !imageSrc) return;
+
+    let isMounted = true;
+
+    // Create reusable preview canvas once
+    if (!previewCanvasRef.current) {
+      previewCanvasRef.current = document.createElement('canvas');
+      previewCanvasRef.current.width = PREVIEW_SIZE;
+      previewCanvasRef.current.height = PREVIEW_SIZE;
+    }
+
+    loadImage(imageSrc).then((img) => {
+      if (!isMounted) return;
+      loadedImgRef.current = img;
+
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      setIsWide(w > h);
+      setIsTall(h > w);
+
+      drawPreview(img, offsetX, offsetY);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, imageSrc]);
+
 
   // Re-render preview when sliders change (if image already loaded)
   useEffect(() => {

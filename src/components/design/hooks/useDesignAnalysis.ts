@@ -32,7 +32,7 @@ export function useDesignAnalysis({
           body: JSON.stringify({ src: design.src, name: design.name }),
         });
         
-        let data: any;
+        let data: { success?: boolean; analysis?: DesignItem['analysis']; error?: string; warning?: string };
         const rawText = await res.text();
         try {
           data = JSON.parse(rawText);

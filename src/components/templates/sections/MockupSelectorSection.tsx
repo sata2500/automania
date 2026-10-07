@@ -25,7 +25,6 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
     (config.staticMockupIds?.length ?? 0);
   const totalVideos = config.videoMockupIds?.length ?? 0;
   const remainingImages = 20 - totalImages;
-  const remainingVideos = 2 - totalVideos;
 
   // Video mockuplar
   const videoMockups = mockups.filter(m => m.isVideo);

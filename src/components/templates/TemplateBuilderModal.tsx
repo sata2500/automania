@@ -15,7 +15,7 @@ import {
   AlertCircle,
   
 } from 'lucide-react';
-import { PodTemplate, PodTemplateInput } from '@/types/templates';
+import { PodTemplate, PodTemplateInput, TemplateVariationRow } from '@/types/templates';
 import { MockupItem } from '@/types/pod';
 import { MockupSelectorSection } from './sections/MockupSelectorSection';
 import { VariationSection } from './sections/VariationSection';
@@ -62,7 +62,7 @@ export function TemplateBuilderModal({
   );
   const [variationConfig, setVariationConfig] = useState(
     template?.variationConfig ?? {
-      rows: [] as any[],
+      rows: [] as TemplateVariationRow[],
       sizes: [] as string[],
       colors: [] as string[],
       basePrice: 24.99,

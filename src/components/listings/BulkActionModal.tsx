@@ -15,12 +15,14 @@ import { useToast } from '@/components/common/ToastContext';
 
 export type BulkActionType = 'vision' | 'evaluate_seo' | 'optimize';
 
+import type { StoredEtsyListing } from '@/types/etsy';
+
 interface BulkActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   actionType: BulkActionType;
-  selectedListings: any[];
-  allListings: any[];
+  selectedListings: StoredEtsyListing[];
+  allListings: StoredEtsyListing[];
   onCompleted: () => void;
 }
 
@@ -105,7 +107,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
       try {
         let endpoint = '';
-        const body: any = { listingIds: chunkIds };
+        const body = { listingIds: chunkIds };
 
         if (actionType === 'vision') {
           endpoint = '/api/etsy/listings/analyze-vision';
@@ -145,7 +147,13 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
     setIsFinished(true);
     setErrorLogs(errors);
     setProgress(100);
-    success(`Toplu işlem tamamlandı! (${completed}/${targetListings.length})`);
+    if (completed === 0) {
+      error(`Toplu işlem başarısız oldu (0/${targetListings.length}). Ayrıntılar için hata kayıtlarına bakın.`);
+    } else if (errors.length > 0) {
+      warning(`Toplu işlem kısmen tamamlandı (${completed}/${targetListings.length}); ${errors.length} hata kaydı var.`);
+    } else {
+      success(`Toplu işlem tamamlandı! (${completed}/${targetListings.length})`);
+    }
   };
 
 

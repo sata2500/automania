@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Header, TabKey } from '@/components/common/Header';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Editör yükleniyor...</div> });
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Tasarımlar yükleniyor...</div> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
@@ -67,6 +68,7 @@ function isInsideScrollableOrInteractive(el: HTMLElement | null): boolean {
 
 function MainContent() {
   const { user, setIsAuthModalOpen } = useAuth();
+  const router = useRouter();
   const [activeTabState, setActiveTabState] = useState<TabKey>('mockups');
 
   useEffect(() => {
@@ -489,10 +491,7 @@ function MainContent() {
         onImportBackup={handleImportBackup}
         onLoadSampleData={handleLoadSampleData}
         onClearAllData={handleClearAllData}
-        onMigrateGuestData={() => handleMigrateGuestData()}
-        onNavigateAdmin={() => {
-          window.location.href = '/admin';
-        }}
+        onNavigateAdmin={() => router.push('/admin')}
       />
     </div>
   );

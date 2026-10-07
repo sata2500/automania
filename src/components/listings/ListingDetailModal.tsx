@@ -27,11 +27,15 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
+import type { StoredEtsyListing } from '@/types/etsy';
+import type { SeoEvaluationResult, VisionAnalysisData } from '@/lib/etsy-seo-evaluator';
+import { parseJsonObject } from '@/lib/json-utils';
+
 interface ListingDetailModalProps {
-  listing: any | null;
+  listing: StoredEtsyListing | null;
   isOpen: boolean;
   onClose: () => void;
-  onListingUpdated: (updated: any) => void;
+  onListingUpdated: (updated: StoredEtsyListing) => void;
 }
 
 type ModalTab = 'seo' | 'vision' | 'optimize' | 'edit';
@@ -106,13 +110,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
   if (!isOpen || !listing) return null;
 
-  const evaluation = typeof listing.seo_evaluation === 'string'
-    ? JSON.parse(listing.seo_evaluation)
-    : listing.seo_evaluation || {};
-
-  const vision = typeof listing.vision_analysis === 'string'
-    ? JSON.parse(listing.vision_analysis)
-    : listing.vision_analysis || {};
+  const evaluation: Partial<SeoEvaluationResult> = parseJsonObject<Partial<SeoEvaluationResult>>(listing.seo_evaluation, {});
+  const vision: Partial<VisionAnalysisData> & Record<string, unknown> = parseJsonObject(listing.vision_analysis, {});
 
   const aiOptimizedTags: string[] = Array.isArray(listing.ai_optimized_tags)
     ? listing.ai_optimized_tags
@@ -279,12 +278,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     return 'text-rose-500 bg-rose-500/10 border-rose-500/30';
   };
 
-  const getScoreBg = (sc: number) => {
-    if (sc >= 85) return 'bg-emerald-500';
-    if (sc >= 60) return 'bg-amber-500';
-    return 'bg-rose-500';
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -293,7 +286,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
           <div className="flex items-center space-x-3 min-w-0">
             <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
-              <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+              <img src={imageUrl} alt={listing.title ?? undefined} className="w-full h-full object-cover" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
@@ -308,7 +301,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   {listing.state === 'active' ? 'Aktif (Live)' : listing.state}
                 </span>
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title}>
+              <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title ?? undefined}>
                 {listing.title || 'Başlıksız İlan'}
               </h3>
             </div>
@@ -322,7 +315,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 rel="noreferrer"
                 className="hidden sm:flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg transition-all"
               >
-                <span>Etsy'de Aç</span>
+                <span>Etsy&apos;de Aç</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
@@ -382,7 +375,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             }`}
           >
             <Send className="w-4 h-4" />
-            <span>4. Düzenle & Etsy'ye Gönder</span>
+            <span>4. Düzenle & Etsy&apos;ye Gönder</span>
           </button>
         </div>
 
@@ -487,11 +480,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 {/* Tag Breakdown Grid */}
                 {(!evaluation.tagBreakdown || evaluation.tagBreakdown.length === 0) ? (
                   <div className="text-center py-6 text-xs text-slate-500 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
-                    <p>Etiket analizi henüz hesaplanmadı. Lütfen yukarıdaki "Etiketleri Havuzda Yeniden Tara" butonuna tıklayın.</p>
+                    <p>Etiket analizi henüz hesaplanmadı. Lütfen yukarıdaki &quot;Etiketleri Havuzda Yeniden Tara&quot; butonuna tıklayın.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {evaluation.tagBreakdown.map((t: any, idx: number) => {
+                    {evaluation.tagBreakdown.map((t, idx) => {
                       const scoreVal = Number(t.opportunityScore || 0);
                       const isHigh = scoreVal >= 70;
                       const isMid = scoreVal >= 45 && scoreVal < 70;
@@ -527,7 +520,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                               {t.competitionLevel || (t.totalListings ? `${t.totalListings.toLocaleString()} İlan` : 'Havuzda Mevcut')}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
-                              {t.bestsellerCount > 0 && (
+                              {(t.bestsellerCount ?? 0) > 0 && (
                                 <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30 px-1.5 py-0.2 rounded font-medium" title="Bestseller Kanıtı">
                                   🔥 Bestseller
                                 </span>
@@ -578,7 +571,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <p className="text-xs text-emerald-400 italic">Tebrikler! Belirgin bir SEO sorunu tespit edilmedi.</p>
                   ) : (
                     <ul className="space-y-2 max-h-60 overflow-y-auto">
-                      {evaluation.issues.map((iss: any, i: number) => (
+                      {evaluation.issues.map((iss, i) => (
                         <li key={i} className={`text-xs p-2.5 rounded-lg border flex flex-col gap-1 ${
                           iss.severity === 'critical'
                             ? 'bg-rose-500/10 border-rose-500/20 text-rose-300'
@@ -616,7 +609,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {evaluation.missingPoolKeywords.map((kw: any, i: number) => (
+                    {evaluation.missingPoolKeywords.map((kw, i) => (
                       <button
                         key={i}
                         onClick={() => {
@@ -652,7 +645,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 {/* Image Preview Box */}
                 <div className="w-full md:w-72 bg-slate-950 p-3 rounded-2xl border border-slate-800 shrink-0 flex flex-col items-center">
                   <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
-                    <img src={imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+                    <img src={imageUrl} alt={listing.title ?? undefined} className="w-full h-full object-cover" />
                   </div>
                   <button
                     onClick={handleRunVisionAnalysis}
@@ -793,7 +786,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   </div>
                   <h4 className="text-sm font-bold text-white">Henüz AI Optimizasyon Önerisi Üretilmedi</h4>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Yukarıdaki "🪄 AI SEO Üret" butonuna tıklayarak bu ilan için optimize edilmiş 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama hazırlatabilirsiniz.
+                    Yukarıdaki &quot;🪄 AI SEO Üret&quot; butonuna tıklayarak bu ilan için optimize edilmiş 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama hazırlatabilirsiniz.
                   </p>
                 </div>
               ) : (
@@ -830,7 +823,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                           {listing.ai_optimized_title}
                         </p>
                         <button
-                          onClick={() => handleCopy(listing.ai_optimized_title, 'aiTitle')}
+                          onClick={() => handleCopy(listing.ai_optimized_title ?? '', 'aiTitle')}
                           className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-1"
                         >
                           <Copy className="w-3 h-3" />
@@ -899,7 +892,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                           <span>AI Optimize Açıklama Metni ({listing.ai_optimized_description.length} Karakter)</span>
                         </span>
                         <button
-                          onClick={() => handleCopy(listing.ai_optimized_description, 'aiDesc')}
+                          onClick={() => handleCopy(listing.ai_optimized_description ?? '', 'aiDesc')}
                           className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
                         >
                           <Copy className="w-3.5 h-3.5" />

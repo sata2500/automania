@@ -20,29 +20,9 @@ import { useToast } from '@/components/common/ToastContext';
 import { ListingDetailModal } from './ListingDetailModal';
 import { BulkActionModal, BulkActionType } from './BulkActionModal';
 
-type VisionAnalysis = Record<string, unknown> & {
-  primarySubject?: string;
-  description?: string;
-  analyzedAt?: string;
-};
+import type { StoredEtsyListing } from '@/types/etsy';
 
-type EtsyListingRecord = {
-  listing_id: string;
-  title?: string;
-  description?: string;
-  tags?: string[] | string | null;
-  state?: string;
-  seo_score?: number | string | null;
-  vision_analysis?: VisionAnalysis | string | null;
-  primary_image_url?: string | null;
-  images?: Array<{ url_570xN?: string; url_fullxfull?: string }>;
-  price?: number | string | null;
-  currency_code?: string | null;
-  views?: number | string | null;
-  num_favorers?: number | string | null;
-  url?: string | null;
-  [key: string]: unknown;
-};
+type EtsyListingRecord = StoredEtsyListing;
 
 export const EtsyListingManager: React.FC = () => {
   const { success, error, warning } = useToast();
@@ -716,7 +696,7 @@ export const EtsyListingManager: React.FC = () => {
                     <h4
                       className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug cursor-pointer hover:text-indigo-500 transition-colors"
                       onClick={() => handleOpenDetail(item)}
-                      title={item.title}
+                      title={item.title ?? undefined}
                     >
                       {item.title || 'Başlıksız İlan'}
                     </h4>
@@ -849,7 +829,7 @@ export const EtsyListingManager: React.FC = () => {
                             <div
                               onClick={() => handleOpenDetail(item)}
                               className="font-bold text-slate-900 dark:text-white truncate cursor-pointer hover:text-indigo-500"
-                              title={item.title}
+                              title={item.title ?? undefined}
                             >
                               {item.title || 'Başlıksız İlan'}
                             </div>

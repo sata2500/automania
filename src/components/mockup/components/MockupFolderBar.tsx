@@ -70,7 +70,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
   };
 
   // --- Mobile Touch Handlers ---
-  const handleTouchStart = (index: number, e: React.TouchEvent) => {
+  const handleTouchStart = (index: number) => {
     touchFolderStartRef.current = index;
     touchFolderOverRef.current = index;
     setTouchDragFolderIndex(index);
@@ -148,7 +148,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
           }`}
         >
           <Folder className="w-3.5 h-3.5 shrink-0" />
-          <span>Tüm Mockup'lar</span>
+          <span>Tüm Mockup&apos;lar</span>
           <span
             className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
               activeFolderId === null
@@ -181,7 +181,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
               onDragStart={() => handleDragStart(index)}
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={() => handleDrop(index)}
-              onTouchStart={(e) => handleTouchStart(index, e)}
+              onTouchStart={() => handleTouchStart(index)}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               onContextMenu={(e) => openMenuForFolder(folder, e)}

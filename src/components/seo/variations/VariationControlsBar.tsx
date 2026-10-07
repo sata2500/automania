@@ -68,7 +68,7 @@ export const VariationControlsBar: React.FC = () => {
             className="flex-1 sm:flex-none text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
           >
             {isFetchingListings || isFetchingInventory ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
-            Etsy'den Şablon İlan Çek
+            Etsy&apos;den Şablon İlan Çek
           </button>
           <button
             onClick={handleOpenBulkSync}

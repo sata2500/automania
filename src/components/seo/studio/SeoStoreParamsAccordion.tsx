@@ -4,11 +4,13 @@ import {
   CheckCircle2, Sparkles, Layers, Hash, RefreshCw, ChevronDown, 
   ChevronUp, SlidersHorizontal 
 } from 'lucide-react';
+import type { EtsyTaxonomyProperty } from '@/types/etsy';
+import { formatReturnPolicy } from '@/lib/etsy-format';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { useToast } from '@/components/common/ToastContext';
 
 // MultiSelect Dropdown component for Etsy Taxonomy properties
-const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: any, selectedValues: number[], onChange: (vals: number[]) => void }) => {
+const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: EtsyTaxonomyProperty, selectedValues: number[], onChange: (vals: number[]) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   
@@ -36,7 +38,7 @@ const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { prop
       </button>
       {isOpen && (
         <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl shadow-xl scrollbar-thin">
-          {propItem.possible_values?.map((v: any) => (
+          {propItem.possible_values?.map((v) => (
             <label key={v.value_id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
               <input 
                 type="checkbox" 
@@ -104,9 +106,9 @@ export const SeoStoreParamsAccordion: React.FC = () => {
   const hasAiAnalyzed = Boolean(generatedTitle || generatedDescription || (selectedTags && selectedTags.length > 0) || (availableTaxonomyProperties && availableTaxonomyProperties.length > 0));
 
   // Quick summary texts for the collapsed header
-  const currentShippingProfile = shippingProfiles.find((p: any) => p.shipping_profile_id.toString() === selectedShippingProfileId?.toString());
-  const currentReadiness = readinessStates.find((r: any) => r.readiness_state_id.toString() === selectedReadinessStateId?.toString());
-  const currentSection = shopSections.find((s: any) => s.shop_section_id?.toString() === selectedShopSectionId?.toString());
+  const currentShippingProfile = shippingProfiles.find((p) => p.shipping_profile_id.toString() === selectedShippingProfileId?.toString());
+  const currentReadiness = readinessStates.find((r) => r.readiness_state_id.toString() === selectedReadinessStateId?.toString());
+  const currentSection = shopSections.find((s) => s.shop_section_id?.toString() === selectedShopSectionId?.toString());
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
@@ -180,7 +182,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 onChange={(e) => setSelectedShippingProfileId(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
-                {shippingProfiles.map((p: any) => (
+                {shippingProfiles.map((p) => (
                   <option key={p.shipping_profile_id} value={p.shipping_profile_id}>
                     {p.title} (ID: {p.shipping_profile_id})
                   </option>
@@ -200,7 +202,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 onChange={(e) => setSelectedReadinessStateId(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
-                {readinessStates.map((r: any) => (
+                {readinessStates.map((r) => (
                   <option key={r.readiness_state_id} value={r.readiness_state_id}>
                     {r.processing_days_display_label} ({r.readiness_state})
                   </option>
@@ -221,7 +223,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
               >
                 <option value="">Seçim Yapılmadı (Boş)</option>
-                {shopSections.map((s: any) => (
+                {shopSections.map((s) => (
                   <option key={s.shop_section_id} value={s.shop_section_id}>
                     {s.title}
                   </option>
@@ -241,9 +243,9 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
                 <option value="">Seçim Yapılmadı (Boş)</option>
-                {returnPolicies.map((r: any) => (
+                {returnPolicies.map((r) => (
                   <option key={r.return_policy_id} value={r.return_policy_id}>
-                    {r.title || `Policy ID: ${r.return_policy_id}`}
+                    {formatReturnPolicy(r)}
                   </option>
                 ))}
               </select>
@@ -260,13 +262,13 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                   onChange={(e) => {
                     const val = e.target.value;
                     setSelectedTemplateForDefault(val);
-                    const t = savedTemplates?.find((st: any) => st.id === val);
+                    const t = savedTemplates?.find((st) => st.id === val);
                     if (t) setVariations(t.variations || []);
                   }}
                   className="flex-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="">-- Kayıtlı Şablon Seçin --</option>
-                  {savedTemplates?.map((t: any) => {
+                  {savedTemplates?.map((t) => {
                     const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
                     return (
                       <option key={t.id} value={t.id}>
@@ -293,14 +295,14 @@ export const SeoStoreParamsAccordion: React.FC = () => {
               <>
                 {/* Dynamic Taxonomy Properties (Filter out unselectable custom_1, custom_2, custom_3 and empty options) */}
                 {(() => {
-                  const validTaxonomyProperties = (availableTaxonomyProperties || []).filter((prop: any) => {
+                  const validTaxonomyProperties = (availableTaxonomyProperties || []).filter((prop) => {
                     if (!prop || !prop.name) return false;
                     if (/^custom[_\s]?\d+/i.test(prop.name.trim())) return false;
                     if (!prop.possible_values || !Array.isArray(prop.possible_values) || prop.possible_values.length === 0) return false;
                     return true;
                   });
 
-                  return validTaxonomyProperties.map((prop: any) => (
+                  return validTaxonomyProperties.map((prop) => (
                     <div key={prop.property_id}>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-purple-500" />
@@ -311,7 +313,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                           propItem={prop} 
                           selectedValues={selectedTaxonomyProperties[prop.property_id] || []}
                           onChange={(vals) => {
-                            setSelectedTaxonomyProperties((prev: any) => ({
+                            setSelectedTaxonomyProperties((prev) => ({
                               ...prev,
                               [prop.property_id]: vals
                             }));
@@ -322,7 +324,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                           value={selectedTaxonomyProperties[prop.property_id]?.[0]?.toString() || ""}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setSelectedTaxonomyProperties((prev: any) => ({
+                            setSelectedTaxonomyProperties((prev) => ({
                               ...prev,
                               [prop.property_id]: val ? [parseInt(val, 10)] : []
                             }));
@@ -330,7 +332,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                           className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-xs"
                         >
                           <option value="">Seçim Yapılmadı (Boş)</option>
-                          {prop.possible_values?.map((v: any) => (
+                          {prop.possible_values?.map((v) => (
                             <option key={v.value_id} value={v.value_id}>
                               {v.name}
                             </option>
@@ -354,7 +356,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                     className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
-                    Yapay zekanın seçtiği veya sizin belirlediğiniz kategori ID'si (Örn: Tişörtler için genelde 482 veya 1081 vb).
+                    Yapay zekanın seçtiği veya sizin belirlediğiniz kategori ID&apos;si (Örn: Tişörtler için genelde 482 veya 1081 vb).
                   </p>
                 </div>
 

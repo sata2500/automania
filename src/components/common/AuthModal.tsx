@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
-import { getGuestWorkspace, AppDataPayload } from '@/lib/storage-service';
 
 interface AuthModalProps {
   isSaving?: boolean;
@@ -27,7 +26,6 @@ interface AuthModalProps {
   onLoadSampleData?: () => void;
   onClearAllData?: () => void;
   onNavigateAdmin?: () => void;
-  onMigrateGuestData?: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -38,18 +36,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoadSampleData,
   onClearAllData,
   onNavigateAdmin,
-  onMigrateGuestData,
 }) => {
   const { user, isAdmin, loginWithGoogle, logout, isAuthModalOpen, setIsAuthModalOpen } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [guestData, setGuestData] = useState<AppDataPayload | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
-
-  useEffect(() => {
-    if (user && isAuthModalOpen) {
-      getGuestWorkspace().then(data => setGuestData(data)).catch(() => setGuestData(null));
-    }
-  }, [user, isAuthModalOpen]);
 
   // Escape key handler — must be before the early return to comply with Rules of Hooks
   useEffect(() => {

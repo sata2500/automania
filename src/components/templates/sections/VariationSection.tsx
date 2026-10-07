@@ -78,7 +78,7 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
     onChange({ ...config, colors: newColors, rows: newRows });
   };
 
-  const updateRow = (rowId: string, field: keyof TemplateVariationRow, value: any) => {
+  const updateRow = <K extends keyof TemplateVariationRow>(rowId: string, field: K, value: TemplateVariationRow[K]) => {
     const newRows = rows.map(r => r.id === rowId ? { ...r, [field]: value } : r);
     onChange({ ...config, rows: newRows });
   };
@@ -105,7 +105,7 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
         ].map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setActiveView(key as any)}
+            onClick={() => setActiveView(key as typeof activeView)}
             className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeView === key
                 ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -263,7 +263,7 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
           {rows.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-xs text-slate-400">
-                Önce beden ve renk ekleyin, ardından "Varyasyon Tablosunu Oluştur" butonuna tıklayın.
+                Önce beden ve renk ekleyin, ardından &quot;Varyasyon Tablosunu Oluştur&quot; butonuna tıklayın.
               </p>
             </div>
           ) : (

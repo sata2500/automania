@@ -434,7 +434,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
 
                       {filteredCategories.length === 0 && categorySearch && (
                         <p className="text-center text-xs text-slate-400 py-4">
-                          "{categorySearch}" için sonuç bulunamadı
+                          &quot;{categorySearch}&quot; için sonuç bulunamadı
                         </p>
                       )}
                     </div>

@@ -73,7 +73,7 @@ export const DesignFolderBar: React.FC<DesignFolderBarProps> = ({
   };
 
   // --- Mobile Touch Handlers ---
-  const handleTouchStart = (index: number, e: React.TouchEvent) => {
+  const handleTouchStart = (index: number) => {
     touchFolderStartRef.current = index;
     touchFolderOverRef.current = index;
     setTouchDragFolderIndex(index);
@@ -227,7 +227,7 @@ export const DesignFolderBar: React.FC<DesignFolderBarProps> = ({
             >
               {/* Drag Handle (Touch & Mouse) */}
               <div
-                onTouchStart={(e) => handleTouchStart(index, e)}
+                onTouchStart={() => handleTouchStart(index)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
                 className="opacity-40 hover:opacity-100 shrink-0 cursor-grab active:cursor-grabbing p-0.5 touch-none"

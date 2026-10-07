@@ -146,3 +146,22 @@ export interface RenderedMatch {
   isVideo?: boolean;
   mimeType?: string;
 }
+
+/** Etsy varyasyon tablosundaki bir satır (beden × renk). */
+export interface EtsyVariationRow {
+  id: string;
+  size: string;
+  color: string;
+  price: number;
+  quantity: number;
+  sku: string;
+  enabled: boolean;
+}
+
+/** Kullanıcının kaydettiği varyasyon şablonu. */
+export interface EtsyVariationTemplate {
+  id: string;
+  name: string;
+  updatedAt?: string;
+  variations: EtsyVariationRow[];
+}

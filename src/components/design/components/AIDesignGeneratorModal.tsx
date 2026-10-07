@@ -261,7 +261,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
               {/* Prompt Input */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                  Tasarım Prompt'u
+                  Tasarım Prompt&apos;u
                 </label>
                 <textarea
                   value={prompt}
@@ -457,7 +457,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
                     className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-xl border border-indigo-200 dark:border-indigo-700/40 transition-colors disabled:opacity-50"
                   >
                     {anyRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eraser className="w-3.5 h-3.5" />}
-                    Tümünün BG'sini Kaldır
+                    Tümünün BG&apos;sini Kaldır
                   </button>
                 )}
               </div>

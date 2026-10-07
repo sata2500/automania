@@ -26,6 +26,12 @@ const eslintConfig = defineConfig([
         destructuredArrayIgnorePattern: "^_",
         ignoreRestSiblings: true,
       }],
+      // Görseller çoğunlukla kullanıcıya ait blob:/data: URL'leri ve canvas çıktılarıdır;
+      // next/image bunları optimize edemez, bu yüzden düz <img> bilinçli olarak kullanılır.
+      "@next/next/no-img-element": "off",
+      // React Compiler önerisi; mevcut "yüklemede senkronize et" efektleri davranış
+      // riski olmadan kademeli olarak dönüştürülecek, o zamana kadar uyarı olarak görünür.
+      "react-hooks/set-state-in-effect": "warn",
     },
   },
 ]);

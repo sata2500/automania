@@ -18,7 +18,7 @@ import {
   RefreshCw,
   Loader2,
 } from 'lucide-react';
-import { PodTemplate } from '@/types/templates';
+import { PodTemplate, PodTemplateInput } from '@/types/templates';
 import { MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
@@ -92,7 +92,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   };
 
   // Şablon kaydet (oluştur / güncelle)
-  const handleSaveTemplate = async (data: any, id?: string) => {
+  const handleSaveTemplate = async (data: PodTemplateInput, id?: string) => {
     try {
       const url = id ? `/api/templates/${id}` : '/api/templates';
       const method = id ? 'PUT' : 'POST';
@@ -247,7 +247,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {templates.map(template => {
-            const { print, staticM, video, total } = getMockupCounts(template);
+            const { video, total } = getMockupCounts(template);
             const scheduleLabel = getScheduleLabel(template);
             const isDeleting = deletingId === template.id;
             const isToggling = togglingId === template.id;
