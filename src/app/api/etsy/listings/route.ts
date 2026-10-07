@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureUserEtsyListingsTable } from '@/lib/db';
+import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
@@ -12,7 +12,6 @@ export const maxDuration = 60;
  */
 export async function GET(req: Request) {
   try {
-    await ensureUserEtsyListingsTable();
 
     const session = await getAuthoritativeSession();
     if (!session) {
@@ -280,7 +279,6 @@ async function fetchAllListingsForState(
  */
 export async function POST(req: Request) {
   try {
-    await ensureUserEtsyListingsTable();
 
     const session = await getAuthoritativeSession();
     if (!session) {

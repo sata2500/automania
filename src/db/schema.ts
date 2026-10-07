@@ -17,8 +17,10 @@ export const users = pgTable('users', {
   avatarUrl: varchar('avatar_url', { length: 1000 }),
   role: varchar('role', { length: 50 }).default('user'),
   status: varchar('status', { length: 50 }).default('active'),
+  provider: varchar('provider', { length: 50 }).default('google'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
+  lastLoginAt: timestamp('last_login_at').defaultNow(),
 });
 
 export const userWorkspaces = pgTable('user_workspaces', {
@@ -30,13 +32,30 @@ export const userWorkspaces = pgTable('user_workspaces', {
   selectedMockupId: varchar('selected_mockup_id', { length: 255 }),
   openrouterKey: varchar('openrouter_key', { length: 500 }),
   openrouterModel: varchar('openrouter_model', { length: 255 }),
-  etsyProductTypes: varchar('etsy_product_types', { length: 1000 }),
+  etsyProductTypes: text('etsy_product_types'),
   etsyUserNotes: text('etsy_user_notes'),
   etsyVariationTemplates: jsonb('etsy_variation_templates').default([]),
   etsyDefaultTemplates: jsonb('etsy_default_templates').$type<Record<number, string>>().default({}),
   etsyCustomSizes: jsonb('etsy_custom_sizes').$type<string[]>().default([]),
   etsyCustomColors: jsonb('etsy_custom_colors').$type<string[]>().default([]),
   etsyGeneratedMockups: jsonb('etsy_generated_mockups').$type<RenderedMatch[]>().default([]),
+
+  /** Scraper ayarları (API anahtarı yalnızca şifreli global ayarlarda tutulur) */
+  scrapingProvider: varchar('scraping_provider', { length: 100 }).default('scraperapi'),
+  cloudflareWorkerUrl: varchar('cloudflare_worker_url', { length: 500 }),
+  /** @deprecated Eski düz metin kopya; `npm run db:encrypt-secrets` ile temizlenir. */
+  scrapingApiKey: varchar('scraping_api_key', { length: 500 }),
+
+  /** Etsy OAuth (token'lar secret-box ile şifreli saklanır) */
+  etsyAccessToken: text('etsy_access_token'),
+  etsyRefreshToken: text('etsy_refresh_token'),
+  etsyTokenExpiresAt: timestamp('etsy_token_expires_at'),
+  etsyShopId: varchar('etsy_shop_id', { length: 200 }),
+  etsyPkceVerifier: varchar('etsy_pkce_verifier', { length: 500 }),
+  etsyPkceState: varchar('etsy_pkce_state', { length: 500 }),
+  /** @deprecated Tekil eski alan; `etsy_variation_templates` kullanılır. */
+  etsyVariationTemplate: jsonb('etsy_variation_template'),
+
   updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -84,8 +103,8 @@ export const auditLogs = pgTable('audit_logs', {
   metadata: jsonb('metadata').default({}),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
-  userCreatedIdx: index('audit_logs_user_created_idx').on(table.userId, table.createdAt),
-  actionCreatedIdx: index('audit_logs_action_created_idx').on(table.action, table.createdAt),
+  userCreatedIdx: index('idx_audit_logs_user_created').on(table.userId, table.createdAt),
+  actionCreatedIdx: index('idx_audit_logs_action_created').on(table.action, table.createdAt),
 }));
 
 export const jobRuns = pgTable('job_runs', {
@@ -103,8 +122,8 @@ export const jobRuns = pgTable('job_runs', {
   finishedAt: timestamp('finished_at'),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  userIdIdempotencyIdx: uniqueIndex('job_runs_user_id_idempotency_idx').on(table.userId, table.idempotencyKey),
-  statusIdx: index('job_runs_status_idx').on(table.status),
+  userIdIdempotencyIdx: uniqueIndex('idx_job_runs_user_idempotency').on(table.userId, table.idempotencyKey),
+  statusIdx: index('idx_job_runs_status').on(table.status),
 }));
 
 export const userEtsyListings = pgTable('user_etsy_listings', {
@@ -123,7 +142,7 @@ export const userEtsyListings = pgTable('user_etsy_listings', {
   url: text('url'),
   views: integer('views').default(0),
   numFavorers: integer('num_favorers').default(0),
-  images: jsonb('images').$type<any[]>().default([]),
+  images: jsonb('images').$type<Array<Record<string, unknown>>>().default([]),
   primaryImageUrl: text('primary_image_url'),
   taxonomyId: integer('taxonomy_id'),
   taxonomyPath: varchar('taxonomy_path', { length: 500 }),
@@ -138,7 +157,14 @@ export const userEtsyListings = pgTable('user_etsy_listings', {
   lastSyncedAt: timestamp('last_synced_at').defaultNow(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => ({
+  userListingIdx: uniqueIndex('user_etsy_listings_user_listing_idx').on(table.userId, table.listingId),
+  userIdIdx: index('idx_user_etsy_listings_user_id').on(table.userId),
+  listingIdIdx: index('idx_user_etsy_listings_listing_id').on(table.listingId),
+  stateIdx: index('idx_user_etsy_listings_state').on(table.state),
+  seoScoreIdx: index('idx_user_etsy_listings_seo_score').on(table.seoScore),
+  etsyUpdatedIdx: index('idx_user_etsy_listings_etsy_updated').on(table.etsyUpdatedTimestamp),
+}));
 
 // ─── Şablon Sistemi ──────────────────────────────────────────────────────────
 
@@ -265,7 +291,7 @@ export const userEtsyShops = pgTable('user_etsy_shops', {
 
   /** OAuth token'ları (bu mağaza için) */
   accessToken: text('access_token'),
-  refreshToken: varchar('refresh_token', { length: 500 }),
+  refreshToken: text('refresh_token'),
   tokenExpiresAt: timestamp('token_expires_at'),
 
   /** PKCE flow geçici veriler */

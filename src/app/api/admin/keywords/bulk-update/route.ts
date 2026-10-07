@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
 import { consumeRateLimit } from '@/lib/request-rate-limit';
 
@@ -16,7 +16,6 @@ export async function POST(req: Request) {
       });
     }
 
-    await ensureKeywordPoolColumns();
     const body = await req.json();
     const { results } = body;
 

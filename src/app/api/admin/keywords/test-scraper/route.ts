@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';
@@ -18,7 +18,6 @@ export async function POST(req: Request) {
       });
     }
 
-    await ensureKeywordPoolColumns();
     const body = await req.json();
     const { keyword = 'vintage shirt', workerUrl } = body;
     if (typeof keyword !== 'string' || keyword.trim().length === 0 || keyword.length > 200) {

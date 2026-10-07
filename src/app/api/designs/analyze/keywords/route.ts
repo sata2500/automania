@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { EvaluatedKeyword } from '@/types/pod';
 
@@ -7,7 +7,6 @@ export async function POST(req: Request) {
   try {
     const session = await getAuthoritativeSession();
     // Allow both guest sessions and authenticated users to read keyword metrics
-    await ensureKeywordPoolColumns();
 
     const body = await req.json();
     const keywords: string[] = Array.isArray(body?.keywords)

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { db, ensureKeywordPoolColumns } from '@/lib/db';
+import sql, { db } from '@/lib/db';
 import { etsyTaxonomyCache } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
@@ -419,7 +419,6 @@ export async function POST(request: Request) {
     const { description, keywords } = parsedResult;
 
     // 5. Anahtar Kelimeleri Temizle ve Etsy 20 Karakter Kuralına Göre Filtrele
-    await ensureKeywordPoolColumns();
     const uniqueKeywords = (Array.from(new Set(
       keywords
         .map((k: string) => k.toLowerCase().trim())

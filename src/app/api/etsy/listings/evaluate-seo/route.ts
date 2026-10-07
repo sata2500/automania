@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns, ensureUserEtsyListingsTable } from '@/lib/db';
+import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
@@ -9,8 +9,6 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    await ensureUserEtsyListingsTable();
-    await ensureKeywordPoolColumns();
 
     const session = await getAuthoritativeSession();
     if (!session) {

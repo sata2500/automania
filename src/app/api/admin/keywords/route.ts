@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-server';
 
 export async function GET(req: Request) {
@@ -9,7 +9,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    await ensureKeywordPoolColumns();
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search') || '';
     const filter = searchParams.get('filter') || 'all'; // 'all', 'tag_eligible', 'gold', 'error'

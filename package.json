@@ -9,7 +9,7 @@
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "seed-admin": "node scripts/seed-admin.mjs",
-    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:migrate": "tsx scripts/db-migrate.ts",
     "db:list-users": "node scripts/db-list-users.mjs",
     "clean-blobs": "tsx scripts/clean-blobs.ts",
     "migrate:r2": "tsx scripts/migrate-blob-to-r2.ts",
@@ -21,7 +21,8 @@
     "verify": "npm run type-check && npm test && npm run test:sqlite && npm run build",
     "verify:local": "npm run verify && npm run test:smoke",
     "db:sqlite:init": "tsx scripts/init-sqlite.ts",
-    "db:encrypt-secrets": "tsx scripts/encrypt-secrets.ts"
+    "db:encrypt-secrets": "tsx scripts/encrypt-secrets.ts",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1114.0",
@@ -47,6 +48,7 @@
     "sql.js": "^1.14.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
@@ -54,6 +56,7 @@
     "@types/react-dom": "^19",
     "@types/sql.js": "^1.4.11",
     "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",

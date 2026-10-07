@@ -739,7 +739,7 @@ export const AdminDashboard: React.FC = () => {
     setDbHealthResult(null);
     const start = Date.now();
     try {
-      const res = await fetch('/api/setup');
+      const res = await fetch('/api/admin/health');
       const latencyMs = Date.now() - start;
       if (res.ok) {
         setDbHealthResult({ ok: true, latencyMs });

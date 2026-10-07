@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';
@@ -18,7 +18,6 @@ export async function GET(req: Request) {
       });
     }
 
-    await ensureKeywordPoolColumns();
     const { searchParams } = new URL(req.url);
     const targetUrl = searchParams.get('url');
     const keyword = searchParams.get('q') || searchParams.get('keyword') || '';

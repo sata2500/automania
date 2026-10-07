@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import sql, { ensureKeywordPoolColumns } from '@/lib/db';
+import sql from '@/lib/db';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { requireAdmin } from '@/lib/auth-server';
@@ -27,7 +27,6 @@ export async function POST(req: Request) {
       });
     }
 
-    await ensureKeywordPoolColumns();
     const body = await req.json();
     let { ids, limit = 20 } = body;
     limit = Math.min(20, Math.max(1, Number(limit) || 20));

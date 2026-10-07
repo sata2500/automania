@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { ensureTableMock, getSessionMock, getTokenMock, sqlMock } = vi.hoisted(() => ({
-  ensureTableMock: vi.fn(),
+const { getSessionMock, getTokenMock, sqlMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
   getTokenMock: vi.fn(),
   sqlMock: vi.fn(),
@@ -9,7 +8,6 @@ const { ensureTableMock, getSessionMock, getTokenMock, sqlMock } = vi.hoisted(()
 
 vi.mock('@/lib/db', () => ({
   default: sqlMock,
-  ensureUserEtsyListingsTable: ensureTableMock,
 }));
 vi.mock('@/lib/auth-server', () => ({ getAuthoritativeSession: getSessionMock }));
 vi.mock('@/lib/etsy-token-manager', () => ({ getValidEtsyToken: getTokenMock }));
@@ -27,7 +25,6 @@ function taggedQueryText(call: unknown[]): string {
 describe('GET /api/etsy/listings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    ensureTableMock.mockResolvedValue(undefined);
     getSessionMock.mockResolvedValue(session);
     getTokenMock.mockResolvedValue({ success: false, error: 'not connected' });
   });

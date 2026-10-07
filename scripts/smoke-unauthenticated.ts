@@ -33,7 +33,6 @@ const cases: Array<{ name: string; path: string; init?: RequestInit; expected: n
   { name: 'admin sample data DELETE', path: '/api/admin/sample-data', init: { method: 'DELETE' }, expected: 401 },
   { name: 'admin taxonomy sync GET', path: '/api/admin/taxonomy-sync', expected: 401 },
   { name: 'admin taxonomy sync POST', path: '/api/admin/taxonomy-sync', init: json({}), expected: 401 },
-  { name: 'setup GET', path: '/api/setup', expected: 401 },
   { name: 'Etsy auth GET', path: '/api/etsy/auth', expected: 401 },
   { name: 'Etsy callback GET', path: '/api/etsy/callback', expected: 401 },
   { name: 'Etsy listings GET', path: '/api/etsy/listings', expected: 401 },
