@@ -31,7 +31,25 @@ export async function GET(_request: Request) {
     }
     const userId = session.id;
 
-    const rows = await db.select().from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
+    // Yalnızca istemciye dönen kolonlar okunur (gizli token kolonları ve olası eksik kolonlar sorguya girmez).
+    const rows = await db
+      .select({
+        mockups: userWorkspaces.mockups,
+        designs: userWorkspaces.designs,
+        folders: userWorkspaces.folders,
+        activeFolderId: userWorkspaces.activeFolderId,
+        selectedMockupId: userWorkspaces.selectedMockupId,
+        openrouterModel: userWorkspaces.openrouterModel,
+        etsyProductTypes: userWorkspaces.etsyProductTypes,
+        etsyUserNotes: userWorkspaces.etsyUserNotes,
+        etsyVariationTemplates: userWorkspaces.etsyVariationTemplates,
+        etsyDefaultTemplates: userWorkspaces.etsyDefaultTemplates,
+        etsyCustomSizes: userWorkspaces.etsyCustomSizes,
+        etsyCustomColors: userWorkspaces.etsyCustomColors,
+        etsyGeneratedMockups: userWorkspaces.etsyGeneratedMockups,
+      })
+      .from(userWorkspaces)
+      .where(eq(userWorkspaces.userId, userId));
 
     if (rows.length === 0) {
       return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
