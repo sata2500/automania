@@ -799,11 +799,12 @@ function useEtsySeoState() {
           setEtsyConnected(true);
           if (data.profiles && data.profiles.length > 0) {
             setShippingProfiles(data.profiles);
-            setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
+            // Birden fazla profil varsa kullanıcı açıkça seçmeli; yanlış kargo profiliyle ilan açılmasın.
+            if (data.profiles.length === 1) setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
           }
           if (data.readinessStates && data.readinessStates.length > 0) {
             setReadinessStates(data.readinessStates);
-            setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
+            if (data.readinessStates.length === 1) setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
           }
           // Fetch shop sections
           fetch('/api/etsy/shop-sections')

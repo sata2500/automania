@@ -1005,6 +1005,9 @@ export const AdminAiSettingsSection: React.FC = () => {
                       <div className="text-xs font-mono font-medium text-orange-700 dark:text-orange-400 bg-white dark:bg-slate-900 py-2 px-3 rounded-xl border border-orange-100 dark:border-orange-800 break-all shadow-2xs">
                         {modelVideo || 'Henüz Seçilmedi'}
                       </div>
+                      <p className="mt-2 text-[10px] leading-snug text-orange-700/80 dark:text-orange-300/80">
+                        Not: Video üretimi her zaman Google Veo ile yapılır. Bu alan kullanılmaz; video modelini Google Gemini bölümünden seçin.
+                      </p>
                     </div>
                     {modelVideo && (
                       <button 

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Image as ImageIcon, Video, Check, Info } from 'lucide-react';
 import { MockupItem } from '@/types/pod';
 import { PodTemplateMockupConfig } from '@/types/templates';
+import { NotAppliedNote } from './NotAppliedNote';
 
 interface MockupSelectorSectionProps {
   mockups: MockupItem[];
@@ -67,6 +68,9 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
 
   return (
     <div className="space-y-4">
+      <NotAppliedNote>
+        Otomasyon şu an yalnızca seçtiğiniz <strong>ilk baskı alanlı mockup</strong>a tasarımı yerleştirir. Kumaş tipi, statik ve video mockup seçimleri kaydedilir ancak henüz çalıştırmaya uygulanmaz.
+      </NotAppliedNote>
       {/* Özet İstatistikler */}
       <div className="grid grid-cols-3 gap-3">
         {[

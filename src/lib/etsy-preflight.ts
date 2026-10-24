@@ -115,3 +115,90 @@ export function validateWhoMade(input: { whoMade?: unknown; isSupply?: unknown; 
   }
   return null;
 }
+
+export type PublishChecklistItem = {
+  id: 'title' | 'description' | 'tags' | 'taxonomy' | 'shipping' | 'readiness' | 'photos' | 'whoMade';
+  label: string;
+  status: 'ok' | 'warning' | 'error';
+  detail: string;
+};
+
+/**
+ * Yayın düğmelerinin yanında gösterilen ön kontrol listesi. Sunucudaki doğrulamayla aynı sınırları kullanır;
+ * böylece kullanıcı bir hatayı Etsy'ye istek gönderilmeden önce görür. "warning" yayını engellemez.
+ */
+export function buildPublishChecklist(input: {
+  title?: string;
+  description?: string;
+  tags?: string[];
+  taxonomyId?: unknown;
+  shippingProfileId?: string;
+  readinessStateId?: string;
+  media?: Array<{ isVideo?: boolean }>;
+  whoMade?: unknown;
+  isSupply?: unknown;
+  whenMade?: unknown;
+}): PublishChecklistItem[] {
+  const title = (input.title || '').trim();
+  const tags = input.tags || [];
+  const invalidTags = tags.filter((tag) => tag.trim().length === 0 || tag.trim().length > MAX_ETSY_TAG_LENGTH).length;
+  const taxonomyId = Number(input.taxonomyId);
+  const media = selectEtsyPublishMedia(input.media || []);
+  const whoMadeError = validateWhoMade(input);
+
+  return [
+    {
+      id: 'title',
+      label: 'Başlık',
+      status: !title || title.length > MAX_ETSY_TITLE_LENGTH ? 'error' : 'ok',
+      detail: !title ? 'Başlık üretilmedi.' : `${title.length}/${MAX_ETSY_TITLE_LENGTH} karakter`,
+    },
+    {
+      id: 'description',
+      label: 'Açıklama',
+      status: (input.description || '').trim() ? 'ok' : 'error',
+      detail: (input.description || '').trim() ? 'Hazır' : 'Açıklama üretilmedi.',
+    },
+    {
+      id: 'tags',
+      label: 'Etiketler',
+      status: tags.length === 0 || tags.length > MAX_ETSY_TAGS || invalidTags > 0 ? 'error' : tags.length < MAX_ETSY_TAGS ? 'warning' : 'ok',
+      detail: invalidTags > 0
+        ? `${invalidTags} etiket 1-${MAX_ETSY_TAG_LENGTH} karakter dışında`
+        : `${tags.length}/${MAX_ETSY_TAGS} etiket${tags.length > 0 && tags.length < MAX_ETSY_TAGS ? ' — 13 etiketin tamamını kullanmanız önerilir' : ''}`,
+    },
+    {
+      id: 'taxonomy',
+      label: 'Kategori',
+      status: Number.isInteger(taxonomyId) && taxonomyId > 0 ? 'ok' : 'error',
+      detail: Number.isInteger(taxonomyId) && taxonomyId > 0 ? `Taxonomy #${taxonomyId}` : 'Kategori seçilmedi.',
+    },
+    {
+      id: 'shipping',
+      label: 'Kargo profili',
+      status: input.shippingProfileId ? 'ok' : 'error',
+      detail: input.shippingProfileId ? 'Seçildi' : 'Mağaza parametrelerinden kargo profili seçin.',
+    },
+    {
+      id: 'readiness',
+      label: 'Hazırlık süresi',
+      status: input.readinessStateId ? 'ok' : 'error',
+      detail: input.readinessStateId ? 'Seçildi' : 'Mağaza parametrelerinden hazırlık süresi seçin.',
+    },
+    {
+      id: 'photos',
+      label: 'Görseller',
+      status: media.photos.length === 0 ? 'error' : media.skippedPhotos > 0 || media.skippedVideos > 0 ? 'warning' : 'ok',
+      detail: media.photos.length === 0
+        ? 'Bu klasörde üretilmiş fotoğraf yok.'
+        : `${media.photos.length} fotoğraf${media.videos.length ? ` + ${media.videos.length} video` : ''}`
+          + (media.skippedPhotos + media.skippedVideos > 0 ? ` (${media.skippedPhotos + media.skippedVideos} medya Etsy sınırı nedeniyle gönderilmeyecek)` : ''),
+    },
+    {
+      id: 'whoMade',
+      label: 'Üretici beyanı',
+      status: whoMadeError ? 'error' : 'ok',
+      detail: whoMadeError || 'Uygun',
+    },
+  ];
+}

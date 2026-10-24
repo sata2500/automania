@@ -43,7 +43,8 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
             id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) + i,
             name: file.name.replace(/\.[^/.]+$/, ''),
             src: optimized.url || optimized.dataUrl,
-            targetApparel: 'light',
+            // Yeni tasarım varsayılan olarak tüm kumaşlarla eşleşir; kullanıcı kartta daraltabilir.
+            targetApparel: 'both',
             isSelected: false,
             width: optimized.width,
             height: optimized.height,
@@ -65,11 +66,10 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
 
       if (newDesigns.length > 0) {
         setDesigns((prev) => {
-          const slotFree = !prev.some((d) => d.isSelected && d.targetApparel === 'light');
-          if (slotFree && newDesigns.length > 0) {
-            newDesigns[0].isSelected = true;
-          }
-          return [...newDesigns, ...prev];
+          // "Tüm kumaşlar" slotu boşsa ilk tasarım üretime alınır (dış diziyi değiştirmeden).
+          const slotFree = !prev.some((d) => d.isSelected && d.targetApparel === 'both');
+          const added = slotFree ? newDesigns.map((d, i) => (i === 0 ? { ...d, isSelected: true } : d)) : newDesigns;
+          return [...added, ...prev];
         });
       }
 

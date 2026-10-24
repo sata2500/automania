@@ -23,7 +23,7 @@ export type AdminOverviewSectionProps = {
 
 export function AdminOverviewSection({ globalStats, isLoadingStats, onRefresh }: AdminOverviewSectionProps) {
   const healthStatus = globalStats?.health?.status;
-  const healthLabel = healthStatus === 'excellent' ? 'Mükemmel' : healthStatus === 'good' ? 'İyi' : 'Yavaş';
+  const healthLabel = healthStatus === 'excellent' ? 'Mükemmel' : healthStatus === 'good' ? 'İyi' : healthStatus === 'degraded' ? 'Yavaş' : 'Bilinmiyor';
   const storageUsedBytes = globalStats?.storage?.usedBytes || 0;
   const storageLimitBytes = globalStats?.storage?.limitBytes || 1;
   const storageUsageRatio = storageUsedBytes / storageLimitBytes;
@@ -68,9 +68,9 @@ export function AdminOverviewSection({ globalStats, isLoadingStats, onRefresh }:
           </div>
         </MetricCard>
 
-        <MetricCard label="Veritabanı Sağlığı" value={isLoadingStats ? '...' : healthLabel} icon={<Activity className="w-6 h-6" />} iconClass="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-100 dark:border-emerald-800/50" valueClass={healthStatus === 'excellent' ? 'text-emerald-600 dark:text-emerald-400' : healthStatus === 'good' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}>
+        <MetricCard label="Veritabanı Sağlığı" value={isLoadingStats ? '...' : healthLabel} icon={<Activity className="w-6 h-6" />} iconClass="text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-100 dark:border-emerald-800/50" valueClass={healthStatus === 'excellent' ? 'text-emerald-600 dark:text-emerald-400' : healthStatus === 'good' ? 'text-amber-600 dark:text-amber-400' : healthStatus === 'degraded' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-3 font-bold bg-slate-50 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
-            {isLoadingStats ? 'Ölçülüyor...' : `Gecikme (Ping): ${globalStats?.health?.dbLatencyMs || 0}ms`}
+            {isLoadingStats ? 'Ölçülüyor...' : healthStatus ? `Gecikme (Ping): ${globalStats?.health?.dbLatencyMs ?? 0}ms` : 'İstatistikler alınamadı'}
           </p>
         </MetricCard>
 

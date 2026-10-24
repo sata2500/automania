@@ -314,7 +314,8 @@ export async function POST(req: Request) {
     if (!tokenRes.success) {
       return NextResponse.json({ 
         success: false, 
-        error: tokenRes.error || 'Etsy bağlantısı bulunamadı. Lütfen Etsy hesabınızı bağlayın.' 
+        error: tokenRes.error || 'Etsy bağlantısı bulunamadı. Lütfen Etsy hesabınızı bağlayın.',
+        notConnected: true,
       }, { status: 400 });
     }
 

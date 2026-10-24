@@ -27,6 +27,8 @@ export interface ManagedUser {
 
 interface AuthContextType {
   user: UserProfile | null;
+  /** 'loading': kayıtlı oturum henüz sunucuda doğrulanmadı (kullanıcı misafir sanılmamalı). */
+  authStatus: 'loading' | 'ready';
   isAdmin: boolean;
   userList: ManagedUser[];
   loginWithGoogle: () => void;
@@ -48,6 +50,7 @@ const USER_LIST_STORAGE_KEY = 'automania_pod_user_list_v1';
 export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const toast = useToast();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [authStatus, setAuthStatus] = useState<'loading' | 'ready'>('loading');
   const [userList, setUserList] = useState<ManagedUser[]>([]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
@@ -85,7 +88,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               body: JSON.stringify(parsed),
             });
             if (res.status === 403) {
-              alert('⚠️ Hesabınız yönetici tarafından engellenmiştir.');
+              toast.error('Hesabınız yönetici tarafından engellenmiştir.', 'Giriş Engellendi');
               setUser(null);
               localStorage.removeItem(AUTH_STORAGE_KEY);
               return;
@@ -98,7 +101,10 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const data = await res.json();
             if (data.success && data.user) {
               setUser(data.user);
+              setAuthStatus('ready');
               localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+              // Kullanıcı listesi yalnızca yöneticiler için çekilir (diğerleri için 403 ve gereksiz istek).
+              if (data.user.role === 'admin') void fetchUsersFromDb();
             } else {
               setUser(null);
               localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -124,11 +130,10 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setUserList(JSON.parse(savedUsers));
         }
       } catch {}
-
-      fetchUsersFromDb();
+      setAuthStatus('ready');
     };
 
-    initializeSession();
+    initializeSession().finally(() => setAuthStatus('ready'));
   }, []);
 
   const saveUserSession = async (userProfile: UserProfile | null) => {
@@ -145,7 +150,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
 
         if (res.status === 403) {
-          alert('⚠️ Hesabınız yönetici tarafından engellenmiştir.');
+          toast.error('Hesabınız yönetici tarafından engellenmiştir.', 'Giriş Engellendi');
           localStorage.removeItem(AUTH_STORAGE_KEY);
           return;
         }
@@ -201,7 +206,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (demoEmail) {
         const cleanEmail = demoEmail.trim().toLowerCase();
         if (isUserBlocked(cleanEmail)) {
-          alert('⚠️ Bu e-posta adresi yönetici tarafından engellenmiştir.');
+          toast.error('Bu e-posta adresi yönetici tarafından engellenmiştir.', 'Giriş Engellendi');
           return;
         }
 
@@ -230,7 +235,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Role is always 'user' by default — to get admin, use seed-admin script + real login
   const loginWithDemo = (email = 'demo@automania.app', name = 'Demo Kullanıcı', role: 'admin' | 'user' = 'user') => {
     if (isUserBlocked(email)) {
-      alert('⚠️ Bu hesap yönetici tarafından engellenmiştir.');
+      toast.error('Bu hesap yönetici tarafından engellenmiştir.', 'Giriş Engellendi');
       return;
     }
 
@@ -282,7 +287,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {}
 
     if (newStatus === 'blocked' && user && user.id === userId) {
-      alert('⚠️ Hesabınız engellendi. Oturum kapatılıyor.');
+      toast.error('Hesabınız engellendi. Oturum kapatılıyor.', 'Hesap Engellendi');
       logout();
     }
     fetchUsersFromDb();
@@ -313,6 +318,7 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <AuthContext.Provider
       value={{
         user,
+        authStatus,
         isAdmin,
         userList,
         loginWithGoogle,

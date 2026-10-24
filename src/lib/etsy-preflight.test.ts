@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateEtsyDraftPreflight } from './etsy-preflight';
+import { buildPublishChecklist, validateEtsyDraftPreflight } from './etsy-preflight';
 
 describe('etsy draft preflight', () => {
   const validInput = {
@@ -54,5 +54,35 @@ describe('etsy draft preflight', () => {
     expect(errors.join(' ')).toContain('Variation');
     expect(errors.join(' ')).toContain('fotoğraf');
     expect(errors.join(' ')).toContain('video');
+  });
+});
+
+describe('buildPublishChecklist', () => {
+  const ready = {
+    title: 'Funny Cat Shirt',
+    description: 'A shirt.',
+    tags: Array.from({ length: 13 }, (_, i) => `tag ${i}`),
+    taxonomyId: 482,
+    shippingProfileId: '1',
+    readinessStateId: '2',
+    media: [{}, { isVideo: true }],
+    whoMade: 'i_did',
+    whenMade: 'made_to_order',
+  };
+
+  it('passes a complete listing', () => {
+    expect(buildPublishChecklist(ready).every((item) => item.status === 'ok')).toBe(true);
+  });
+
+  it('flags missing shipping, readiness and photos as errors', () => {
+    const items = buildPublishChecklist({ ...ready, shippingProfileId: '', readinessStateId: '', media: [{ isVideo: true }] });
+    const errors = items.filter((item) => item.status === 'error').map((item) => item.id);
+    expect(errors).toEqual(['shipping', 'readiness', 'photos']);
+  });
+
+  it('warns but does not block on extra media and few tags', () => {
+    const items = buildPublishChecklist({ ...ready, tags: ['cat'], media: Array.from({ length: 22 }, () => ({})) });
+    expect(items.find((item) => item.id === 'photos')?.status).toBe('warning');
+    expect(items.find((item) => item.id === 'tags')?.status).toBe('warning');
   });
 });

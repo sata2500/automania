@@ -25,6 +25,8 @@ import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { SyncStatusNotification } from '@/components/common/SyncStatusNotification';
 import { SaveStatusBanner } from '@/components/common/SaveStatusBanner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { GettingStartedChecklist } from '@/components/common/GettingStartedChecklist';
 import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X, LayoutTemplate } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
@@ -73,8 +75,33 @@ function isInsideScrollableOrInteractive(el: HTMLElement | null): boolean {
   return false;
 }
 
+const ETSY_ERROR_MESSAGES: Record<string, string> = {
+  access_denied: 'Etsy bağlantısı iptal edildi.',
+  missing_params: 'Etsy yanıtı eksik geldi. Lütfen bağlantıyı tekrar deneyin.',
+  workspace_not_found: 'Çalışma alanınız bulunamadı. Lütfen sayfayı yenileyip tekrar bağlanın.',
+  invalid_state: 'Etsy bağlantı oturumu doğrulanamadı (süresi dolmuş olabilir). Lütfen tekrar bağlanın.',
+  missing_api_key: 'Etsy API anahtarı yapılandırılmamış. Yöneticinize başvurun.',
+  token_exchange_failed: 'Etsy erişim izni alınamadı. Lütfen tekrar deneyin.',
+  shop_not_found: 'Etsy hesabınıza bağlı bir mağaza bulunamadı. Etsy\'de mağazanızın açık olduğundan emin olup tekrar bağlanın.',
+  internal_error: 'Etsy bağlantısı sırasında beklenmeyen bir hata oluştu.',
+};
+
+/** Giriş gerektiren sekmeler: oturum doğrulanırken bekleme, misafire giriş çağrısı gösterir. */
+function ProtectedTabPlaceholder({ loading, onLogin }: { loading: boolean; onLogin: () => void }) {
+  if (loading) {
+    return <div className="p-8 text-center text-slate-500 animate-pulse">Oturum doğrulanıyor...</div>;
+  }
+  return (
+    <div className="max-w-lg mx-auto my-10 p-6 text-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
+      <p className="text-sm font-bold text-slate-900 dark:text-white">Bu adım için giriş yapmanız gerekiyor</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">Etsy SEO ve ilan yönetimi, Etsy mağazanızın bağlı olduğu bir hesap gerektirir. Hazırladığınız taslaklar girişten sonra hesabınıza aktarılır.</p>
+      <button type="button" onClick={onLogin} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Giriş Yap</button>
+    </div>
+  );
+}
+
 function MainContent() {
-  const { user, setIsAuthModalOpen } = useAuth();
+  const { user, authStatus, setIsAuthModalOpen } = useAuth();
   const router = useRouter();
   const [activeTabState, setActiveTabState] = useState<TabKey>('mockups');
   const [generatorView, setGeneratorView] = useState<GeneratorView>('manual');
@@ -92,13 +119,14 @@ function MainContent() {
     return () => window.clearTimeout(tabTimer);
   }, []);
 
-  // If user is guest and on a hidden tab (seo or listings), redirect to mockups
+  // If user is guest and on a protected tab (seo or listings), show mockups — but only once the
+  // stored session has been checked; otherwise a signed-in user loses their tab on every reload.
+  // The saved tab is kept so it is restored after the user signs in.
   useEffect(() => {
-    if (!user && (activeTabState === 'seo' || activeTabState === 'listings')) {
+    if (authStatus === 'ready' && !user && (activeTabState === 'seo' || activeTabState === 'listings')) {
       setActiveTabState('mockups');
-      try { localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, 'mockups'); } catch {}
     }
-  }, [user, activeTabState]);
+  }, [authStatus, user, activeTabState]);
 
   const setActiveTab = (tab: TabKey) => {
     // Prevent guest from navigating to protected tabs
@@ -140,6 +168,23 @@ function MainContent() {
     retrySave,
   } = useWorkspace();
   const toast = useToast();
+
+  // OAuth dönüş mesajları (Google girişi ve Etsy bağlantısı) — okunur, gösterilir ve adresten temizlenir.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('auth_error');
+    const etsyError = params.get('etsy_error');
+    const etsySuccess = params.get('etsy_success');
+    if (!authError && !etsyError && !etsySuccess) return;
+    if (authError) toast.error(authError, 'Giriş Başarısız');
+    if (etsyError) toast.error(ETSY_ERROR_MESSAGES[etsyError] || `Etsy bağlantısı başarısız (${etsyError}).`, 'Etsy Bağlantısı');
+    if (etsySuccess) toast.success('Etsy mağazanız başarıyla bağlandı.', 'Etsy Bağlantısı');
+    ['auth_error', 'etsy_error', 'etsy_success'].forEach((key) => params.delete(key));
+    const query = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    // Yalnızca ilk açılışta çalışır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const touchStartRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
 
@@ -191,7 +236,7 @@ function MainContent() {
     try {
       const data = await loadSampleAppData();
       if (data.mockups.length === 0 || data.designs.length === 0) {
-        throw new Error('Örnek taslak paketi boş. Lütfen yönetici ayarlarından örnek şablonu yapılandırın.');
+        throw new Error('Örnek taslak paketi şu anda kullanılamıyor.');
       }
       setMockups(data.mockups);
       setDesigns(data.designs);
@@ -287,7 +332,11 @@ function MainContent() {
     }
   };
 
-  const isEmptyWorkspace = isInitialized && !isMigrating && mockups.length === 0 && designs.length === 0;
+  // Rehber, üretimin önkoşulları (mockup, baskı alanı, tasarım, aktif tasarım) tamamlanana kadar görünür.
+  const hasProductionPrerequisites =
+    mockups.some((m) => !m.isVideo && m.hasPrintArea !== false && (m.printAreas?.length ?? 0) > 0) &&
+    designs.some((d) => d.isSelected);
+  const showGettingStarted = isInitialized && !isMigrating && !isEmptyWorkspaceDismissed && !hasProductionPrerequisites;
 
   return (
     <div
@@ -339,7 +388,7 @@ function MainContent() {
         )}
 
         {/* Guest User Informational Banner (Dismissible & Remembered) */}
-        {!user && !isGuestInfoDismissed && (
+        {authStatus === 'ready' && !user && !isGuestInfoDismissed && !showGettingStarted && (
           <div className="bg-gradient-to-r from-indigo-50 via-white to-purple-50 dark:from-indigo-950/90 dark:via-slate-900/90 dark:to-purple-950/90 border border-indigo-200 dark:border-indigo-500/40 rounded-2xl p-4 sm:p-5 shadow-md dark:shadow-xl text-slate-800 dark:text-slate-100 font-sans mb-4 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fadeIn">
             <div className="flex items-start space-x-3.5 min-w-0">
               <div className="bg-indigo-100 dark:bg-indigo-500/20 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-500/30 shrink-0 mt-0.5">
@@ -381,32 +430,18 @@ function MainContent() {
           </div>
         )}
 
-        {/* Compact Empty Workspace Bar (Dismissible) */}
-        {isEmptyWorkspace && !isEmptyWorkspaceDismissed && (
-          <div className="bg-white dark:bg-slate-900/90 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl p-3 sm:px-4 sm:py-2.5 shadow-md dark:shadow-lg text-slate-700 dark:text-slate-200 font-sans mb-4 flex items-center justify-between gap-3 animate-fadeIn">
-            <div className="flex items-center space-x-2.5 min-w-0">
-              <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-300 truncate">
-                Çalışma alanınız boş. Hazır demo mockup ve örnek tasarımları yükleyebilirsiniz:
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 shrink-0">
-              <button
-                onClick={handleLoadSampleData}
-                className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Örnek Taslağı Yükle</span>
-              </button>
-              <button
-                onClick={handleDismissEmptyWorkspaceBanner}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-all cursor-pointer"
-                title="Kapat"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
+        {/* Başlangıç rehberi: üretimin önkoşulları tamamlanana kadar adım adım yol gösterir. */}
+        {showGettingStarted && (
+          <GettingStartedChecklist
+            mockups={mockups}
+            designs={designs}
+            hasGenerated={hasGenerated || renderedMatches.length > 0}
+            isSignedIn={Boolean(user)}
+            onNavigate={setActiveTab}
+            onLogin={() => setIsAuthModalOpen(true)}
+            onLoadSample={handleLoadSampleData}
+            onDismiss={handleDismissEmptyWorkspaceBanner}
+          />
         )}
 
         {/* PWA Installation Banner (Mobile Only) */}
@@ -421,7 +456,7 @@ function MainContent() {
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-slate-900 dark:text-white">Uygulamayı Cihazınıza Yükleyin</span>
                 <p className="text-xs font-medium text-slate-600 dark:text-slate-400 max-w-md leading-relaxed mt-0.5">
-                  Tarayıcı menüsünden &quot;Ana Ekrana Ekle&quot; diyerek daha hızlı, tam ekran ve kotasız bir deneyim yaşayabilirsiniz.
+                  Tarayıcı menüsünden &quot;Ana Ekrana Ekle&quot; diyerek uygulamayı tam ekran ve daha hızlı açabilirsiniz.
                 </p>
               </div>
             </div>
@@ -437,79 +472,83 @@ function MainContent() {
           </div>
         )}
 
-        {/* Tab Views */}
-        {activeTab === 'mockups' && (
-          <MockupCanvasEditor
-            mockups={mockups}
-            setMockups={setMockups}
-            folders={folders}
-            setFolders={setFolders}
-            selectedMockupId={selectedMockupId}
-            setSelectedMockupId={setSelectedMockupId}
-            activeFolderId={activeFolderId}
-            setActiveFolderId={setActiveFolderId}
-          />
-        )}
+        {/* Tab Views — her sekme kendi hata sınırında: bir sekmedeki hata tüm uygulamayı düşürmez. */}
+        <ErrorBoundary key={activeTab} fallbackTitle="Bu sekme yüklenirken bir sorun oluştu">
+          {/* Tab Views */}
+          {activeTab === 'mockups' && (
+            <MockupCanvasEditor
+              mockups={mockups}
+              setMockups={setMockups}
+              folders={folders}
+              setFolders={setFolders}
+              selectedMockupId={selectedMockupId}
+              setSelectedMockupId={setSelectedMockupId}
+              activeFolderId={activeFolderId}
+              setActiveFolderId={setActiveFolderId}
+            />
+          )}
 
-        {activeTab === 'designs' && (
-          <DesignUploader 
-            designs={designs} 
-            setDesigns={setDesigns}
-            folders={folders}
-            setFolders={setFolders}
-            activeDesignFolderId={activeDesignFolderId}
-            setActiveDesignFolderId={setActiveDesignFolderId}
-          />
-        )}
+          {activeTab === 'designs' && (
+            <DesignUploader 
+              designs={designs} 
+              setDesigns={setDesigns}
+              folders={folders}
+              setFolders={setFolders}
+              activeDesignFolderId={activeDesignFolderId}
+              setActiveDesignFolderId={setActiveDesignFolderId}
+            />
+          )}
 
-        {activeTab === 'generator' && user && (
-          <div role="tablist" aria-label="Üretim modu" className="flex w-full sm:w-auto sm:inline-flex items-center gap-1 mb-5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60">
-            {GENERATOR_VIEWS.map(({ key, label, icon: Icon }) => {
-              const isActive = generatorView === key;
-              return (
-                <button
-                  key={key}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setGeneratorView(key)}
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    isActive
-                      ? key === 'templates'
-                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
-                        : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        )}
+          {activeTab === 'generator' && user && (
+            <div role="tablist" aria-label="Üretim modu" className="flex w-full sm:w-auto sm:inline-flex items-center gap-1 mb-5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60">
+              {GENERATOR_VIEWS.map(({ key, label, icon: Icon }) => {
+                const isActive = generatorView === key;
+                return (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setGeneratorView(key)}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                      isActive
+                        ? key === 'templates'
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
+                          : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {activeTab === 'generator' && user && generatorView === 'templates' && (
-          <TemplatesManager mockups={mockups} />
-        )}
+          {activeTab === 'generator' && user && generatorView === 'templates' && (
+            <TemplatesManager mockups={mockups} />
+          )}
 
-        {activeTab === 'generator' && (!user || generatorView === 'manual') && (
-          <BatchPreviewGrid
-            mockups={mockups}
-            designs={designs}
-            folders={folders}
-            activeFolderId={activeFolderId}
-            setActiveFolderId={setActiveFolderId}
-            activeDesignFolderId={activeDesignFolderId}
-            renderedMatches={renderedMatches}
-            setRenderedMatches={setRenderedMatches}
-            hasGenerated={hasGenerated}
-            setHasGenerated={setHasGenerated}
-          />
-        )}
+          {activeTab === 'generator' && (!user || generatorView === 'manual') && (
+            <BatchPreviewGrid
+              mockups={mockups}
+              designs={designs}
+              folders={folders}
+              activeFolderId={activeFolderId}
+              setActiveFolderId={setActiveFolderId}
+              activeDesignFolderId={activeDesignFolderId}
+              renderedMatches={renderedMatches}
+              setRenderedMatches={setRenderedMatches}
+              hasGenerated={hasGenerated}
+              setHasGenerated={setHasGenerated}
+              onGoToSeo={user ? () => setActiveTab('seo') : undefined}
+            />
+          )}
 
-        {activeTab === 'seo' && <EtsySeoHelper />}
+          {activeTab === 'seo' && (user ? <EtsySeoHelper /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
 
-        {activeTab === 'listings' && <EtsyListingManager />}
+          {activeTab === 'listings' && (user ? <EtsyListingManager /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
+        </ErrorBoundary>
 
 
 

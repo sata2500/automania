@@ -21,6 +21,7 @@ import { MockupSelectorSection } from './sections/MockupSelectorSection';
 import { VariationSection } from './sections/VariationSection';
 import { SeoHintsSection } from './sections/SeoHintsSection';
 import { ScheduleSection } from './sections/ScheduleSection';
+import { useToast } from '@/components/common/ToastContext';
 
 interface TemplateBuilderModalProps {
   mockups: MockupItem[];
@@ -45,6 +46,7 @@ export function TemplateBuilderModal({
   onClose,
 }: TemplateBuilderModalProps) {
   const isEditing = Boolean(template);
+  const toast = useToast();
   const [activeStep, setActiveStep] = useState<Step>(1);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -108,11 +110,11 @@ export function TemplateBuilderModal({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      alert('Lütfen bir şablon adı girin.');
+      toast.error('Lütfen bir şablon adı girin.');
       return;
     }
     if (allStepErrors.length > 0) {
-      alert('Lütfen hataları düzeltin:\n' + allStepErrors.join('\n'));
+      toast.error('Lütfen hataları düzeltin: ' + allStepErrors.join(' '));
       return;
     }
     try {
@@ -125,7 +127,8 @@ export function TemplateBuilderModal({
           variationConfig,
           seoHints,
           automationSchedule,
-          isActive: true,
+          // Düzenleme, kullanıcının pasife aldığı şablonu yeniden aktif etmesin.
+          isActive: template?.isActive ?? true,
         },
         template?.id
       );

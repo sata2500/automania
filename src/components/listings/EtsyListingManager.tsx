@@ -46,6 +46,7 @@ export const EtsyListingManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [autoSyncBanner, setAutoSyncBanner] = useState<string | null>(null);
+  const [etsyNotConnected, setEtsyNotConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState('all');
   const [scoreFilter, setScoreFilter] = useState('all');
@@ -101,6 +102,7 @@ export const EtsyListingManager: React.FC = () => {
         }
       } else {
         // Soft notification if token is missing or not connected
+        if (data.notConnected) setEtsyNotConnected(true);
         warning(data.error || 'Etsy otomatik senkronizasyonu tamamlanamadı.');
       }
     } catch (err) {
@@ -245,8 +247,10 @@ export const EtsyListingManager: React.FC = () => {
       if (data.success) {
         if (data.partial) warning(data.message);
         else success(data.message || 'Etsy ilanları başarıyla senkronize edildi!');
+        setEtsyNotConnected(false);
         fetchListings(false);
       } else {
+        if (data.notConnected) setEtsyNotConnected(true);
         error(data.error || 'Etsy senkronizasyonu başarısız oldu.');
       }
     } catch (err: unknown) {
@@ -609,12 +613,22 @@ export const EtsyListingManager: React.FC = () => {
               {stats.total === 0 ? 'Veritabanında Henüz Etsy İlanı Bulunmuyor' : 'Filtreye Uygun İlan Bulunamadı'}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              {stats.total === 0
+              {stats.total === 0 && etsyNotConnected
+                ? 'İlanlarınızı görmek için önce Etsy mağazanızı bağlayın. Bağlantıdan sonra bu sekmeye geri dönersiniz.'
+                : stats.total === 0
                 ? 'Etsy mağazanızdaki ilanları veritabanınıza çekmek için "Etsy Verilerini Güncelle" butonuna tıklayın.'
                 : 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'}
             </p>
           </div>
-          {stats.total === 0 && (
+          {stats.total === 0 && etsyNotConnected && (
+            <a
+              href="/api/etsy/auth?returnUrl=/"
+              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2"
+            >
+              Etsy Mağazamı Bağla
+            </a>
+          )}
+          {stats.total === 0 && !etsyNotConnected && (
             <button
               onClick={handleSyncEtsy}
               disabled={isSyncing}

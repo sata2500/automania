@@ -34,13 +34,14 @@ export async function GET(req: Request) {
     const state = crypto.randomBytes(16).toString('hex');
 
     // 3. Save verifier and state to database to check during callback
+    //    Çalışma alanı satırı henüz yoksa (yeni kullanıcı) oluşturulur; aksi halde UPDATE hiçbir şey
+    //    yazmaz ve callback "invalid_state" ile başarısız olur. updated_at (çalışma alanı sürümü) değişmez.
     await sql`
-      UPDATE user_workspaces 
-      SET 
-        etsy_pkce_verifier = ${codeVerifier},
-        etsy_pkce_state = ${state},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ${session.id}
+      INSERT INTO user_workspaces (user_id, etsy_pkce_verifier, etsy_pkce_state)
+      VALUES (${session.id}, ${codeVerifier}, ${state})
+      ON CONFLICT (user_id) DO UPDATE SET
+        etsy_pkce_verifier = EXCLUDED.etsy_pkce_verifier,
+        etsy_pkce_state = EXCLUDED.etsy_pkce_state
     `;
 
     // 4. Construct Authorization URL

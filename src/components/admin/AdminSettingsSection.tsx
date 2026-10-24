@@ -163,10 +163,10 @@ export function AdminSettingsSection({
         <div className="p-5 bg-rose-50/50 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-900/60 space-y-3">
           <div className="flex items-center space-x-2 text-rose-600 dark:text-rose-400">
             <Trash2 className="w-5 h-5" />
-            <h3 className="text-xs font-bold">Veritabanı Çöp &amp; Artık Verilerini Temizle</h3>
+            <h3 className="text-xs font-bold">Depolamadaki Sahipsiz Dosyaları Temizle</h3>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            PostgreSQL veritabanındaki tüm yetkisiz test kayıtlarını ve çöp artıkları temizler. Sistemdeki hazır demo şablon kütüphanesi olduğu gibi muhafaza edilir.
+            Cloudflare R2&apos;de hiçbir çalışma alanı veya otomasyon kaydının kullanmadığı, 24 saatten eski dosyaları kalıcı olarak siler. Veritabanı kayıtlarına dokunmaz; kullanılan mockup, tasarım ve örnek taslak dosyaları korunur. Önce &quot;Doğrula&quot; ile sayıları kontrol edin.
           </p>
           <button
             type="button"
@@ -192,7 +192,7 @@ export function AdminSettingsSection({
             className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-rose-600/20"
           >
             <Trash2 className="w-4 h-4" />
-            <span>Çöp Verileri Temizle (Örnek Şablonlar Korunur)</span>
+            <span>Sahipsiz Dosyaları Sil (Kullanılanlar Korunur)</span>
           </button>
         </div>
 

@@ -105,6 +105,12 @@ export const SeoStoreParamsAccordion: React.FC = () => {
 
   const hasAiAnalyzed = Boolean(generatedTitle || generatedDescription || (selectedTags && selectedTags.length > 0) || (availableTaxonomyProperties && availableTaxonomyProperties.length > 0));
 
+  const missingRequired = [
+    !selectedShippingProfileId && 'kargo',
+    !selectedReadinessStateId && 'hazırlık süresi',
+    !(Number(taxonomyId) > 0) && 'kategori',
+  ].filter(Boolean) as string[];
+
   // Quick summary texts for the collapsed header
   const currentShippingProfile = shippingProfiles.find((p) => p.shipping_profile_id.toString() === selectedShippingProfileId?.toString());
   const currentReadiness = readinessStates.find((r) => r.readiness_state_id.toString() === selectedReadinessStateId?.toString());
@@ -123,13 +129,17 @@ export const SeoStoreParamsAccordion: React.FC = () => {
             <span className="w-6 h-6 rounded-full bg-emerald-500 text-white text-xs flex items-center justify-center font-bold shrink-0">3</span>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               Etsy Mağaza & Kategori Parametreleri
-              <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono px-2 py-0.5 rounded-full font-bold">
-                {isOpen ? 'Açık' : 'Otomatik Yapılandırıldı'}
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                missingRequired.length > 0
+                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
+                  : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+              }`}>
+                {missingRequired.length > 0 ? `Eksik: ${missingRequired.join(', ')}` : 'Zorunlu alanlar tamam'}
               </span>
             </h3>
           </div>
           <p className="text-xs text-slate-500 pl-8">
-            Yapay zeka tarafından otomatik belirlenen kargo, üretim süresi ve kategori niteliklerini açıp inceleyin veya değiştirin.
+            Kargo profili, hazırlık süresi ve kategori niteliklerini seçin. Kategori AI analizinden önerilir; kargo ve süre mağazanızdan seçilmelidir.
           </p>
 
           {/* Quick Summary Badges when Collapsed */}
@@ -182,6 +192,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 onChange={(e) => setSelectedShippingProfileId(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
+                {shippingProfiles.length > 0 && <option value="">Kargo profili seçin…</option>}
                 {shippingProfiles.map((p) => (
                   <option key={p.shipping_profile_id} value={p.shipping_profile_id}>
                     {p.title} (ID: {p.shipping_profile_id})
@@ -202,6 +213,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 onChange={(e) => setSelectedReadinessStateId(e.target.value)}
                 className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
+                {readinessStates.length > 0 && <option value="">Hazırlık süresi seçin…</option>}
                 {readinessStates.map((r) => (
                   <option key={r.readiness_state_id} value={r.readiness_state_id}>
                     {r.processing_days_display_label} ({r.readiness_state})

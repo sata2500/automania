@@ -117,7 +117,8 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
     openRouterApiKey,
     imageModel,
     textModel,
-    videoModel: process.env.AI_VIDEO_MODEL ?? 'veo-3.1-fast-generate-preview',
+    // Video her zaman Google Veo ile üretilir; bu yüzden yalnızca Gemini video modeli ayarı geçerlidir.
+    videoModel: settings['gemini_model_video'] ?? process.env.AI_VIDEO_MODEL ?? 'veo-3.1-fast-generate-preview',
   };
 }
 

@@ -148,8 +148,8 @@ export async function GET(req: NextRequest) {
     // PKCE state/verifier tek kullanımlıktır.
     await sql`UPDATE user_workspaces SET etsy_pkce_state = NULL, etsy_pkce_verifier = NULL WHERE user_id = ${session.id}`;
 
-    // 7. Redirect back with success flag
-    const response = NextResponse.redirect(getRedirectUrl(`etsy_success=true`));
+    // 7. Redirect back with success flag (mağaza bulunamadıysa bağlantı kullanılamaz; kullanıcıya söylenir)
+    const response = NextResponse.redirect(getRedirectUrl(shopId ? `etsy_success=true` : `etsy_error=shop_not_found`));
     
     // Clear the cookie
     response.cookies.delete('etsy_return_to');

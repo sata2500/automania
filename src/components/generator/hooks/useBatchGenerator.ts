@@ -44,6 +44,8 @@ export function useBatchGenerator({
   const [isGenerating, setIsGenerating] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  // Son "Etsy için kaydet" başarılı olduysa SEO sekmesine geçiş düğmesi gösterilir.
+  const [savedForEtsyCount, setSavedForEtsyCount] = useState(0);
 
   const exportFormat: ExportFormatType = 'image/webp';
   const outputQuality = 0.95;
@@ -262,6 +264,7 @@ export function useBatchGenerator({
 
     setRenderedMatches(results);
     setHasGenerated(true);
+    setSavedForEtsyCount(0);
     setIsGenerating(false);
     setExportProgress(null);
 
@@ -387,6 +390,7 @@ export function useBatchGenerator({
       }
 
       setRenderedMatches(updatedMatches);
+      setSavedForEtsyCount(updatedMatches.length);
       toast.removeToast(uploadToastId);
       
       try {
@@ -398,7 +402,7 @@ export function useBatchGenerator({
       } catch {}
 
       toast.success(
-        `${updatedMatches.length} görsel başarıyla kaydedildi! "4. Etsy SEO" sekmesinden ilan taslağınızı oluşturabilirsiniz.`
+        `${updatedMatches.length} görsel Etsy için kaydedildi. Sıradaki adım: Etsy SEO sekmesinde ilan metnini üretin.`
       );
     } catch (error: unknown) {
       console.error('Save for Etsy error:', getErrorMessage(error));
@@ -417,11 +421,13 @@ export function useBatchGenerator({
   const handleConfirmClear = () => {
     setRenderedMatches([]);
     setHasGenerated(false);
+    setSavedForEtsyCount(0);
     setConfirmClearOpen(false);
     toast.info('Üretim sonuçları temizlendi.');
   };
 
   return {
+    savedForEtsyCount,
     isGenerating,
     exportProgress,
     confirmClearOpen,

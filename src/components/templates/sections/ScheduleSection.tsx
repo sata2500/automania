@@ -7,8 +7,8 @@
  *   1. Günde kaç kez çalışacağını seçer (1, 2, 3, 4, 6, 12, 24)
  *   2. Başlangıç saatini seçer (00:00 – 23:00)
  *   3. Zaman dilimini seçer
- *   4. Her çalışmada kaç listing üretileceğini seçer
- *   5. Yayın modunu seçer (Taslak / Direkt Yayın)
+ *   4. Her çalışmada kaç tasarım üretileceğini seçer
+ *   5. Yayın modunu seçer (Taslak / Direkt Yayın — ilan oluşturma henüz uygulanmadı)
  *
  * Cron ifadesi otomatik hesaplanır.
  */
@@ -16,6 +16,7 @@
 import React, { useMemo } from 'react';
 import { Clock, Globe, Shield, AlertCircle, Zap } from 'lucide-react';
 import { PodTemplateAutomationSchedule } from '@/types/templates';
+import { NotAppliedNote } from './NotAppliedNote';
 
 interface ScheduleSectionProps {
   schedule: PodTemplateAutomationSchedule;
@@ -48,7 +49,8 @@ const TIMEZONES = [
   { value: 'Asia/Tokyo',         label: 'Tokyo (JST)',          flag: '🇯🇵' },
 ];
 
-const LISTINGS_OPTIONS = [1, 2, 3, 5, 10];
+// Sunucu (clampListingsPerRun) çalışma başına en fazla 5 tasarım üretir.
+const LISTINGS_OPTIONS = [1, 2, 3, 5];
 
 // ─── Yardımcı Fonksiyonlar ────────────────────────────────────────────────────
 
@@ -262,7 +264,7 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
           {/* Her Çalışmada Kaç Listing */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              Her Çalışmada Üretilecek Listing
+              Her Çalışmada Üretilecek Tasarım
             </label>
             <div className="flex gap-2">
               {LISTINGS_OPTIONS.map(n => (
@@ -288,6 +290,11 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
               <Shield className="w-3.5 h-3.5 text-amber-500" />
               Yayın Modu
             </label>
+            <div className="mb-2">
+              <NotAppliedNote>
+                Otomasyon şu an tasarım, mockup ve video üretir; Etsy&apos;de ilan oluşturmaz. Bu tercih, ilan oluşturma adımı eklendiğinde uygulanacak.
+              </NotAppliedNote>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {[
                 {
@@ -337,8 +344,7 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
                 freq > 1 ? `her ${24 / freq} saatte bir` : '24 saatte bir'
               } — saat <strong>{runTimes.join(', ')}</strong>{' '}
               ({schedule.timezone.split('/')[1]?.replace('_', ' ')})
-              {' '}· Her çalışmada <strong>{schedule.listingsPerRun}</strong> listing
-              {' '}· <strong>{schedule.publishMode === 'active' ? 'Direkt Yayın' : 'Taslak'}</strong>
+              {' '}· Her çalışmada <strong>{schedule.listingsPerRun}</strong> tasarım
             </p>
           </div>
         </>

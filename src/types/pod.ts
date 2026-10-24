@@ -77,6 +77,11 @@ export interface DesignItem {
   id: string;
   name: string;
   src: string;
+  /**
+   * Tasarımın hangi kumaş rengine uygun olduğu, tasarımın tonu üzerinden ifade edilir:
+   * 'dark' = koyu tonlu tasarım → AÇIK kumaş; 'light' = açık tonlu tasarım → KOYU kumaş; 'both' = tüm kumaşlar.
+   * Arayüzde her zaman kumaş adıyla gösterilir (SLOT_LABELS).
+   */
   targetApparel?: TargetApparel;
   isSelected?: boolean;
   width: number;

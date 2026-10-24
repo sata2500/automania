@@ -1,6 +1,7 @@
 'use client';
-import React, { useRef, useState } from 'react';
-import { AlertTriangle, ShieldCheck, Send, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ShieldCheck, Send, CheckCircle, XCircle, ExternalLink, CircleAlert } from 'lucide-react';
+import { buildPublishChecklist } from '@/lib/etsy-preflight';
 import { LIVE_PUBLISH_CONFIRMATION, isLivePublishEnabled } from '@/lib/etsy-publish-mode';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { useEtsySeo } from '../context/EtsySeoContext';
@@ -19,6 +20,13 @@ export const SeoPublishSection: React.FC = () => {
     basePrice,
     etsyConnected,
     selectedShippingProfileId,
+    selectedReadinessStateId,
+    generatedDescription,
+    selectedTags,
+    taxonomyId,
+    whoMade,
+    whenMade,
+    isSupply,
     isPublishing,
     handlePublishToEtsy,
     publishResult,
@@ -57,6 +65,21 @@ export const SeoPublishSection: React.FC = () => {
     (m) => m.folderId === selectedFolderId && !m.isVideo
   )?.previewUrl || null;
 
+  const checklist = useMemo(() => buildPublishChecklist({
+    title: generatedTitle,
+    description: generatedDescription,
+    tags: selectedTags,
+    taxonomyId,
+    shippingProfileId: selectedShippingProfileId,
+    readinessStateId: selectedReadinessStateId,
+    media: mockupPreviews.filter((m) => m.folderId === selectedFolderId && m.previewUrl),
+    whoMade,
+    whenMade,
+    isSupply,
+  }), [generatedTitle, generatedDescription, selectedTags, taxonomyId, selectedShippingProfileId, selectedReadinessStateId, mockupPreviews, selectedFolderId, whoMade, whenMade, isSupply]);
+  const blockingCount = checklist.filter((item) => item.status === 'error').length;
+  const canPublish = !isPublishing && blockingCount === 0;
+
   return (
     <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -93,8 +116,6 @@ export const SeoPublishSection: React.FC = () => {
             </div>
             <a 
               href="/api/etsy/auth?returnUrl=/"
-              target="_blank"
-              rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl transition-colors shrink-0 shadow-sm"
             >
               Etsy Mağazamı Bağla
@@ -106,7 +127,7 @@ export const SeoPublishSection: React.FC = () => {
               <div>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  Etsy Mağaza Bağlantısı Aktif & Yayına Hazır
+                  {blockingCount > 0 ? 'Etsy Mağaza Bağlantısı Aktif' : 'Etsy Mağaza Bağlantısı Aktif & Yayına Hazır'}
                 </h4>
                 <p className="text-[11px] text-slate-500">
                   Oluşturulan başlık, açıklama, 13 etiket, mockuplar ve varyasyonlar tek tıkla mağazanıza aktarılır.
@@ -117,7 +138,7 @@ export const SeoPublishSection: React.FC = () => {
                 <div className="flex w-full flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => publish('draft')}
-                    disabled={isPublishing || !selectedShippingProfileId}
+                    disabled={!canPublish}
                     className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Send className={`w-3.5 h-3.5 ${isPublishing ? 'animate-spin' : ''}`} />
@@ -126,7 +147,7 @@ export const SeoPublishSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsLiveConfirmOpen(true)}
-                    disabled={isPublishing || !selectedShippingProfileId || !livePublishEnabled}
+                    disabled={!canPublish || !livePublishEnabled}
                     className="w-full sm:w-auto px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     title={!livePublishEnabled ? 'Canlı yayınlama sunucu ayarıyla kapalı.' : 'Etsy’de canlı yayınlama onayını aç'}
                   >
@@ -135,13 +156,39 @@ export const SeoPublishSection: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-500 sm:text-right">
-                  {!livePublishEnabled
+                  {blockingCount > 0
+                    ? `Yayınlamadan önce ${blockingCount} eksik alanı tamamlayın.`
+                    : !livePublishEnabled
                     ? 'Canlı yayınlama bu ortamda güvenlik amacıyla kapalıdır.'
                     : 'Canlı yayınlama yalnızca açık onay ve son bir kontrol sonrasında yapılır.'}
                 </p>
               </div>
             </div>
           </div>
+        )}
+
+        {etsyConnected && (
+          <ul aria-label="Yayın ön kontrolü" className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
+            {checklist.map((item) => (
+              <li
+                key={item.id}
+                className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-1.5 ${
+                  item.status === 'error'
+                    ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'
+                    : item.status === 'warning'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                      : 'border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                }`}
+              >
+                {item.status === 'ok'
+                  ? <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-px text-emerald-500" aria-label="Tamam" />
+                  : item.status === 'warning'
+                    ? <CircleAlert className="w-3.5 h-3.5 shrink-0 mt-px" aria-label="Uyarı" />
+                    : <XCircle className="w-3.5 h-3.5 shrink-0 mt-px" aria-label="Eksik" />}
+                <span className="min-w-0"><strong>{item.label}:</strong> {item.detail}</span>
+              </li>
+            ))}
+          </ul>
         )}
 
         {isLiveConfirmOpen && livePublishEnabled && (
@@ -181,7 +228,7 @@ export const SeoPublishSection: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    disabled={isPublishing || liveConfirmationPhrase !== LIVE_PUBLISH_CONFIRMATION}
+                    disabled={!canPublish || liveConfirmationPhrase !== LIVE_PUBLISH_CONFIRMATION}
                     onClick={async () => {
                       await publish('active', {
                         confirmLivePublish: true,

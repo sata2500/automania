@@ -25,6 +25,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onCancel,
 }) => {
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   // Escape key handler
   useEffect(() => {
@@ -36,14 +37,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onCancel]);
 
-  // Auto-focus the confirm button when modal opens
+  // Yıkıcı işlemlerde odak "İptal"de başlar: yanlışlıkla Enter'a basmak silme yapmasın.
+  // Açılmadan önceki odak, pencere kapanınca geri verilir.
   useEffect(() => {
-    if (isOpen) {
-      // Small delay to ensure the DOM is ready
-      const t = setTimeout(() => confirmButtonRef.current?.focus(), 50);
-      return () => clearTimeout(t);
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const target = confirmVariant === 'primary' ? confirmButtonRef : cancelButtonRef;
+    const t = setTimeout(() => target.current?.focus(), 50);
+    return () => {
+      clearTimeout(t);
+      previouslyFocused?.focus?.();
+    };
+  }, [isOpen, confirmVariant]);
 
   if (!isOpen) return null;
 
@@ -95,6 +100,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
         <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button
+            ref={cancelButtonRef}
             onClick={onCancel}
             className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer"
           >

@@ -4,7 +4,6 @@ import { getErrorMessage } from '@/lib/errors';
 import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
-  Zap,
   Cpu,
   Database,
   Trash2,
@@ -156,7 +155,7 @@ export const AdminDashboard: React.FC = () => {
     setConfirmConfig({
       isOpen: true,
       title: 'Sistem Verilerini Temizle',
-      message: 'Bu işlem, veritabanında karşılığı olmayan veya kullanılmayan tüm çöp (yetim) görselleri Cloudflare R2 / Depolama alanından tamamen silecektir.\n\nSistemdeki hazır örnek taslaklar ve kullanıcıların aktif mockupları KORUNACAKTIR. Devam etmek istiyor musunuz?',
+      message: 'Bu işlem, hiçbir çalışma alanında veya otomasyon kaydında kullanılmayan ve 24 saatten eski dosyaları Cloudflare R2 depolamasından kalıcı olarak siler. Geri alınamaz.\n\nKullanılan mockup, tasarım ve örnek taslak dosyaları korunur. Devam etmek istiyor musunuz?',
       action: async () => {
         try {
           const res = await fetch('/api/admin/clean-blobs', { method: 'POST' });
@@ -226,6 +225,16 @@ export const AdminDashboard: React.FC = () => {
 
 
 
+  // Başlıktaki veritabanı göstergesi sabit "Aktif" yerine son ölçümü yansıtır.
+  const dbStatus = dbHealthResult ? (dbHealthResult.ok ? 'ok' : 'error') : globalStats?.health?.status;
+  const dbIndicator = dbStatus === 'ok' || dbStatus === 'excellent' || dbStatus === 'good'
+    ? { label: 'Erişilebilir', iconClass: 'text-emerald-500', textClass: 'text-emerald-600 dark:text-emerald-400' }
+    : dbStatus === 'degraded'
+      ? { label: 'Yavaş', iconClass: 'text-amber-500', textClass: 'text-amber-600 dark:text-amber-400' }
+      : dbStatus === 'error'
+        ? { label: 'Bağlantı hatası', iconClass: 'text-rose-500', textClass: 'text-rose-600 dark:text-rose-400' }
+        : { label: 'Ölçülmedi', iconClass: 'text-slate-400', textClass: 'text-slate-500 dark:text-slate-400' };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-16">
       {/* Top Banner & Header Section - Soft Light-Friendly Styling */}
@@ -255,18 +264,11 @@ export const AdminDashboard: React.FC = () => {
           {/* Quick System Indicators */}
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 px-3.5 py-2 rounded-2xl text-xs font-semibold">
-              <Server className="w-4 h-4 text-emerald-500" />
+              <Server className={`w-4 h-4 ${dbIndicator.iconClass}`} />
               <span className="text-slate-600 dark:text-slate-300">PostgreSQL:</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">Aktif</span>
+              <span className={`font-extrabold ${dbIndicator.textClass}`}>{dbIndicator.label}</span>
             </div>
 
-            <div className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 px-3.5 py-2 rounded-2xl text-xs font-semibold">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <span className="text-slate-600 dark:text-slate-300">OpenRouter:</span>
-              <span className="font-extrabold text-indigo-600 dark:text-amber-300">
-                Sunucuda Tanımlı
-              </span>
-            </div>
           </div>
         </div>
 

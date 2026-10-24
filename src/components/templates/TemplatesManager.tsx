@@ -20,6 +20,7 @@ import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from
 import { MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
+import { parseScheduledHours } from '@/lib/automation-schedule';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
@@ -246,15 +247,11 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   // Zamanlama etiketi
   const getScheduleLabel = (template: PodTemplate) => {
     if (!template.automationSchedule?.enabled) return null;
-    const cron = template.automationSchedule.cronExpression;
-    const presets: Record<string, string> = {
-      '0 9 * * *': 'Her gün 09:00',
-      '0 9 * * 1': 'Her Pazartesi 09:00',
-      '0 9 1 * *': 'Her ayın 1\'i',
-      '0 */6 * * *': 'Her 6 saatte bir',
-      '0 */12 * * *': 'Her 12 saatte bir',
-    };
-    return presets[cron] ?? cron;
+    // Zamanlayıcı yalnızca günlük saat listelerini çalıştırır; başka bir ifade asla tetiklenmez.
+    const hours = parseScheduledHours(template.automationSchedule.cronExpression);
+    if (hours.length === 0) return 'Desteklenmeyen zamanlama — şablonu düzenleyip yeniden kaydedin';
+    const tz = template.automationSchedule.timezone?.split('/')[1]?.replace('_', ' ');
+    return `Her gün ${hours.map((h) => `${String(h).padStart(2, '0')}:00`).join(', ')}${tz ? ` (${tz})` : ''}`;
   };
 
   if (isLoading) {
@@ -455,9 +452,6 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                   <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-500/30">
                     <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                     <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">{scheduleLabel}</span>
-                    <span className="ml-auto text-[10px] text-indigo-500 font-medium">
-                      {template.automationSchedule.publishMode === 'active' ? 'Direkt Yayın' : 'Taslak'}
-                    </span>
                   </div>
                 )}
 
@@ -468,7 +462,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                     <span>Son çalışma: {new Date(template.lastRunAt).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                     {template.totalListingsGenerated > 0 && (
                       <span className="ml-auto font-semibold text-slate-500">
-                        {template.totalListingsGenerated} listing üretildi
+                        {template.totalListingsGenerated} çalıştırma tamamlandı
                       </span>
                     )}
                   </div>

@@ -461,3 +461,23 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
 | Marka (trademark) filtresi | Uzun terimler önce eşleşiyor ("Winnie the Pooh" artık "winnie the" artığı bırakmıyor). Genel anlamı da olan kelimeler ("champion", "peanuts", "vans", "converse", "yeti") yalnızca marka bağlamında (ör. "champion hoodie", "yeti tumbler") riskli sayılıyor. Regex'ler bir kez derleniyor. Tasarım analizinin önerdiği kelimeler ve rakip etiketleri de marka filtresinden geçiyor. |
 
 **Doğrulama:** 247 birim testi geçiyor (yeni: kelime sınırlı konu tespiti, sezon muafiyeti, marka filtresi, tek not ölçeği, ilgili havuz önerileri). SEO sekmesi mobil ve masaüstünde taşmasız; üretim derlemesi ve E2E testleri (3/3) geçti.
+
+### Faz 3: Arayüz ve iş akışı netliği ✅ Tamamlandı (24 Ekim 2026)
+
+| Bulgu | Yapılan |
+|---|---|
+| Beyaz ekran riski | Uygulama ve kök düzen için hata ekranları eklendi (`error.tsx`, `global-error.tsx`). Her sekme ayrı bir hata sınırında; bir sekmedeki hata diğerlerini etkilemiyor ve "Tekrar dene" ile kurtarılabiliyor. |
+| Oturum yüklenirken sekme kaybı | Oturum durumu (`loading`/`ready`) eklendi. Giriş doğrulanmadan SEO/İlanlarım sekmesinden atılma ve kaydedilmiş sekmenin üzerine yazılması artık olmuyor. Kullanıcı listesi yalnızca admin için çekiliyor; `alert()` yerine bildirim kullanılıyor. |
+| Gizli sekmeler | Misafirler tüm sekmeleri görüyor; giriş gerektirenler kilit simgesiyle işaretli ve tıklanınca giriş penceresi açılıyor. |
+| Sessiz OAuth hataları | Etsy/Google dönüşündeki `etsy_error`, `etsy_success`, `auth_error` parametreleri anlaşılır bildirimlere çevriliyor ve adres çubuğundan temizleniyor. Mağaza bulunamazsa ayrı hata veriliyor. PKCE kaydı çalışma alanı sürümünü değiştirmiyor. |
+| İlk kullanım | Dağınık banner'lar yerine 6 adımlı **Başlangıç Rehberi**: mockup → baskı alanı → tasarım → aktif tasarım → üretim → giriş/yayın. Her adım çalışma alanı verisinden işaretleniyor ve sıradaki adıma tek tıkla gidiliyor. Boş çalışma alanında örnek taslak yüklenebiliyor. |
+| "Koyu/Açık" terimi karışıklığı | Tasarımın `targetApparel` anlamı belgelendi; yeniden renklendirme seçenekleri "(Koyu kumaş için)/(Açık kumaş için)" olarak adlandırıldı. Yeni yüklemeler "her iki kumaş" olarak başlıyor. |
+| Silme davranışları | Tekil tasarım silme onay istiyor. Mockup klasörü silinince içindeki mockup'lar silinmek yerine kök klasöre taşınıyor. Klasör değişince eski seçimler temizleniyor. Onay pencerelerinde odak "Vazgeç"te başlıyor ve kapanınca geri dönüyor. |
+| Misafir için AI düğmeleri | Arka plan kaldırma, yeniden renklendirme ve AI tasarım üretimi misafirde giriş penceresine yönlendiriyor (önceden 401 hatası veriyordu). |
+| Yayın öncesi belirsizlik | Yayın düğmelerinin yanında **ön kontrol listesi**: başlık (≤140), açıklama, etiketler (13 önerilir), kategori, kargo profili, hazırlık süresi, görseller (20 fotoğraf + 1 video sınırı) ve üretici beyanı. Kırmızı madde varken yayın düğmeleri kapalı. Sunucuyla aynı kurallar kullanılıyor. |
+| Otomatik kargo profili seçimi | Birden fazla kargo profili/hazırlık süresi varsa ilki sessizce seçilmiyor; kullanıcı açıkça seçiyor. "Otomatik Yapılandırıldı" rozeti yerine eksik zorunlu alanları gösteren rozet var. |
+| Etsy bağlama akışı | "Etsy Mağazamı Bağla" yeni sekme yerine aynı sekmede açılıyor ve dönüşte aynı sekmeye geliniyor. İlanlarım sekmesinde bağlantı yoksa bağlama düğmesi gösteriliyor. Toplu üretimde "Etsy için kaydet" sonrası "Etsy SEO'ya git" düğmesi çıkıyor. |
+| Otomasyon şablonları | Henüz uygulanmayan ayarlar (varyasyonlar, yayın modu, kumaş tipi, statik/video mockup'lar) "Yakında" notuyla işaretlendi. Sunucunun kabul etmediği "10 listing" seçeneği kaldırıldı ve "listing" yerine "tasarım" deniyor. Zamanlama etiketi gerçek çalışma saatlerini gösteriyor; desteklenmeyen ifade uyarıyla belirtiliyor. Şablonu düzenlemek pasif şablonu yeniden aktif etmiyor. Sayaç "çalıştırma tamamlandı" olarak düzeltildi. |
+| Admin paneli | Sabit "PostgreSQL: Aktif" / "OpenRouter: Tanımlı" rozetleri yerine son ölçüme göre durum (Erişilebilir/Yavaş/Bağlantı hatası/Ölçülmedi). İstatistik alınamayınca "Yavaş" yerine "Bilinmiyor". Temizlik kartı gerçekte ne yaptığını söylüyor (R2'deki sahipsiz dosyaları siler, veritabanına dokunmaz). Gemini video modeli ayarı artık gerçekten kullanılıyor; OpenRouter video alanının kullanılmadığı belirtildi. |
+
+**Doğrulama:** 250 birim testi geçiyor (yeni: yayın ön kontrol listesi). TypeScript ve ESLint temiz, üretim derlemesi ve E2E testleri (3/3) geçti. Mobil (375), tablet (768) ve masaüstünde (1440) ana sekmeler, şablon oluşturucu, SEO yayın bölümü ve admin ekranlarında yatay taşma ve sayfa hatası yok.

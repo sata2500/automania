@@ -4,6 +4,7 @@ import { DesignItem, MockupFolder } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
+import { useAuth } from '@/components/common/UserAuthContext';
 import { optimizeDesignImage } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 
@@ -39,6 +40,15 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   setActiveDesignFolderId,
 }) => {
   const toast = useToast();
+  const { user, setIsAuthModalOpen } = useAuth();
+
+  /** AI işlemleri (üretim, arka plan kaldırma, renk uyarlama) hesap gerektirir; misafire nedenini söyle. */
+  const requireAccount = (feature: string): boolean => {
+    if (user) return true;
+    toast.info(`${feature} için giriş yapmanız gerekiyor. Taslaklarınız girişten sonra hesabınıza aktarılır.`, 'Giriş Gerekli');
+    setIsAuthModalOpen(true);
+    return false;
+  };
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
 
   // AI Design Generator Modal
@@ -171,6 +181,21 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   };
 
   // --- Deletion Handlers ---
+  // Tekil silme de toplu silme gibi onay ister (dosya kalıcı olarak silinir).
+  const requestDeleteDesign = (id: string) => {
+    const target = designs.find((d) => d.id === id);
+    if (!target) return;
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Tasarım silinsin mi?',
+      message: `"${target.name}" ve dosyası kalıcı olarak silinecek. Bu işlem geri alınamaz.`,
+      onConfirm: () => {
+        deleteDesign(id);
+        setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
   const deleteDesign = (id: string) => {
     const target = designs.find((d) => d.id === id);
     if (target?.src) {
@@ -226,6 +251,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   // --- Remove Background Handler ---
   const handleRemoveBgClick = async (design: DesignItem) => {
     if (!design.src) return;
+    if (!requireAccount('Arka plan kaldırma')) return;
 
     const toastId = toast.progress('Arka plan kaldırılıyor...');
     try {
@@ -259,6 +285,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   // --- Recolor Handler ---
   const handleRecolorClick = async (design: DesignItem, mode: 'light_garment' | 'dark_garment') => {
     if (!design.src) return;
+    if (!requireAccount('Renk uyarlama')) return;
 
     const actionText = mode === 'dark_garment' ? 'Açık renk versiyonu (Koyu Kumaş) oluşturuluyor...' : 'Koyu renk versiyonu (Açık Kumaş) oluşturuluyor...';
     const toastId = toast.progress(actionText);
@@ -276,11 +303,15 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       const recoloredUrl = data.recoloredUrl;
 
       // Yeni bir tasarım objesi oluştur
+      // Yeni kopya hedef kumaşa göre eşleşir ve üretime pasif olarak eklenir (aynı slotta iki aktif
+      // tasarım oluşmasın). targetApparel tasarımın mürekkep tonudur: koyu kumaş için açık ton ('light').
       const newDesign: DesignItem = {
         ...design,
         id: crypto.randomUUID(),
-        name: `${design.name} (${mode === 'dark_garment' ? 'Açık' : 'Koyu'} Versiyon)`,
+        name: `${design.name} (${mode === 'dark_garment' ? 'Koyu' : 'Açık'} kumaş için)`,
         src: recoloredUrl,
+        targetApparel: mode === 'dark_garment' ? 'light' : 'dark',
+        isSelected: false,
         createdAt: Date.now(),
       };
 
@@ -304,7 +335,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onFileChange={(e) => e.target.files && handleFiles(e.target.files)}
-        onAIGenerate={() => setIsAIModalOpen(true)}
+        onAIGenerate={() => { if (requireAccount('AI ile tasarım üretimi')) setIsAIModalOpen(true); }}
       />
 
       {/* Folder Selection Bar */}
@@ -366,7 +397,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           onRemoveBgClick={handleRemoveBgClick}
           onRecolorClick={handleRecolorClick}
           onMoveToFolder={handleMoveToFolder}
-          onDeleteClick={deleteDesign}
+          onDeleteClick={requestDeleteDesign}
         />
       </div>
 

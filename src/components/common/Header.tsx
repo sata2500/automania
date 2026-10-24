@@ -13,6 +13,7 @@ import {
   Monitor,
   User,
   ShoppingBag,
+  Lock,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './UserAuthContext';
@@ -35,6 +36,9 @@ const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.Elemen
   { key: 'listings',  label: '5. Etsy İlanlarım',  shortLabel: 'İlanlarım',    icon: ShoppingBag },
 ];
 
+
+/** Misafirlere gösterilen ama giriş gerektiren adımlar (tıklayınca giriş penceresi açılır). */
+const LOCKED_FOR_GUESTS = new Set<TabKey>(['seo', 'listings']);
 
 const THEME_LABELS: Record<string, string> = {
   system: 'Sistem',
@@ -98,15 +102,17 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Top Navigation Tabs */}
             <nav aria-label="Ana navigasyon" className="hidden lg:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, label, shortLabel, icon: Icon }) => {
+              {TABS.map(({ key, label, shortLabel, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
+                const isLocked = !user && LOCKED_FOR_GUESTS.has(key);
                 return (
                   <button
                     key={key}
                     onClick={() => setActiveTab(key)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center space-x-2 px-2.5 xl:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                    title={isLocked ? 'Bu adım için giriş yapın' : undefined}
+                    className={`flex items-center space-x-2 px-2.5 xl:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${isLocked ? 'opacity-60 ' : ''}${
                       isActive
                         ? key === 'generator'
                           ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
@@ -125,6 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
                     />
                     <span className="xl:hidden">{shortLabel}</span>
                     <span className="hidden xl:inline">{label}</span>
+                    {isLocked && <Lock className="w-3 h-3" aria-label="Giriş gerekli" />}
                     {badge !== null && (
                       <span
                         className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full font-bold ${
@@ -190,14 +197,15 @@ export const Header: React.FC<HeaderProps> = ({
         aria-label="Mobil navigasyon"
         className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
       >
-        {TABS.filter(({ key }) => user ? true : key === 'mockups' || key === 'designs' || key === 'generator').map(({ key, shortLabel, icon: Icon }) => { const isActive = activeTab === key;
+        {TABS.map(({ key, shortLabel, icon: Icon }) => { const isActive = activeTab === key;
           const badge = getBadge(key);
+          const isLocked = !user && LOCKED_FOR_GUESTS.has(key);
           return (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               aria-current={isActive ? 'page' : undefined}
-              aria-label={`${shortLabel}${badge ? `, ${badge} öğe` : ''}`}
+              aria-label={`${shortLabel}${isLocked ? ', giriş gerekli' : ''}${badge ? `, ${badge} öğe` : ''}`}
               className={`relative flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[10px] font-bold transition-all active:scale-95 ${
                 isActive
                   ? key === 'generator'
@@ -215,7 +223,10 @@ export const Header: React.FC<HeaderProps> = ({
                     : ''
                 }`}
               />
-              <span className="leading-none">{shortLabel}</span>
+              <span className={`leading-none ${isLocked ? 'opacity-60' : ''}`}>{shortLabel}</span>
+              {isLocked && (
+                <Lock className="absolute top-1 right-2 w-3 h-3 text-slate-400" aria-hidden="true" />
+              )}
               {badge !== null && badge > 0 && (
                 <span className="absolute top-1 right-2 w-4 h-4 bg-pink-500 text-white text-[8px] font-extrabold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow">
                   {badge > 99 ? '99+' : badge}

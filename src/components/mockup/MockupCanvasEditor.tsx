@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
@@ -63,6 +63,10 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
   // UI States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Klasör değişince toplu seçim temizlenir (görünmeyen mockup'lar yanlışlıkla silinmesin/taşınmasın).
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeFolderId]);
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'canvas'>('canvas');
@@ -335,24 +339,21 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       const folder = mockupFolders.find((f) => f.id === folderId);
       if (!folder) return;
 
+      const itemCount = mockups.filter((m) => m.folderId === folderId).length;
+      // Tasarım klasörleriyle aynı davranış: klasör silinir, içindeki mockup'lar "Tüm Mockup'lar"a taşınır.
+      // Böylece klasör silmek hiçbir dosyayı kalıcı olarak silmez; mockup'lar ayrıca silinebilir.
       setConfirmModalState({
         isOpen: true,
-        title: `'${folder.name}' Silinsin mi?`,
-        message: 'Bu klasör ve içindeki tüm mockup yapılandırmaları silinecektir. Devam etmek istiyor musunuz?',
+        title: `'${folder.name}' klasörü silinsin mi?`,
+        message: itemCount > 0
+          ? `Klasör silinecek; içindeki ${itemCount} mockup silinmeyecek, "Tüm Mockup'lar" altına taşınacak.`
+          : 'Bu boş klasör silinecek.',
         onConfirm: () => {
-          const urlsToDelete = mockups
-            .filter((m) => m.folderId === folderId && m.src)
-            .map((m) => m.src);
-
-          if (urlsToDelete.length > 0) {
-            void deleteUnreferencedBlobs(urlsToDelete, { mockups: mockups.filter((m) => m.folderId !== folderId) });
-          }
-
           setMockupFolders((prev) => prev.filter((f) => f.id !== folderId));
-          setMockups((prev) => prev.filter((m) => m.folderId !== folderId));
+          setMockups((prev) => prev.map((m) => (m.folderId === folderId ? { ...m, folderId: undefined } : m)));
           if (activeFolderId === folderId) setActiveFolderId(null);
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
-          toast.info(`'${folder.name}' silindi.`);
+          toast.info(itemCount > 0 ? `'${folder.name}' silindi; ${itemCount} mockup "Tüm Mockup'lar"a taşındı.` : `'${folder.name}' silindi.`);
         },
       });
     },
