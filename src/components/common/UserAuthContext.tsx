@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { forceSyncFromServer } from '@/lib/storage-service';
 import { getCanonicalAppOrigin } from '@/lib/oauth-origin';
 import { useToast } from './ToastContext';
@@ -314,24 +314,34 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
+  // Eylemler her render'da yeniden oluşturulur; tüketicilere sabit kimlikli sarmalayıcılar verilir.
+  // Böylece context değeri yalnızca gerçek durum değişince değişir ve tüm uygulama gereksiz yere yeniden çizilmez.
+  const actionsRef = useRef({ loginWithGoogle, loginWithDemo, logout, updateUserRole, toggleUserBlock, deleteUser, addUser });
+  useEffect(() => {
+    actionsRef.current = { loginWithGoogle, loginWithDemo, logout, updateUserRole, toggleUserBlock, deleteUser, addUser };
+  });
+  const actions = useMemo(() => ({
+    loginWithGoogle: () => actionsRef.current.loginWithGoogle(),
+    loginWithDemo: (...args: Parameters<typeof loginWithDemo>) => actionsRef.current.loginWithDemo(...args),
+    logout: () => actionsRef.current.logout(),
+    updateUserRole: (...args: Parameters<typeof updateUserRole>) => actionsRef.current.updateUserRole(...args),
+    toggleUserBlock: (...args: Parameters<typeof toggleUserBlock>) => actionsRef.current.toggleUserBlock(...args),
+    deleteUser: (...args: Parameters<typeof deleteUser>) => actionsRef.current.deleteUser(...args),
+    addUser: (...args: Parameters<typeof addUser>) => actionsRef.current.addUser(...args),
+  }), []);
+
+  const value = useMemo(() => ({
+    user,
+    authStatus,
+    isAdmin,
+    userList,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    ...actions,
+  }), [user, authStatus, isAdmin, userList, isAuthModalOpen, actions]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        authStatus,
-        isAdmin,
-        userList,
-        loginWithGoogle,
-        loginWithDemo,
-        logout,
-        isAuthModalOpen,
-        setIsAuthModalOpen,
-        updateUserRole,
-        toggleUserBlock,
-        deleteUser,
-        addUser,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

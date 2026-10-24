@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { MockupItem, PrintArea, MockupFolder } from '@/types/pod';
 import { MockupItemMenu } from './MockupItemMenu';
+import { activateOnKey } from '@/lib/a11y';
 
 interface MockupSidebarListProps {
   filteredMockups: MockupItem[];
@@ -377,7 +378,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDrop={() => handleDrop(index)}
-                onClick={() => setSelectedMockupId(item.id)}
+                role="button" tabIndex={0} onKeyDown={activateOnKey(() => setSelectedMockupId(item.id))} onClick={() => setSelectedMockupId(item.id)}
                 className={`group relative flex items-center gap-2 p-2 rounded-2xl border transition-all cursor-pointer ${
                   isBeingDragged
                     ? 'opacity-30 scale-95 border-dashed border-amber-500 shadow-inner'
@@ -438,7 +439,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
                       <span className="px-1 text-center text-[8px] font-semibold leading-tight">Erişilemiyor</span>
                     </div>
                   ) : (
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={item.src}
                       alt={item.name}
                       className="w-full h-full object-cover"

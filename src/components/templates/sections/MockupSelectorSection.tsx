@@ -207,7 +207,7 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
                   }`}
                 >
                   {mockup.src ? (
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={mockup.src}
                       alt={mockup.name}
                       className="w-full h-full object-cover"

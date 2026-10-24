@@ -28,6 +28,30 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/**
+ * Canvas'ı data URL'e çevirir. `toBlob` kodlamayı ana thread dışında yaptığı için toplu üretimde
+ * arayüz donmaz (`toDataURL` her görselde sayfayı yüzlerce ms kilitler). Format desteklenmezse PNG'ye düşer.
+ */
+export async function canvasToDataUrl(canvas: HTMLCanvasElement, format: string, quality: number): Promise<string> {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    try {
+      canvas.toBlob(resolve, format, quality);
+    } catch {
+      resolve(null);
+    }
+  });
+  if (!blob || !blob.type.startsWith('image/')) {
+    const fallback = canvas.toDataURL(format, quality);
+    return fallback.startsWith('data:image/') ? fallback : canvas.toDataURL('image/png');
+  }
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('Görsel kodlanamadı.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export interface RenderOptions {
   outputWidth?: number;
   outputHeight?: number;
@@ -100,11 +124,7 @@ export async function renderMockupWithDesign(
   // If this item is a static visual (size chart, color chart) or has no print area, return base image directly
   const isStaticAsset = mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;
   if (isStaticAsset) {
-    let dataUrl = canvas.toDataURL(format, quality);
-    if (!dataUrl.startsWith('data:image/')) {
-      dataUrl = canvas.toDataURL('image/png');
-    }
-    return dataUrl;
+    return canvasToDataUrl(canvas, format, quality);
   }
 
   // 2. Process design overlay for each print area cleanly
@@ -144,11 +164,7 @@ export async function renderMockupWithDesign(
     ctx.restore();
   }
 
-  let finalDataUrl = canvas.toDataURL(format, quality);
-  if (!finalDataUrl.startsWith('data:image/')) {
-    finalDataUrl = canvas.toDataURL('image/png');
-  }
-  return finalDataUrl;
+  return canvasToDataUrl(canvas, format, quality);
 }
 
 export function generateMatchingPairs(

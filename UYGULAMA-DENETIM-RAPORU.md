@@ -481,3 +481,25 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
 | Admin paneli | Sabit "PostgreSQL: Aktif" / "OpenRouter: Tanımlı" rozetleri yerine son ölçüme göre durum (Erişilebilir/Yavaş/Bağlantı hatası/Ölçülmedi). İstatistik alınamayınca "Yavaş" yerine "Bilinmiyor". Temizlik kartı gerçekte ne yaptığını söylüyor (R2'deki sahipsiz dosyaları siler, veritabanına dokunmaz). Gemini video modeli ayarı artık gerçekten kullanılıyor; OpenRouter video alanının kullanılmadığı belirtildi. |
 
 **Doğrulama:** 250 birim testi geçiyor (yeni: yayın ön kontrol listesi). TypeScript ve ESLint temiz, üretim derlemesi ve E2E testleri (3/3) geçti. Mobil (375), tablet (768) ve masaüstünde (1440) ana sekmeler, şablon oluşturucu, SEO yayın bölümü ve admin ekranlarında yatay taşma ve sayfa hatası yok.
+
+### Faz 6: Performans ve erişilebilirlik ✅ Tamamlandı (24 Ekim 2026)
+
+| Bulgu | Yapılan |
+|---|---|
+| 5 sn'de bir senkron yoklaması | Aralık 30 sn'ye çıkarıldı; sekmeye veya pencereye dönüldüğünde anında kontrol yapılıyor. Başka cihazdaki değişiklik kullanıcı geri gelince hemen görünüyor, arka planda gereksiz DB sorgusu atılmıyor (sorgu sayısı ~%80 azaldı). |
+| Medya sunumu (`/api/r2`) | Dosya belleğe alınmadan akıtılıyor. Video ileri sarma için `Range` (206) destekleniyor. `ETag`/304 ile tekrar indirme önleniyor. Dosya adları UUID içerdiği için tarayıcı önbelleği 1 yıl (`private, immutable`). Kullanıcının kendi medya okumaları IP istek sınırına sayılmıyor (galeri açılışında 429 riski kalktı). |
+| Admin açılışı | Depolama istatistikleri (tüm bucket listesi) 10 dk önbellekleniyor; "Verileri Yenile" taze ölçüm yapıyor, temizlik sonrası önbellek boşalıyor. Yapay Zeka, Kelime Havuzu ve Kategoriler sekmeleri yalnızca açılınca indiriliyor. |
+| Görsel listeleri | Tasarım, mockup, galeri ve sonuç ızgaralarında görseller tembel yükleniyor (`loading="lazy"`, `decoding="async"`). |
+| Toplu üretimde donma | Görsel kodlama `toDataURL` yerine asenkron `toBlob` ile yapılıyor; üretim sırasında arayüz yanıt vermeye devam ediyor. Çıktı biçimi değişmedi. |
+| Oturum context'i | Değer ve eylemler sabitlendi; oturum bilgisi değişmedikçe tüm uygulama yeniden çizilmiyor. |
+| Sunucuda yeşil perde | Piksel başına nesne oluşturulmuyor. Sonuç 16,7 milyon rengin tamamında eski uygulamayla birebir aynı (testle doğrulandı). |
+| Modallar | Ortak `useDialogA11y` / `DialogPanel`: `role="dialog"`, başlık bağlantısı, açılınca odak içeri, Tab ile odak pencerede kalıyor, Escape yalnızca en üstteki pencereyi kapatıyor, kapanınca odak geri dönüyor. 16 pencere bu yapıya geçirildi (şablon oluşturucu, ilan detayı, toplu işlem, varyasyon pencereleri, AI tasarım, klasör, analiz, admin pencereleri...). İşlem sürerken toplu işlem penceresi Escape ile kapanmıyor. |
+| Klavye ile erişilemeyen kartlar | Klasör sekmeleri, tasarım/mockup kartları, galeri klasörleri, baskı alanı sekmeleri ve ilan satırları Tab ile odaklanıp Enter/Boşluk ile seçilebiliyor. |
+| Fare gerektiren baskı alanı | Ayarlar panelinde X, Y, genişlik ve yükseklik (%) için sayısal alanlar eklendi. |
+| Yalnızca hover'da görünen kontroller | Galeri indirme/silme ve özel beden/renk silme düğmeleri klavye odağında ve dokunmatik ekranlarda görünür; silme düğmelerine erişilebilir adlar eklendi. |
+| `confirm()` kullanımı | Şablon ve kelime silme, havuz taraması uygulamanın onay penceresine geçti (`useConfirmDialog`). Havuz taraması metni artık doğru kapsamı söylüyor (7 günden eski kelimeler) ve istek sınırına takılınca durmak yerine bekleyip devam ediyor. |
+| Örnek taslak mockup'ı görünmüyordu | Demo SVG'lerde boyut bilgisi olmadığı için mockup düzenleyicide görsel 0 piksel genişlikte kalıyordu. SVG'lere boyut eklendi; örnek taslak artık düzenleyicide görünüyor. |
+
+**Doğrulama:** 256 birim testi geçiyor (yeni: Range ayrıştırma, medya istek sınırı muafiyeti, yeşil perde eşdeğerliği). TypeScript temiz, ESLint'te hata yok. Üretim derlemesi ve E2E testleri (3/3) geçti. Tarayıcıda klavye testi: şablon penceresinde odak içeri taşınıyor, 40 Tab sonrası pencerede kalıyor, Escape kapatıyor; kartlar Tab ile odaklanabiliyor. Ana sekmeler ve admin ekranları telefon, tablet ve masaüstü genişliğinde taşmasız ve hatasız.
+
+**Kapsam dışı bırakılanlar:** Yüklemede küçük resim (thumbnail) üretimi, render'ın Web Worker/OffscreenCanvas'a taşınması, SEO context'inin bölünmesi ve Vision/optimizasyon sonuçlarının önbelleklenmesi.

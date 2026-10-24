@@ -2,6 +2,7 @@
 import React from 'react';
 import { Sparkles, Folder, Edit2, Trash2, GripVertical, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { activateOnKey } from '@/lib/a11y';
 
 export const SeoGallerySection: React.FC = () => {
   const {
@@ -73,7 +74,7 @@ export const SeoGallerySection: React.FC = () => {
               onDragStart={(e) => handleFolderDragStart(e, folder.id)}
               onDragOver={handleFolderDragOver}
               onDrop={(e) => handleFolderDrop(e, folder.id)}
-              onClick={() => handleSelectFolder(folder.id)}
+              role="button" tabIndex={0} onKeyDown={activateOnKey(() => handleSelectFolder(folder.id))} onClick={() => handleSelectFolder(folder.id)}
               className={`group relative shrink-0 w-28 sm:w-32 rounded-xl border-2 p-2 cursor-pointer transition-all flex flex-col items-center gap-1.5 ${
                 isSelected
                   ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 shadow-sm'
@@ -82,7 +83,7 @@ export const SeoGallerySection: React.FC = () => {
             >
               <div className="w-full h-18 sm:h-20 rounded-lg bg-slate-200 dark:bg-slate-800 overflow-hidden relative border border-slate-100 dark:border-slate-800 flex items-center justify-center">
                 {thumbnailMockup?.previewUrl ? (
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={thumbnailMockup.previewUrl}
                     alt={folder.name}
                     draggable={false}
@@ -150,7 +151,7 @@ export const SeoGallerySection: React.FC = () => {
                 </div>
               ) : (
                 <div
-                  className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
+                  className="absolute top-1 right-1 bg-red-500/80 text-white rounded p-0.5 opacity-80 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity hover:bg-red-600 cursor-pointer"
                   title="Klasörü Sil"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -200,7 +201,7 @@ export const SeoGallerySection: React.FC = () => {
                       <span className="text-[8px] text-slate-400">MP4</span>
                     </div>
                   ) : (
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={mockup.previewUrl}
                       alt={mockup.mockupName}
                       draggable={false}
@@ -214,7 +215,7 @@ export const SeoGallerySection: React.FC = () => {
                   </div>
 
                   {/* Hover & Touch Action Controls */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100 transition-opacity flex flex-col justify-between p-1">
                     <div className="flex justify-between items-center">
                       <a
                         href={mockup.previewUrl}

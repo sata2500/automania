@@ -21,6 +21,7 @@ import { MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
 import { parseScheduledHours } from '@/lib/automation-schedule';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
@@ -53,6 +54,7 @@ function formatRunDate(value: string | null): string {
 
 export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   const toast = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const { error: showError, success: showSuccess } = toast;
   const [templates, setTemplates] = useState<PodTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,7 +174,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
 
   // Şablon sil
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`"${name}" şablonunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) return;
+    if (!(await confirm({ title: 'Şablonu sil', message: `"${name}" şablonu silinecek. Bu işlem geri alınamaz.`, confirmText: 'Sil' }))) return;
     try {
       setDeletingId(id);
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
@@ -265,6 +267,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
 
   return (
     <div className="space-y-6 pb-8">
+      {confirmDialog}
       {/* Başlık */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

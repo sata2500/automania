@@ -39,7 +39,9 @@ export const IDB_KEY_SUFFIXES = {
 
 export const TIMING = {
   /** Polling interval for cross-device sync (ms) */
-  SYNC_POLL_INTERVAL_MS: 5000,
+  SYNC_POLL_INTERVAL_MS: 30_000,
+  /** Odak/görünürlük değişiminde iki kontrol arasındaki en kısa süre. */
+  SYNC_FOCUS_MIN_GAP_MS: 3_000,
   /** Debounce delay for auto-save to server (ms) */
   SAVE_DEBOUNCE_MS: 400,
   /** Debounce delay for local IndexedDB UI state saves (ms) */

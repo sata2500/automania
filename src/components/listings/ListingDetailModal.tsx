@@ -31,6 +31,7 @@ import type { StoredEtsyListing } from '@/types/etsy';
 import type { SeoEvaluationResult, VisionAnalysisData } from '@/lib/etsy-seo-evaluator';
 import { parseJsonObject } from '@/lib/json-utils';
 import { isLivePublishEnabled, LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface ListingDetailModalProps {
   listing: StoredEtsyListing | null;
@@ -340,7 +341,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <DialogPanel aria-labelledby="listing-detail-title" onClose={onClose} className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
@@ -361,7 +362,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   {listing.state === 'active' ? 'Aktif (Live)' : listing.state}
                 </span>
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title ?? undefined}>
+              <h3 id="listing-detail-title" className="text-sm sm:text-base font-bold text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title ?? undefined}>
                 {listing.title || 'Başlıksız İlan'}
               </h3>
             </div>
@@ -1218,7 +1219,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           </div>
         </div>
 
-      </div>
+      </DialogPanel>
     </div>
   );
 };

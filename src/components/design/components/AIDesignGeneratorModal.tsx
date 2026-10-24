@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
+import { DialogPanel } from '@/components/common/DialogPanel';
+import { activateOnKey } from '@/lib/a11y';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -236,7 +238,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogPanel aria-labelledby="ai-design-modal-title" onClose={handleClose} className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden flex flex-col max-h-[90vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-purple-600/10 via-indigo-600/10 to-pink-600/10 shrink-0">
@@ -245,7 +247,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
               <Sparkles className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              <h2 id="ai-design-modal-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">
                 AI ile Tasarım Üret
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -351,7 +353,12 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
                           ? 'border-purple-500 shadow-md shadow-purple-500/20'
                           : 'border-slate-200 dark:border-slate-700 opacity-60'
                       }`}
-                      onClick={() =>
+                      role="button" tabIndex={0} onKeyDown={activateOnKey(() =>
+                        setPreviews(prev =>
+                          prev.map(p =>
+                            p.id === preview.id ? { ...p, selected: !p.selected } : p
+                          )
+                        ))} onClick={() =>
                         setPreviews(prev =>
                           prev.map(p =>
                             p.id === preview.id ? { ...p, selected: !p.selected } : p
@@ -494,7 +501,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
             </>
           )}
         </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

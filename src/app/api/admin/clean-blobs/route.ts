@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth-server';
 import { isR2Configured, listR2Objects, deleteFromR2, R2ObjectItem } from '@/lib/r2';
 import { parseJsonArray } from '@/lib/json-utils';
 import { writeAuditLog } from '@/lib/audit-log';
+import { invalidateR2StatsCache } from '@/lib/r2-stats-cache';
 import { collectWorkspaceReferences, findOrphanKeys } from '@/lib/orphan-detection';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,7 @@ export async function POST(_request: Request) {
     if (orphanKeys.length > 0) {
       const res = await deleteFromR2(orphanKeys);
       totalDeleted = res.deletedCount;
+      invalidateR2StatsCache();
       await writeAuditLog({
         userId: adminSession.id,
         action: 'admin.storage.orphans_deleted',

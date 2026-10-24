@@ -16,6 +16,7 @@ import { useToast } from '@/components/common/ToastContext';
 export type BulkActionType = 'vision' | 'evaluate_seo' | 'optimize';
 
 import type { StoredEtsyListing } from '@/types/etsy';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface BulkActionModalProps {
   isOpen: boolean;
@@ -184,7 +185,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <DialogPanel aria-labelledby="bulk-action-title" onClose={isProcessing ? undefined : onClose} className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
@@ -195,7 +196,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
               {actionType === 'optimize' && <Sparkles className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-white">
+              <h3 id="bulk-action-title" className="text-sm sm:text-base font-bold text-white">
                 {getActionTitle()}
               </h3>
               <p className="text-xs text-slate-400">
@@ -349,7 +350,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
           )}
         </div>
 
-      </div>
+      </DialogPanel>
     </div>
   );
 };

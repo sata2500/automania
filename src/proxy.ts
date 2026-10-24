@@ -33,8 +33,15 @@ export function buildContentSecurityPolicy(nonce: string, isDev: boolean): strin
   `.replace(/\s{2,}/g, ' ').trim();
 }
 
+// Kullanıcının kendi medya dosyalarını okuması IP sınırına sayılmaz: bir galeri tek seferde onlarca
+// görsel ister ve bunlar zaten oturum + sahiplik kontrolünden geçip tarayıcıda uzun süre önbelleklenir.
+export function isRateLimitExemptMediaRead(method: string, pathname: string): boolean {
+  return (method === 'GET' || method === 'HEAD') && (pathname.startsWith('/api/r2/') || pathname.startsWith('/api/uploads/'));
+}
+
 export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
+    if (isRateLimitExemptMediaRead(request.method, request.nextUrl.pathname)) return NextResponse.next();
     const ip = getClientIp(request);
     if (ip) {
       const limit = consumeRateLimit(`ip:${ip}`, MAX_REQUESTS_PER_WINDOW, RATE_LIMIT_WINDOW_MS);

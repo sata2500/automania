@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { MockupFolder, DesignItem } from '@/types/pod';
 import { DesignFolderMenu } from './DesignFolderMenu';
+import { activateOnKey } from '@/lib/a11y';
 
 interface DesignFolderBarProps {
   designFolders: MockupFolder[];
@@ -207,7 +208,7 @@ export const DesignFolderBar: React.FC<DesignFolderBarProps> = ({
               onDragStart={() => handleDragStart(index)}
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={() => handleDrop(index)}
-              onClick={() => setActiveDesignFolderId(folder.id)}
+              role="button" tabIndex={0} onKeyDown={activateOnKey(() => setActiveDesignFolderId(folder.id))} onClick={() => setActiveDesignFolderId(folder.id)}
               className={`relative flex items-center space-x-1.5 pl-2.5 pr-2 py-2 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer max-w-[240px] min-w-0 ${
                 isBeingDragged
                   ? 'opacity-30 scale-95 border-dashed border-indigo-400'

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { X, SlidersHorizontal } from 'lucide-react';
 import { MockupSettingsPanel } from './MockupSettingsPanel';
 import { MockupItem, PrintArea, ApparelType } from '@/types/pod';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface MockupMobileDrawerProps {
   isOpen: boolean;
@@ -52,12 +53,12 @@ export const MockupMobileDrawer: React.FC<MockupMobileDrawerProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-250">
+      <DialogPanel aria-labelledby="mockup-drawer-title" onClose={onClose} className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-250">
         {/* Drawer Drag Bar / Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+            <h3 id="mockup-drawer-title" className="text-sm font-bold text-slate-800 dark:text-white">
               Mockup Ayarları
             </h3>
           </div>
@@ -74,7 +75,7 @@ export const MockupMobileDrawer: React.FC<MockupMobileDrawerProps> = ({
         <div className="overflow-y-auto p-4 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <MockupSettingsPanel {...panelProps} />
         </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

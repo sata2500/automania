@@ -30,6 +30,7 @@ import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { saveAppData, loadAppData } from '@/lib/storage-service';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT, DEFAULT_GENERATE_DESIGN_PROMPT } from '@/lib/default-prompts';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 export interface PromptVariable {
   tag: string;
@@ -1625,13 +1626,13 @@ export const AdminAiSettingsSection: React.FC = () => {
       {/* Test Sonuç Modalı */}
       {testResponseData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
+          <DialogPanel aria-labelledby="ai-test-result-title" onClose={() => setTestResponseData(null)} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/60 rounded-lg text-indigo-600 dark:text-indigo-400">
                   <Sparkles className="w-4 h-4" />
                 </div>
-                <h3 className="font-bold text-slate-800 dark:text-white text-sm">Model Test Sonucu</h3>
+                <h3 id="ai-test-result-title" className="font-bold text-slate-800 dark:text-white text-sm">Model Test Sonucu</h3>
               </div>
               <button onClick={() => setTestResponseData(null)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                 <XCircle className="w-5 h-5" />
@@ -1664,7 +1665,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                 Kapat
               </button>
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
     </>

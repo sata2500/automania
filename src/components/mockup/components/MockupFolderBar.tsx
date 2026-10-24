@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Folder, Plus, MoreVertical, Video } from 'lucide-react';
 import { MockupFolder, MockupItem } from '@/types/pod';
 import { MockupFolderMenu } from './MockupFolderMenu';
+import { activateOnKey } from '@/lib/a11y';
 
 interface MockupFolderBarProps {
   mockupFolders: MockupFolder[];
@@ -200,7 +201,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
                   ? 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   : ''
               }`}
-              onClick={() => setActiveFolderId(folder.id)}
+              role="button" tabIndex={0} onKeyDown={activateOnKey(() => setActiveFolderId(folder.id))} onClick={() => setActiveFolderId(folder.id)}
             >
               <Folder className="w-3.5 h-3.5 shrink-0" />
               <span>{folder.name}</span>

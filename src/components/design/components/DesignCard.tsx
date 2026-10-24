@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
 import { DesignItemMenu } from './DesignItemMenu';
+import { activateOnKey } from '@/lib/a11y';
 
 interface DesignCardProps {
   design: DesignItem;
@@ -52,7 +53,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
 
   return (
     <div
-      onClick={() => onToggleCheck(design.id)}
+      role="button" tabIndex={0} onKeyDown={activateOnKey(() => onToggleCheck(design.id))} onClick={() => onToggleCheck(design.id)}
       className={`relative p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
         isChecked
           ? 'bg-gradient-to-b from-indigo-50 dark:from-indigo-950/80 to-white dark:to-slate-900 border-indigo-400 dark:border-indigo-500 shadow-lg ring-1 ring-indigo-400/50 dark:ring-indigo-500/50'
@@ -132,7 +133,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
             : ''
         }`}
       >
-        <img
+        <img decoding="async"
           src={design.src}
           alt={design.name}
           className="max-w-full max-h-full object-contain drop-shadow-md"

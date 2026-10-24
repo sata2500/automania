@@ -22,6 +22,7 @@ import { VariationSection } from './sections/VariationSection';
 import { SeoHintsSection } from './sections/SeoHintsSection';
 import { ScheduleSection } from './sections/ScheduleSection';
 import { useToast } from '@/components/common/ToastContext';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface TemplateBuilderModalProps {
   mockups: MockupItem[];
@@ -139,7 +140,7 @@ export function TemplateBuilderModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
-      <div className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 my-4 flex flex-col">
+      <DialogPanel aria-labelledby="template-builder-title" onClose={onClose} className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 my-4 flex flex-col">
 
         {/* Modal Başlık */}
         <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-800">
@@ -148,7 +149,7 @@ export function TemplateBuilderModal({
               <LayoutTemplate className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              <h2 id="template-builder-title" className="text-base font-bold text-slate-900 dark:text-white">
                 {isEditing ? 'Şablonu Düzenle' : 'Yeni Şablon Oluştur'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -304,7 +305,7 @@ export function TemplateBuilderModal({
             </button>
           )}
         </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 }

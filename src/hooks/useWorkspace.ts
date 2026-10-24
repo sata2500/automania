@@ -369,8 +369,10 @@ export function useWorkspace() {
   // sunucu verisi uygulanmaz (aksi halde kullanıcının son düzenlemesi silinir).
   useEffect(() => {
     if (!isInitialized || !user) return;
-    const interval = setInterval(async () => {
+    let lastCheckAt = 0;
+    const checkRemote = async () => {
       if (isSyncFetchingRef.current || document.visibilityState === 'hidden') return;
+      lastCheckAt = Date.now();
       if (hasPendingSaveRef.current || isSaveInFlightRef.current || hasSaveConflictRef.current) return;
       try {
         const res = await fetch('/api/storage/version', { cache: 'no-store' });
@@ -402,8 +404,20 @@ export function useWorkspace() {
       } catch {
         isSyncFetchingRef.current = false;
       }
-    }, TIMING.SYNC_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    };
+    // Seyrek yoklama + sekmeye/pencereye dönüldüğünde anında kontrol: başka cihazdaki değişiklik
+    // kullanıcı geri geldiğinde hemen görünür, arka planda ise sunucuya gereksiz sorgu gitmez.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastCheckAt > TIMING.SYNC_FOCUS_MIN_GAP_MS) void checkRemote();
+    };
+    const interval = setInterval(checkRemote, TIMING.SYNC_POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [isInitialized, user, applyLoadedCollections]);
 
   return {

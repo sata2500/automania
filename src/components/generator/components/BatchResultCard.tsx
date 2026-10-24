@@ -19,7 +19,7 @@ export const BatchResultCard: React.FC<BatchResultCardProps> = ({ match }) => {
           </div>
         ) : (
           <>
-            <img src={match.previewUrl} alt={match.exportFileName} className="w-full h-full object-contain" />
+            <img loading="lazy" decoding="async" src={match.previewUrl} alt={match.exportFileName} className="w-full h-full object-contain" />
             <a
               href={match.previewUrl}
               download={match.exportFileName}

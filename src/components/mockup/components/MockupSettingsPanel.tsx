@@ -14,6 +14,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { MockupItem, PrintArea, ApparelType } from '@/types/pod';
+import { activateOnKey } from '@/lib/a11y';
 
 interface MockupSettingsPanelProps {
   selectedMockup: MockupItem | null;
@@ -193,7 +194,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
                   return (
                     <div
                       key={area.id || idx}
-                      onClick={() => setActiveAreaIndex(idx)}
+                      role="button" tabIndex={0} onKeyDown={activateOnKey(() => setActiveAreaIndex(idx))} onClick={() => setActiveAreaIndex(idx)}
                       className={`group/tab flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                         isActive
                           ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm'
@@ -209,6 +210,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
                           onClick={(e) => onRemoveArea(idx, e)}
                           className="opacity-60 group-hover/tab:opacity-100 hover:text-red-500 p-0.5 rounded transition-all"
                           title="Alanı Sil"
+                          aria-label={`${area.name || `Alan ${idx + 1}`} alanını sil`}
                         >
                           <Trash2 className="w-2.5 h-2.5" />
                         </button>
@@ -233,6 +235,38 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 />
               </div>
+            )}
+
+            {/* Konum ve boyut: sürüklemeye klavye/dokunmatik alternatifi (yüzde cinsinden) */}
+            {activePrintArea && (
+              <fieldset className="grid grid-cols-4 gap-1.5">
+                <legend className="col-span-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Konum ve Boyut (%)</legend>
+                {([
+                  { key: 'x', label: 'X' },
+                  { key: 'y', label: 'Y' },
+                  { key: 'width', label: 'Gen.' },
+                  { key: 'height', label: 'Yük.' },
+                ] as const).map(({ key, label }) => (
+                  <label key={key} className="flex flex-col text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    {label}
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={key === 'width' || key === 'height' ? 1 : 0}
+                      max={100}
+                      step={0.5}
+                      value={Math.round((activePrintArea[key] ?? 0) * 10) / 10}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isFinite(value)) return;
+                        const min = key === 'width' || key === 'height' ? 1 : 0;
+                        onUpdateActiveArea({ [key]: Math.min(100, Math.max(min, value)) });
+                      }}
+                      className="mt-0.5 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    />
+                  </label>
+                ))}
+              </fieldset>
             )}
 
             {/* Rotation Slider & Presets */}

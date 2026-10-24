@@ -18,6 +18,7 @@ import {
 import { MockupFolder } from '@/types/pod';
 import { PodTemplateAutomationSchedule } from '@/types/templates';
 import { ScheduleSection } from '../../templates/sections/ScheduleSection';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,12 +185,12 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden flex flex-col max-h-[88vh]">
+      <DialogPanel aria-labelledby="folder-template-title" onClose={onClose} className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700/60 overflow-hidden flex flex-col max-h-[88vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-purple-600/10 to-indigo-600/10 shrink-0">
@@ -198,7 +199,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
               <Settings2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Şablon Ayarları</h2>
+              <h2 id="folder-template-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">Şablon Ayarları</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">📁 {folder.name}</p>
             </div>
           </div>
@@ -498,7 +499,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
             </button>
           </div>
         </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

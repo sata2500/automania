@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { parseJsonObject } from '@/lib/json-utils';
+import { DialogPanel } from '@/components/common/DialogPanel';
+import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 
 // Ham Etsy metrikleri (raw_metrics JSONB); alanlar kaynağa göre değişebilir.
 type RawKeywordMetrics = {
@@ -51,6 +53,7 @@ interface EtsyStatus {
 
 export default function KeywordPoolManagement() {
   const toast = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [total, setTotal] = useState(0);
   const [etsyStatus, setEtsyStatus] = useState<EtsyStatus>({ connected: false, shopId: null });
@@ -145,7 +148,7 @@ export default function KeywordPoolManagement() {
 
   const handleDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`${selectedIds.size} adet kelimeyi silmek istediğinize emin misiniz?`)) return;
+    if (!(await confirm({ title: 'Kelimeleri sil', message: `${selectedIds.size} adet kelime havuzdan silinecek. Bu işlem geri alınamaz.`, confirmText: 'Sil' }))) return;
 
     try {
       const res = await fetch('/api/admin/keywords', {
@@ -193,7 +196,7 @@ export default function KeywordPoolManagement() {
 
   // Delete a single keyword
   const handleDeleteSingle = async (kw: Keyword) => {
-    if (!confirm(`"${kw.keyword}" kelimesini silmek istediğinize emin misiniz?`)) return;
+    if (!(await confirm({ title: 'Kelimeyi sil', message: `"${kw.keyword}" kelimesi havuzdan silinecek. Bu işlem geri alınamaz.`, confirmText: 'Sil' }))) return;
     try {
       const res = await fetch('/api/admin/keywords', {
         method: 'DELETE',
@@ -263,7 +266,12 @@ export default function KeywordPoolManagement() {
   // Full Pool Bulk Runner (loops API-sized batches of 20 until complete)
   const handleRunFullPoolEvaluation = async () => {
     if (isBulkRunning || isEvaluating) return;
-    if (!confirm(`Kelime havuzundaki tüm kelimeler (%100 Gerçek Etsy API) taranıp güncellenecek. Başlatmak istiyor musunuz?`)) return;
+    if (!(await confirm({
+      title: 'Havuz taramasını başlat',
+      message: 'Hiç taranmamış veya son taraması 7 günden eski olan kelimeler Etsy verisiyle güncellenecek. Tarama 20\'şerlik partilerle ilerler; istek sınırına ulaşılırsa otomatik olarak bekleyip devam eder. İstediğiniz an durdurabilirsiniz.',
+      confirmText: 'Taramayı başlat',
+      confirmVariant: 'primary',
+    }))) return;
 
     setIsBulkRunning(true);
     cancelBulkRef.current = false;
@@ -281,6 +289,17 @@ export default function KeywordPoolManagement() {
           body: JSON.stringify({ limit: batchSize })
         });
         const data = await res.json();
+
+        // İstek sınırı: taramayı bitirmek yerine sunucunun söylediği kadar bekleyip devam et.
+        if (res.status === 429) {
+          const waitSeconds = Math.max(5, Number(data.retryAfterSeconds) || Number(res.headers.get('Retry-After')) || 60);
+          toast.info(`İstek sınırına ulaşıldı; tarama ${Math.ceil(waitSeconds / 60)} dk sonra kendiliğinden devam edecek.`);
+          const resumeAt = Date.now() + waitSeconds * 1000;
+          while (!cancelBulkRef.current && Date.now() < resumeAt) {
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          continue;
+        }
 
         if (!data.success) {
           toast.error(data.error || 'Toplu taramada hata oluştu.');
@@ -558,6 +577,7 @@ export default function KeywordPoolManagement() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {confirmDialog}
       {/* Header & Status Card */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="space-y-1.5">
@@ -1052,10 +1072,10 @@ export default function KeywordPoolManagement() {
       {/* Top Co-Occurring Tags Details Modal */}
       {activeDetailsKeyword && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
+          <DialogPanel aria-labelledby="keyword-details-title" onClose={() => setActiveDetailsKeyword(null)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
-                <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <h4 id="keyword-details-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   🏷️ &quot;{activeDetailsKeyword.keyword}&quot; Analiz Detayları
                 </h4>
                 <p className="text-xs text-slate-500">Etsy&apos;de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
@@ -1140,16 +1160,16 @@ export default function KeywordPoolManagement() {
                 Kapat
               </button>
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
 
       {/* Diagnostics / Test Modal */}
       {showTestModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
+          <DialogPanel aria-labelledby="keyword-test-title" onClose={() => setShowTestModal(false)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <h3 id="keyword-test-title" className="text-sm sm:text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 🧪 Etsy Kazıyıcı &amp; Canlı API Testi
               </h3>
               <button 
@@ -1215,7 +1235,7 @@ export default function KeywordPoolManagement() {
                 Kapat
               </button>
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Folder, X } from 'lucide-react';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface MockupFolderModalProps {
   isOpen: boolean;
@@ -38,13 +39,11 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
+      <DialogPanel aria-labelledby="mockup-folder-modal-title" onClose={onClose}
         className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative"
       >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+          <h3 id="mockup-folder-modal-title" className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Folder className="w-4 h-4 text-amber-500" />
             {isEditing ? 'Klasörü Yeniden Adlandır' : 'Yeni Klasör Oluştur'}
           </h3>
@@ -89,7 +88,7 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
             </button>
           </div>
         </form>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

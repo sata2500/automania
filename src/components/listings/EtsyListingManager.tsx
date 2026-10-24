@@ -866,7 +866,7 @@ export const EtsyListingManager: React.FC = () => {
                           <div className="min-w-0 max-w-sm">
                             <div className="text-[10px] font-mono text-slate-400">#{item.listing_id}</div>
                             <div
-                              onClick={() => handleOpenDetail(item)}
+                              role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleOpenDetail(item); } }} onClick={() => handleOpenDetail(item)}
                               className="font-bold text-slate-900 dark:text-white truncate cursor-pointer hover:text-indigo-500"
                               title={item.title ?? undefined}
                             >

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ShoppingBag, CheckCircle, RefreshCw, Send, AlertTriangle, X } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { BULK_INVENTORY_CONFIRMATION } from '@/lib/etsy-variations';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 /** Sunucu tek istekte en fazla 100 ilanın envanterini günceller. */
 const MAX_BULK_LISTINGS = 100;
@@ -43,9 +44,9 @@ export const VariationModals: React.FC = () => {
       {/* 1. Etsy Listings Modal (Şablon Seçimi) */}
       {showListingsModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
+          <DialogPanel aria-labelledby="listings-picker-title" onClose={() => setShowListingsModal(false)} className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <h3 id="listings-picker-title" className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
                 <ShoppingBag className="w-4 h-4 text-emerald-500" />
                 Etsy Mağazanızdaki İlanlar (Şablon Seçimi)
               </h3>
@@ -91,16 +92,16 @@ export const VariationModals: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
 
       {/* 2. Save Template Modal */}
       {isSaveTemplateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+          <DialogPanel aria-labelledby="save-template-title" onClose={() => setIsSaveTemplateModalOpen(false)} className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 rounded-t-2xl">
-              <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
+              <h3 id="save-template-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
                 <CheckCircle className="w-5 h-5 text-indigo-500" />
                 Yeni Şablon Olarak Kaydet
               </h3>
@@ -134,16 +135,16 @@ export const VariationModals: React.FC = () => {
                 {isSavingTemplate ? 'Kaydediliyor...' : 'Kaydet'}
               </button>
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
 
       {/* 3. Load Template Modal */}
       {isLoadTemplateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+          <DialogPanel aria-labelledby="load-template-title" onClose={() => setIsLoadTemplateModalOpen(false)} className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 rounded-t-2xl">
-              <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
+              <h3 id="load-template-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
                 <RefreshCw className="w-5 h-5 text-indigo-500" />
                 Kayıtlı Şablonlarınız
               </h3>
@@ -189,16 +190,16 @@ export const VariationModals: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
 
       {/* 4. Bulk Sync Modal */}
       {isBulkSyncModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+          <DialogPanel aria-labelledby="bulk-sync-title" onClose={() => setIsBulkSyncModalOpen(false)} className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950/50 rounded-t-2xl">
-              <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
+              <h3 id="bulk-sync-title" className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
                 <Send className="w-5 h-5 text-emerald-500" />
                 Etsy İlanlarına Uygula
               </h3>
@@ -322,7 +323,7 @@ export const VariationModals: React.FC = () => {
                 )}
               </button>
             </div>
-          </div>
+          </DialogPanel>
         </div>
       )}
     </>

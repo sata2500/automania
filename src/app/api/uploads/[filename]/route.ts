@@ -39,7 +39,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'private, max-age=3600',
+        'Cache-Control': 'private, max-age=31536000, immutable', // dosya adları UUID içerir, içerik değişmez
         'X-Content-Type-Options': 'nosniff',
         'Content-Disposition': 'inline',
       },

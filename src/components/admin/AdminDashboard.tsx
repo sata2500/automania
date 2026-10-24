@@ -17,10 +17,14 @@ import {
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
-import KeywordPoolManagement from './KeywordPoolManagement';
-import TaxonomyManagement from './TaxonomyManagement';
+import dynamic from 'next/dynamic';
 import { AdminSettingsSection } from './AdminSettingsSection';
-import { AdminAiSettingsSection } from './AdminAiSettingsSection';
+
+// Büyük sekmeler yalnızca açıldıklarında indirilir; genel bakış daha hızlı açılır.
+const AdminTabLoading = () => <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Yükleniyor...</div>;
+const KeywordPoolManagement = dynamic(() => import('./KeywordPoolManagement'), { ssr: false, loading: AdminTabLoading });
+const TaxonomyManagement = dynamic(() => import('./TaxonomyManagement'), { ssr: false, loading: AdminTabLoading });
+const AdminAiSettingsSection = dynamic(() => import('./AdminAiSettingsSection').then((mod) => mod.AdminAiSettingsSection), { ssr: false, loading: AdminTabLoading });
 import { AdminOverviewSection, type AdminGlobalStats } from './AdminOverviewSection';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
@@ -47,7 +51,7 @@ export const AdminDashboard: React.FC = () => {
   const fetchGlobalStats = async (showToast: boolean = false) => {
     setIsLoadingStats(true);
     try {
-      const res = await fetch(`/api/admin/stats?_t=${Date.now()}`, {
+      const res = await fetch(`/api/admin/stats?_t=${Date.now()}${showToast ? '&fresh=1' : ''}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache, no-store' }
       });
@@ -458,7 +462,7 @@ function UserManagementSection() {
                 {/* User info */}
                 <div className="col-span-4 w-full flex items-center space-x-2.5">
                   <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0 overflow-hidden border border-slate-300 dark:border-slate-700">
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={u.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.email)}`}
                       alt={u.name}
                       className="w-full h-full object-cover"

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
+import { useDialogA11y } from '@/hooks/useDialogA11y';
 import { AlertTriangle, X, Check } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -27,28 +28,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Escape key handler
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onCancel]);
-
+  const dialogRef = useRef<HTMLDivElement>(null);
   // Yıkıcı işlemlerde odak "İptal"de başlar: yanlışlıkla Enter'a basmak silme yapmasın.
-  // Açılmadan önceki odak, pencere kapanınca geri verilir.
-  useEffect(() => {
-    if (!isOpen) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const target = confirmVariant === 'primary' ? confirmButtonRef : cancelButtonRef;
-    const t = setTimeout(() => target.current?.focus(), 50);
-    return () => {
-      clearTimeout(t);
-      previouslyFocused?.focus?.();
-    };
-  }, [isOpen, confirmVariant]);
+  // Escape, odak tuzağı ve kapanınca odağın geri verilmesi ortak hook'tan gelir.
+  useDialogA11y(dialogRef, {
+    isOpen,
+    onClose: onCancel,
+    initialFocusRef: confirmVariant === 'primary' ? confirmButtonRef : cancelButtonRef,
+  });
 
   if (!isOpen) return null;
 
@@ -70,6 +57,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"

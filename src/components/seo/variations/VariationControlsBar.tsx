@@ -128,8 +128,9 @@ export const VariationControlsBar: React.FC = () => {
                   </button>
                   <button 
                     type="button"
-                    onClick={() => handleDeleteCustomSize(size)} 
-                    className="absolute right-1 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-red-500 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleDeleteCustomSize(size)}
+                    aria-label={`${size} bedenini kalıcı sil`}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-red-500 opacity-80 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity"
                     title="Kalıcı Sil"
                   >
                     ✕
@@ -227,8 +228,9 @@ export const VariationControlsBar: React.FC = () => {
                   </button>
                   <button 
                     type="button"
-                    onClick={() => handleDeleteCustomColor(color)} 
-                    className="absolute right-1 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-red-500 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => handleDeleteCustomColor(color)}
+                    aria-label={`${color} rengini kalıcı sil`}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-emerald-400 hover:text-red-500 opacity-80 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 transition-opacity"
                     title="Kalıcı Sil"
                   >
                     ✕

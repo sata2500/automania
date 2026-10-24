@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, X, Clock, FileText, Hash, RefreshCw, Trophy, Tag, Layers } from 'lucide-react';
 import { DesignItem, EvaluatedKeyword } from '@/types/pod';
+import { DialogPanel } from '@/components/common/DialogPanel';
 
 interface DesignAnalysisModalProps {
   analysisModalData: DesignItem | null;
@@ -72,7 +73,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+      <DialogPanel aria-labelledby="design-analysis-modal-title" onClose={onClose} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -80,7 +81,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+              <h3 id="design-analysis-modal-title" className="font-bold text-slate-900 dark:text-white text-base">
                 Tasarım Analizi & Etsy Puanları
               </h3>
               <p className="text-[11px] text-slate-500 flex items-center gap-1">
@@ -243,7 +244,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
             Kapat
           </button>
         </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

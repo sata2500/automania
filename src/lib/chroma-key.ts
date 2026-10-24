@@ -44,29 +44,31 @@ export interface ChromaKeyResult {
 
 // ─── Yardımcı ────────────────────────────────────────────────────────────────
 
-function rgbToHsv(r: number, g: number, b: number) {
-  r /= 255;
-  g /= 255;
-  b /= 255;
+/**
+ * Bir pikselin yeşil perde sonrası alfa değerini döner. Döngüde piksel başına nesne oluşturmamak için
+ * HSV hesabı satır içidir (eski `rgbToHsv` ile aynı sonuç). -1: piksel tamamen kaldırıldı (alfa 0).
+ */
+export function greenScreenAlpha(r: number, g: number, b: number, alpha: number): number {
+  // Sınır değerlerinde eski sonuçla birebir aynı kalmak için hesap 0–1 aralığında yapılır.
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const maxN = Math.max(rn, gn, bn);
+  const d = maxN - Math.min(rn, gn, bn);
+  // Doygunluk (s = d/max) ve parlaklık (v = max) eşikleri: çok gri/beyaz ve çok siyah korunur.
+  if (maxN === 0 || maxN < 0.15 || d / maxN < 0.15) return alpha;
 
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const d = max - min;
-  
-  let h = 0;
-  const s = max === 0 ? 0 : d / max;
-  const v = max;
+  let h: number;
+  if (maxN === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  else if (maxN === gn) h = (bn - rn) / d + 2;
+  else h = (rn - gn) / d + 4;
+  h = (h / 6) * 360;
 
-  if (max !== min) {
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
+  // Yeşil tonu (Hue 70–170) tamamen saydam; 60–70 ve 170–180 arası kenarlar kısmen saydam.
+  if (h >= 70 && h <= 170) return -1;
+  if ((h >= 60 && h < 70) || (h > 170 && h <= 180)) {
+    const distanceToCore = h < 70 ? 70 - h : h - 170;
+    return Math.min(alpha, Math.round((distanceToCore / 10) * 255));
   }
-  
-  return { h: h * 360, s, v };
+  return alpha;
 }
 
 // ─── Ana Fonksiyon ────────────────────────────────────────────────────────────
@@ -104,32 +106,12 @@ export async function removeGreenBackground(
 
   // Piksel bazlı işlem — RGBA düzeni (her piksel 4 byte)
   for (let i = 0; i < data.length; i += channels) {
-    const r = data[i]!;
-    const g = data[i + 1]!;
-    const b = data[i + 2]!;
-
-    const { h, s, v } = rgbToHsv(r, g, b);
-
-    // Yeşil tonu algılaması (Hue: 70 - 170 arası yeşildir)
-    // AI görsellerindeki gölgeler ve ışık patlamaları için Saturation ve Value eşikleri düşük tutuldu
-    const isGreenHue = h >= 70 && h <= 170;
-    const isColorful = s >= 0.15; // Çok gri/beyaz değil
-    const isNotBlack = v >= 0.15; // Çok siyah değil
-
-    if (isGreenHue && isColorful && isNotBlack) {
-      // Tam transparan
+    const nextAlpha = greenScreenAlpha(data[i]!, data[i + 1]!, data[i + 2]!, data[i + 3]!);
+    if (nextAlpha === -1) {
       data[i + 3] = 0;
       removedCount++;
     } else {
-      // Sınırdaki pikseller (Yumuşatma / Feather)
-      // Yeşil tonuna çok yakın olan ama sınırda kalan renkleri yarı saydam yapalım
-      const isEdgeGreen = (h >= 60 && h < 70) || (h > 170 && h <= 180);
-      if (isEdgeGreen && isColorful && isNotBlack) {
-        // Hue sınırlarına yaklaştıkça saydamlık artar
-        const distanceToCore = h < 70 ? (70 - h) : (h - 170); // 0 ile 10 arası
-        const alphaRatio = distanceToCore / 10; // 0.0 (tam saydam) ile 1.0 (tam opak) arası
-        data[i + 3] = Math.min(data[i + 3]!, Math.round(alphaRatio * 255));
-      }
+      data[i + 3] = nextAlpha;
     }
   }
 

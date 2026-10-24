@@ -2,13 +2,14 @@ import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db'; // Re-exported raw sql client
 import { requireAdmin } from '@/lib/auth-server';
-import { isR2Configured, getR2Stats } from '@/lib/r2';
+import { isR2Configured } from '@/lib/r2';
+import { getCachedR2Stats } from '@/lib/r2-stats-cache';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const adminSession = await requireAdmin();
     if (!adminSession) {
@@ -51,7 +52,7 @@ export async function GET() {
 
     if (isR2Configured()) {
       try {
-        const r2Stats = await getR2Stats();
+        const r2Stats = await getCachedR2Stats({ fresh: new URL(request.url).searchParams.get('fresh') === '1' });
         totalSizeBytes = r2Stats.totalBytes;
         blobCount = r2Stats.objectCount;
       } catch (r2Err) {
