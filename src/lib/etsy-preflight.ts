@@ -76,3 +76,42 @@ export function validateEtsyDraftPreflight(
 
   return errors;
 }
+
+/** Etsy Open API ilan başına yalnızca 1 videoyu kabul eder (videos uç noktası mevcut videoyu değiştirir). */
+export const MAX_ETSY_API_VIDEOS = 1;
+
+/**
+ * Bir klasörün medyasını Etsy'ye gönderilebilecek sınırlara indirir (sıra korunur).
+ * Atlananların sayısı kullanıcıya bildirilmek üzere döner.
+ */
+export function selectEtsyPublishMedia<T extends { isVideo?: boolean }>(items: T[]): {
+  photos: T[];
+  videos: T[];
+  skippedPhotos: number;
+  skippedVideos: number;
+} {
+  const allPhotos = items.filter((item) => item.isVideo !== true);
+  const allVideos = items.filter((item) => item.isVideo === true);
+  return {
+    photos: allPhotos.slice(0, MAX_ETSY_PHOTOS),
+    videos: allVideos.slice(0, MAX_ETSY_API_VIDEOS),
+    skippedPhotos: Math.max(0, allPhotos.length - MAX_ETSY_PHOTOS),
+    skippedVideos: Math.max(0, allVideos.length - MAX_ETSY_API_VIDEOS),
+  };
+}
+
+/** Son yıllarda yapılmış (vintage olmayan) ürünleri belirten when_made değerleri. */
+function isRecentWhenMade(whenMade: unknown): boolean {
+  return whenMade === 'made_to_order' || (typeof whenMade === 'string' && /^20(0[7-9]|1\d|2\d)/.test(whenMade));
+}
+
+/**
+ * Etsy, başkası tarafından yapılmış yeni (vintage olmayan) bitmiş ürünleri kabul etmez. Baskı-isteğe-bağlı
+ * (POD) ürünlerde doğru beyan "Ben yaptım (i_did)" + üretim ortağıdır. Geçersiz kombinasyonda hata döner.
+ */
+export function validateWhoMade(input: { whoMade?: unknown; isSupply?: unknown; whenMade?: unknown }): string | null {
+  if (input.whoMade === 'someone_else' && input.isSupply !== true && isRecentWhenMade(input.whenMade)) {
+    return 'Etsy, başkası tarafından yapılmış yeni bir bitmiş ürünü kabul etmez. Baskı-isteğe-bağlı ürünler için "Kim yaptı" alanını "Ben yaptım" seçip üretim ortağınızı (ör. Printify/Printful) belirtin.';
+  }
+  return null;
+}

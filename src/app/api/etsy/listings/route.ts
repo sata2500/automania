@@ -4,8 +4,12 @@ import sql, { type DbRow } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { etsyFetch, listingsToMarkRemoved } from '@/lib/etsy-api';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
+
+/** Etsy'nin getListingsByShop için tanıdığı tüm durumlar. Hepsi çekilmezse "mağazada yok" kararı verilemez. */
+const ETSY_LISTING_STATES = ['active', 'draft', 'inactive', 'sold_out', 'expired'] as const;
 
 /**
  * GET /api/etsy/listings
@@ -30,7 +34,9 @@ export async function GET(req: Request) {
     // 1. Single listing detail & inventory query
     if (listingId) {
       let inventory = null;
-      try {
+      // Envanter Etsy'den canlı çekilir; yalnızca ayrıntı görünümü gerekmiyorsa atlanabilir.
+      const includeInventory = searchParams.get('inventory') !== 'false';
+      if (includeInventory) try {
         const tokenRes = await getValidEtsyToken(session.id);
         if (tokenRes.success && tokenRes.access_token) {
           const { access_token: etsyAccessToken, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
@@ -99,8 +105,8 @@ export async function GET(req: Request) {
         created_at,
         updated_at
       FROM user_etsy_listings
-      WHERE user_id = ${session.id}
-      ORDER BY updated_at DESC
+      WHERE user_id = ${session.id} AND state <> 'removed'
+      ORDER BY etsy_updated_timestamp DESC NULLS LAST
     `;
 
     // Compute store overall stats
@@ -108,6 +114,7 @@ export async function GET(req: Request) {
     let activeCount = 0;
     let draftCount = 0;
     let inactiveCount = 0;
+    let otherCount = 0;
     let analyzedCount = 0;
     let totalScoreSum = 0;
     let lastSyncedAt: string | null = null;
@@ -115,7 +122,8 @@ export async function GET(req: Request) {
     for (const r of allRows) {
       if (r.state === 'active') activeCount++;
       else if (r.state === 'draft') draftCount++;
-      else inactiveCount++;
+      else if (r.state === 'inactive') inactiveCount++;
+      else otherCount++; // sold_out, expired
 
       const va = typeof r.vision_analysis === 'string' ? JSON.parse(r.vision_analysis) : (r.vision_analysis || {});
       if (va && (va.primarySubject || va.description || va.analyzedAt)) {
@@ -181,15 +189,10 @@ export async function GET(req: Request) {
       if (sortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
       if (sortBy === 'title_asc') return (a.title || '').localeCompare(b.title || '');
       if (sortBy === 'title_desc') return (b.title || '').localeCompare(a.title || '');
-      if (sortBy === 'oldest') {
-        const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
-        const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
-        return dateA - dateB;
-      }
-      // newest default
-      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
-      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
-      return dateB - dateA;
+      // "En yeni": ilanın Etsy'de son güncellendiği zaman (senkron zamanı değil).
+      const etsyTime = (r: DbRow) => Number(r.etsy_updated_timestamp || 0) || new Date(r.created_at || 0).getTime() / 1000;
+      if (sortBy === 'oldest') return etsyTime(a) - etsyTime(b);
+      return etsyTime(b) - etsyTime(a);
     });
 
     return NextResponse.json({
@@ -200,6 +203,7 @@ export async function GET(req: Request) {
         active: activeCount,
         draft: draftCount,
         inactive: inactiveCount,
+        other: otherCount,
         avgScore,
         analyzedCount,
         lastSyncedAt,
@@ -236,52 +240,53 @@ async function fetchAllListingsForState(
   mode: 'smart' | 'full',
   existingMap: Map<string, DbRow>,
   maxTimestampInDb: number
-): Promise<{ listings: EtsyApiListing[]; totalInEtsy: number }> {
+): Promise<{ listings: EtsyApiListing[]; totalInEtsy: number; complete: boolean; error?: string }> {
   const listings: EtsyApiListing[] = [];
   let offset = 0;
   const limit = 100;
   let totalInEtsy = 0;
-  let hasMore = true;
 
-  while (hasMore) {
+  while (true) {
     const url = `https://openapi.etsy.com/v3/application/shops/${shopId}/listings?state=${state}&limit=${limit}&offset=${offset}&sort_on=updated&sort_order=desc&includes=images`;
-    const res = await fetch(url, { headers });
-    
+    let res: Response;
+    try {
+      res = await etsyFetch(url, { headers });
+    } catch (fetchError) {
+      return { listings, totalInEtsy, complete: false, error: getErrorMessage(fetchError) };
+    }
+
     if (!res.ok) {
-      const errText = await res.text();
-      console.warn(`Etsy fetch page warning for state ${state}, offset ${offset} (${res.status}):`, errText);
-      break;
+      const errText = await res.text().catch(() => '');
+      console.warn(`Etsy fetch page warning for state ${state}, offset ${offset} (${res.status}):`, errText.slice(0, 300));
+      // Eksik sayfa: bu durumdaki ilanların tamamı görülmedi, "silindi" kararı verilemez.
+      return { listings, totalInEtsy, complete: false, error: `HTTP ${res.status}` };
     }
 
     const data = await res.json();
     totalInEtsy = Number(data.count) || totalInEtsy;
     const pageResults: EtsyApiListing[] = Array.isArray(data.results) ? data.results : [];
-    
-    if (pageResults.length === 0) break;
 
+    if (pageResults.length === 0) break;
     listings.push(...pageResults);
 
-    // Smart Delta optimization for stores with >300 listings:
-    // If all items on subsequent pages are older than DB cache, we can safely terminate early.
+    // Smart Delta optimization for stores with >300 listings: remaining pages are older than the cache.
+    // Bu durumda liste bilerek eksik bırakılır (complete=false) ve kalan ilanlar "silindi" sayılmaz.
     if (totalInEtsy > 300 && mode === 'smart' && maxTimestampInDb > 0 && offset > 0) {
       const allOlderAndCached = pageResults.every((item) => {
         const itemTs = Number(item.updated_timestamp || item.last_modified_timestamp || item.state_timestamp || 0);
         const ex = existingMap.get(String(item.listing_id));
         return ex && Number(ex.etsy_updated_timestamp || 0) >= itemTs;
       });
-
       if (allOlderAndCached) {
-        break;
+        return { listings, totalInEtsy, complete: false };
       }
     }
 
     offset += pageResults.length;
-    if (offset >= (data.count || 0) || pageResults.length < limit) {
-      hasMore = false;
-    }
+    if (offset >= (data.count || 0) || pageResults.length < limit) break;
   }
 
-  return { listings, totalInEtsy };
+  return { listings, totalInEtsy, complete: true };
 }
 
 /**
@@ -342,18 +347,24 @@ export async function POST(req: Request) {
       if (ts > maxTimestampInDb) maxTimestampInDb = ts;
     }
 
-    // 2. Fetch listings from Etsy for Active, Draft, and Inactive states
-    const [activeData, draftData, inactiveData] = await Promise.all([
-      fetchAllListingsForState(String(etsyShopId), 'active', headers, mode, existingMap, maxTimestampInDb),
-      fetchAllListingsForState(String(etsyShopId), 'draft', headers, mode, existingMap, maxTimestampInDb),
-      fetchAllListingsForState(String(etsyShopId), 'inactive', headers, mode, existingMap, maxTimestampInDb),
-    ]);
+    // 2. Fetch listings from Etsy for every listing state. Sıralı çalıştırılır: paralel 5 durum
+    //    Etsy'nin saniye başına istek sınırını kolayca aşar.
+    const stateResults: Array<Awaited<ReturnType<typeof fetchAllListingsForState>> & { state: string }> = [];
+    for (const state of ETSY_LISTING_STATES) {
+      const result = await fetchAllListingsForState(String(etsyShopId), state, headers, mode, existingMap, maxTimestampInDb);
+      stateResults.push({ ...result, state });
+    }
+    const failedStates = stateResults.filter((r) => r.error).map((r) => r.state);
+    const allStatesComplete = stateResults.every((r) => r.complete);
 
-    const rawEtsyListings = [
-      ...activeData.listings,
-      ...draftData.listings,
-      ...inactiveData.listings
-    ];
+    const rawEtsyListings = stateResults.flatMap((r) => r.listings);
+
+    if (rawEtsyListings.length === 0 && failedStates.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'Etsy ilanları alınamadı (Etsy yanıt vermedi veya istek sınırına ulaşıldı). Mevcut veriler korunuyor; lütfen biraz sonra tekrar deneyin.',
+      }, { status: 502 });
+    }
 
     if (rawEtsyListings.length === 0 && existingDbRows.length === 0) {
       return NextResponse.json({
@@ -523,17 +534,14 @@ export async function POST(req: Request) {
       `;
     }
 
-    // 5. Handle listings deleted on Etsy (if they existed in DB as active but were deleted on Etsy)
-    if (rawEtsyListings.length > 0) {
-      for (const [listingId, ex] of existingMap.entries()) {
-        if (!returnedEtsyListingIds.has(listingId) && ex.state !== 'removed') {
-          await sql`
-            UPDATE user_etsy_listings 
-            SET state = 'removed', updated_at = CURRENT_TIMESTAMP 
-            WHERE user_id = ${session.id} AND listing_id = ${listingId}
-          `.catch(() => {});
-        }
-      }
+    // 5. Handle listings deleted on Etsy — only when every state was fetched completely.
+    const removedIds = listingsToMarkRemoved(existingMap.entries(), returnedEtsyListingIds, allStatesComplete);
+    for (const listingId of removedIds) {
+      await sql`
+        UPDATE user_etsy_listings
+        SET state = 'removed', updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ${session.id} AND listing_id = ${listingId}
+      `.catch(() => {});
     }
 
     const totalCount = await sql`
@@ -541,10 +549,16 @@ export async function POST(req: Request) {
     `;
     const finalTotal = Number(totalCount[0]?.cnt || 0);
 
-    const message = `Etsy senkronizasyonu tamamlandı: Toplam ${finalTotal} ilan güncel. (${newOrUpdatedCount} yeni/güncellenen işlendi, ${unchangedCount} değişmeyen ilan korundu)`;
+    const partial = failedStates.length > 0;
+    const message = partial
+      ? `Etsy senkronizasyonu kısmen tamamlandı: ${rawEtsyListings.length} ilan güncellendi, ancak bazı ilanlar alınamadı (Etsy yanıt vermedi veya istek sınırı). Alınamayan ilanların mevcut kayıtları korundu; biraz sonra tekrar senkronize edin.`
+      : `Etsy senkronizasyonu tamamlandı: Toplam ${finalTotal} ilan güncel. (${newOrUpdatedCount} yeni/güncellenen işlendi, ${unchangedCount} değişmeyen ilan korundu${removedIds.length > 0 ? `, Etsy'den kaldırılmış ${removedIds.length} ilan listeden çıkarıldı` : ''})`;
 
     return NextResponse.json({
       success: true,
+      partial,
+      failedStates,
+      removedCount: removedIds.length,
       mode,
       totalListings: finalTotal,
       newOrUpdatedCount,

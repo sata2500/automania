@@ -1,7 +1,11 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { ShoppingBag, CheckCircle, RefreshCw, Send, AlertTriangle, X } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { BULK_INVENTORY_CONFIRMATION } from '@/lib/etsy-variations';
+
+/** Sunucu tek istekte en fazla 100 ilanın envanterini günceller. */
+const MAX_BULK_LISTINGS = 100;
 
 export const VariationModals: React.FC = () => {
   const {
@@ -32,6 +36,7 @@ export const VariationModals: React.FC = () => {
     handleBulkSync,
     isFetchingListings,
   } = useEtsySeo();
+  const [bulkConfirmation, setBulkConfirmation] = useState('');
 
   return (
     <>
@@ -207,9 +212,9 @@ export const VariationModals: React.FC = () => {
             </div>
             
             <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 scrollbar-thin">
-              <div className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-400 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-xs font-medium flex items-start gap-2">
+              <div role="alert" className="bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 p-3 rounded-xl border border-red-200 dark:border-red-800/50 text-xs font-medium flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <p>Aşağıdan seçtiğiniz ilanların mevcut varyasyonları <strong>tamamen silinecek</strong> ve seçtiğiniz şablondaki varyasyonlar ile değiştirilecektir. Bu işlem geri alınamaz.</p>
+                <p>Seçtiğiniz <strong>canlı Etsy ilanlarının</strong> mevcut varyasyon, fiyat ve stokları <strong>tamamen silinip</strong> seçtiğiniz şablondakilerle değiştirilecektir. Her ilanın önceki envanteri işlemden önce denetim kaydına yedeklenir, ancak geri yükleme otomatik değildir.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -237,7 +242,7 @@ export const VariationModals: React.FC = () => {
                 </div>
               ) : etsyListings.length === 0 ? (
                 <div className="text-center py-8 text-slate-500 text-sm font-semibold">
-                  Etsy hesabınızda uygun ilan bulunamadı.
+                  Kayıtlı ilan bulunamadı. İlanlarınızı önce &quot;5. Etsy İlanlarım&quot; sekmesinden Etsy ile senkronize edin.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -246,12 +251,14 @@ export const VariationModals: React.FC = () => {
                     <button 
                       type="button"
                       onClick={() => {
-                        if (selectedListingsForSync.length === etsyListings.length) setSelectedListingsForSync([]);
-                        else setSelectedListingsForSync(etsyListings.map((l) => l.listing_id));
+                        if (selectedListingsForSync.length > 0) setSelectedListingsForSync([]);
+                        else setSelectedListingsForSync(etsyListings.slice(0, MAX_BULK_LISTINGS).map((l) => l.listing_id));
                       }}
                       className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
                     >
-                      {selectedListingsForSync.length === etsyListings.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
+                      {selectedListingsForSync.length > 0
+                        ? 'Seçimi Kaldır'
+                        : etsyListings.length > MAX_BULK_LISTINGS ? `İlk ${MAX_BULK_LISTINGS} İlanı Seç` : 'Tümünü Seç'}
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
@@ -260,6 +267,7 @@ export const VariationModals: React.FC = () => {
                         <input
                           type="checkbox"
                           checked={selectedListingsForSync.includes(listing.listing_id)}
+                          disabled={!selectedListingsForSync.includes(listing.listing_id) && selectedListingsForSync.length >= MAX_BULK_LISTINGS}
                           onChange={(e) => {
                             if (e.target.checked) setSelectedListingsForSync((prev) => [...prev, listing.listing_id]);
                             else setSelectedListingsForSync((prev) => prev.filter((id) => id !== listing.listing_id));
@@ -280,11 +288,25 @@ export const VariationModals: React.FC = () => {
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 rounded-b-2xl">
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 rounded-b-2xl space-y-3">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor="bulk-inventory-confirmation">
+                Onaylamak için <span className="font-mono">{BULK_INVENTORY_CONFIRMATION}</span> yazın
+              </label>
+              <input
+                id="bulk-inventory-confirmation"
+                value={bulkConfirmation}
+                onChange={(e) => setBulkConfirmation(e.target.value.toUpperCase())}
+                placeholder={BULK_INVENTORY_CONFIRMATION}
+                autoComplete="off"
+                className="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 px-3 py-2"
+              />
               <button
                 type="button"
-                onClick={handleBulkSync}
-                disabled={isSyncing || selectedListingsForSync.length === 0}
+                onClick={async () => {
+                  await handleBulkSync(bulkConfirmation);
+                  setBulkConfirmation('');
+                }}
+                disabled={isSyncing || selectedListingsForSync.length === 0 || bulkConfirmation !== BULK_INVENTORY_CONFIRMATION}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-sm"
               >
                 {isSyncing ? (

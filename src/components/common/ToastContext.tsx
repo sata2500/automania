@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { CheckCircle2, AlertCircle, Info, AlertTriangle, X, Loader2 } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'progress';
@@ -16,7 +16,6 @@ export interface ToastItem {
 }
 
 interface ToastContextType {
-  toasts: ToastItem[];
   addToast: (toast: Omit<ToastItem, 'id'>) => string;
   removeToast: (id: string) => void;
   updateProgressToast: (id: string, progress: number, message?: string) => void;
@@ -118,20 +117,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [addToast]
   );
 
+  // Değer sabit tutulur: aksi halde her bildirim tüm tüketicileri yeniden render eder
+  // (ör. açık modalların durumunu sıfırlayan efektleri tetikler).
+  // Bildirim listesi (`toasts`) yalnızca bu sağlayıcının kendi katmanında kullanılır; bağlama
+  // konmaz ki yeni bir bildirim, bildirimi kullanan her bileşeni yeniden çizmesin.
+  const value = useMemo(
+    () => ({ addToast, removeToast, updateProgressToast, success, error, info, warning, progress }),
+    [addToast, removeToast, updateProgressToast, success, error, info, warning, progress],
+  );
+
   return (
-    <ToastContext.Provider
-      value={{
-        toasts,
-        addToast,
-        removeToast,
-        updateProgressToast,
-        success,
-        error,
-        info,
-        warning,
-        progress,
-      }}
-    >
+    <ToastContext.Provider value={value}>
       {children}
       {/* Toast Notification Layer — aria-live for screen reader announcements */}
       <div

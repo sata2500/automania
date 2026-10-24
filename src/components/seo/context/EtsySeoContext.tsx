@@ -16,6 +16,27 @@ import type {
   StoredEtsyListing,
 } from '@/types/etsy';
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
+import { selectEtsyPublishMedia, validateWhoMade } from '@/lib/etsy-preflight';
+
+/** Bu cihazda Etsy'ye aktarılmış klasörler: aynı klasörün yanlışlıkla ikinci kez ilan olarak açılmasını önler. */
+const PUBLISHED_FOLDERS_KEY = 'automania_etsy_published_folders_v1';
+export type PublishedFolderRecord = { listingId: string; state: string; listingUrl?: string; at: number };
+
+function readPublishedFolders(): Record<string, PublishedFolderRecord> {
+  try {
+    return JSON.parse(localStorage.getItem(PUBLISHED_FOLDERS_KEY) || '{}') as Record<string, PublishedFolderRecord>;
+  } catch {
+    return {};
+  }
+}
+
+function rememberPublishedFolder(folderId: string, record: PublishedFolderRecord) {
+  try {
+    localStorage.setItem(PUBLISHED_FOLDERS_KEY, JSON.stringify({ ...readPublishedFolders(), [folderId]: record }));
+  } catch {
+    // Depolama kapalıysa yalnızca mükerrer uyarısı çalışmaz.
+  }
+}
 
 type VariationRow = EtsyVariationRow;
 
@@ -125,7 +146,8 @@ function useEtsySeoState() {
   const [enrichedKeywords, setEnrichedKeywords] = useState<KeywordCandidate[]>([]);
   const [coOccurringTags, setCoOccurringTags] = useState<Array<string | KeywordCandidate>>([]);
   const [taxonomyId, setTaxonomyId] = useState<number>(1081);
-  const [whoMade, setWhoMade] = useState<string>('someone_else');
+  // Baskı-isteğe-bağlı ürünlerde Etsy'nin beklediği beyan: tasarımı ben yaptım (+ üretim ortağı).
+  const [whoMade, setWhoMade] = useState<string>('i_did');
   const [whenMade, setWhenMade] = useState<string>('made_to_order');
   const [isSupply, setIsSupply] = useState<boolean>(false);
   const [productionPartnerId, setProductionPartnerId] = useState<string>('');
@@ -735,6 +757,11 @@ function useEtsySeoState() {
   // Publishing state
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<Record<string, unknown> | null>(null);
+  /** Seçili klasör daha önce bu cihazdan Etsy'ye aktarıldıysa kaydı (mükerrer ilan uyarısı için). */
+  const [duplicatePublish, setDuplicatePublish] = useState<PublishedFolderRecord | null>(null);
+  useEffect(() => {
+    setDuplicatePublish(null);
+  }, [selectedFolderId]);
   
   // Etsy Integration state
   const [etsyConnected, setEtsyConnected] = useState(false);
@@ -1026,7 +1053,8 @@ function useEtsySeoState() {
   const handleOpenBulkSync = async () => {
     setIsBulkSyncModalOpen(true);
     if (etsyListings.length === 0) {
-      await handleFetchListings();
+      // Yalnızca ilan listesi yüklenir; "şablon ilan seç" penceresi açılmaz.
+      await handleFetchListings({ openModal: false });
     }
     try {
       const appData = await loadAppData();
@@ -1034,9 +1062,13 @@ function useEtsySeoState() {
     } catch {}
   };
 
-  const handleBulkSync = async () => {
+  const handleBulkSync = async (confirmationPhrase: string) => {
     if (selectedListingsForSync.length === 0) {
       toast.error('Lütfen güncellenecek en az bir ilan seçin.');
+      return;
+    }
+    if (selectedListingsForSync.length > 100) {
+      toast.error('Tek seferde en fazla 100 ilan güncellenebilir.');
       return;
     }
     
@@ -1060,7 +1092,8 @@ function useEtsySeoState() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listingIds: selectedListingsForSync,
-          variations: variationsToSync
+          variations: variationsToSync,
+          confirmationPhrase,
         })
       });
       
@@ -1075,7 +1108,10 @@ function useEtsySeoState() {
           setSelectedListingsForSync([]);
         } else {
           const firstError = (data.results as ListingBatchResult[]).find((r) => !r.success)?.error || 'Bilinmeyen hata';
-          toast.error(`${successCount} başarılı, ${failCount} başarısız işlem. Hata detayı: ${firstError}`);
+          toast.error(`${successCount} başarılı, ${failCount} başarısız işlem${data.rateLimited ? ' (Etsy istek sınırına ulaşıldı; kalanlar işlenmedi)' : ''}. Hata detayı: ${firstError}`);
+          // Başarılı olanları seçimden çıkar ki tekrar denemede yalnızca kalanlar gitsin.
+          const succeededIds = new Set((data.results as ListingBatchResult[]).filter((r) => r.success).map((r) => String(r.listingId)));
+          setSelectedListingsForSync((prev) => prev.filter((id) => !succeededIds.has(String(id))));
         }
       } else {
         toast.error('Toplu güncelleme başarısız: ' + data.error);
@@ -1142,9 +1178,9 @@ function useEtsySeoState() {
     }
   };
 
-  const handleFetchListings = async () => {
+  const handleFetchListings = async ({ openModal = true }: { openModal?: boolean } = {}) => {
     setIsFetchingListings(true);
-    setShowListingsModal(true);
+    if (openModal) setShowListingsModal(true);
     try {
       const res = await fetch('/api/etsy/listings');
       const data = await res.json();
@@ -1283,8 +1319,10 @@ function useEtsySeoState() {
   const handlePublishToEtsy = async (
     requestedState: 'draft' | 'active' = 'draft',
     liveConfirmation?: { confirmLivePublish: boolean; confirmationPhrase: string },
+    options: { allowDuplicate?: boolean } = {},
   ) => {
     const state = requestedState;
+    if (isPublishing) return; // çift tıklama ile ikinci ilan açılmasın
     if (state === 'active' && (!liveConfirmation?.confirmLivePublish || liveConfirmation.confirmationPhrase !== LIVE_PUBLISH_CONFIRMATION)) {
       toast.error('Canlı yayın için açık kullanıcı onayı gereklidir.');
       return;
@@ -1296,6 +1334,24 @@ function useEtsySeoState() {
     if (!selectedShippingProfileId) {
       toast.error('Lütfen bir Kargo Profili (Shipping Profile) seçin.');
       return;
+    }
+    const whoMadeError = validateWhoMade({ whoMade, isSupply, whenMade });
+    if (whoMadeError) {
+      toast.error(whoMadeError);
+      return;
+    }
+    const previous = selectedFolderId ? readPublishedFolders()[selectedFolderId] : undefined;
+    if (previous && !options.allowDuplicate) {
+      setDuplicatePublish(previous);
+      return;
+    }
+    setDuplicatePublish(null);
+
+    // Etsy sınırları: en fazla 20 fotoğraf ve (API ile) 1 video. Fazlası gönderilmez, kullanıcıya bildirilir.
+    const folderMedia = dbGeneratedMockups.filter(m => m.folderId === selectedFolderId && m.previewUrl);
+    const media = selectEtsyPublishMedia(folderMedia);
+    if (media.skippedPhotos > 0 || media.skippedVideos > 0) {
+      toast.warning(`Etsy sınırı nedeniyle ${media.skippedPhotos > 0 ? `${media.skippedPhotos} fotoğraf` : ''}${media.skippedPhotos > 0 && media.skippedVideos > 0 ? ' ve ' : ''}${media.skippedVideos > 0 ? `${media.skippedVideos} video` : ''} gönderilmeyecek (en fazla 20 fotoğraf + 1 video).`);
     }
 
     setIsPublishing(true);
@@ -1329,20 +1385,25 @@ function useEtsySeoState() {
           taxonomy_properties_values: selectedTaxonomyProperties,
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
-          images: dbGeneratedMockups
-            .filter(m => m.folderId === selectedFolderId && m.previewUrl)
-            .map(m => ({ url: m.previewUrl, isVideo: m.isVideo === true }))
-            .slice(0, 22)
+          images: [...media.photos, ...media.videos].map(m => ({ url: m.previewUrl, isVideo: m.isVideo === true })),
         })
       });
       const data = await res.json();
       setPublishResult(data);
+      if (data.listingId && selectedFolderId && !data.simulated) {
+        rememberPublishedFolder(selectedFolderId, {
+          listingId: String(data.listingId),
+          state: data.state || 'draft',
+          listingUrl: data.listingUrl,
+          at: Date.now(),
+        });
+      }
       if (data.success) {
         const realErrors = (data.uploadErrors || []).filter((e: string) => !e.startsWith('Bilgi:'));
         const infoMessages = (data.uploadErrors || []).filter((e: string) => e.startsWith('Bilgi:'));
-        
+
         if (realErrors.length > 0) {
-          toast.warning(`İlan aktarıldı ancak bazı görseller yüklenemedi: ${realErrors[0]}`);
+          toast.warning(data.message || `İlan aktarıldı ancak bazı adımlar tamamlanamadı: ${realErrors[0]}`);
         } else {
           toast.success(data.message || 'İlan Etsy mağazanıza aktarıldı!');
         }
@@ -1432,6 +1493,7 @@ function useEtsySeoState() {
     dragState, setDragState,
     isPublishing, setIsPublishing,
     publishResult, setPublishResult,
+    duplicatePublish, setDuplicatePublish,
     etsyConnected, setEtsyConnected,
     shippingProfiles, setShippingProfiles,
     selectedShippingProfileId, setSelectedShippingProfileId,

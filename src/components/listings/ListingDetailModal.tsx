@@ -30,13 +30,27 @@ import { useToast } from '@/components/common/ToastContext';
 import type { StoredEtsyListing } from '@/types/etsy';
 import type { SeoEvaluationResult, VisionAnalysisData } from '@/lib/etsy-seo-evaluator';
 import { parseJsonObject } from '@/lib/json-utils';
+import { isLivePublishEnabled, LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 
 interface ListingDetailModalProps {
   listing: StoredEtsyListing | null;
   isOpen: boolean;
   onClose: () => void;
   onListingUpdated: (updated: StoredEtsyListing) => void;
+  /** İlanın açıklama, SEO kırılımı gibi ağır alanları yükleniyor. */
+  isDetailLoading?: boolean;
 }
+
+const STATE_LABELS: Record<string, string> = {
+  active: '🟢 Aktif (mağazada satışta)',
+  inactive: '⏸️ Pasif (yayında değil)',
+  draft: '📝 Taslak',
+  sold_out: '📦 Tükendi',
+  expired: '⌛ Süresi doldu',
+};
+
+const parseTags = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map(String) : typeof value === 'string' ? (JSON.parse(value) as string[]) : [];
 
 type ModalTab = 'seo' | 'vision' | 'optimize' | 'edit';
 
@@ -44,7 +58,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   listing,
   isOpen,
   onClose,
-  onListingUpdated
+  onListingUpdated,
+  isDetailLoading = false,
 }) => {
   const { success, error, warning } = useToast();
   const [activeTab, setActiveTab] = useState<ModalTab>('seo');
@@ -54,7 +69,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState<string[]>([]);
   const [newTagInput, setNewTagInput] = useState('');
-  const [editState, setEditState] = useState('active');
+  const [stateAction, setStateAction] = useState<'idle' | 'confirm-deactivate' | 'confirm-activate'>('idle');
+  const [activationPhrase, setActivationPhrase] = useState('');
+  const [isChangingState, setIsChangingState] = useState(false);
+  const livePublishEnabled = isLivePublishEnabled(process.env.NEXT_PUBLIC_ETSY_LIVE_PUBLISH_ENABLED);
 
   // Loading states
   const [isVisionLoading, setIsVisionLoading] = useState(false);
@@ -76,7 +94,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       const data = await res.json();
       if (data.success && data.results?.[0]) {
         const item = data.results[0];
-        success(`Etiketler kelime havuzunda başarıyla güncellendi! (${data.newlyScrapedTagsCount || 0} yeni taranan etiket)`);
+        if (data.scrapeFailures > 0 || data.deferredTagCount > 0) {
+          warning(`${data.newlyScrapedTagsCount || 0} etiket tarandı; ${data.scrapeFailures || 0} etiket taranamadı${data.deferredTagCount > 0 ? `, ${data.deferredTagCount} etiket sonraki değerlendirmeye bırakıldı` : ''}. Mevcut puanlar korundu.`);
+        } else {
+          success(`Etiketler kelime havuzunda başarıyla güncellendi! (${data.newlyScrapedTagsCount || 0} yeni taranan etiket)`);
+        }
         const updated = {
           ...listing,
           seo_score: item.seoScore,
@@ -104,11 +126,19 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         ? JSON.parse(listing.tags)
         : [];
       setEditTags(rawTags);
-      setEditState(listing.state || 'active');
+      setStateAction('idle');
+      setActivationPhrase('');
     }
   }, [listing]);
 
   if (!isOpen || !listing) return null;
+
+  // Etsy'ye gidecek değişiklikler (durum hariç; durum ayrı ve onaylı bir işlemdir)
+  const originalTags = parseTags(listing.tags);
+  const changedFields: string[] = [];
+  if (editTitle.trim() !== (listing.title || '').trim()) changedFields.push('başlık');
+  if (editDescription.trim() !== (listing.description || '').trim()) changedFields.push('açıklama');
+  if (JSON.stringify(editTags) !== JSON.stringify(originalTags)) changedFields.push('etiketler');
 
   const evaluation: Partial<SeoEvaluationResult> = parseJsonObject<Partial<SeoEvaluationResult>>(listing.seo_evaluation, {});
   const vision: Partial<VisionAnalysisData> & Record<string, unknown> = parseJsonObject(listing.vision_analysis, {});
@@ -233,6 +263,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
       warning('En az 1 adet etiket gereklidir.');
       return;
     }
+    if (changedFields.length === 0) {
+      warning('Gönderilecek bir değişiklik yok.');
+      return;
+    }
 
     setIsUpdatingEtsy(true);
     try {
@@ -244,7 +278,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           title: editTitle,
           description: editDescription,
           tags: editTags,
-          state: editState
         })
       });
 
@@ -255,14 +288,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         ...listing,
         title: editTitle,
         description: editDescription,
-        tags: editTags,
-        state: editState,
+        tags: data.listing?.tags ?? editTags,
         seo_score: data.listing?.seoScore ?? listing.seo_score,
         seo_evaluation: data.listing?.seoEvaluation ?? listing.seo_evaluation
       };
 
       onListingUpdated(updated);
-      success('🎉 İlan Etsy mağazanızda canlı olarak güncellendi!');
+      success(`İlanın ${changedFields.join(', ')} alanları Etsy'de güncellendi. İlan durumu değişmedi.`);
     } catch (err) {
       error(getErrorMessage(err) || 'Etsy güncellemesinde hata oluştu.');
     } finally {
@@ -270,6 +302,34 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   };
 
+
+  // İlan durumunu değiştir (yayından kaldır / yayına al) — her zaman açık onayla
+  const handleChangeState = async (target: 'active' | 'inactive') => {
+    setIsChangingState(true);
+    try {
+      const res = await fetch('/api/etsy/listings/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listingId: listing.listing_id,
+          state: target,
+          ...(target === 'inactive'
+            ? { confirmStateChange: true }
+            : { confirmLivePublish: true, confirmationPhrase: activationPhrase.trim() }),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'İlan durumu değiştirilemedi.');
+      onListingUpdated({ ...listing, state: target });
+      success(target === 'inactive' ? 'İlan yayından kaldırıldı (Pasif).' : 'İlan yeniden yayına alındı.');
+      setStateAction('idle');
+      setActivationPhrase('');
+    } catch (err) {
+      error(getErrorMessage(err) || 'İlan durumu değiştirilemedi.');
+    } finally {
+      setIsChangingState(false);
+    }
+  };
 
   // Helper score color
   const getScoreColor = (sc: number) => {
@@ -381,6 +441,12 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+          {isDetailLoading && (
+            <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/70 border border-slate-700 text-xs text-slate-300">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              İlan ayrıntıları (açıklama, SEO analizi, AI önerileri) yükleniyor…
+            </div>
+          )}
 
           {/* TAB 1: SEO AUDIT & DIAGNOSTIC */}
           {activeTab === 'seo' && (
@@ -926,11 +992,12 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                 <button
                   onClick={handlePushToEtsy}
-                  disabled={isUpdatingEtsy}
+                  disabled={isUpdatingEtsy || isDetailLoading || changedFields.length === 0}
+                  title={changedFields.length > 0 ? `Değişenler: ${changedFields.join(', ')}` : 'Henüz bir değişiklik yapılmadı'}
                   className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                 >
                   <Send className={`w-4 h-4 ${isUpdatingEtsy ? 'animate-spin' : ''}`} />
-                  {isUpdatingEtsy ? 'Etsy Güncelleniyor...' : '🚀 Etsy Mağazasında Güncelle'}
+                  {isUpdatingEtsy ? 'Etsy Güncelleniyor...' : changedFields.length > 0 ? `🚀 Etsy'de Güncelle (${changedFields.join(', ')})` : 'Değişiklik yok'}
                 </button>
               </div>
 
@@ -1034,18 +1101,72 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 />
               </div>
 
-              {/* Status State Selector */}
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-bold text-slate-300">İlan Durumu:</label>
-                <select
-                  value={editState}
-                  onChange={(e) => setEditState(e.target.value)}
-                  className="bg-slate-950 border border-slate-700 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-teal-500"
-                >
-                  <option value="active">🟢 Aktif (Active - Mağazada Satışta)</option>
-                  <option value="draft">📝 Taslak (Draft - Gizli)</option>
-                  <option value="inactive">⏸️ Pasif (Inactive)</option>
-                </select>
+              {/* İlan durumu: içerik güncellemesinden bağımsız, onaylı işlem */}
+              <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-300">İlan Durumu: </span>
+                    <span className="text-slate-200">{STATE_LABELS[listing.state || ''] || listing.state || 'Bilinmiyor'}</span>
+                  </div>
+                  {listing.state === 'active' && stateAction === 'idle' && (
+                    <button
+                      type="button"
+                      onClick={() => setStateAction('confirm-deactivate')}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                    >
+                      Yayından kaldır…
+                    </button>
+                  )}
+                  {listing.state === 'inactive' && stateAction === 'idle' && livePublishEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setStateAction('confirm-activate')}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                    >
+                      Yeniden yayına al…
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  &quot;Etsy&apos;de Güncelle&quot; yalnızca başlık, açıklama ve etiketleri değiştirir; ilanın yayın durumuna dokunmaz.
+                </p>
+                {stateAction === 'confirm-deactivate' && (
+                  <div role="alertdialog" aria-label="Yayından kaldırma onayı" className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <span className="text-xs text-amber-200 flex-1 min-w-[200px]">İlan mağazanızda görünmez olacak ve satışa kapanacak. Emin misiniz?</span>
+                    <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-200">Vazgeç</button>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeState('inactive')}
+                      disabled={isChangingState}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50"
+                    >
+                      {isChangingState ? 'Kaldırılıyor…' : 'Evet, yayından kaldır'}
+                    </button>
+                  </div>
+                )}
+                {stateAction === 'confirm-activate' && (
+                  <div role="alertdialog" aria-label="Yayına alma onayı" className="space-y-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <p className="text-xs text-emerald-200">İlan mağazanızda yeniden satışa açılacak ve Etsy listeleme ücreti alınabilir. Onaylamak için <b>{LIVE_PUBLISH_CONFIRMATION}</b> yazın.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={activationPhrase}
+                        onChange={(e) => setActivationPhrase(e.target.value)}
+                        placeholder={LIVE_PUBLISH_CONFIRMATION}
+                        aria-label="Onay ifadesi"
+                        className="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg px-3 py-1.5 w-32"
+                      />
+                      <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-200">Vazgeç</button>
+                      <button
+                        type="button"
+                        onClick={() => handleChangeState('active')}
+                        disabled={isChangingState || activationPhrase.trim() !== LIVE_PUBLISH_CONFIRMATION}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                      >
+                        {isChangingState ? 'Yayına alınıyor…' : 'Yayına al'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1074,11 +1195,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             {activeTab === 'edit' ? (
               <button
                 onClick={handlePushToEtsy}
-                disabled={isUpdatingEtsy}
+                disabled={isUpdatingEtsy || isDetailLoading || changedFields.length === 0}
+                title={changedFields.length > 0 ? `Değişenler: ${changedFields.join(', ')}` : 'Henüz bir değişiklik yapılmadı'}
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 <Send className={`w-3.5 h-3.5 ${isUpdatingEtsy ? 'animate-spin' : ''}`} />
-                {isUpdatingEtsy ? 'Etsy Güncelleniyor...' : 'Etsy\'de Güncelle'}
+                {isUpdatingEtsy
+                  ? 'Etsy Güncelleniyor...'
+                  : changedFields.length > 0
+                    ? `Etsy'de Güncelle (${changedFields.length})`
+                    : 'Değişiklik yok'}
               </button>
             ) : (
               <button

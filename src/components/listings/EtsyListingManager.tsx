@@ -34,6 +34,7 @@ export const EtsyListingManager: React.FC = () => {
     active: 0,
     draft: 0,
     inactive: 0,
+    other: 0,
     avgScore: 0,
     analyzedCount: 0,
     lastSyncedAt: null as string | null,
@@ -70,6 +71,8 @@ export const EtsyListingManager: React.FC = () => {
   // Modals state
   const [selectedListingForModal, setSelectedListingForModal] = useState<EtsyListingRecord | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const detailRequestRef = useRef(0);
   const [bulkActionType, setBulkActionType] = useState<BulkActionType | null>(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
@@ -87,7 +90,8 @@ export const EtsyListingManager: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        success(data.message || 'Etsy verileri başarıyla güncellendi!');
+        if (data.partial) warning(data.message);
+        else success(data.message || 'Etsy verileri başarıyla güncellendi!');
         // Refresh listings and stats from DB
         const refreshRes = await fetch('/api/etsy/listings');
         const refreshData = await refreshRes.json();
@@ -215,15 +219,13 @@ export const EtsyListingManager: React.FC = () => {
         return 0;
       };
 
-      if (sortBy === 'oldest') {
-        const dateA = getTime(a.updated_at || a.created_at);
-        const dateB = getTime(b.updated_at || b.created_at);
-        return dateA - dateB;
-      }
-      // default: newest
-      const dateA = getTime(a.updated_at || a.created_at);
-      const dateB = getTime(b.updated_at || b.created_at);
-      return dateB - dateA;
+      // "En yeni": ilanın Etsy'de son güncellendiği zaman (her senkronda değişen kayıt zamanı değil).
+      const etsyTime = (item: EtsyListingRecord) => {
+        const ts = Number(item.etsy_updated_timestamp || 0);
+        return ts > 0 ? ts * 1000 : getTime(item.created_at);
+      };
+      if (sortBy === 'oldest') return etsyTime(a) - etsyTime(b);
+      return etsyTime(b) - etsyTime(a);
     });
 
     return result;
@@ -241,7 +243,8 @@ export const EtsyListingManager: React.FC = () => {
       const data = await res.json();
 
       if (data.success) {
-        success(data.message || 'Etsy ilanları başarıyla senkronize edildi!');
+        if (data.partial) warning(data.message);
+        else success(data.message || 'Etsy ilanları başarıyla senkronize edildi!');
         fetchListings(false);
       } else {
         error(data.error || 'Etsy senkronizasyonu başarısız oldu.');
@@ -270,9 +273,29 @@ export const EtsyListingManager: React.FC = () => {
   };
 
   // Open Detail Modal
-  const handleOpenDetail = (listing: EtsyListingRecord) => {
+  const handleOpenDetail = async (listing: EtsyListingRecord) => {
     setSelectedListingForModal(listing);
     setIsDetailModalOpen(true);
+
+    // Liste görünümü hafif alanlarla gelir; açıklama, SEO kırılımı ve AI önerileri burada yüklenir.
+    const requestId = ++detailRequestRef.current;
+    setIsDetailLoading(true);
+    try {
+      const res = await fetch(`/api/etsy/listings?listing_id=${encodeURIComponent(String(listing.listing_id))}&inventory=false`);
+      const data = await res.json();
+      if (requestId !== detailRequestRef.current) return;
+      if (data.success && data.listing) {
+        setSelectedListingForModal((current) =>
+          current && String(current.listing_id) === String(listing.listing_id) ? { ...current, ...data.listing } : current
+        );
+      } else {
+        warning(data.error || 'İlan ayrıntıları yüklenemedi; bazı alanlar boş görünebilir.');
+      }
+    } catch {
+      if (requestId === detailRequestRef.current) warning('İlan ayrıntıları yüklenemedi; bazı alanlar boş görünebilir.');
+    } finally {
+      if (requestId === detailRequestRef.current) setIsDetailLoading(false);
+    }
   };
 
   // Callback when a listing is updated in detail modal
@@ -298,7 +321,7 @@ export const EtsyListingManager: React.FC = () => {
     return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
   };
 
-  const selectedListingsList = listings.filter(l => selectedIds.includes(l.listing_id));
+  const selectedListingsList = useMemo(() => listings.filter(l => selectedIds.includes(l.listing_id)), [listings, selectedIds]);
 
   return (
     <div className="space-y-6">
@@ -438,6 +461,8 @@ export const EtsyListingManager: React.FC = () => {
               <option value="active">🟢 Aktif ({stats.active})</option>
               <option value="draft">📝 Taslak ({stats.draft})</option>
               <option value="inactive">⏸️ Pasif ({stats.inactive})</option>
+              {stats.other > 0 && <option value="sold_out">📦 Tükendi</option>}
+              {stats.other > 0 && <option value="expired">⌛ Süresi Doldu</option>}
             </select>
 
             {/* Score Filter */}
@@ -909,10 +934,13 @@ export const EtsyListingManager: React.FC = () => {
         listing={selectedListingForModal}
         isOpen={isDetailModalOpen}
         onClose={() => {
+          detailRequestRef.current++;
+          setIsDetailLoading(false);
           setIsDetailModalOpen(false);
           setSelectedListingForModal(null);
         }}
         onListingUpdated={handleListingUpdated}
+        isDetailLoading={isDetailLoading}
       />
 
       {/* Bulk Operations Modal */}

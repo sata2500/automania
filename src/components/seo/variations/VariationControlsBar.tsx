@@ -63,7 +63,7 @@ export const VariationControlsBar: React.FC = () => {
             Şablon Olarak Kaydet
           </button>
           <button
-            onClick={handleFetchListings}
+            onClick={() => handleFetchListings()}
             disabled={isFetchingListings || isFetchingInventory}
             className="flex-1 sm:flex-none text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
           >

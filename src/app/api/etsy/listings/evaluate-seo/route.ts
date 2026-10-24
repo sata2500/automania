@@ -5,8 +5,11 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
+import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 60;
+/** Tek istekte taranacak en fazla etiket; kalanlar sonraki değerlendirmede taranır (60 sn sınırı). */
+const MAX_TAGS_TO_SCRAPE_PER_REQUEST = 15;
 
 export async function POST(req: Request) {
   try {
@@ -16,6 +19,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
     }
 
+    const rateLimit = await checkRateLimit(`etsy:evaluate-seo:${session.id}`, 30, 10 * 60_000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'SEO değerlendirme limiti aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const body = await req.json();
     const { listingId, listingIds, all = false, forceRescrape = false } = body;
 
@@ -23,8 +34,8 @@ export async function POST(req: Request) {
 
     if (all) {
       listings = await sql`
-        SELECT * FROM user_etsy_listings 
-        WHERE user_id = ${session.id}
+        SELECT * FROM user_etsy_listings
+        WHERE user_id = ${session.id} AND state <> 'removed'
       `;
     } else {
       const targetIds: string[] = [];
@@ -77,7 +88,7 @@ export async function POST(req: Request) {
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
 
-    const tagsToScrape = allUniqueTags.filter(tag => {
+    const staleTags = allUniqueTags.filter(tag => {
       if (forceRescrape) return true;
       const existing = poolMapByKeyword.get(tag);
       if (!existing) return true;
@@ -85,9 +96,12 @@ export async function POST(req: Request) {
       const ageMs = now - new Date(existing.last_evaluated_at).getTime();
       return ageMs > SEVEN_DAYS_MS;
     });
+    const tagsToScrape = staleTags.slice(0, MAX_TAGS_TO_SCRAPE_PER_REQUEST);
+    const deferredTagCount = staleTags.length - tagsToScrape.length;
 
     // 4. If any tags need scraping, resolve Etsy / Scraper credentials and evaluate
     let newlyScrapedCount = 0;
+    let scrapeFailures = 0;
     if (tagsToScrape.length > 0) {
       // Fetch Etsy credentials & settings
       const { etsyAccessToken, etsyApiKey, etsySharedSecret, scrapingApiKey, scrapingProvider, workerUrl } =
@@ -107,6 +121,18 @@ export async function POST(req: Request) {
           });
 
           const newId = poolMapByKeyword.get(tag)?.id || `kw-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+
+          if (scraped.scrapeError) {
+            // Başarısız tarama mevcut metriklerin üzerine sıfır yazmaz ve kelimeyi "taze" işaretlemez;
+            // yalnızca hata kaydedilir, bir sonraki değerlendirmede yeniden denenir.
+            await sql`
+              INSERT INTO keyword_pool (id, keyword, char_length, last_scrape_error)
+              VALUES (${newId}, ${tag}, ${tag.length}, ${String(scraped.scrapeError).slice(0, 1000)})
+              ON CONFLICT (keyword) DO UPDATE SET last_scrape_error = EXCLUDED.last_scrape_error
+            `;
+            scrapeFailures++;
+            continue;
+          }
 
           await sql`
             INSERT INTO keyword_pool (
@@ -187,7 +213,9 @@ export async function POST(req: Request) {
       success: true,
       evaluatedCount: results.length,
       newlyScrapedTagsCount: newlyScrapedCount,
-      freshFromPoolTagsCount: allUniqueTags.length - newlyScrapedCount,
+      freshFromPoolTagsCount: allUniqueTags.length - newlyScrapedCount - scrapeFailures - deferredTagCount,
+      scrapeFailures,
+      deferredTagCount,
       results
     });
 

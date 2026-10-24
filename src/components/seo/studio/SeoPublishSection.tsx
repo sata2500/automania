@@ -1,6 +1,6 @@
 'use client';
-import React, { useState } from 'react';
-import { AlertTriangle, ShieldCheck, Send, CheckCircle } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { AlertTriangle, ShieldCheck, Send, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import { LIVE_PUBLISH_CONFIRMATION, isLivePublishEnabled } from '@/lib/etsy-publish-mode';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { useEtsySeo } from '../context/EtsySeoContext';
@@ -22,7 +22,31 @@ export const SeoPublishSection: React.FC = () => {
     isPublishing,
     handlePublishToEtsy,
     publishResult,
+    duplicatePublish,
+    setDuplicatePublish,
   } = useEtsySeo();
+
+  // Mükerrer uyarısından sonra "yine de oluştur" denirse aynı istek tekrarlanır.
+  type PublishArgs = Parameters<typeof handlePublishToEtsy>;
+  const lastPublishArgsRef = useRef<PublishArgs>(['draft']);
+  const publish = (...args: PublishArgs) => {
+    lastPublishArgsRef.current = args;
+    return handlePublishToEtsy(...args);
+  };
+
+  const result = publishResult as null | {
+    success?: boolean;
+    simulated?: boolean;
+    partial?: boolean;
+    listingId?: string | number;
+    listingUrl?: string;
+    state?: string;
+    message?: string;
+    error?: string;
+    imagesUploaded?: number;
+    imagesRequested?: number;
+    uploadErrors?: string[];
+  };
 
   const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState(false);
   const [liveConfirmationPhrase, setLiveConfirmationPhrase] = useState('');
@@ -92,7 +116,7 @@ export const SeoPublishSection: React.FC = () => {
               <div className="flex w-full sm:w-auto flex-col gap-2">
                 <div className="flex w-full flex-col sm:flex-row gap-2">
                   <button
-                    onClick={() => handlePublishToEtsy('draft')}
+                    onClick={() => publish('draft')}
                     disabled={isPublishing || !selectedShippingProfileId}
                     className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -159,7 +183,7 @@ export const SeoPublishSection: React.FC = () => {
                     type="button"
                     disabled={isPublishing || liveConfirmationPhrase !== LIVE_PUBLISH_CONFIRMATION}
                     onClick={async () => {
-                      await handlePublishToEtsy('active', {
+                      await publish('active', {
                         confirmLivePublish: true,
                         confirmationPhrase: liveConfirmationPhrase,
                       });
@@ -176,14 +200,80 @@ export const SeoPublishSection: React.FC = () => {
           </div>
         )}
 
-        {/* Publish Result Output */}
-        {publishResult && (
-          <div className="mt-4 bg-slate-950 text-slate-100 p-4 rounded-xl font-mono text-xs overflow-x-auto space-y-2 border border-slate-800">
-            <div className="text-emerald-400 font-bold flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5" />
-              ETSY API YAYINLAMA RAPORU
+        {/* Mükerrer ilan uyarısı */}
+        {duplicatePublish && (
+          <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+            <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Bu klasör zaten Etsy&apos;ye aktarıldı
+            </p>
+            <p className="mt-1 text-amber-800 dark:text-amber-300">
+              {new Date(duplicatePublish.at).toLocaleString('tr-TR')} tarihinde #{duplicatePublish.listingId} numaralı ilan ({duplicatePublish.state === 'active' ? 'yayında' : 'taslak'}) olarak oluşturuldu. Yeniden aktarmak mağazanızda ikinci bir ilan açar.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {duplicatePublish.listingUrl && (
+                <a href={duplicatePublish.listingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-3 py-1.5 font-semibold text-amber-900 dark:border-amber-700 dark:text-amber-200">
+                  <ExternalLink className="w-3.5 h-3.5" /> Mevcut ilanı aç
+                </a>
+              )}
+              <button type="button" onClick={() => setDuplicatePublish(null)} className="rounded-lg border border-slate-300 px-3 py-1.5 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const [state, confirmation] = lastPublishArgsRef.current;
+                  void handlePublishToEtsy(state, confirmation, { allowDuplicate: true });
+                }}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white hover:bg-amber-500"
+              >
+                Yine de yeni ilan oluştur
+              </button>
             </div>
-            <pre className="text-[11px] whitespace-pre-wrap">{JSON.stringify(publishResult, null, 2)}</pre>
+          </div>
+        )}
+
+        {/* Yayın sonucu */}
+        {result && (
+          <div
+            role="status"
+            className={`rounded-xl border p-4 text-xs space-y-2 ${
+              !result.success
+                ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'
+                : result.partial
+                  ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+            }`}
+          >
+            <p className="font-bold flex items-center gap-1.5">
+              {!result.success ? <XCircle className="w-4 h-4 shrink-0" /> : result.partial ? <AlertTriangle className="w-4 h-4 shrink-0" /> : <CheckCircle className="w-4 h-4 shrink-0" />}
+              {!result.success
+                ? (result.listingId ? 'İlan taslak olarak oluşturuldu, ancak işlem tamamlanamadı' : 'İlan oluşturulamadı')
+                : result.simulated
+                  ? 'Önizleme hazır (Etsy bağlantısı yok)'
+                  : result.partial
+                    ? 'İlan taslak olarak oluşturuldu — bazı adımlar eksik'
+                    : result.state === 'active' ? 'İlan yayında' : 'İlan taslak olarak oluşturuldu'}
+            </p>
+            <p>{result.success ? result.message : result.error}</p>
+            {typeof result.imagesRequested === 'number' && (
+              <p>Görseller: {result.imagesUploaded ?? 0}/{result.imagesRequested} yüklendi</p>
+            )}
+            {result.uploadErrors && result.uploadErrors.length > 0 && (
+              <ul className="list-disc pl-5 space-y-0.5">
+                {result.uploadErrors.map((message, index) => <li key={index}>{message}</li>)}
+              </ul>
+            )}
+            {result.listingId && (
+              <a
+                href={result.listingUrl || `https://www.etsy.com/your/shops/me/listing-editor/edit/${result.listingId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> İlanı Etsy&apos;de aç (#{result.listingId})
+              </a>
+            )}
           </div>
         )}
       </div>

@@ -4,12 +4,19 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { checkRateLimit } from '@/lib/request-rate-limit';
+import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
+import { sanitizeEtsyTags } from '@/lib/etsy-format';
+import { hasExplicitLivePublishConfirmation, isLivePublishEnabled } from '@/lib/etsy-publish-mode';
 
 export const maxDuration = 60;
 
 /**
  * PATCH /api/etsy/listings/update
- * Pushes updated Title, Description, Tags, or State directly to Etsy via Etsy OpenAPI v3.
+ * Bir ilanın başlık, açıklama ve etiketlerini Etsy'de günceller. İlan durumu yalnızca
+ * açıkça istendiğinde değiştirilir:
+ *  - 'inactive' (yayından kaldır): `confirmStateChange: true` gerekir.
+ *  - 'active' (yayına al): canlı yayının sunucuda açık olması ve "YAYINLA" onayı gerekir.
+ * Etsy, updateListing ile ilanın taslağa çekilmesine izin vermez.
  */
 export async function PATCH(req: Request) {
   try {
@@ -26,80 +33,99 @@ export async function PATCH(req: Request) {
       });
     }
 
-    const body = await req.json();
-    const { listingId, title, description, tags, materials, state } = body;
+    const body = await req.json().catch(() => ({}));
+    const { listingId, title, description, tags, materials, state } = body as Record<string, unknown>;
 
-    if (!listingId) {
+    if (!listingId || !/^\d+$/.test(String(listingId))) {
       return NextResponse.json({ success: false, error: 'Güncellenecek Listing ID belirtilmedi.' }, { status: 400 });
     }
-    if (state !== undefined && state !== 'draft') {
-      return NextResponse.json({ success: false, error: 'Güvenlik nedeniyle listing state yalnızca draft olarak tutulabilir.' }, { status: 400 });
+
+    if (state !== undefined && state !== null) {
+      if (state !== 'active' && state !== 'inactive') {
+        return NextResponse.json({
+          success: false,
+          error: 'İlan durumu yalnızca "Aktif" veya "Pasif" yapılabilir (Etsy, yayındaki bir ilanın taslağa çekilmesine izin vermez).',
+        }, { status: 400 });
+      }
+      if (state === 'inactive' && body.confirmStateChange !== true) {
+        return NextResponse.json({ success: false, error: 'İlanı yayından kaldırmak için onay gerekiyor.' }, { status: 400 });
+      }
+      if (state === 'active') {
+        if (!isLivePublishEnabled(process.env.ETSY_LIVE_PUBLISH_ENABLED)) {
+          return NextResponse.json({ success: false, error: 'Canlı yayın sunucu ayarlarında kapalı.' }, { status: 403 });
+        }
+        if (!hasExplicitLivePublishConfirmation(body)) {
+          return NextResponse.json({ success: false, error: 'İlanı yayına almak için "YAYINLA" onayı gerekiyor.' }, { status: 400 });
+        }
+      }
     }
 
     const tokenRes = await getValidEtsyToken(session.id);
     if (!tokenRes.success) {
-      return NextResponse.json({ 
-        success: false, 
-        error: tokenRes.error || 'Etsy bağlantısı bulunamadı.' 
+      return NextResponse.json({
+        success: false,
+        error: tokenRes.error || 'Etsy bağlantısı bulunamadı.'
       }, { status: 400 });
     }
 
     const { access_token: etsyAccessToken, shop_id: etsyShopId, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
 
-    const headers = {
-      'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
-      'Authorization': `Bearer ${etsyAccessToken}`,
-      'Content-Type': 'application/json'
-    };
-
-    // Prepare Etsy update payload (only send provided non-null fields)
-    const patchBody: Record<string, unknown> = {};
+    // Etsy updateListing gövdesi application/x-www-form-urlencoded'dır; etiketler virgülle ayrılır.
+    const patchBody = new URLSearchParams();
+    const applied: { title?: string; description?: string; tags?: string[] } = {};
 
     if (typeof title === 'string' && title.trim()) {
-      patchBody.title = title.trim().slice(0, 140);
+      applied.title = title.trim().slice(0, 140);
+      patchBody.set('title', applied.title);
     }
 
     if (typeof description === 'string' && description.trim()) {
-      patchBody.description = description.trim();
+      applied.description = description.trim();
+      patchBody.set('description', applied.description);
     }
 
-    if (Array.isArray(tags) && tags.length > 0) {
-      patchBody.tags = tags
-        .map(t => String(t).trim())
-        .filter(t => t.length > 0 && t.length <= 20)
-        .slice(0, 13);
+    if (Array.isArray(tags)) {
+      const cleanTags = sanitizeEtsyTags(tags);
+      if (cleanTags.length === 0) {
+        return NextResponse.json({ success: false, error: 'Geçerli en az bir etiket gerekiyor (en fazla 20 karakter, özel karakter içermeden).' }, { status: 400 });
+      }
+      applied.tags = cleanTags;
+      patchBody.set('tags', cleanTags.join(','));
     }
 
     if (Array.isArray(materials)) {
-      patchBody.materials = materials.map(m => String(m).trim()).filter(Boolean);
+      for (const material of materials.map((m) => String(m).trim()).filter(Boolean)) patchBody.append('materials', material);
     }
 
-    if (state && ['active', 'draft', 'inactive'].includes(state)) {
-      patchBody.state = state;
+    if (state === 'active' || state === 'inactive') {
+      patchBody.set('state', state);
     }
 
-    // Call Etsy API PATCH /shops/{shop_id}/listings/{listing_id}
-    const etsyUrl = `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}`;
-    const etsyRes = await fetch(etsyUrl, {
+    if ([...patchBody.keys()].length === 0) {
+      return NextResponse.json({ success: false, error: 'Güncellenecek bir alan gönderilmedi.' }, { status: 400 });
+    }
+
+    const etsyRes = await etsyFetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}`, {
       method: 'PATCH',
-      headers,
-      body: JSON.stringify(patchBody)
+      headers: {
+        'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+        'Authorization': `Bearer ${etsyAccessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: patchBody,
     });
 
     if (!etsyRes.ok) {
-      const errText = await etsyRes.text();
-      console.error(`Etsy update error (${etsyRes.status}):`, errText);
-      return NextResponse.json({ 
-        success: false, 
-        error: `Etsy API Güncelleme Hatası (${etsyRes.status}): ${errText}` 
-      }, { status: 500 });
+      const message = await readEtsyError(etsyRes, 'Etsy ilanı güncellemeyi reddetti');
+      console.error('[Etsy Listing Update]', message);
+      return NextResponse.json({ success: false, error: message }, { status: etsyRes.status === 429 ? 429 : 502 });
     }
 
-    const updatedEtsyData = await etsyRes.json();
+    const updatedEtsyData = await etsyRes.json().catch(() => ({}));
 
     // Fetch existing listing from DB to get vision analysis and keyword pool
     const existingRows = await sql`
-      SELECT * FROM user_etsy_listings 
+      SELECT * FROM user_etsy_listings
       WHERE user_id = ${session.id} AND listing_id = ${String(listingId)}
       LIMIT 1
     `;
@@ -107,15 +133,16 @@ export async function PATCH(req: Request) {
     const vision = existingRows.length > 0 ? (typeof existingRows[0].vision_analysis === 'string' ? JSON.parse(existingRows[0].vision_analysis) : (existingRows[0].vision_analysis || {})) : {};
 
     const keywordPoolRows = await sql`
-      SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, is_etsy_suggested 
+      SELECT keyword, opportunity_score, etsy_score, total_listings, competition_level, bestseller_count, is_etsy_suggested, last_evaluated_at
       FROM keyword_pool
       WHERE opportunity_score > 0 OR etsy_score > 0
     `;
 
     // Re-evaluate SEO with new live data
-    const finalTitle = patchBody.title || (existingRows[0]?.title ?? '');
-    const finalDesc = patchBody.description || (existingRows[0]?.description ?? '');
-    const finalTags = patchBody.tags || (existingRows[0]?.tags ?? []);
+    const finalTitle = applied.title ?? (existingRows[0]?.title ?? '');
+    const finalDesc = applied.description ?? (existingRows[0]?.description ?? '');
+    const finalTags = applied.tags ?? (existingRows[0]?.tags ?? []);
+    const finalState = typeof state === 'string' ? state : existingRows[0]?.state;
 
     const newEvaluation = evaluateEtsyListingSeo({
       title: finalTitle,
@@ -127,12 +154,12 @@ export async function PATCH(req: Request) {
 
     // Update database cache
     await sql`
-      UPDATE user_etsy_listings 
-      SET 
+      UPDATE user_etsy_listings
+      SET
         title = ${finalTitle},
         description = ${finalDesc},
         tags = ${JSON.stringify(finalTags)}::jsonb,
-        state = COALESCE(${patchBody.state || null}, state),
+        state = COALESCE(${typeof state === 'string' ? state : null}, state),
         seo_score = ${newEvaluation.score},
         seo_evaluation = ${JSON.stringify(newEvaluation)}::jsonb,
         updated_at = CURRENT_TIMESTAMP
@@ -141,13 +168,13 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'İlan Etsy mağazanızda ve veritabanında başarıyla güncellendi!',
+      message: 'İlan Etsy mağazanızda güncellendi.',
       listing: {
         listingId,
         title: finalTitle,
         description: finalDesc,
         tags: finalTags,
-        state: patchBody.state || existingRows[0]?.state,
+        state: finalState,
         seoScore: newEvaluation.score,
         seoEvaluation: newEvaluation
       },

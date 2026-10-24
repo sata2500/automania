@@ -1,5 +1,6 @@
 'use client';
 
+import { MAX_ETSY_PHOTOS, MAX_ETSY_VIDEOS } from '@/lib/etsy-preflight';
 import { useState, useMemo, Dispatch, SetStateAction } from 'react';
 import { MockupItem, DesignItem, RenderedMatch, MockupFolder, ExportFormatType } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
@@ -49,16 +50,22 @@ export function useBatchGenerator({
 
   const mockupFolders = useMemo(() => folders.filter((f) => f.type !== 'design'), [folders]);
 
-  // Etsy allows maximum 22 items per listing (20 images + 2 videos)
+  // Etsy bir ilanda en fazla 20 fotoğraf ve 2 video kabul eder (MAX_ETSY_PHOTOS / MAX_ETSY_VIDEOS).
+  // Sınır mockup sayısına değil, üretilecek görsellere (eşleşmelere) uygulanır.
+  const fitsEtsyMediaLimits = (pairs: Array<{ mockup: { isVideo?: boolean } }>) => {
+    const videos = pairs.filter((p) => p.mockup.isVideo === true).length;
+    return pairs.length - videos <= MAX_ETSY_PHOTOS && videos <= MAX_ETSY_VIDEOS;
+  };
+
   // Compute stats per individual folder
   const folderStatsMap = useMemo(() => {
     const map = new Map<string, { itemCount: number; isEligible: boolean; pairCount: number }>();
     mockupFolders.forEach((f) => {
       const folderMockups = mockups.filter((m) => m.folderId === f.id);
       const itemCount = folderMockups.length;
-      const pairCount = generateMatchingPairs(folderMockups, designs, f.id, activeDesignFolderId).length;
-      // An individual folder is eligible if both its item count and resulting variations are <= 22
-      const isEligible = itemCount <= 22 && pairCount <= 22;
+      const pairs = generateMatchingPairs(folderMockups, designs, f.id, activeDesignFolderId);
+      const pairCount = pairs.length;
+      const isEligible = fitsEtsyMediaLimits(pairs);
       map.set(f.id, { itemCount, isEligible, pairCount });
     });
     return map;
@@ -76,9 +83,9 @@ export function useBatchGenerator({
   const allFoldersStats = useMemo(() => {
     const allMockups = mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId));
     const itemCount = allMockups.length;
-    const pairCount = generateMatchingPairs(allMockups, designs, null, activeDesignFolderId).length;
-    // "Tüm Klasörler" is eligible ONLY IF total items and total variations are <= 22
-    const isEligible = itemCount <= 22 && pairCount <= 22;
+    const pairs = generateMatchingPairs(allMockups, designs, null, activeDesignFolderId);
+    const pairCount = pairs.length;
+    const isEligible = fitsEtsyMediaLimits(pairs);
     return { itemCount, pairCount, isEligible };
   }, [mockups, mockupFolders, designs, activeDesignFolderId]);
 
@@ -104,10 +111,10 @@ export function useBatchGenerator({
   const isCurrentSelectionEligible = useMemo(() => {
     if (activeFolderId) {
       const stats = folderStatsMap.get(activeFolderId);
-      return stats ? stats.isEligible : currentItemCount <= 22 && currentPairs.length <= 22;
+      return stats ? stats.isEligible : fitsEtsyMediaLimits(currentPairs);
     }
     return allFoldersStats.isEligible;
-  }, [activeFolderId, folderStatsMap, currentItemCount, currentPairs.length, allFoldersStats]);
+  }, [activeFolderId, folderStatsMap, currentPairs, allFoldersStats]);
 
   const selectedFolderName = useMemo(() => {
     if (activeFolderId) {
@@ -121,7 +128,7 @@ export function useBatchGenerator({
       setActiveFolderId(null);
       if (!allFoldersStats.isEligible) {
         toast.warning(
-          `Tüm klasörlerde toplam ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy tek bir ilanda en fazla 22 medya (20 görsel + 2 video) desteklediği için 22'den fazla öğe üretime alınamaz.`
+          `Tüm klasörlerde toplam ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy tek bir ilanda en fazla 20 fotoğraf ve 2 video kabul ettiği için bu kapsam üretime alınamaz.`
         );
       }
       return;
@@ -133,16 +140,15 @@ export function useBatchGenerator({
 
     if (stats && !stats.isEligible) {
       toast.warning(
-        `"${folder?.name || 'Klasör'}" içinde ${stats.itemCount} öğe / ${stats.pairCount} varyasyon var. Etsy en fazla 22 medya (20 görsel + 2 video) kabul eder.`
+        `"${folder?.name || 'Klasör'}" içinde ${stats.itemCount} öğe / ${stats.pairCount} varyasyon var. Etsy en fazla 20 fotoğraf ve 2 video kabul eder.`
       );
     }
   };
 
   const handleGenerate = async () => {
-    // Strict 22-items limit check
-    if (!isCurrentSelectionEligible || currentPairs.length > 22 || currentItemCount > 22) {
+    if (!isCurrentSelectionEligible) {
       toast.warning(
-        `Etsy tek bir ilanda en fazla 22 medya (20 görsel + 2 video) kabul eder. Seçili alanda ${currentItemCount} öğe / ${currentPairs.length} varyasyon bulunmaktadır. Lütfen 22 veya daha az öğe içeren bir klasör seçin.`
+        `Etsy tek bir ilanda en fazla ${MAX_ETSY_PHOTOS} fotoğraf ve ${MAX_ETSY_VIDEOS} video kabul eder. Seçili alan ${currentPairs.length} görsel üretecek. Lütfen daha az mockup/tasarım içeren bir klasör seçin.`
       );
       return;
     }

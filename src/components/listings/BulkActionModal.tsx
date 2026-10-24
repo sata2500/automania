@@ -1,7 +1,7 @@
 'use client';
 
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -42,24 +42,32 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
   const [processedCount, setProcessedCount] = useState(0);
   const [errorLogs, setErrorLogs] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
-
+  const cancelRef = useRef(false);
+  const selectedCountRef = useRef(selectedListings.length);
   useEffect(() => {
-    if (selectedListings.length === 0) {
-      setScope('all');
-    } else {
-      setScope('selected');
-    }
+    selectedCountRef.current = selectedListings.length;
+  }, [selectedListings.length]);
+
+  // Yalnızca modal açılırken sıfırla. Liste ya da bildirimler yeniden render ettiğinde süren işlemin
+  // ilerlemesi ve bitiş raporu kaybolmamalı.
+  useEffect(() => {
+    if (!isOpen) return;
+    setScope(selectedCountRef.current === 0 ? 'all' : 'selected');
     setIsProcessing(false);
     setProgress(0);
     setProcessedCount(0);
     setErrorLogs([]);
     setIsFinished(false);
-  }, [isOpen, selectedListings]);
+    cancelRef.current = false;
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const targetListings = scope === 'selected' ? selectedListings : allListings;
   const totalItems = targetListings.length;
+  // Vision ve AI optimizasyonu sunucuda 10 dakikada 10 ilanla sınırlı (maliyet koruması).
+  const AI_BATCH_LIMIT = 10;
+  const isAiAction = actionType === 'vision' || actionType === 'optimize';
 
   const getActionTitle = () => {
     if (actionType === 'vision') return '👁️ Toplu Görsel (Vision AI) Analizi';
@@ -95,11 +103,17 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
     let completed = 0;
     const errors: string[] = [];
+    let stoppedReason: string | null = null;
+    cancelRef.current = false;
 
     // Process sequentially or in small chunks of 2 to avoid timeout/rate limits
     const chunkSize = actionType === 'vision' ? 1 : actionType === 'optimize' ? 1 : 10;
     
     for (let i = 0; i < targetListings.length; i += chunkSize) {
+      if (cancelRef.current) {
+        stoppedReason = `İşlem durduruldu; ${targetListings.length - i} ilan işlenmedi.`;
+        break;
+      }
       const chunk = targetListings.slice(i, i + chunkSize);
       const chunkIds = chunk.map(c => c.listing_id);
 
@@ -123,14 +137,22 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
           body: JSON.stringify(body)
         });
 
+        if (res.status === 429) {
+          // Sınır dolduysa kalan istekler de reddedilecek: boşuna denemek yerine dur ve süreyi bildir.
+          const retryAfter = Number(res.headers.get('Retry-After')) || 0;
+          const minutes = Math.max(1, Math.ceil(retryAfter / 60));
+          stoppedReason = `İstek sınırına ulaşıldı; ${targetListings.length - i} ilan işlenmedi. Yaklaşık ${minutes} dakika sonra kalanlar için tekrar çalıştırın.`;
+          break;
+        }
+
         const data = await res.json();
         if (!data.success) {
           errors.push(`Hata: ${data.error || 'Bilinmeyen hata'}`);
         } else {
-          completed += chunk.length;
-          if (data.errors && Array.isArray(data.errors)) {
-            errors.push(...data.errors);
-          }
+          const itemErrors: string[] = Array.isArray(data.errors) ? data.errors : [];
+          errors.push(...itemErrors);
+          // Sunucunun hata bildirdiği ilanlar "tamamlandı" sayılmaz.
+          completed += Math.max(0, chunk.length - itemErrors.length);
         }
       } catch (err) {
         errors.push(`Ağ Hatası: ${getErrorMessage(err)}`);
@@ -145,9 +167,12 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
     setIsProcessing(false);
     setIsFinished(true);
+    if (stoppedReason) errors.unshift(stoppedReason);
     setErrorLogs(errors);
-    setProgress(100);
-    if (completed === 0) {
+    setProgress(stoppedReason ? Math.round((completed / Math.max(1, targetListings.length)) * 100) : 100);
+    if (stoppedReason) {
+      warning(`${stoppedReason} (${completed}/${targetListings.length} tamamlandı)`);
+    } else if (completed === 0) {
       error(`Toplu işlem başarısız oldu (0/${targetListings.length}). Ayrıntılar için hata kayıtlarına bakın.`);
     } else if (errors.length > 0) {
       warning(`Toplu işlem kısmen tamamlandı (${completed}/${targetListings.length}); ${errors.length} hata kaydı var.`);
@@ -193,6 +218,13 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
           <p className="text-xs text-slate-300 leading-relaxed">
             {getActionDescription()}
           </p>
+
+          {isAiAction && !isProcessing && !isFinished && totalItems > AI_BATCH_LIMIT && (
+            <p role="note" className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 leading-relaxed">
+              Maliyet koruması nedeniyle bu işlem 10 dakikada en fazla {AI_BATCH_LIMIT} ilan işleyebilir. Sınıra ulaşıldığında işlem durur
+              ve kalan ilanlar için ne zaman tekrar çalıştırabileceğiniz gösterilir.
+            </p>
+          )}
 
           {/* Scope Selector */}
           {!isProcessing && !isFinished && (
@@ -292,6 +324,16 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
                 <span>İşlemi Başlat ({totalItems} İlan)</span>
               </button>
             </>
+          )}
+
+          {isProcessing && (
+            <button
+              type="button"
+              onClick={() => { cancelRef.current = true; }}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+            >
+              Durdur
+            </button>
           )}
 
           {isFinished && (

@@ -34,7 +34,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
           </label>
         </div>
         <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium shrink-0">
-          Etsy Limiti: <strong className="font-semibold text-slate-600 dark:text-slate-400">Maks. 22 Medya</strong>
+          Etsy Limiti: <strong className="font-semibold text-slate-600 dark:text-slate-400">Maks. 20 Fotoğraf + 2 Video</strong>
         </span>
       </div>
 
@@ -54,7 +54,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
           }`}
           title={
             isAllOverLimit
-              ? `Tüm klasörlerde ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy en fazla 22 öğe kabul eder.`
+              ? `Tüm klasörlerde ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy en fazla 20 fotoğraf ve 2 video kabul eder.`
               : `Tüm Klasörler (${allFoldersStats.itemCount} Öğe - ${allFoldersStats.pairCount} Varyasyon)`
           }
         >
@@ -75,7 +75,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
                 : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
             }`}
           >
-            {isAllOverLimit ? `>22 (${allFoldersStats.pairCount})` : allFoldersStats.pairCount}
+            {isAllOverLimit ? `Sınır aşıldı (${allFoldersStats.pairCount})` : allFoldersStats.pairCount}
           </span>
         </button>
 
@@ -100,7 +100,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
               }`}
               title={
                 isOverLimit
-                  ? `Bu klasörde ${stats.itemCount} öğe ve ${stats.pairCount} varyasyon var. Etsy en fazla 22 öğe kabul eder.`
+                  ? `Bu klasörde ${stats.itemCount} öğe ve ${stats.pairCount} varyasyon var. Etsy en fazla 20 fotoğraf ve 2 video kabul eder.`
                   : `${folder.name} (${stats.itemCount} Öğe - ${stats.pairCount} Varyasyon)`
               }
             >
@@ -121,7 +121,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
                     : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
                 }`}
               >
-                {isOverLimit ? `>22 (${stats.itemCount})` : stats.pairCount}
+                {isOverLimit ? `Sınır aşıldı (${stats.pairCount})` : stats.pairCount}
               </span>
             </button>
           );
@@ -133,7 +133,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
         <div className="flex items-center gap-2 pt-0.5 text-[11px] text-amber-600 dark:text-amber-400/90 font-medium">
           <Info className="w-3.5 h-3.5 shrink-0 text-amber-500" />
           <span className="leading-tight">
-            Tüm klasörlerde toplam {allFoldersStats.itemCount} öğe / {allFoldersStats.pairCount} varyasyon bulunuyor. Etsy en fazla 22 medya kabul ettiği için lütfen yukarıdan tek bir klasör seçin.
+            Tüm klasörlerde toplam {allFoldersStats.itemCount} öğe / {allFoldersStats.pairCount} varyasyon bulunuyor. Etsy en fazla 20 fotoğraf ve 2 video kabul ettiği için lütfen yukarıdan tek bir klasör seçin.
           </span>
         </div>
       )}
@@ -142,7 +142,7 @@ export const BatchFolderBar: React.FC<BatchFolderBarProps> = ({
         <div className="flex items-center gap-2 pt-0.5 text-[11px] text-amber-600 dark:text-amber-400/90 font-medium">
           <Info className="w-3.5 h-3.5 shrink-0 text-amber-500" />
           <span className="leading-tight">
-            {overLimitFolders.length} adet klasör 22 medya limitini aştığı için toplu üretime uygun değildir (
+            {overLimitFolders.length} adet klasör Etsy medya sınırını (20 fotoğraf + 2 video) aştığı için toplu üretime uygun değildir (
             {overLimitFolders.map((f) => f.name).join(', ')}).
           </span>
         </div>

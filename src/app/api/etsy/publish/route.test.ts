@@ -6,7 +6,7 @@ const { sessionMock, tokenMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth-server', () => ({ getAuthoritativeSession: sessionMock }));
-vi.mock('@/lib/etsy-preflight', () => ({ validateEtsyDraftPreflight: vi.fn(() => []) }));
+vi.mock('@/lib/etsy-preflight', () => ({ validateEtsyDraftPreflight: vi.fn(() => []), validateWhoMade: vi.fn(() => null) }));
 vi.mock('@/lib/etsy-publish-mode', () => ({
   resolveEtsyPublishMode: (input: { publishMode?: unknown; state?: unknown }) => {
     const values = [input.publishMode, input.state].filter((value) => value !== undefined);

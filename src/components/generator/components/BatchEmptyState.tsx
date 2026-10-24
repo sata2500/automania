@@ -46,18 +46,18 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
           <div className="space-y-1 text-xs">
             <div className="flex items-center justify-between gap-2">
               <h4 className="font-bold text-amber-800 dark:text-amber-300">
-                Etsy 22 Medya Sınırı
+                Etsy Medya Sınırı
               </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
-                {currentItemCount} / 22 Öğe
+                {currentPairsCount} görsel (sınır: 20 fotoğraf + 2 video)
               </span>
             </div>
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11.5px]">
-              Seçili alanda <strong className="font-semibold text-slate-900 dark:text-white">{currentItemCount} adet medya</strong> ve <strong className="font-semibold text-slate-900 dark:text-white">{currentPairsCount} varyasyon</strong> bulunmaktadır. Etsy bir listelemede en fazla <strong>22 medya öğesine (20 görsel + 2 video)</strong> izin verir.
+              Seçili alanda <strong className="font-semibold text-slate-900 dark:text-white">{currentItemCount} adet medya</strong> ve <strong className="font-semibold text-slate-900 dark:text-white">{currentPairsCount} varyasyon</strong> bulunmaktadır. Etsy bir ilanda en fazla <strong>20 fotoğraf ve 2 video</strong> kabul eder.
             </p>
             <p className="text-amber-700 dark:text-amber-400 text-[11px] font-medium pt-0.5 flex items-center gap-1">
               <Lightbulb className="w-3.5 h-3.5 shrink-0" />
-              <span>Üretim yapabilmek için lütfen yukarıdan en fazla 22 öğe içeren bir klasör seçin.</span>
+              <span>Üretim yapabilmek için lütfen daha az görsel üretecek bir klasör seçin.</span>
             </p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
           }`}
           title={
             !isEligible
-              ? 'Etsy 22 medya limitini aştığı için üretim yapılamaz.'
+              ? 'Etsy medya sınırı (20 fotoğraf + 2 video) aşıldığı için üretim yapılamaz.'
               : `Toplu Görselleri Üret (${currentPairsCount})`
           }
         >
@@ -99,7 +99,7 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
           )}
           <span>
             {!isEligible
-              ? `Etsy Limiti Aşıldı (${currentPairsCount} > 22)`
+              ? `Etsy Sınırı Aşıldı (${currentPairsCount} görsel)`
               : `Toplu Görselleri Üret (${currentPairsCount})`}
           </span>
         </button>

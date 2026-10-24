@@ -8,7 +8,9 @@ import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { isR2Configured, getR2Client, getBucketName, extractKeyFromUrlOrKey } from '@/lib/r2';
 import { isOwnedUploadName } from '@/lib/upload-security';
-import { validateEtsyDraftPreflight } from '@/lib/etsy-preflight';
+import { validateEtsyDraftPreflight, validateWhoMade } from '@/lib/etsy-preflight';
+import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
+import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { writeAuditLog } from '@/lib/audit-log';
 import {
@@ -17,7 +19,9 @@ import {
   resolveEtsyPublishMode,
 } from '@/lib/etsy-publish-mode';
 
-export const maxDuration = 60;
+// 20 görsel + video + envanter adımları sıralı yapıldığında 60 sn yetmeyebiliyor.
+export const maxDuration = 300;
+const IMAGE_UPLOAD_CONCURRENCY = 3;
 const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
 
 type EtsyVariationInput = {
@@ -132,6 +136,17 @@ async function loadMediaBlob(userId: string, urlOrPath: string): Promise<Blob | 
   return null;
 }
 
+/** Etsy görsel yükleme JPG/PNG/GIF kabul eder; WebP gerçekten JPEG'e dönüştürülür (yalnızca uzantı değil). */
+async function toEtsyImage(blob: Blob): Promise<{ blob: Blob; ext: string }> {
+  const type = blob.type.toLowerCase();
+  if (type === 'image/jpeg' || type === 'image/jpg') return { blob, ext: 'jpg' };
+  if (type === 'image/png') return { blob, ext: 'png' };
+  if (type === 'image/gif') return { blob, ext: 'gif' };
+  const sharp = (await import('sharp')).default;
+  const jpeg = await sharp(Buffer.from(await blob.arrayBuffer())).flatten({ background: '#ffffff' }).jpeg({ quality: 92 }).toBuffer();
+  return { blob: new Blob([new Uint8Array(jpeg)], { type: 'image/jpeg' }), ext: 'jpg' };
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getAuthoritativeSession();
@@ -227,8 +242,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: preflightErrors.join(' ') }, { status: 400 });
     }
 
+    const whoMadeError = validateWhoMade({ whoMade: who_made, isSupply: is_supply, whenMade: when_made });
+    if (whoMadeError) {
+      return NextResponse.json({ success: false, error: whoMadeError }, { status: 400 });
+    }
+
     const taxonomyId = Number(taxonomy_id);
-    const validTags = tags.map((t: string) => t.trim()).filter((t: string) => t.length > 0 && t.length <= 20).slice(0, 13);
+    // Etsy'nin karakter kurallarına uymayan etiketler (ör. & veya virgül) tüm isteği bozar.
+    const validTags = sanitizeEtsyTags(tags);
+    if (validTags.length === 0) {
+      return NextResponse.json({ success: false, error: 'Geçerli en az bir etiket gerekiyor (en fazla 20 karakter; harf, rakam, boşluk, - ve \').' }, { status: 400 });
+    }
 
     // Yalnızca isteği yapan kullanıcının kendi Etsy bağlantısı kullanılır. Ortamdaki genel
     // bir token'a düşmek, bağlantısı olmayan kullanıcıların başka bir mağazaya ilan açmasına yol açardı.
@@ -318,7 +342,7 @@ export async function POST(req: Request) {
     if (return_policy_id) createBody.set('return_policy_id', String(Number(return_policy_id)));
 
     // Call Official Etsy API v3 createDraftListing endpoint.
-    const createRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
+    const createRes = await etsyFetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
       method: 'POST',
       headers: {
         'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
@@ -329,8 +353,10 @@ export async function POST(req: Request) {
     });
 
     if (!createRes.ok) {
-      await createRes.text();
-      throw new Error(`Etsy API Hatası (${createRes.status}).`);
+      // Etsy'nin hata metni (ör. geçersiz alan) kullanıcıya iletilir; "HTTP 400" tek başına çözüm göstermez.
+      const message = await readEtsyError(createRes, 'Etsy ilan taslağını oluşturmayı reddetti');
+      console.warn('[Etsy Publish]', message);
+      return NextResponse.json({ success: false, draftCreated: false, error: message }, { status: createRes.status === 429 ? 429 : 502 });
     }
 
     const listingData = await createRes.json();
@@ -342,7 +368,7 @@ export async function POST(req: Request) {
       for (const [propId, valueIds] of Object.entries(taxonomy_properties_values)) {
         if (Array.isArray(valueIds) && valueIds.length > 0) {
           try {
-            const propRes = await fetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/properties/${propId}`, {
+            const propRes = await etsyFetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/properties/${propId}`, {
               method: 'PUT',
               headers: {
                 'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
@@ -352,8 +378,7 @@ export async function POST(req: Request) {
               body: JSON.stringify({ value_ids: valueIds, values: [] })
             });
             if (!propRes.ok) {
-              const err = await propRes.text();
-              uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err}`);
+              uploadErrors.push(await readEtsyError(propRes, `Kategori özelliği kaydedilemedi (ID: ${propId})`));
             }
           } catch (err: unknown) {
             uploadErrors.push(`Özellik hatası (ID: ${propId}): ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -382,7 +407,7 @@ export async function POST(req: Request) {
           ]
         }));
 
-        const invRes = await fetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
+        const invRes = await etsyFetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
           method: 'PUT',
           headers: {
             'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
@@ -400,8 +425,7 @@ export async function POST(req: Request) {
         if (invRes.ok) {
           variationsUpdated = true;
         } else {
-          const invErr = await invRes.text();
-          uploadErrors.push(`Varyasyon hatası: ${invErr}`);
+          uploadErrors.push(await readEtsyError(invRes, 'Varyasyonlar (envanter) kaydedilemedi'));
         }
       } catch (err: unknown) {
         uploadErrors.push(`Varyasyon hatası: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -437,50 +461,47 @@ export async function POST(req: Request) {
 
     console.log(`[Etsy Upload] Total: ${images.length} items. Images: ${imageItems.length}, Videos: ${videoItems.length}`);
 
-    // Upload images first
+    // Upload images (sınırlı eşzamanlılıkla; `rank` sırayı korur). Yüklenemeyen her görsel hataya yazılır —
+    // sessizce atlanan görsel, ilanın eksik görselle "başarılı" sayılmasına yol açar.
     if (listingId && imageItems.length > 0) {
-      let imgIndex = 0;
-      for (const imgUrl of imageItems) {
-        imgIndex++;
-        try {
-          const uniqueId = `${Date.now()}-${imgIndex}-${Math.random().toString(36).substring(7)}`;
-          const blob = await loadMediaBlob(session.id, imgUrl);
-
-          if (!blob) {
-            console.warn(`[Etsy Upload] Image ${imgIndex} could not be loaded.`);
-            continue;
-          }
-
-          let fileExt = (blob.type.split('/')[1] || 'jpeg').toLowerCase();
-          if (fileExt === 'webp') fileExt = 'jpeg';
-          const filename = `mockup-${uniqueId}.${fileExt}`;
-
-          const formData = new FormData();
-          formData.append('image', blob, filename);
-          formData.append('rank', String(imagesUploaded + 1));
-
-          const imgRes = await fetch(
-            `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`,
-            {
-              method: 'POST',
-              headers: {
-                'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
-                'Authorization': `Bearer ${etsyAccessToken}`,
-              },
-              body: formData,
+      const queue = imageItems.map((url, index) => ({ url, rank: index + 1 }));
+      const worker = async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          const { url: imgUrl, rank } = next;
+          try {
+            const loaded = await loadMediaBlob(session.id, imgUrl);
+            if (!loaded) {
+              uploadErrors.push(`Görsel ${rank}: dosya okunamadı (silinmiş veya erişilemiyor).`);
+              continue;
             }
-          );
+            const { blob, ext } = await toEtsyImage(loaded);
+            const formData = new FormData();
+            formData.append('image', blob, `mockup-${listingId}-${rank}.${ext}`);
+            formData.append('rank', String(rank));
 
-          if (imgRes.ok) {
-            imagesUploaded++;
-            console.log(`[Etsy Upload] Image ${imgIndex}/${imageItems.length} uploaded: ${filename}`);
-          } else {
-            uploadErrors.push(`Image ${imgIndex}: yükleme başarısız (HTTP ${imgRes.status}).`);
+            const imgRes = await etsyFetch(
+              `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`,
+              {
+                method: 'POST',
+                headers: {
+                  'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+                  'Authorization': `Bearer ${etsyAccessToken}`,
+                },
+                body: formData,
+              }
+            );
+
+            if (imgRes.ok) {
+              imagesUploaded++;
+            } else {
+              uploadErrors.push(await readEtsyError(imgRes, `Görsel ${rank} yüklenemedi`));
+            }
+          } catch (uploadError) {
+            uploadErrors.push(`Görsel ${rank}: yükleme sırasında beklenmeyen hata (${uploadError instanceof Error ? uploadError.message : 'bilinmiyor'}).`);
           }
-        } catch {
-          uploadErrors.push(`Image ${imgIndex}: yükleme sırasında beklenmeyen hata.`);
         }
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(IMAGE_UPLOAD_CONCURRENCY, queue.length) }, worker));
     }
 
     // Upload videos sequentially
@@ -502,7 +523,7 @@ export async function POST(req: Request) {
           const blob = await loadMediaBlob(session.id, vidUrl);
 
           if (!blob) {
-            console.warn(`[Etsy Upload] Video ${vidIndex} could not be loaded.`);
+            uploadErrors.push(`Video ${vidIndex}: dosya okunamadı (silinmiş veya erişilemiyor).`);
             continue;
           }
 
@@ -513,7 +534,7 @@ export async function POST(req: Request) {
           formData.append('video', blob, filename);
           formData.append('name', filename);
 
-          const vidRes = await fetch(
+          const vidRes = await etsyFetch(
             `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/videos`,
             {
               method: 'POST',
@@ -529,13 +550,7 @@ export async function POST(req: Request) {
             const vidData = await vidRes.json();
             console.log(`[Etsy Upload] Video ${vidIndex} uploaded successfully:`, vidData);
           } else {
-            uploadErrors.push(`Video ${vidIndex}: yükleme başarısız (HTTP ${vidRes.status}).`);
-          }
-
-          // Always wait 5 seconds between videos to let Etsy finish processing
-          if (vidIndex < videoItems.length) {
-            console.log(`[Etsy Upload] Waiting 5 seconds before next video...`);
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            uploadErrors.push(await readEtsyError(vidRes, `Video ${vidIndex} yüklenemedi`));
           }
         } catch {
           uploadErrors.push(`Video ${vidIndex}: yükleme sırasında beklenmeyen hata.`);
@@ -546,7 +561,8 @@ export async function POST(req: Request) {
     let activated = false;
     if (state === 'active') {
       const blockingUploadErrors = uploadErrors.filter((error) => !error.startsWith('Bilgi:'));
-      if (!listingId || imagesUploaded < 1 || blockingUploadErrors.length > 0) {
+      // Canlı yayın yalnızca gönderilen her görsel yüklendiyse ve hiçbir adım başarısız olmadıysa yapılır.
+      if (!listingId || imagesUploaded < 1 || imagesUploaded < imageItems.length || blockingUploadErrors.length > 0) {
         const error = !listingId
           ? 'Etsy listing kimliği alınamadığı için canlı yayın durduruldu.'
           : imagesUploaded < 1
@@ -579,7 +595,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        const activateRes = await fetch(
+        const activateRes = await etsyFetch(
           `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}`,
           {
             method: 'PATCH',
@@ -614,7 +630,7 @@ export async function POST(req: Request) {
             draftCreated: true,
             listingId,
             state: 'draft',
-            error: 'Listing taslak olarak oluşturuldu ancak canlı yayınlama adımı başarısız oldu.',
+            error: `${await readEtsyError(activateRes, 'İlan taslak olarak oluşturuldu ancak Etsy yayına almayı reddetti')} Taslağı Etsy panelinden kontrol edebilirsiniz.`,
           }, { status: 502 });
         }
         activated = true;
@@ -645,6 +661,7 @@ export async function POST(req: Request) {
     }
 
     const resultingState = activated ? 'active' : 'draft';
+    const blockingErrors = uploadErrors.filter((error) => !error.startsWith('Bilgi:'));
     await writeAuditLog({
       userId: session.id,
       action: activated ? 'etsy.listing.published' : 'etsy.draft_listing.created',
@@ -669,10 +686,14 @@ export async function POST(req: Request) {
       listingUrl: listingData.url || `https://www.etsy.com/listing/${listingId}`,
       variationsUpdated,
       imagesUploaded,
+      imagesRequested: imageItems.length,
+      partial: blockingErrors.length > 0,
       uploadErrors: uploadErrors.length > 0 ? uploadErrors : undefined,
       message: activated
         ? 'İlan Etsy mağazanızda canlı olarak yayınlandı.'
-        : 'İlan Etsy mağazanıza taslak (DRAFT) olarak aktarıldı.',
+        : blockingErrors.length > 0
+          ? `İlan taslak olarak oluşturuldu, ancak ${blockingErrors.length} adım tamamlanamadı (${imagesUploaded}/${imageItems.length} görsel yüklendi). Eksikleri Etsy panelinden tamamlayın.`
+          : 'İlan Etsy mağazanıza taslak (DRAFT) olarak aktarıldı.',
     });
 
   } catch (error) {
