@@ -6,7 +6,7 @@ import { AIListingStudio } from './tabs/AIListingStudio';
 import { VariationMatrix } from './tabs/VariationMatrix';
 
 const EtsySeoContent = () => {
-  const { activeTab, setActiveTab, isGenerating, handleGenerateAI, variations } = useEtsySeo();
+  const { activeTab, setActiveTab, isGenerating, handleGenerateAI, variations, regenerateConfirmOpen, setRegenerateConfirmOpen } = useEtsySeo();
 
   return (
     <div className="space-y-6">
@@ -30,7 +30,7 @@ const EtsySeoContent = () => {
           </div>
 
           <button
-            onClick={handleGenerateAI}
+            onClick={() => handleGenerateAI()}
             disabled={isGenerating}
             className="w-full md:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
           >
@@ -38,6 +38,16 @@ const EtsySeoContent = () => {
             {isGenerating ? 'SEO Modeli Üretiyor...' : '🪄 AI SEO İle Yeniden Üret'}
           </button>
         </div>
+
+        {regenerateConfirmOpen && (
+          <div role="alertdialog" aria-label="Yeniden üretim onayı" className="relative z-10 mt-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+            <span className="flex-1">Yeniden üretim mevcut başlık, açıklama ve etiketlerin üzerine yazacak (yaptığınız düzenlemeler dahil). Devam edilsin mi?</span>
+            <div className="flex gap-2 shrink-0">
+              <button type="button" onClick={() => setRegenerateConfirmOpen(false)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-200 font-semibold">Vazgeç</button>
+              <button type="button" onClick={() => handleGenerateAI({ confirmed: true })} className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold">Evet, yeniden üret</button>
+            </div>
+          </div>
+        )}
 
         {/* Tab Navigation Header */}
         <div className="flex bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 text-xs font-semibold mt-5 sm:mt-6 gap-1 overflow-x-auto">

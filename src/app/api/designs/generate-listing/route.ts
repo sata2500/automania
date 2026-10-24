@@ -7,6 +7,44 @@ import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadSettingRows } from '@/lib/app-settings';
+import { containsWord, filterContaminatedTerms } from '@/lib/listing-subject';
+
+/**
+ * Havuzda gerçek Etsy verisi olmayan kelimeye puan uydurulmaz: puan `null` döner ve AI'ya
+ * "veri yok" olarak iletilir. Sezon bonusu yalnızca gerçek bir taban puana eklenir.
+ */
+function scoreKeyword(keyword: string, row: KeywordMetricsRow | undefined) {
+  const rawBase = row?.opportunity_score ?? row?.etsy_score ?? null;
+  const hasData = rawBase !== null && rawBase !== undefined && Number(rawBase) > 0;
+  const baseScore = hasData ? Number(rawBase) : null;
+  const seasonal = baseScore !== null ? applySeasonalBonus(keyword, baseScore) : { finalScore: null, bonusApplied: 0, seasonReason: undefined };
+  return {
+    keyword,
+    opportunity_score: seasonal.finalScore as number | null,
+    base_score: baseScore,
+    has_data: hasData,
+    seasonal_bonus: seasonal.bonusApplied,
+    seasonal_reason: seasonal.seasonReason,
+    total_listings: row?.total_listings ?? 0,
+    bestseller_count: row?.bestseller_count ?? 0,
+    autocomplete_rank: row?.autocomplete_rank ?? 0,
+    tag_eligible: keyword.length <= 20,
+  };
+}
+
+/** Puanı olanlar önce (yüksekten düşüğe), verisi olmayanlar sonda. */
+const byScore = (a: { opportunity_score: number | null }, b: { opportunity_score: number | null }) =>
+  (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1);
+
+function describeKeyword(k: ReturnType<typeof scoreKeyword>, suffix = ''): string {
+  let details = k.opportunity_score !== null ? `Score: ${k.opportunity_score}/100` : 'Score: no Etsy data yet (do not assume demand)';
+  if (k.seasonal_bonus > 0) details += ` (Seasonal +${k.seasonal_bonus}: ${k.seasonal_reason})`;
+  if (k.total_listings > 0) details += `, Listings: ${k.total_listings.toLocaleString('en-US')}`;
+  if (k.bestseller_count > 0) details += `, Bestsellers: ${k.bestseller_count}`;
+  if (k.autocomplete_rank > 0) details += `, Autocomplete: #${k.autocomplete_rank}`;
+  details += `, Tag Fit: ${k.tag_eligible ? 'YES (<=20 char)' : 'NO (>20 char)'}`;
+  return `- "${k.keyword}" (${details}${suffix})`;
+}
 
 type KeywordMetricsRow = {
   keyword: string;
@@ -184,71 +222,15 @@ export async function POST(req: Request) {
       }
     }
 
-    const enrichedCoOccurring = rankedCoOccurringTags.map(tagStr => {
-      const dbData = dbCoOccurringMap.get(tagStr);
-      const baseScore = dbData?.opportunity_score ?? dbData?.etsy_score ?? 80;
-      const seasonal = applySeasonalBonus(tagStr, baseScore);
-      const listings = dbData?.total_listings ?? 0;
-      const bestsellers = dbData?.bestseller_count ?? 0;
-      const autoRank = dbData?.autocomplete_rank ?? 0;
-      const tagOk = tagStr.length <= 20;
-
-      return {
-        keyword: tagStr,
-        opportunity_score: seasonal.finalScore,
-        base_score: baseScore,
-        seasonal_bonus: seasonal.bonusApplied,
-        seasonal_reason: seasonal.seasonReason,
-        total_listings: listings,
-        bestseller_count: bestsellers,
-        autocomplete_rank: autoRank,
-        tag_eligible: tagOk
-      };
-    }).sort((a, b) => b.opportunity_score - a.opportunity_score);
+    const enrichedCoOccurring = rankedCoOccurringTags.map((tagStr) => scoreKeyword(tagStr, dbCoOccurringMap.get(tagStr))).sort(byScore);
 
     // Build enriched candidate keywords list sorted by Opportunity Score (with Seasonal Multiplier)
-    const enrichedKeywords = uniqueInputKeywords.map(kStr => {
-      const dbData = dbKeywordsMap.get(kStr);
-      const baseScore = dbData?.opportunity_score ?? dbData?.etsy_score ?? 75;
-      const seasonal = applySeasonalBonus(kStr, baseScore);
-      const listings = dbData?.total_listings ?? 0;
-      const bestsellers = dbData?.bestseller_count ?? 0;
-      const autoRank = dbData?.autocomplete_rank ?? 0;
-      const tagOk = kStr.length <= 20;
+    const enrichedKeywords = uniqueInputKeywords.map((kStr) => scoreKeyword(kStr, dbKeywordsMap.get(kStr))).sort(byScore);
 
-      return {
-        keyword: kStr,
-        opportunity_score: seasonal.finalScore,
-        base_score: baseScore,
-        seasonal_bonus: seasonal.bonusApplied,
-        seasonal_reason: seasonal.seasonReason,
-        total_listings: listings,
-        bestseller_count: bestsellers,
-        autocomplete_rank: autoRank,
-        tag_eligible: tagOk
-      };
-    }).sort((a, b) => b.opportunity_score - a.opportunity_score);
-
-    const formattedKeywords = enrichedKeywords.map(k => {
-      let details = `Score: ${k.opportunity_score}/100`;
-      if (k.seasonal_bonus > 0) details += ` (Seasonal +${k.seasonal_bonus}: ${k.seasonal_reason})`;
-      if (k.total_listings > 0) details += `, Listings: ${k.total_listings.toLocaleString('en-US')}`;
-      if (k.bestseller_count > 0) details += `, Bestsellers: ${k.bestseller_count}`;
-      if (k.autocomplete_rank > 0) details += `, Autocomplete: #${k.autocomplete_rank}`;
-      details += `, Tag Fit: ${k.tag_eligible ? 'YES (<=20 char)' : 'NO (>20 char)'}`;
-      return `- "${k.keyword}" (${details})`;
-    }).join('\n');
+    const formattedKeywords = enrichedKeywords.map((k) => describeKeyword(k)).join('\n');
 
     const formattedCoOccurring = enrichedCoOccurring.length > 0
-      ? enrichedCoOccurring.map(t => {
-          let details = `Score: ${t.opportunity_score}/100`;
-          if (t.seasonal_bonus > 0) details += ` (Seasonal +${t.seasonal_bonus}: ${t.seasonal_reason})`;
-          if (t.total_listings > 0) details += `, Listings: ${t.total_listings.toLocaleString('en-US')}`;
-          if (t.bestseller_count > 0) details += `, Bestsellers: ${t.bestseller_count}`;
-          if (t.autocomplete_rank > 0) details += `, Autocomplete: #${t.autocomplete_rank}`;
-          details += `, Tag Fit: ${t.tag_eligible ? 'YES (<=20 char)' : 'NO (>20 char)'}`;
-          return `- "${t.keyword}" (${details}, Proven Competitor Tag)`;
-        }).join('\n')
+      ? enrichedCoOccurring.map((t) => describeKeyword(t, ', Proven Competitor Tag')).join('\n')
       : 'None detected yet in pool.';
 
     // Prepare dynamic values for placeholders
@@ -372,17 +354,17 @@ export async function POST(req: Request) {
     const { cleanTags, violationsFound } = sanitizeEtsyTags(parsedResult.selectedTags);
 
     // 2. Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
-    const detectedSubj = (parsedResult.detectedSubject || primarySubject || '').toLowerCase();
-    const forbiddenTerms = ['dog', 'cat', 'horse', 'nurse', 'teacher', 'halloween', 'christmas']
-      .filter(term => !detectedSubj.includes(term) && !(designDescription || '').toLowerCase().includes(term));
-
-    parsedResult.selectedTags = cleanTags
-      .filter((t: string) => {
-        if (t.length === 0 || t.length > 20) return false;
-        const lower = t.toLowerCase();
-        return !forbiddenTerms.some(term => lower.includes(term));
-      })
-      .slice(0, 13);
+    //    Kelime sınırıyla eşleşir ("vacation tee" kedi sayılmaz). Aktif sezonun bayram temaları
+    //    (ör. Q4'te "christmas") sezon motoru tarafından önerildiği için silinmez.
+    const seasonalAllowed = ['halloween', 'christmas'].filter((term) =>
+      currentSeason.bonusRules.some((rule) => rule.keywords.some((k) => containsWord(k, term))),
+    );
+    const subjectText = `${parsedResult.detectedSubject || ''} ${primarySubject || ''} ${designDescription || ''}`;
+    parsedResult.selectedTags = filterContaminatedTerms(
+      cleanTags.filter((t: string) => t.length > 0 && t.length <= 20),
+      (t: string) => t,
+      { subjectText, allowedTerms: seasonalAllowed },
+    ).slice(0, 13);
 
     return NextResponse.json({
       success: true,

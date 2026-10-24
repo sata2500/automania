@@ -5,7 +5,18 @@
  */
 
 // Comprehensive dictionary of high-risk brands, franchises, and trademarked terms
-export const HIGH_RISK_TRADEMARKS: { term: string; safeAlternative?: string; category: string }[] = [
+export type TrademarkEntry = {
+  term: string;
+  safeAlternative?: string;
+  category: string;
+  /**
+   * Genel anlamı da olan kelimeler (ör. "world champion dad", "camper vans") yalnızca bu bağlam
+   * kelimelerinden biriyle birlikte geçtiğinde marka riski sayılır.
+   */
+  onlyWith?: string[];
+};
+
+export const HIGH_RISK_TRADEMARKS: TrademarkEntry[] = [
   // Major Entertainment & Characters
   { term: 'disney', category: 'Entertainment' },
   { term: 'mickey mouse', category: 'Entertainment' },
@@ -35,7 +46,7 @@ export const HIGH_RISK_TRADEMARKS: { term: string; safeAlternative?: string; cat
   { term: 'barbie', category: 'Entertainment' },
   { term: 'hello kitty', category: 'Entertainment' },
   { term: 'sanrio', category: 'Entertainment' },
-  { term: 'peanuts', category: 'Entertainment' },
+  { term: 'peanuts', category: 'Entertainment', onlyWith: ['snoopy', 'charlie brown', 'woodstock', 'comic', 'gang', 'linus', 'lucy'] },
   { term: 'snoopy', category: 'Entertainment' },
   { term: 'grinch', safeAlternative: 'holiday monster', category: 'Entertainment' },
   { term: 'dr seuss', category: 'Entertainment' },
@@ -75,9 +86,9 @@ export const HIGH_RISK_TRADEMARKS: { term: string; safeAlternative?: string; cat
   { term: 'patagonia', category: 'Fashion' },
   { term: 'north face', category: 'Fashion' },
   { term: 'the north face', category: 'Fashion' },
-  { term: 'vans', category: 'Fashion' },
-  { term: 'converse', category: 'Fashion' },
-  { term: 'champion', category: 'Fashion' },
+  { term: 'vans', category: 'Fashion', onlyWith: ['shoe', 'shoes', 'sneaker', 'sneakers', 'skate', 'off the wall', 'checkerboard'] },
+  { term: 'converse', category: 'Fashion', onlyWith: ['shoe', 'shoes', 'sneaker', 'sneakers', 'chuck', 'all star', 'high top'] },
+  { term: 'champion', category: 'Fashion', onlyWith: ['hoodie', 'sweatshirt', 'brand', 'logo', 'reverse weave', 'athletic wear'] },
   { term: 'comfort colors', safeAlternative: 'vintage garment dyed', category: 'Fashion' },
   { term: 'bella canvas', safeAlternative: 'premium cotton', category: 'Fashion' },
   { term: 'gildan', safeAlternative: 'heavyweight cotton', category: 'Fashion' },
@@ -92,7 +103,7 @@ export const HIGH_RISK_TRADEMARKS: { term: string; safeAlternative?: string; cat
   { term: 'chapstick', safeAlternative: 'lip balm', category: 'Generic Trap' },
   { term: 'stanley cup', safeAlternative: '40oz tumbler', category: 'Generic Trap' },
   { term: 'stanley tumbler', safeAlternative: 'insulated tumbler', category: 'Generic Trap' },
-  { term: 'yeti', safeAlternative: 'stainless tumbler', category: 'Generic Trap' },
+  { term: 'yeti', safeAlternative: 'stainless tumbler', category: 'Generic Trap', onlyWith: ['tumbler', 'cooler', 'rambler', 'mug', 'cup', 'bottle'] },
   { term: 'crock-pot', safeAlternative: 'slow cooker', category: 'Generic Trap' },
   { term: 'crock pot', safeAlternative: 'slow cooker', category: 'Generic Trap' },
   { term: 'jacuzzi', safeAlternative: 'hot tub', category: 'Generic Trap' },
@@ -101,6 +112,25 @@ export const HIGH_RISK_TRADEMARKS: { term: string; safeAlternative?: string; cat
   { term: 'frisbee', safeAlternative: 'flying disc', category: 'Generic Trap' },
 ];
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Regex'ler modül yüklenirken bir kez derlenir. Uzun terimler önce denenir: "winnie the pooh",
+ * "pooh"dan önce temizlenmezse metinde "winnie the" artığı kalır.
+ */
+const COMPILED_TRADEMARKS = [...HIGH_RISK_TRADEMARKS]
+  .sort((a, b) => b.term.length - a.term.length)
+  .map((entry) => ({
+    entry,
+    test: new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(entry.term)}(?=$|[^\\p{L}\\p{N}])`, 'iu'),
+    replace: new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(entry.term)}(?=$|[^\\p{L}\\p{N}])`, 'giu'),
+    context: entry.onlyWith?.map((word) => new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(word)}(?=$|[^\\p{L}\\p{N}])`, 'iu')),
+  }));
+
+function hasRequiredContext(compiled: (typeof COMPILED_TRADEMARKS)[number], text: string): boolean {
+  return !compiled.context || compiled.context.some((pattern) => pattern.test(text));
+}
+
 /**
  * Check if a single string or tag contains any high-risk trademark
  */
@@ -108,11 +138,9 @@ export function isTrademarkViolator(input: string): { isViolator: boolean; match
   if (!input || typeof input !== 'string') return { isViolator: false };
   const normalized = input.toLowerCase().trim();
 
-  for (const entry of HIGH_RISK_TRADEMARKS) {
-    const escaped = entry.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(^|\\b|\\s|_|-)${escaped}(\\b|\\s|_|-|$)`, 'i');
-    if (regex.test(normalized)) {
-      return { isViolator: true, matchedTerm: entry.term, category: entry.category };
+  for (const compiled of COMPILED_TRADEMARKS) {
+    if (compiled.test.test(normalized) && hasRequiredContext(compiled, normalized)) {
+      return { isViolator: true, matchedTerm: compiled.entry.term, category: compiled.entry.category };
     }
   }
   return { isViolator: false };
@@ -145,19 +173,14 @@ export function sanitizeTrademarkText(text: string): { cleanText: string; violat
   let sanitized = text;
   const violations: string[] = [];
 
-  for (const entry of HIGH_RISK_TRADEMARKS) {
-    const escaped = entry.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
-    if (regex.test(sanitized)) {
-      violations.push(entry.term);
-      if (entry.safeAlternative) {
-        sanitized = sanitized.replace(regex, entry.safeAlternative);
-      } else {
-        sanitized = sanitized.replace(regex, '').replace(/\s{2,}/g, ' ').trim();
-      }
-    }
+  for (const compiled of COMPILED_TRADEMARKS) {
+    if (!compiled.test.test(sanitized) || !hasRequiredContext(compiled, sanitized)) continue;
+    violations.push(compiled.entry.term);
+    const replacement = compiled.entry.safeAlternative ?? '';
+    sanitized = sanitized.replace(compiled.replace, (_match, prefix: string) => `${prefix}${replacement}`);
   }
 
+  sanitized = sanitized.replace(/[ \t]{2,}/g, ' ').replace(/ +([,.!?;:])/g, '$1').trim();
   return { cleanText: sanitized, violations };
 }
 

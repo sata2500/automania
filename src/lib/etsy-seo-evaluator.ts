@@ -85,6 +85,27 @@ export type KeywordPoolInputRow = {
   lastEvaluatedAt?: string | Date | null;
 };
 
+export type SeoGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+
+/** Uygulama genelindeki tek harf notu ölçeği (Stüdyo ve İlanlarım aynı eşikleri kullanır). */
+export function gradeForSeoScore(score: number): SeoGrade {
+  if (score >= 90) return 'A+';
+  if (score >= 80) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 55) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
+const GENERIC_WORDS = new Set(['the', 'and', 'for', 'with', 'shirt', 'tee', 'tshirt', 't-shirt', 'gift', 'gifts', 'unisex', 'women', 'men', 'womens', 'mens']);
+
+/** Eşleşme için anlamlı kelimeler (kısa ve çok genel kelimeler hariç). */
+function significantWords(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 3 && !GENERIC_WORDS.has(word)),
+  );
+}
+
 /**
  * Calculates a comprehensive 0-100 SEO score for an Etsy listing.
  */
@@ -486,20 +507,20 @@ export function evaluateEtsyListingSeo(params: {
   // ==========================================
   const totalScore = Math.min(100, Math.max(0, Math.round(tagsScore + titleScore + descriptionScore)));
 
-  let grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' = 'F';
-  if (totalScore >= 90) grade = 'A+';
-  else if (totalScore >= 80) grade = 'A';
-  else if (totalScore >= 70) grade = 'B';
-  else if (totalScore >= 55) grade = 'C';
-  else if (totalScore >= 40) grade = 'D';
-  else grade = 'F';
+  const grade = gradeForSeoScore(totalScore);
 
-  // Find missing high-opportunity keywords from pool
+  // Find missing high-opportunity keywords from pool — yalnızca ilanla ortak bir kelimesi olanlar
+  // (aksi halde kedi tişörtüne havuzdaki alakasız popüler kelimeler önerilir).
   const missingPoolKeywords: KeywordPoolMetric[] = [];
   const existingTagsSet = new Set(rawTags.map(t => t.toLowerCase().trim()));
+  const listingWords = significantWords(`${title} ${rawTags.join(' ')}`);
 
   for (const poolItem of Array.from(poolMap.values())) {
-    if (poolItem.opportunityScore >= 65 && !existingTagsSet.has(poolItem.keyword.toLowerCase().trim())) {
+    if (
+      poolItem.opportunityScore >= 65 &&
+      !existingTagsSet.has(poolItem.keyword.toLowerCase().trim()) &&
+      [...significantWords(poolItem.keyword)].some((word) => listingWords.has(word))
+    ) {
       missingPoolKeywords.push(poolItem);
     }
   }

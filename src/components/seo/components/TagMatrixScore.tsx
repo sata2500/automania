@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { ShieldCheck, Sparkles, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
 import { isTrademarkViolator } from '@/lib/trademark-shield';
+import { gradeForSeoScore } from '@/lib/etsy-seo-evaluator';
 
 interface TagMatrixScoreProps {
   tags: string[];
@@ -73,7 +74,8 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
       }
     });
 
-    // Calculate SEO Health Score
+    // Etiket sağlığı puanı (genel SEO skoru değildir; o, İlanlarım ile aynı motordan hesaplanır).
+    // Hiç etiket yoksa puan 0'dır — "temiz" kontroller boş listeden puan kazandırmaz.
     let score = 0;
     // 1. Tag count (Target 13)
     if (tagCount === 13) score += 30;
@@ -97,19 +99,15 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
     else if (filledBuckets >= 3) score += 10;
     else score += 5;
 
-    // Grade
-    let grade = 'A+';
-    let gradeColor = 'text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10';
-    if (score < 75) {
-      grade = 'C';
-      gradeColor = 'text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10';
-    } else if (score < 85) {
-      grade = 'B';
-      gradeColor = 'text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10';
-    } else if (score < 95) {
-      grade = 'A';
-      gradeColor = 'text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10';
-    }
+    if (tagCount === 0) score = 0;
+
+    // Harf notu tüm uygulamada aynı ölçekten gelir.
+    const grade = gradeForSeoScore(score);
+    const gradeColor = score >= 80
+      ? 'text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
+      : score >= 55
+        ? 'text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10'
+        : 'text-rose-700 dark:text-rose-400 border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10';
 
     return {
       tagCount,
@@ -142,7 +140,7 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
         {/* Health Score Badge */}
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs ${analysis.gradeColor}`}>
           <Sparkles className="w-3.5 h-3.5" />
-          <span>SEO Skoru: {analysis.score}/100 ({analysis.grade})</span>
+          <span>Etiket Sağlığı: {analysis.score}/100 ({analysis.grade})</span>
         </div>
       </div>
 

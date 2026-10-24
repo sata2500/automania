@@ -446,3 +446,18 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
 **Doğrulama:** 236 birim testi geçiyor (yeni testler: Etsy yeniden deneme ve hata mesajı, "kaldırıldı" kararı, etiket temizleme, medya sınırı, `who_made`, varyasyon doğrulaması, ilan güncelleme route'u). Tarayıcıda ilan düzenleme akışı uçtan uca test edildi (içerik güncellemesi durum göndermiyor, yayından kaldırma onaylı ve ayrı istekle gidiyor). Mobil, tablet ve masaüstünde taşma yok. Üretim derlemesi ve E2E testleri (3/3) geçti.
 
 **Not:** Envanter yedekleri denetim kaydında (`audit_logs`, `etsy.inventory.backup`) tutuluyor; arayüzden geri yükleme henüz yok.
+
+### Faz 4: AI ilan kalitesi ✅ Tamamlandı (24 Ekim 2026)
+
+| Bulgu | Yapılan |
+|---|---|
+| Sabit "cottagecore botanical wildflower" estetiği | Kaldırıldı. Konu ve estetik, tasarımın kendi AI analizinden (`primarySubject`, `primaryAesthetic`) alınıyor; analiz yoksa model tasarım açıklamasından çıkarıyor. |
+| Alt dize ile konu tespiti ("vacation" → kedi) | Tüm konu tespiti ve konu kirliliği filtresi kelime sınırıyla çalışıyor (eş anlamlılar dahil: bunny/kitten/puppy). Tasarım kedi değilse "vacation tee", "education" gibi etiketler artık silinmiyor. |
+| Sezon temalarının silinmesi | Aktif sezonun bayram temaları (Q4'te "christmas", sonbaharda "halloween") filtreden muaf; sezon motorunun önerdiği etiketler artık silinmiyor. |
+| Uydurma 75/80 skorlar | Havuzda gerçek Etsy verisi olmayan kelimeye puan verilmiyor. AI'ya "veri yok, talep varsayma" olarak iletiliyor, arayüzde "Veri yok" yazıyor. Sezon bonusu yalnızca gerçek bir taban puana ekleniyor. |
+| Klasör değişince önceki metnin kalması | Seçilen klasörün tasarımında kayıtlı SEO yoksa başlık, açıklama ve etiketler temizleniyor. |
+| Onaysız yeniden üretim | Mevcut başlık/açıklama/etiket varken "AI ile Yeniden Üret" onay istiyor. Varsayılan varyasyon şablonu yalnızca tablo boşsa uygulanıyor; dolu tablo korunuyor ve kullanıcı bilgilendiriliyor. |
+| İki farklı "SEO Skoru" | Stüdyoda, İlanlarım sekmesiyle aynı motor ve ölçekle hesaplanan **Genel SEO Skoru** gösteriliyor (başlık/etiket/açıklama kırılımı ve ilk 3 sorun ile). Eski etiket puanı "Etiket Sağlığı" olarak yeniden adlandırıldı, boş etiket listesine artık 0 veriyor ve harf notları tüm uygulamada aynı eşiklerden geliyor. Havuz önerileri yalnızca ilanla ortak kelimesi olan anahtar kelimelerden seçiliyor. |
+| Marka (trademark) filtresi | Uzun terimler önce eşleşiyor ("Winnie the Pooh" artık "winnie the" artığı bırakmıyor). Genel anlamı da olan kelimeler ("champion", "peanuts", "vans", "converse", "yeti") yalnızca marka bağlamında (ör. "champion hoodie", "yeti tumbler") riskli sayılıyor. Regex'ler bir kez derleniyor. Tasarım analizinin önerdiği kelimeler ve rakip etiketleri de marka filtresinden geçiyor. |
+
+**Doğrulama:** 247 birim testi geçiyor (yeni: kelime sınırlı konu tespiti, sezon muafiyeti, marka filtresi, tek not ölçeği, ilgili havuz önerileri). SEO sekmesi mobil ve masaüstünde taşmasız; üretim derlemesi ve E2E testleri (3/3) geçti.

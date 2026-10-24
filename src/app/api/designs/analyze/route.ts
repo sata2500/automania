@@ -1,3 +1,4 @@
+import { filterSafeKeywords } from '@/lib/trademark-shield';
 import { NextResponse } from 'next/server';
 import sql, { db } from '@/lib/db';
 import { etsyTaxonomyCache } from '@/db/schema';
@@ -289,10 +290,12 @@ export async function POST(request: Request) {
     const { description, keywords } = parsedResult;
 
     // 5. Anahtar Kelimeleri Temizle ve Etsy 20 Karakter Kuralına Göre Filtrele
+    // Marka riski taşıyan kelimeler havuza yazılmaz ve öneri olarak gösterilmez.
+    const { safe: trademarkSafeKeywords, removed: trademarkRemovedKeywords } = filterSafeKeywords(
+      keywords.map((k: string) => k.toLowerCase().trim()),
+    );
     const uniqueKeywords = (Array.from(new Set(
-      keywords
-        .map((k: string) => k.toLowerCase().trim())
-        .filter((k: string) => k.length > 0 && k.length <= 20)
+      trademarkSafeKeywords.filter((k: string) => k.length > 0 && k.length <= 20)
     )) as string[]);
     
     // 6. Kelime Havuzundaki Mevcut Kayıtları Çek
@@ -438,10 +441,11 @@ export async function POST(request: Request) {
     }
 
     // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla ve Puanla
-    const topDiscoveredTags = Array.from(discoveredTopTagsMap.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([tag]) => tag);
+    const topDiscoveredTags = filterSafeKeywords(
+      Array.from(discoveredTopTagsMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag]) => tag),
+    ).safe.slice(0, 8);
 
     if (topDiscoveredTags.length > 0) {
       // Check which competitor tags already exist in keyword_pool
@@ -556,7 +560,8 @@ export async function POST(request: Request) {
         niche: parsedResult.primarySubject ? (parsedResult.primaryAesthetic ? `${parsedResult.primarySubject} (${parsedResult.primaryAesthetic})` : parsedResult.primarySubject) : (parsedResult.niche || ''),
         userNotes: parsedResult.userNotes || '',
         productType: parsedResult.productType || '',
-        taxonomyId: parsedResult.taxonomyId || null
+        taxonomyId: parsedResult.taxonomyId || null,
+        trademarkRemovedKeywords: trademarkRemovedKeywords.map((r) => r.keyword),
       }
     });
 

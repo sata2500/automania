@@ -17,6 +17,7 @@ import type {
 } from '@/types/etsy';
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { selectEtsyPublishMedia, validateWhoMade } from '@/lib/etsy-preflight';
+import { containsWord, detectPrimarySubject } from '@/lib/listing-subject';
 
 /** Bu cihazda Etsy'ye aktarılmış klasörler: aynı klasörün yanlışlıkla ikinci kez ilan olarak açılmasını önler. */
 const PUBLISHED_FOLDERS_KEY = 'automania_etsy_published_folders_v1';
@@ -243,11 +244,13 @@ function useEtsySeoState() {
         const cleanNicheName = extractCleanNiche(designWithAi);
         setNiche(cleanNicheName);
         if (designWithAi.analysis?.description) setDesignDescription(designWithAi.analysis.description);
-        if (designWithAi.seo) {
-          setGeneratedTitle(designWithAi.seo.title || '');
-          setGeneratedDescription(designWithAi.seo.description || '');
-          setSelectedTags(designWithAi.seo.tags || []);
-        }
+        // Kayıtlı SEO yoksa alanlar temizlenir: aksi halde önceki klasörün başlık ve etiketleri
+        // bu klasörün görselleriyle yayınlanabilir.
+        setGeneratedTitle(designWithAi.seo?.title || '');
+        setGeneratedDescription(designWithAi.seo?.description || '');
+        setSelectedTags(designWithAi.seo?.tags || []);
+        setEnrichedKeywords([]);
+        setCoOccurringTags([]);
         toast.info(`'${foldersWithMockups.find(f=>f.id===targetFolderId)?.name}' klasörü seçildi. AI verileri: '${designWithAi.name}'`);
       }
     } else if (usedDesignIds.size > 0) {
@@ -757,6 +760,8 @@ function useEtsySeoState() {
   // Publishing state
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<Record<string, unknown> | null>(null);
+  /** Mevcut metnin üzerine yazacak yeniden üretim için onay bekleniyor. */
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   /** Seçili klasör daha önce bu cihazdan Etsy'ye aktarıldıysa kaydı (mükerrer ilan uyarısı için). */
   const [duplicatePublish, setDuplicatePublish] = useState<PublishedFolderRecord | null>(null);
   useEffect(() => {
@@ -860,19 +865,27 @@ function useEtsySeoState() {
     setTimeout(() => setCopiedKey(null), 1500);
   };
 
-  const handleGenerateAI = async () => {
+  const handleGenerateAI = async (options: { confirmed?: boolean } = {}) => {
     if (!selectedDesign) {
-      toast.error('Lütfen önce yukarıdaki galeriden analiz edilmiş bir tasarım seçin.');
+      toast.error('Seçili klasördeki tasarımların AI analizi yok. Önce "2. Tasarımlar" sekmesinden tasarımı analiz edin.');
       return;
     }
+    // Mevcut başlık/açıklama/etiketlerin üzerine onaysız yazılmaz.
+    const hasContent = Boolean(generatedTitle.trim() || generatedDescription.trim() || selectedTags.length > 0);
+    if (hasContent && !options.confirmed) {
+      setRegenerateConfirmOpen(true);
+      return;
+    }
+    setRegenerateConfirmOpen(false);
 
     setIsGenerating(true);
     try {
-      // 1. Detect primary subject from niche & design description
-      const descLower = (designDescription + ' ' + niche).toLowerCase();
-      const isRabbit = descLower.includes('rabbit') || descLower.includes('bunny');
-      const isDog = descLower.includes('dog');
-      const isCat = descLower.includes('cat');
+      // 1. Ana konu ve estetik: önce tasarımın kendi AI analizi, yoksa açıklamadan kelime sınırıyla tespit.
+      //    ("vacation" veya "education" içinde "cat" geçtiği için tasarım kedi sayılmaz.)
+      const analysis = selectedDesign.analysis;
+      const detected = detectPrimarySubject(`${designDescription} ${niche} ${analysis?.primarySubject || ''}`);
+      const primarySubject = analysis?.primarySubject?.trim() || detected?.label || niche;
+      const primaryAesthetic = analysis?.primaryAesthetic?.trim() || '';
 
       // 2. Extract design's own AI vision analysis keywords
       const designKeywords = selectedDesign.analysis?.keywords || [];
@@ -897,10 +910,15 @@ function useEtsySeoState() {
         }
       }
 
-      // 4. Anti-contamination filter (e.g. remove 'dog' if design is rabbit)
-      const excludeTerms = isRabbit ? ['dog', 'cat'] : isDog ? ['cat', 'rabbit'] : isCat ? ['dog', 'rabbit'] : [];
+      // 4. Anti-contamination filter (e.g. remove 'dog' if design is rabbit) — kelime sınırıyla
+      const otherAnimals: Record<string, string[]> = {
+        rabbit: ['dog', 'puppy', 'cat', 'kitten'],
+        dog: ['cat', 'kitten', 'rabbit', 'bunny'],
+        cat: ['dog', 'puppy', 'rabbit', 'bunny'],
+      };
+      const excludeTerms = detected ? otherAnimals[detected.subject] || [] : [];
       if (excludeTerms.length > 0) {
-        kwList = kwList.filter((k) => !excludeTerms.some((term) => k.keyword.toLowerCase().includes(term)));
+        kwList = kwList.filter((k) => !excludeTerms.some((term) => containsWord(k.keyword, term)));
       }
 
       // We now receive taxonomyId directly from the analyze step (saved in selectedDesign.analysis)
@@ -933,8 +951,9 @@ function useEtsySeoState() {
           keywords: kwList,
           productType,
           userNotes,
-          primarySubject: isRabbit ? 'rabbit bunny' : isDog ? 'dog' : isCat ? 'cat' : niche,
-          primaryAesthetic: 'cottagecore botanical wildflower',
+          primarySubject,
+          // Sabit bir estetik gönderilmez; analiz yoksa model tasarım açıklamasından çıkarır.
+          primaryAesthetic: primaryAesthetic || undefined,
           shopSections,
           taxonomyId: predictedTaxonomyId,
           taxonomyProperties: fetchedTaxonomyProperties
@@ -989,7 +1008,14 @@ function useEtsySeoState() {
                const template = ((appData.etsyVariationTemplates || []) as Array<{ id: string; variations?: VariationRow[] }>)
                  .find((t) => t.id === templateId);
                if (template) {
-                 setVariations(template.variations || []);
+                 // Kullanıcının doldurduğu varyasyon tablosu sessizce değiştirilmez.
+                 setVariations((current) => {
+                   if (current.length > 0) {
+                     toast.info('Bu kategori için varsayılan bir varyasyon şablonu var; mevcut tablonuz korundu. İsterseniz şablonu "Varyasyon & Fiyat" sekmesinden yükleyebilirsiniz.');
+                     return current;
+                   }
+                   return template.variations || [];
+                 });
                }
              }
            }, 200);
@@ -1023,7 +1049,7 @@ function useEtsySeoState() {
           console.error("SEO verisi veritabanına kaydedilemedi:", dbErr);
         }
 
-        toast.success(`Görsel Doğrulama Destekli AI (${data.modelUsed}) ile SEO İçerikleriniz Üretildi ve Kaydedildi!`);
+        toast.success(`SEO içerikleriniz tasarım analizine göre üretildi ve kaydedildi (${data.modelUsed}).`);
       } else {
         toast.error(data.error || 'İçerik üretilirken hata oluştu.');
       }
@@ -1494,6 +1520,7 @@ function useEtsySeoState() {
     isPublishing, setIsPublishing,
     publishResult, setPublishResult,
     duplicatePublish, setDuplicatePublish,
+    regenerateConfirmOpen, setRegenerateConfirmOpen,
     etsyConnected, setEtsyConnected,
     shippingProfiles, setShippingProfiles,
     selectedShippingProfileId, setSelectedShippingProfileId,

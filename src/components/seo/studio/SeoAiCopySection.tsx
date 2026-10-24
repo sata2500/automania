@@ -186,7 +186,7 @@ export const SeoAiCopySection: React.FC = () => {
                 Kelime Havuzu & Birlikte Kullanılan Popüler Rakip Etiketler
               </h3>
               <p className="text-xs text-slate-500">
-                Aşağıdaki gerçek Etsy arama puanları, ilan sayıları ve rakip etiketleri arasından listenize kolayca etiket ekleyebilirsiniz.
+                Aşağıdaki kelimelerin kelime havuzundaki Etsy puanları, ilan sayıları ve rakip etiketleri arasından listenize etiket ekleyebilirsiniz. &quot;Veri yok&quot; yazanlar henüz taranmadı; talep hakkında bilgi içermez.
               </p>
             </div>
           </div>
@@ -215,13 +215,19 @@ export const SeoAiCopySection: React.FC = () => {
                               {(kw.total_listings ?? 0).toLocaleString('tr-TR')} İlan
                             </span>
                           )}
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
-                            (kw.opportunity_score ?? 0) >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
-                            (kw.opportunity_score ?? 0) >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
-                            'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                          }`}>
-                            {kw.opportunity_score}/100
-                          </span>
+                          {typeof kw.opportunity_score === 'number' ? (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                              kw.opportunity_score >= 85 ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300' :
+                              kw.opportunity_score >= 70 ? 'bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-400' :
+                              'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}>
+                              {kw.opportunity_score}/100
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500" title="Bu kelime henüz Etsy'de taranmadı">
+                              Veri yok
+                            </span>
+                          )}
                           <button
                             onClick={() => {
                               if (isSelected) {
@@ -293,7 +299,7 @@ export const SeoAiCopySection: React.FC = () => {
                                 {Number(tagListings).toLocaleString('tr-TR')} İlan
                               </span>
                             )}
-                            {tagScore && tagScore > 0 && (
+                            {typeof tagScore === 'number' && tagScore > 0 && (
                               <span className={`font-bold px-1 rounded font-mono ${
                                 tagScore >= 85 
                                   ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300' 
