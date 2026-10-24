@@ -8,15 +8,13 @@
  *   2. Başlangıç saatini seçer (00:00 – 23:00)
  *   3. Zaman dilimini seçer
  *   4. Her çalışmada kaç tasarım üretileceğini seçer
- *   5. Yayın modunu seçer (Taslak / Direkt Yayın — ilan oluşturma henüz uygulanmadı)
  *
  * Cron ifadesi otomatik hesaplanır.
  */
 
 import React, { useMemo } from 'react';
-import { Clock, Globe, Shield, AlertCircle, Zap } from 'lucide-react';
+import { Clock, Globe, Zap } from 'lucide-react';
 import { PodTemplateAutomationSchedule } from '@/types/templates';
-import { NotAppliedNote } from './NotAppliedNote';
 
 interface ScheduleSectionProps {
   schedule: PodTemplateAutomationSchedule;
@@ -265,6 +263,7 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
               Her Çalışmada Üretilecek Tasarım
+              <span className="ml-1 text-slate-400 font-normal">(ilan açma açıksa her tasarım için bir taslak ilan)</span>
             </label>
             <div className="flex gap-2">
               {LISTINGS_OPTIONS.map(n => (
@@ -282,56 +281,6 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Yayın Modu */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-amber-500" />
-              Yayın Modu
-            </label>
-            <div className="mb-2">
-              <NotAppliedNote>
-                Otomasyon şu an tasarım, mockup ve video üretir; Etsy&apos;de ilan oluşturmaz. Bu tercih, ilan oluşturma adımı eklendiğinde uygulanacak.
-              </NotAppliedNote>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                {
-                  value: 'draft',
-                  label: '📝 Taslak',
-                  desc: 'Etsy\'de taslak listing oluşturur. Güvenli.',
-                  selected: 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400',
-                },
-                {
-                  value: 'active',
-                  label: '🚀 Direkt Yayınla',
-                  desc: 'Oluşturulunca otomatik yayına alır.',
-                  selected: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400',
-                },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => update('publishMode', opt.value as 'draft' | 'active')}
-                  className={`flex flex-col p-3 rounded-xl border-2 text-left transition-all ${
-                    schedule.publishMode === opt.value
-                      ? opt.selected
-                      : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="text-xs font-bold">{opt.label}</span>
-                  <span className="text-[10px] mt-1 opacity-80 leading-tight">{opt.desc}</span>
-                </button>
-              ))}
-            </div>
-
-            {schedule.publishMode === 'active' && (
-              <div className="mt-2 flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl text-xs text-amber-700 dark:text-amber-400">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>Her aktif listing için Etsy $0.20 ücret alır.</span>
-              </div>
-            )}
           </div>
 
           {/* Özet Kutusu */}

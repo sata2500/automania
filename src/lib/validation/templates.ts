@@ -38,6 +38,19 @@ export const seoHintsSchema = z.object({
   primaryNiche: shortText(200).default(''),
 });
 
+const optionalEtsyId = z.string().trim().max(32).regex(/^\d*$/, 'Geçersiz Etsy kimliği.').optional();
+
+export const etsyListingSettingsSchema = z.object({
+  shippingProfileId: z.string().trim().max(32).regex(/^\d*$/, 'Geçersiz kargo profili.').default(''),
+  readinessStateId: z.string().trim().max(32).regex(/^\d*$/, 'Geçersiz hazırlık süresi.').default(''),
+  returnPolicyId: optionalEtsyId,
+  shopSectionId: optionalEtsyId,
+  taxonomyId: z.number().int().min(1).max(100_000).default(482),
+  price: z.number().min(0.2).max(50_000).default(24.99),
+  whoMade: z.enum(['i_did', 'someone_else', 'collective']).default('i_did'),
+  whenMade: z.string().max(32).default('made_to_order'),
+});
+
 export const automationScheduleSchema = z.object({
   enabled: z.boolean().default(false),
   cronExpression: shortText(100).default('0 9 * * *'),
@@ -52,6 +65,10 @@ export const automationScheduleSchema = z.object({
   nextRunAt: z.string().max(64).nullable().default(null),
   listingsPerRun: z.number().int().min(1).max(5).default(1),
   publishMode: z.enum(['draft', 'active']).default('draft'),
+  generateVideo: z.boolean().default(false),
+  // Eski şablonlar (alan yok) önceki davranışı korur: ilan açılmaz.
+  createListing: z.boolean().default(false),
+  etsy: etsyListingSettingsSchema.optional(),
 });
 
 export const templateInputSchema = z.object({

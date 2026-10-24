@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampListingsPerRun, hourInTimeZone, isDueThisHour, parseScheduledHours } from './automation-schedule';
+import { clampListingsPerRun, computeNextRunAt, hourInTimeZone, isDueThisHour, latestDueSlot, parseScheduledHours } from './automation-schedule';
 
 describe('parseScheduledHours', () => {
   it('parses hour lists produced by the schedule UI', () => {
@@ -37,5 +37,22 @@ describe('clampListingsPerRun', () => {
     expect(clampListingsPerRun(3)).toBe(3);
     expect(clampListingsPerRun(50)).toBe(5);
     expect(clampListingsPerRun('x')).toBe(1);
+  });
+});
+
+describe('latestDueSlot / computeNextRunAt', () => {
+  const schedule = { enabled: true, cronExpression: '0 9,21 * * *', timezone: 'UTC' };
+
+  it('finds the current slot and a missed slot within the lookback window', () => {
+    expect(latestDueSlot(schedule, new Date('2026-10-24T09:05:00Z'))?.toISOString()).toBe('2026-10-24T09:00:00.000Z');
+    expect(latestDueSlot(schedule, new Date('2026-10-24T11:40:00Z'))?.toISOString()).toBe('2026-10-24T09:00:00.000Z');
+    expect(latestDueSlot(schedule, new Date('2026-10-24T14:00:00Z'))).toBeNull();
+    expect(latestDueSlot({ ...schedule, enabled: false }, new Date('2026-10-24T09:05:00Z'))).toBeNull();
+  });
+
+  it('computes the next run in the template time zone', () => {
+    expect(computeNextRunAt(schedule, new Date('2026-10-24T09:05:00Z'))?.toISOString()).toBe('2026-10-24T21:00:00.000Z');
+    const istanbul = { enabled: true, cronExpression: '0 9 * * *', timezone: 'Europe/Istanbul' };
+    expect(computeNextRunAt(istanbul, new Date('2026-10-24T07:00:00Z'))?.toISOString()).toBe('2026-10-25T06:00:00.000Z');
   });
 });

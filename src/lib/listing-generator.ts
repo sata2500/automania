@@ -1,0 +1,389 @@
+import sql from '@/lib/db';
+import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
+import { GoogleGenAI } from '@google/genai';
+import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
+import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
+import { loadSettingRows } from '@/lib/app-settings';
+import { containsWord, filterContaminatedTerms } from '@/lib/listing-subject';
+
+/**
+ * Etsy ilan metni (başlık, açıklama, etiketler) üretimi. Hem SEO stüdyosu (`/api/designs/generate-listing`)
+ * hem de otomasyon hattı bu servisi kullanır; anahtar kelime zenginleştirme, sezon bağlamı, marka (trademark)
+ * temizliği ve konu kirliliği filtresi tek yerde uygulanır.
+ */
+
+export class ListingGenerationError extends Error {
+  constructor(message: string, readonly status = 500) {
+    super(message);
+    this.name = 'ListingGenerationError';
+  }
+}
+
+export type GenerateListingInput = {
+  designDescription?: string;
+  keywords: Array<string | { keyword?: string }>;
+  productType?: string;
+  userNotes?: string;
+  primarySubject?: string;
+  primaryAesthetic?: string;
+  shopSections?: unknown;
+  taxonomyId?: number | string;
+  taxonomyProperties?: unknown;
+};
+
+/**
+ * Havuzda gerçek Etsy verisi olmayan kelimeye puan uydurulmaz: puan `null` döner ve AI'ya
+ * "veri yok" olarak iletilir. Sezon bonusu yalnızca gerçek bir taban puana eklenir.
+ */
+function scoreKeyword(keyword: string, row: KeywordMetricsRow | undefined) {
+  const rawBase = row?.opportunity_score ?? row?.etsy_score ?? null;
+  const hasData = rawBase !== null && rawBase !== undefined && Number(rawBase) > 0;
+  const baseScore = hasData ? Number(rawBase) : null;
+  const seasonal = baseScore !== null ? applySeasonalBonus(keyword, baseScore) : { finalScore: null, bonusApplied: 0, seasonReason: undefined };
+  return {
+    keyword,
+    opportunity_score: seasonal.finalScore as number | null,
+    base_score: baseScore,
+    has_data: hasData,
+    seasonal_bonus: seasonal.bonusApplied,
+    seasonal_reason: seasonal.seasonReason,
+    total_listings: row?.total_listings ?? 0,
+    bestseller_count: row?.bestseller_count ?? 0,
+    autocomplete_rank: row?.autocomplete_rank ?? 0,
+    tag_eligible: keyword.length <= 20,
+  };
+}
+
+/** Puanı olanlar önce (yüksekten düşüğe), verisi olmayanlar sonda. */
+const byScore = (a: { opportunity_score: number | null }, b: { opportunity_score: number | null }) =>
+  (b.opportunity_score ?? -1) - (a.opportunity_score ?? -1);
+
+function describeKeyword(k: ReturnType<typeof scoreKeyword>, suffix = ''): string {
+  let details = k.opportunity_score !== null ? `Score: ${k.opportunity_score}/100` : 'Score: no Etsy data yet (do not assume demand)';
+  if (k.seasonal_bonus > 0) details += ` (Seasonal +${k.seasonal_bonus}: ${k.seasonal_reason})`;
+  if (k.total_listings > 0) details += `, Listings: ${k.total_listings.toLocaleString('en-US')}`;
+  if (k.bestseller_count > 0) details += `, Bestsellers: ${k.bestseller_count}`;
+  if (k.autocomplete_rank > 0) details += `, Autocomplete: #${k.autocomplete_rank}`;
+  details += `, Tag Fit: ${k.tag_eligible ? 'YES (<=20 char)' : 'NO (>20 char)'}`;
+  return `- "${k.keyword}" (${details}${suffix})`;
+}
+
+type KeywordMetricsRow = {
+  keyword: string;
+  opportunity_score?: number | null;
+  etsy_score?: number | null;
+  total_listings?: number | null;
+  bestseller_count?: number | null;
+  autocomplete_rank?: number | null;
+  tag_eligible?: boolean | null;
+  avg_price?: string | number | null;
+  raw_metrics?: unknown;
+};
+type ShopSection = { shop_section_id: number | string; title: string };
+type TaxonomyProperty = {
+  name: string;
+  property_id: number;
+  possible_values?: Array<{ name: string; value_id: number }>;
+};
+
+export async function generateListingContent(userId: string, input: GenerateListingInput) {
+  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties } = input;
+  if (!Array.isArray(keywords) || keywords.length === 0) {
+    throw new ListingGenerationError('İçerik oluşturmak için en az bir kelime gereklidir.', 400);
+  }
+
+  // Seasonality Context & Current Active Shopping Wave
+  const currentSeason = getCurrentSeasonInfo();
+
+  // Query Workspace settings for SEO Copywriter AI Model
+  const rows = await sql`
+    SELECT openrouter_model 
+    FROM user_workspaces
+    WHERE user_id = ${userId}
+    LIMIT 1
+  `;
+
+  // Get API Key and Models from app_settings or env
+  const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing']);
+  
+  let activeAiProvider = 'openrouter';
+  let dbApiKey = null;
+  let dbReasoningModel = null;
+  let geminiApiKey = null;
+  let dbGeminiReasoningModel = null;
+  let customPrompt: string | null = null;
+  
+  for (const row of settingsRows) {
+    if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
+    if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
+    if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
+    if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
+    if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
+    if (row.setting_key === 'ai_prompt_generate_listing') customPrompt = row.setting_value;
+  }
+
+  const apiKey = activeAiProvider === 'gemini' 
+    ? (geminiApiKey || process.env.GEMINI_API_KEY)
+    : (dbApiKey || process.env.OPENROUTER_API_KEY);
+
+  if (!apiKey) {
+    throw new ListingGenerationError('Sistem API anahtarı (Admin) yapılandırılmamış.', 500);
+  }
+  
+  // Parse SEO Copywriter Model fallback
+  let seoModel = 'google/gemma-4-26b-a4b-it:free';
+  try {
+    if (rows.length > 0 && rows[0].openrouter_model) {
+      const raw = rows[0].openrouter_model.trim();
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        seoModel = parsed.reasoning || parsed.text || parsed.seo || parsed.vision || seoModel;
+      } else if (raw.length > 0) {
+        seoModel = raw;
+      }
+    }
+  } catch {}
+
+  // Override with global setting if present
+  if (activeAiProvider === 'gemini') {
+    seoModel = dbGeminiReasoningModel || 'gemini-3.8-flash';
+  } else {
+    if (dbReasoningModel) {
+      seoModel = dbReasoningModel;
+    }
+  }
+
+  // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
+  let prompt = DEFAULT_GENERATE_LISTING_PROMPT;
+
+  if (customPrompt && customPrompt.trim().length > 10) {
+    prompt = customPrompt;
+  }
+
+  // Extract input keyword strings & apply Trademark Safety Shield
+  const rawInputKeywords: string[] = keywords
+    .map((k: string | { keyword?: string }) => (typeof k === 'string' ? k.trim() : (k?.keyword || '').trim()))
+    .filter(Boolean);
+  const { safe: safeInputKeywords, removed: trademarkRemovedKeywords } = filterSafeKeywords(rawInputKeywords);
+  const uniqueInputKeywords = Array.from(new Set(safeInputKeywords.map(k => k.toLowerCase())));
+
+  // Direct Database Keyword Pool Enrichment (Real Etsy Metrics & Co-Occurring Competitor Tags)
+  const dbKeywordsMap = new Map<string, KeywordMetricsRow>();
+  const coOccurringTagsList: string[] = [];
+
+  if (uniqueInputKeywords.length > 0) {
+    try {
+      const dbKeywords = await sql`
+        SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, 
+               autocomplete_rank, tag_eligible, avg_price, raw_metrics
+        FROM keyword_pool
+        WHERE LOWER(keyword) = ANY(${uniqueInputKeywords})
+      `;
+
+      for (const row of dbKeywords) {
+        dbKeywordsMap.set(String(row.keyword).toLowerCase(), row as KeywordMetricsRow);
+
+        // Extract competitor co-occurring tags from raw_metrics.topTags
+        const rm = typeof row.raw_metrics === 'string' ? JSON.parse(row.raw_metrics) : (row.raw_metrics || {});
+        if (Array.isArray(rm.topTags)) {
+          for (const tag of rm.topTags) {
+            const cleanTag = String(tag).trim().toLowerCase();
+            if (cleanTag && cleanTag.length <= 20 && !uniqueInputKeywords.includes(cleanTag)) {
+              coOccurringTagsList.push(cleanTag);
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Error fetching keyword metrics from DB in generate-listing:', dbErr);
+    }
+  }
+
+  // Filter co-occurring tags with Trademark Shield
+  const { safe: safeCoOccurring } = filterSafeKeywords(coOccurringTagsList);
+
+  // Rank competitor co-occurring tags by frequency of occurrence across listings
+  const tagFrequency: Record<string, number> = {};
+  safeCoOccurring.forEach(t => {
+    tagFrequency[t] = (tagFrequency[t] || 0) + 1;
+  });
+  const rankedCoOccurringTags = Object.entries(tagFrequency)
+    .sort((a, b) => b[1] - a[1])
+    .map(([t]) => t)
+    .slice(0, 15);
+
+  // Query DB for evaluated metrics of competitor co-occurring sub-keywords
+  const dbCoOccurringMap = new Map<string, KeywordMetricsRow>();
+  if (rankedCoOccurringTags.length > 0) {
+    try {
+      const dbCoRows = await sql`
+        SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, 
+               autocomplete_rank, tag_eligible, avg_price
+        FROM keyword_pool
+        WHERE LOWER(keyword) = ANY(${rankedCoOccurringTags})
+      `;
+      for (const row of dbCoRows) {
+        dbCoOccurringMap.set(String(row.keyword).toLowerCase(), row as KeywordMetricsRow);
+      }
+    } catch (e) {
+      console.warn('Error fetching co-occurring metrics from DB:', e);
+    }
+  }
+
+  const enrichedCoOccurring = rankedCoOccurringTags.map((tagStr) => scoreKeyword(tagStr, dbCoOccurringMap.get(tagStr))).sort(byScore);
+
+  // Build enriched candidate keywords list sorted by Opportunity Score (with Seasonal Multiplier)
+  const enrichedKeywords = uniqueInputKeywords.map((kStr) => scoreKeyword(kStr, dbKeywordsMap.get(kStr))).sort(byScore);
+
+  const formattedKeywords = enrichedKeywords.map((k) => describeKeyword(k)).join('\n');
+
+  const formattedCoOccurring = enrichedCoOccurring.length > 0
+    ? enrichedCoOccurring.map((t) => describeKeyword(t, ', Proven Competitor Tag')).join('\n')
+    : 'None detected yet in pool.';
+
+  // Prepare dynamic values for placeholders
+  const dynamicValues = {
+    designDescription: designDescription || 'Apparel design for US market.',
+    primarySubject: primarySubject || 'Extracted from design concept',
+    primaryAesthetic: primaryAesthetic || 'Extracted from design concept',
+    productType: productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee',
+    userNotes: userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.',
+    seasonalityContext: currentSeason.promptGuidance,
+    keywords: formattedKeywords || 'None provided',
+    coOccurringTags: formattedCoOccurring,
+    taxonomyId: String(taxonomyId || 482),
+    shopSections: shopSections && Array.isArray(shopSections) ? (shopSections as ShopSection[]).map((s) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
+    taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? (taxonomyProperties as TaxonomyProperty[]).map((p) => 
+      `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${(p.possible_values || []).map((v) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
+    ).join('\n   ') : 'None'
+  };
+
+  // Replace all placeholders
+  prompt = prompt
+    .replace(/\{\{designDescription\}\}/g, dynamicValues.designDescription)
+    .replace(/\{\{primarySubject\}\}/g, dynamicValues.primarySubject)
+    .replace(/\{\{primaryAesthetic\}\}/g, dynamicValues.primaryAesthetic)
+    .replace(/\{\{productType\}\}/g, dynamicValues.productType)
+    .replace(/\{\{userNotes\}\}/g, dynamicValues.userNotes)
+    .replace(/\{\{seasonalityContext\}\}/g, dynamicValues.seasonalityContext)
+    .replace(/\{\{keywords\}\}/g, dynamicValues.keywords)
+    .replace(/\{\{coOccurringTags\}\}/g, dynamicValues.coOccurringTags)
+    .replace(/\{\{taxonomyId\}\}/g, dynamicValues.taxonomyId)
+    .replace(/\{\{shopSections\}\}/g, dynamicValues.shopSections)
+    .replace(/\{\{taxonomyProperties\}\}/g, dynamicValues.taxonomyProperties);
+
+  let content = '';
+
+  if (activeAiProvider === 'gemini') {
+    const ai = new GoogleGenAI({ apiKey });
+    const candidates = Array.from(new Set([
+      seoModel,
+      'gemini-3.8-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite'
+    ]));
+
+    let lastErr: unknown = null;
+    for (const m of candidates) {
+      try {
+        const res = await ai.models.generateContent({
+          model: m,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 8192,
+            temperature: 0.7,
+          }
+        });
+        const txt = res.text?.trim();
+        if (txt) {
+          content = txt;
+          seoModel = m;
+          break;
+        }
+      } catch (err: unknown) {
+        lastErr = err;
+        console.warn(`[Generate Listing] Model '${m}' failed:`, err instanceof Error ? err.message : err);
+        continue;
+      }
+    }
+
+    if (!content) {
+      throw lastErr || new Error('Gemini model yanıt vermedi.');
+    }
+  } else {
+    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'Automania POD Studio Listing Generator',
+      },
+      body: JSON.stringify({
+        model: seoModel,
+        messages: [
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!openRouterRes.ok) {
+      const err = await openRouterRes.text();
+      throw new Error(`OpenRouter SEO API Hatası: ${openRouterRes.status} - ${err}`);
+    }
+
+    const aiData = await openRouterRes.json();
+    content = aiData.choices?.[0]?.message?.content || '{}';
+  }
+
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    content = jsonMatch[0];
+  }
+
+  let parsedResult;
+  try {
+    parsedResult = JSON.parse(content);
+  } catch {
+    throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
+  }
+
+  if (!parsedResult.title || !parsedResult.description || !parsedResult.selectedTags || !Array.isArray(parsedResult.selectedTags)) {
+    throw new Error('Yapay zeka eksik veri döndürdü.');
+  }
+
+  // 1. Post-Processing Trademark Sanitization (Zero IP Infringement Guarantee)
+  const sanitizedTitleObj = sanitizeTrademarkText(parsedResult.title);
+  parsedResult.title = sanitizedTitleObj.cleanText;
+
+  const sanitizedDescObj = sanitizeTrademarkText(parsedResult.description);
+  parsedResult.description = sanitizedDescObj.cleanText;
+
+  const { cleanTags, violationsFound } = sanitizeEtsyTags(parsedResult.selectedTags);
+
+  // 2. Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
+  //    Kelime sınırıyla eşleşir ("vacation tee" kedi sayılmaz). Aktif sezonun bayram temaları
+  //    (ör. Q4'te "christmas") sezon motoru tarafından önerildiği için silinmez.
+  const seasonalAllowed = ['halloween', 'christmas'].filter((term) =>
+    currentSeason.bonusRules.some((rule) => rule.keywords.some((k) => containsWord(k, term))),
+  );
+  const subjectText = `${parsedResult.detectedSubject || ''} ${primarySubject || ''} ${designDescription || ''}`;
+  parsedResult.selectedTags = filterContaminatedTerms(
+    cleanTags.filter((t: string) => t.length > 0 && t.length <= 20),
+    (t: string) => t,
+    { subjectText, allowedTerms: seasonalAllowed },
+  ).slice(0, 13);
+
+  return {
+    listing: parsedResult,
+    keywordsEnriched: enrichedKeywords,
+    coOccurringTags: enrichedCoOccurring,
+    seasonInfo: currentSeason,
+    trademarkSafeguard: {
+      cleanedInputKeywords: trademarkRemovedKeywords,
+      titleViolationsCleaned: sanitizedTitleObj.violations,
+      tagViolationsCleaned: violationsFound
+    },
+    modelUsed: seoModel
+  };
+}

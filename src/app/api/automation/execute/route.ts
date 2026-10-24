@@ -7,9 +7,9 @@
  * pipeline'ı `after()` ile doğrudan çalıştırır ve bu uç noktayı kullanmaz.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { isValidInternalToken } from '@/lib/internal-auth';
-import { executeAutomationRun } from '@/lib/automation-runner';
+import { dispatchAutomationRun, executeAutomationRun } from '@/lib/automation-runner';
 
 export const maxDuration = 300;
 
@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
   }
 
   const outcome = await executeAutomationRun({ runId, templateId, userId });
-  if (outcome.ok) return NextResponse.json({ success: true, runId });
+  // Süre bütçesi dolduysa kalan adımlar yeni bir çağrıda (kendi süre sınırıyla) sürdürülür.
+  if (outcome.ok && outcome.resumed) {
+    const origin = req.nextUrl.origin;
+    after(async () => { await dispatchAutomationRun({ runId, templateId, userId }, origin); });
+  }
+  if (outcome.ok) return NextResponse.json({ success: true, runId, resumed: outcome.resumed === true });
   if (outcome.reason === 'not_found') return NextResponse.json({ error: 'Record not found' }, { status: 404 });
   if (outcome.reason === 'not_pending') return NextResponse.json({ error: 'Run is not pending' }, { status: 409 });
   return NextResponse.json({ error: 'Internal pipeline error' }, { status: 500 });

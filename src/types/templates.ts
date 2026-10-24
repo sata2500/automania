@@ -56,6 +56,22 @@ export interface PodTemplateSeoHints {
   primaryNiche: string;
 }
 
+/** Otomasyonun Etsy'de açacağı taslak ilanın mağaza ayarları */
+export interface PodTemplateEtsyListingSettings {
+  /** Kargo profili (zorunlu; yoksa ilan adımı atlanır) */
+  shippingProfileId: string;
+  /** Hazırlık süresi (zorunlu) */
+  readinessStateId: string;
+  returnPolicyId?: string;
+  shopSectionId?: string;
+  /** Etsy kategori (taxonomy) kimliği */
+  taxonomyId: number;
+  /** Varyasyon yoksa kullanılacak fiyat */
+  price: number;
+  whoMade: 'i_did' | 'someone_else' | 'collective';
+  whenMade: string;
+}
+
 /** Otomasyon zamanlama konfigürasyonu */
 export interface PodTemplateAutomationSchedule {
   /** Otomasyon aktif mi? */
@@ -68,8 +84,14 @@ export interface PodTemplateAutomationSchedule {
   nextRunAt: string | null;
   /** Her çalışmada üretilecek listing sayısı */
   listingsPerRun: number;
-  /** Yayın modu: 'draft' = taslak, 'active' = direkt yayın */
+  /** Yayın modu: otomasyon güvenlik için her zaman taslak oluşturur ('active' eski kayıtlarla uyumluluk için). */
   publishMode: 'draft' | 'active';
+  /** Her çalıştırmada video üretilsin mi? (Maliyetli; varsayılan kapalı) */
+  generateVideo?: boolean;
+  /** SEO metni üretilip Etsy'de taslak ilan açılsın mı? Kapalı/yoksa "kuru çalıştırma": yalnızca görseller üretilir. */
+  createListing?: boolean;
+  /** Etsy taslak ilan ayarları */
+  etsy?: PodTemplateEtsyListingSettings;
 }
 
 // ─── Şablon Ana Tipi ─────────────────────────────────────────────────────────

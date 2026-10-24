@@ -20,7 +20,8 @@ import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from
 import { MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
-import { parseScheduledHours } from '@/lib/automation-schedule';
+import { computeNextRunAt, parseScheduledHours } from '@/lib/automation-schedule';
+import { RunDetailsDialog, STEP_LABELS, getRunListingUrl, getRunWarnings } from './RunDetailsDialog';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 
 interface TemplatesManagerProps {
@@ -30,19 +31,15 @@ interface TemplatesManagerProps {
 const POLL_INTERVAL_MS = 4000;
 const ACTIVE_RUN_STATUSES = new Set<AutomationRun['status']>(['pending', 'running']);
 
-const STEP_LABELS: Record<AutomationStepName, string> = {
-  designGeneration: 'Tasarım üretimi',
-  backgroundRemoval: 'Arka plan kaldırma',
-  mockupRender: 'Mockup oluşturma',
-  videoGeneration: 'Video üretimi',
-  seoGeneration: 'SEO içeriği',
-  listingCreation: 'Etsy ilanı',
-};
 
 /** Çalışan bir run'ın kullanıcıya gösterilecek mevcut adımı. */
 function describeRunProgress(run: AutomationRun): string {
-  if (run.status === 'pending') return 'Sırada bekliyor...';
   const steps = run.steps ? (Object.entries(run.steps) as Array<[AutomationStepName, { status: string }]>) : [];
+  if (run.status === 'pending') {
+    // Süre sınırı nedeniyle bölünen çalıştırma kaldığı yerden devam eder.
+    const done = steps.filter(([, step]) => step.status !== 'pending' && step.status !== 'running').length;
+    return done > 0 ? `Devam etmeyi bekliyor (${done}/${steps.length} adım bitti)...` : 'Sırada bekliyor...';
+  }
   const running = steps.find(([, step]) => step.status === 'running');
   return running ? `${STEP_LABELS[running[0]]}...` : 'Çalışıyor...';
 }
@@ -66,6 +63,8 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   /** Şablon başına en son otomasyon çalıştırması. */
   const [latestRuns, setLatestRuns] = useState<Record<string, AutomationRun>>({});
   const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [detailsTemplateId, setDetailsTemplateId] = useState<string | null>(null);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
 
   const stopPolling = useCallback((templateId: string) => {
     clearTimeout(pollTimers.current[templateId]);
@@ -92,7 +91,9 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
         }
         delete pollTimers.current[templateId];
         if (run.status === 'completed') {
-          showSuccess('Otomasyon tamamlandı. Üretilen görseller hazır.');
+          showSuccess(run.etsyListingId
+            ? 'Otomasyon tamamlandı: Etsy\'de taslak ilan oluşturuldu.'
+            : 'Otomasyon tamamlandı. Üretilen görseller hazır.');
           setTemplates(prev => prev.map(t => t.id === templateId
             ? { ...t, lastRunAt: run.completedAt ?? t.lastRunAt, totalListingsGenerated: (t.totalListingsGenerated ?? 0) + 1 }
             : t));
@@ -137,6 +138,27 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
       setIsLoading(false);
     }
   }, [showError, pollRun]);
+
+  // Süren çalıştırmayı iptal et
+  const handleCancelRun = async (templateId: string, runId: string) => {
+    try {
+      setCancellingRunId(runId);
+      const res = await fetch('/api/automation/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Çalıştırma iptal edilemedi.');
+      stopPolling(templateId);
+      setLatestRuns(prev => prev[templateId] ? { ...prev, [templateId]: { ...prev[templateId], status: 'cancelled' } } : prev);
+      toast.info('Çalıştırma iptal edildi. Süren adım tamamlanınca durur.');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Çalıştırma iptal edilemedi.');
+    } finally {
+      setCancellingRunId(null);
+    }
+  };
 
   // Şablonu şimdi çalıştır
   const handleRunNow = async (template: PodTemplate) => {
@@ -253,7 +275,9 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
     const hours = parseScheduledHours(template.automationSchedule.cronExpression);
     if (hours.length === 0) return 'Desteklenmeyen zamanlama — şablonu düzenleyip yeniden kaydedin';
     const tz = template.automationSchedule.timezone?.split('/')[1]?.replace('_', ' ');
-    return `Her gün ${hours.map((h) => `${String(h).padStart(2, '0')}:00`).join(', ')}${tz ? ` (${tz})` : ''}`;
+    const next = template.isActive ? computeNextRunAt(template.automationSchedule, new Date()) : null;
+    const nextLabel = next ? ` · Sonraki: ${next.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+    return `Her gün ${hours.map((h) => `${String(h).padStart(2, '0')}:00`).join(', ')}${tz ? ` (${tz})` : ''}${nextLabel}`;
   };
 
   if (isLoading) {
@@ -268,6 +292,15 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   return (
     <div className="space-y-6 pb-8">
       {confirmDialog}
+      {detailsTemplateId && latestRuns[detailsTemplateId] && (
+        <RunDetailsDialog
+          run={latestRuns[detailsTemplateId]}
+          templateName={templates.find(t => t.id === detailsTemplateId)?.name ?? ''}
+          onClose={() => setDetailsTemplateId(null)}
+          onCancel={() => handleCancelRun(detailsTemplateId, latestRuns[detailsTemplateId].id)}
+          isCancelling={cancellingRunId === latestRuns[detailsTemplateId].id}
+        />
+      )}
       {/* Başlık */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -448,6 +481,16 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                   }`}>
                     {template.mockupConfig?.fabricType === 'light' ? '☀️ Açık Kumaş' : template.mockupConfig?.fabricType === 'dark' ? '🌑 Koyu Kumaş' : '✦ Tüm Kumaşlar'}
                   </span>
+                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                    template.automationSchedule?.createListing === true
+                      ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                  }`}>
+                    {template.automationSchedule?.createListing === true ? 'SEO + Etsy taslağı' : 'Yalnızca görseller'}
+                  </span>
+                  {template.automationSchedule?.generateVideo === true && (
+                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/30">AI video</span>
+                  )}
                 </div>
 
                 {/* Zamanlama */}
@@ -479,6 +522,8 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                         ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
                         : latestRun.status === 'completed'
                         ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                        : latestRun.status === 'cancelled'
+                        ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                         : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300'
                     }`}
                   >
@@ -494,12 +539,36 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                         {isRunActive
                           ? describeRunProgress(latestRun)
                           : latestRun.status === 'completed'
-                          ? `Son çalıştırma başarılı · ${formatRunDate(latestRun.completedAt)}`
+                          ? `${latestRun.etsyListingId ? 'Taslak ilan oluşturuldu' : 'Son çalıştırma başarılı'}${getRunWarnings(latestRun).length > 0 ? ' (uyarılarla)' : ''} · ${formatRunDate(latestRun.completedAt)}`
+                          : latestRun.status === 'cancelled'
+                          ? `Son çalıştırma iptal edildi · ${formatRunDate(latestRun.completedAt ?? latestRun.createdAt)}`
                           : `Son çalıştırma başarısız · ${formatRunDate(latestRun.completedAt ?? latestRun.createdAt)}`}
                       </p>
                       {latestRun.status === 'failed' && latestRun.errorMessage && (
                         <p className="mt-0.5 break-words opacity-80 line-clamp-2">{latestRun.errorMessage}</p>
                       )}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {latestRun.id && latestRun.steps && (
+                          <button type="button" onClick={() => setDetailsTemplateId(template.id)} className="font-bold underline underline-offset-2">
+                            Ayrıntılar
+                          </button>
+                        )}
+                        {isRunActive && latestRun.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelRun(template.id, latestRun.id)}
+                            disabled={cancellingRunId === latestRun.id}
+                            className="font-bold underline underline-offset-2 disabled:opacity-50"
+                          >
+                            {cancellingRunId === latestRun.id ? 'İptal ediliyor…' : 'İptal et'}
+                          </button>
+                        )}
+                        {getRunListingUrl(latestRun) && (
+                          <a href={getRunListingUrl(latestRun)!} target="_blank" rel="noopener noreferrer" className="font-bold underline underline-offset-2">
+                            Etsy taslağını aç
+                          </a>
+                        )}
+                      </div>
                       {latestRun.status === 'completed' && (latestRun.generatedMockupUrls?.length ?? 0) > 0 && (
                         <div className="mt-2 flex gap-1.5 overflow-x-auto">
                           {latestRun.generatedMockupUrls.slice(0, 6).map(url => (

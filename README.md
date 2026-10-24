@@ -11,7 +11,7 @@ Etsy satıcıları için Print-on-Demand (POD) stüdyosu: mockup editörü, AI t
 | Toplu üretim | Mockup × tasarım eşleştirmelerini tarayıcıda canvas ile render etme, ZIP dışa aktarma | `src/components/generator/`, `src/lib/canvas-renderer.ts` |
 | Etsy SEO stüdyosu | Başlık/açıklama/etiket üretimi, varyasyon matrisi, Etsy'ye taslak gönderme | `src/components/seo/`, `src/app/api/designs/generate-listing/`, `src/app/api/etsy/publish/` |
 | İlan yönetimi | Etsy ilanlarını senkronize etme, SEO puanlama, AI optimizasyon | `src/components/listings/`, `src/app/api/etsy/listings/` |
-| Otomasyon şablonları | Şablon bazlı tasarım + mockup üretimi; saatlik zamanlama | `src/components/templates/`, `src/lib/automation-runner.ts`, `src/app/api/cron/automation/` |
+| Otomasyon şablonları | Şablon bazlı tasarım → mockup → (isteğe bağlı video) → SEO metni → Etsy taslak ilanı; saatlik zamanlama | `src/components/templates/`, `src/lib/automation-runner.ts`, `src/app/api/cron/automation/` |
 | Admin paneli | Ayarlar (şifreli anahtarlar), anahtar kelime havuzu, taksonomi, depolama bakımı | `src/components/admin/`, `src/app/api/admin/` |
 
 ## Mimari
@@ -98,6 +98,8 @@ Geliştirme ve CI ortamlarında bu bayrağı açmayın; testler yalnızca mock k
 ## Zamanlanmış otomasyon
 
 Şablon zamanlamaları saat bazındadır ve `GET /api/cron/automation` uç noktası saatte bir çağrılmalıdır (`Authorization: Bearer <CRON_SECRET>`). Vercel Hobby planı yalnızca günlük cron desteklediğinden depo, saatlik bir GitHub Actions iş akışı içerir (`.github/workflows/scheduled-automation.yml`). Etkinleştirmek için repository secret olarak `AUTOMATION_APP_URL` ve `CRON_SECRET` ekleyin. `INTERNAL_API_TOKEN` tanımlıysa her çalıştırma ayrı bir fonksiyon çağrısında yürütülür.
+
+Otomasyon hattı adım adım ilerler ve her adımın sonucu `automation_runs` kaydına yazılır. Bir çağrının süre bütçesi (≈170 sn) dolarsa çalıştırma `pending` durumuna döner ve kaldığı yerden sürdürülür: `INTERNAL_API_TOKEN` varsa hemen yeni bir çağrıyla, yoksa kullanıcı şablon ekranını izlerken takip isteğiyle veya saatlik zamanlayıcıyla. Tamamlanan adımlar tekrar çalışmaz; aynı çalıştırma ikinci bir Etsy ilanı açmaz. Zamanlayıcı son 3 saatte kaçırılan bir planlı saati telafi eder. Otomasyon ilanları **her zaman taslak** olarak açar; video üretimi şablonda ayrıca açılmadıkça yapılmaz.
 
 ## Anahtar kelime değerlendirme ve medya işleme
 

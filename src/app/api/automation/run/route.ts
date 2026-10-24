@@ -8,7 +8,7 @@
  *  3. mockupRender      — Tasarımı mockuplara yerleştirme
  *  4. videoGeneration   — Veo 3.1 ile video üretimi
  *  5. seoGeneration     — 2026 Etsy SEO içeriği üretimi
- *  6. listingCreation   — Etsy'de taslak/aktif listing oluşturma
+ *  6. listingCreation   — Etsy'de taslak listing oluşturma (otomasyon canlıya almaz)
  *
  * Run kaydı oluşturulup yanıt hemen döner; pipeline `after()` ile aynı fonksiyon
  * çağrısı içinde, yanıt gönderildikten sonra çalışır (maxDuration sınırı içinde).
@@ -20,7 +20,7 @@ import { db } from '@/lib/db';
 import { automationRuns } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { createAutomationRun, executeAutomationRun } from '@/lib/automation-runner';
+import { createAutomationRun, failStaleAutomationRuns, runAndContinue } from '@/lib/automation-runner';
 import { eq, and, desc } from 'drizzle-orm';
 
 export const maxDuration = 300;
@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'templateId zorunludur.' }, { status: 400 });
     }
 
+    // Takılı kalmış (30 dk'dır ilerlemeyen) bir çalıştırma "Şimdi Çalıştır"ı kilitlemesin.
+    await failStaleAutomationRuns(30, { templateId }).catch(() => 0);
     const created = await createAutomationRun({ templateId, userId: session.id, triggerType });
     if (!created.ok) {
       if (created.reason === 'not_found') return NextResponse.json({ error: 'Şablon bulunamadı.' }, { status: 404 });
@@ -59,8 +61,9 @@ export async function POST(req: NextRequest) {
 
     const runId = created.runId;
     const userId = session.id;
+    const origin = req.nextUrl.origin;
     after(async () => {
-      await executeAutomationRun({ runId, templateId, userId });
+      await runAndContinue({ runId, templateId, userId }, origin);
     });
 
     return NextResponse.json({

@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { Plus, DollarSign, Palette, Hash } from 'lucide-react';
 import { PodTemplateVariationConfig, TemplateVariationRow } from '@/types/templates';
-import { NotAppliedNote } from './NotAppliedNote';
 
 interface VariationSectionProps {
   config: PodTemplateVariationConfig;
@@ -98,9 +97,9 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
 
   return (
     <div className="space-y-4">
-      <NotAppliedNote>
-        Varyasyon ve fiyat matrisi şablonda saklanır; otomatik Etsy ilanı oluşturma eklendiğinde kullanılacak. Şimdilik çalıştırmalar ilan açmaz.
-      </NotAppliedNote>
+      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+        Etkin satırlar, otomasyonun açtığı taslak ilanın envanterine (beden × renk, fiyat, stok) aktarılır. Satır yoksa &quot;Etsy İlanı&quot; adımındaki fiyat kullanılır.
+      </p>
       {/* Görünüm Seçici */}
       <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
         {[

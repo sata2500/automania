@@ -49,3 +49,41 @@ export function clampListingsPerRun(value: unknown): number {
   const n = Math.floor(Number(value));
   return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : 1;
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+const floorToHour = (date: Date) => new Date(Math.floor(date.getTime() / HOUR_MS) * HOUR_MS);
+
+type ScheduleLike = { enabled?: boolean; cronExpression?: string; timezone?: string } | null | undefined;
+
+/**
+ * Son `lookbackHours` saat içinde zamanı gelmiş en yakın çalışma saatinin başlangıcı (yoksa null).
+ * Zamanlayıcı bir saati kaçırırsa (GitHub Actions gecikmesi/atlaması) sonraki tetiklemede telafi edilir;
+ * çağıran, bu andan sonra zaten bir çalıştırma oluşturulmuşsa tekrar oluşturmamalıdır.
+ */
+export function latestDueSlot(schedule: ScheduleLike, now: Date, lookbackHours = 3): Date | null {
+  if (!schedule?.enabled) return null;
+  const hours = parseScheduledHours(schedule.cronExpression || '');
+  if (hours.length === 0) return null;
+  const timeZone = schedule.timezone || 'UTC';
+  for (let back = 0; back <= lookbackHours; back++) {
+    const slot = floorToHour(new Date(now.getTime() - back * HOUR_MS));
+    const hour = hourInTimeZone(slot, timeZone);
+    if (hour !== null && hours.includes(hour)) return slot;
+  }
+  return null;
+}
+
+/** Bir sonraki planlı çalışma saati (en fazla 48 saat ileriye bakılır). */
+export function computeNextRunAt(schedule: ScheduleLike, now: Date): Date | null {
+  if (!schedule?.enabled) return null;
+  const hours = parseScheduledHours(schedule.cronExpression || '');
+  if (hours.length === 0) return null;
+  const timeZone = schedule.timezone || 'UTC';
+  const start = floorToHour(now).getTime() + HOUR_MS;
+  for (let ahead = 0; ahead < 48; ahead++) {
+    const slot = new Date(start + ahead * HOUR_MS);
+    const hour = hourInTimeZone(slot, timeZone);
+    if (hour !== null && hours.includes(hour)) return slot;
+  }
+  return null;
+}

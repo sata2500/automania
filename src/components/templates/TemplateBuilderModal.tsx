@@ -13,14 +13,16 @@ import {
   Check,
   Save,
   AlertCircle,
+  Store,
   
 } from 'lucide-react';
-import { PodTemplate, PodTemplateInput, TemplateVariationRow } from '@/types/templates';
+import { PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, TemplateVariationRow } from '@/types/templates';
 import { MockupItem } from '@/types/pod';
 import { MockupSelectorSection } from './sections/MockupSelectorSection';
 import { VariationSection } from './sections/VariationSection';
 import { SeoHintsSection } from './sections/SeoHintsSection';
 import { ScheduleSection } from './sections/ScheduleSection';
+import { EtsyListingSection, DEFAULT_ETSY_LISTING_SETTINGS } from './sections/EtsyListingSection';
 import { useToast } from '@/components/common/ToastContext';
 import { DialogPanel } from '@/components/common/DialogPanel';
 
@@ -31,13 +33,15 @@ interface TemplateBuilderModalProps {
   onClose: () => void;
 }
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
+const LAST_STEP: Step = 5;
 
 const STEPS = [
   { step: 1 as Step, label: 'Görseller', icon: ImageIcon, description: 'Mockup & Baskı Alanı' },
   { step: 2 as Step, label: 'Varyasyonlar', icon: Palette, description: 'Renk, Beden, Fiyat' },
   { step: 3 as Step, label: 'SEO İpuçları', icon: Tag, description: 'Ürün & Niş Bilgisi' },
-  { step: 4 as Step, label: 'Zamanlama', icon: Clock, description: 'Otomasyon Ayarları' },
+  { step: 4 as Step, label: 'Etsy İlanı', icon: Store, description: 'Taslak İlan & Mağaza Ayarları' },
+  { step: 5 as Step, label: 'Zamanlama', icon: Clock, description: 'Otomasyon Ayarları' },
 ];
 
 export function TemplateBuilderModal({
@@ -79,14 +83,18 @@ export function TemplateBuilderModal({
       primaryNiche: '',
     }
   );
-  const [automationSchedule, setAutomationSchedule] = useState(
+  const [automationSchedule, setAutomationSchedule] = useState<PodTemplateAutomationSchedule>(
     template?.automationSchedule ?? {
       enabled: false,
       cronExpression: '0 9 * * *',
       timezone: 'America/New_York',
-      nextRunAt: null as string | null,
+      nextRunAt: null,
       listingsPerRun: 1,
-      publishMode: 'draft' as 'draft' | 'active',
+      publishMode: 'draft',
+      // Yeni şablonlarda tam akış (SEO + taslak ilan) varsayılan; eski şablonlar kullanıcı açana kadar değişmez.
+      createListing: true,
+      generateVideo: false,
+      etsy: DEFAULT_ETSY_LISTING_SETTINGS,
     }
   );
 
@@ -105,7 +113,7 @@ export function TemplateBuilderModal({
     return errors;
   };
 
-  const allStepErrors = [1, 2, 3, 4].flatMap(s => getStepErrors(s as Step));
+  const allStepErrors = [1, 2, 3, 4, 5].flatMap(s => getStepErrors(s as Step));
   const currentErrors = getStepErrors(activeStep);
   const canProceed = currentErrors.length === 0;
 
@@ -244,6 +252,12 @@ export function TemplateBuilderModal({
             />
           )}
           {activeStep === 4 && (
+            <EtsyListingSection
+              schedule={automationSchedule}
+              onChange={setAutomationSchedule}
+            />
+          )}
+          {activeStep === 5 && (
             <ScheduleSection
               schedule={automationSchedule}
               onChange={setAutomationSchedule}
@@ -285,9 +299,9 @@ export function TemplateBuilderModal({
             ))}
           </div>
 
-          {activeStep < 4 ? (
+          {activeStep < LAST_STEP ? (
             <button
-              onClick={() => setActiveStep(s => Math.min(4, s + 1) as Step)}
+              onClick={() => setActiveStep(s => Math.min(LAST_STEP, s + 1) as Step)}
               disabled={!canProceed}
               className="flex items-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >

@@ -503,3 +503,23 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
 **Doğrulama:** 256 birim testi geçiyor (yeni: Range ayrıştırma, medya istek sınırı muafiyeti, yeşil perde eşdeğerliği). TypeScript temiz, ESLint'te hata yok. Üretim derlemesi ve E2E testleri (3/3) geçti. Tarayıcıda klavye testi: şablon penceresinde odak içeri taşınıyor, 40 Tab sonrası pencerede kalıyor, Escape kapatıyor; kartlar Tab ile odaklanabiliyor. Ana sekmeler ve admin ekranları telefon, tablet ve masaüstü genişliğinde taşmasız ve hatasız.
 
 **Kapsam dışı bırakılanlar:** Yüklemede küçük resim (thumbnail) üretimi, render'ın Web Worker/OffscreenCanvas'a taşınması, SEO context'inin bölünmesi ve Vision/optimizasyon sonuçlarının önbelleklenmesi.
+
+### Faz 5: Otomasyonun tamamlanması ✅ Tamamlandı (24 Ekim 2026)
+
+| Bulgu / Hedef | Yapılan |
+|---|---|
+| Servis katmanı | İlan metni üretimi (`listing-generator.ts`) ve Etsy taslak ilan oluşturma (`etsy-listing-service.ts`: taslak, kategori özellikleri, envanter, görsel/video yükleme) route'lardan ayrıldı. SEO stüdyosu ve otomasyon aynı kodu kullanıyor; mevcut yayın testleri değişmeden geçiyor. |
+| SEO ve ilan adımları "atlanıyordu" | Hat artık uçtan uca: AI tasarım → arka plan kaldırma → mockup render → (isteğe bağlı) video → SEO metni → **Etsy taslak ilanı**. SEO adımı şablonun niş/kitle/ürün bilgisi ve havuzdaki ilgili anahtar kelimelerle, stüdyodakiyle aynı marka (trademark) ve konu filtrelerinden geçerek üretiliyor. |
+| Şablonda Etsy ayarları yoktu | Sihirbaza "Etsy İlanı" adımı eklendi: kargo profili ve hazırlık süresi (mağazadan, açık seçim), iade politikası, mağaza bölümü, kategori, fiyat; "SEO + taslak ilan" ve "AI video" seçenekleri. Ayarlar mevcut `automation_schedule` alanında tutulduğu için veritabanı değişikliği gerekmedi. Eski şablonlar, kullanıcı açana kadar ilan açmaz (kuru çalıştırma). |
+| Yalnızca ilk mockup kullanılıyordu | Seçili tüm baskı alanlı mockup'lar kumaş filtresine göre render ediliyor (birden fazla baskı alanı dahil); statik görseller olduğu gibi ekleniyor; toplam 20 fotoğraf sınırı uygulanıyor. Görseller ilana JPEG olarak gidiyor. |
+| Video her çalıştırmada, ilandan bağımsızdı | Video yalnızca şablonda açılırsa üretiliyor; Google'dan indirilip kullanıcının depolamasına kopyalanıyor ve ilana ekleniyor. Video kapalıysa şablondaki video mockup'ı kullanılıyor. |
+| Prompt'u "SEO notları" eziyordu; kopya tasarımlar | Niş, kitle ve ürün tipi her zaman prompt'ta; notlar ek gereksinim olarak ekleniyor. Her çalıştırma farklı bir yaratıcı yönle başlıyor. |
+| 300 sn sınırında takılan çalıştırmalar | Hat devam ettirilebilir: her adım sonucu kaydediliyor, süre bütçesi dolunca çalıştırma `pending`e dönüp kaldığı yerden sürdürülüyor (iç token ile yeni çağrı, takip isteği veya saatlik zamanlayıcı). Video yalnızca yeterli süre kalmışsa başlatılıyor. Zaman aşımı "son güncelleme"ye göre ölçülüyor; "Şimdi Çalıştır" takılı çalıştırmayı kendisi kapatıyor. |
+| Mükerrer ilan riski | Aynı çalıştırma ikinci kez ilan açmaz (`etsyListingId` kontrolü). Otomasyon her zaman **taslak** açar; canlıya alma kullanıcıdadır. Her taslak denetim kaydına yazılıyor. |
+| İptal yoktu | "İptal et" düğmesi ve `/api/automation/cancel`. Süren adım biter, sonraki adımlar (ör. Etsy ilanı) başlamaz; son adımda iptal edilse bile durum "iptal edildi" kalır. |
+| Kaçırılan zamanlamalar | Zamanlayıcı son 3 saatte kaçırılan planlı saati bir kez telafi ediyor; aynı saat için ikinci çalıştırma açılmıyor. Kartta bir sonraki çalışma zamanı gösteriliyor. |
+| Çalıştırma sonucu görünmüyordu | "Ayrıntılar" penceresi: adım adım durum ve hata/atlama nedeni, uyarılar (ör. yüklenemeyen görsel), üretilen tasarım ve mockup'lar, SEO başlığı/etiketleri/açıklaması, "Etsy taslağını aç". Kartta şablonun modu (SEO + Etsy taslağı / Yalnızca görseller) ve AI video rozeti var. |
+
+**Doğrulama:** 272 birim testi geçiyor. Yeni testler: mockup seçimi ve kumaş filtresi, 20 görsel sınırı, prompt ve anahtar kelime üretimi, adım ilerleme ve sonuç, zamanlama telafisi ve sonraki çalışma (saat dilimiyle). Çalıştırıcı sahte veritabanıyla uçtan uca test edildi: tam akışta tek taslak ilan, devam eden çalıştırmada ikinci ilan açılmaması, kuru çalıştırma, eksik kargo ayarında anlaşılır atlama, Etsy reddinde başarısız durum, iptalin korunması. TypeScript ve ESLint temiz; üretim derlemesi ve E2E testleri (3/3) geçti; yeni sihirbaz adımı ve ayrıntılar penceresi telefon ve masaüstünde taşmasız.
+
+**Canlı ortamda yapılması gerekenler:** Gerçek Etsy mağazasıyla bir "Şimdi Çalıştır" denemesi (taslak ilan, görseller ve envanter Etsy panelinden kontrol edilmeli). `INTERNAL_API_TOKEN` tanımlanması önerilir; tanımlı değilse uzun çalıştırmalar şablon ekranı açıkken veya saatlik zamanlayıcıyla tamamlanır.

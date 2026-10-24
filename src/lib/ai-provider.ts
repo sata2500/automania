@@ -62,6 +62,8 @@ export interface GenerateVideoOptions {
   durationSeconds?: 5 | 8;
   aspectRatio?: '9:16' | '16:9' | '1:1';
   resolution?: '720p' | '1080p';
+  /** En fazla bekleme süresi (ms). Varsayılan 5 dakika; sunucu fonksiyonu süre sınırı için kısaltılabilir. */
+  maxWaitMs?: number;
 }
 
 export interface GeneratedImage {
@@ -342,7 +344,7 @@ export async function generateVideo(
   });
 
   // Polling (maksimum 5 dakika)
-  const maxAttempts = 30;
+  const maxAttempts = Math.max(1, Math.floor((options.maxWaitMs ?? 300_000) / 10_000));
   let attempts = 0;
 
   while (!operation.done && attempts < maxAttempts) {
@@ -352,7 +354,7 @@ export async function generateVideo(
   }
 
   if (!operation.done) {
-    throw new Error('Video üretimi zaman aşımına uğradı (5 dakika).');
+    throw new Error(`Video üretimi zaman aşımına uğradı (${Math.round((maxAttempts * 10) / 60)} dakika).`);
   }
 
   if (operation.error) {

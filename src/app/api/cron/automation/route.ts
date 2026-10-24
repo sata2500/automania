@@ -2,8 +2,9 @@
  * GET /api/cron/automation
  * =========================
  * Saatte bir çağrılan zamanlayıcı uç noktası (Vercel Cron veya harici zamanlayıcı).
- * - Uzun süredir takılı kalan çalıştırmaları 'failed' olarak kapatır.
- * - Zamanlaması bu saate denk gelen aktif şablonlar için çalıştırma oluşturur.
+ * - Uzun süredir ilerlemeyen çalıştırmaları 'failed' olarak kapatır.
+ * - Yarıda kalmış (süre bütçesi dolmuş) çalıştırmaları sürdürür.
+ * - Zamanı gelmiş aktif şablonlar için çalıştırma oluşturur; son 3 saatte kaçırılan bir saat varsa telafi eder.
  * `Authorization: Bearer <CRON_SECRET>` gerektirir; CRON_SECRET yoksa kapalıdır.
  */
 import { NextRequest, NextResponse, after } from 'next/server';
@@ -11,13 +12,14 @@ import { and, eq, gt, sql as dsql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
 import { isValidCronAuthorization } from '@/lib/internal-auth';
-import { clampListingsPerRun, isDueThisHour } from '@/lib/automation-schedule';
-import { createAutomationRun, dispatchAutomationRun, failStaleAutomationRuns } from '@/lib/automation-runner';
+import { clampListingsPerRun, latestDueSlot } from '@/lib/automation-schedule';
+import { createAutomationRun, dispatchAutomationRun, failStaleAutomationRuns, findResumableRuns } from '@/lib/automation-runner';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const DUPLICATE_WINDOW_MS = 50 * 60 * 1000;
+/** Zamanlayıcı bir saati kaçırırsa en fazla bu kadar geriye bakılarak telafi edilir. */
+const CATCH_UP_HOURS = 3;
 
 export async function GET(req: NextRequest) {
   if (!isValidCronAuthorization(req.headers.get('authorization'))) {
@@ -39,16 +41,18 @@ export async function GET(req: NextRequest) {
   const skipped: Array<{ templateId: string; reason: string }> = [];
 
   for (const template of templates) {
-    if (!isDueThisHour(template.schedule, now)) continue;
+    const slot = latestDueSlot(template.schedule, now, CATCH_UP_HOURS);
+    if (!slot) continue;
 
-    // Aynı saat diliminde ikinci kez tetiklenirse (yeniden deneme vb.) tekrar üretme
+    // Bu planlı saat için zaten çalıştırma oluşturulduysa (aynı saatte yeniden tetikleme veya
+    // önceki bir telafi) tekrar üretme.
     const [recent] = await db
       .select({ id: automationRuns.id })
       .from(automationRuns)
       .where(and(
         eq(automationRuns.templateId, template.id),
         eq(automationRuns.triggerType, 'scheduled'),
-        gt(automationRuns.createdAt, new Date(now.getTime() - DUPLICATE_WINDOW_MS)),
+        gt(automationRuns.createdAt, slot),
       ))
       .limit(1);
     if (recent) {
@@ -73,10 +77,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Yarıda kalmış veya hiç başlamamış eski çalıştırmalar da sürdürülür.
+  const createdIds = new Set(created.map((run) => run.runId));
+  const resumable = (await findResumableRuns(60, 10).catch(() => [])).filter((run) => !createdIds.has(run.runId));
+
   const origin = req.nextUrl.origin;
-  if (created.length > 0) {
+  const toDispatch = [...created, ...resumable];
+  if (toDispatch.length > 0) {
     after(async () => {
-      await Promise.allSettled(created.map((run) => dispatchAutomationRun(run, origin)));
+      await Promise.allSettled(toDispatch.map((run) => dispatchAutomationRun(run, origin)));
     });
   }
 
@@ -85,6 +94,7 @@ export async function GET(req: NextRequest) {
     checkedTemplates: templates.length,
     created: created.map(({ runId, templateId }) => ({ runId, templateId })),
     skipped,
+    resumed: resumable.map(({ runId }) => runId),
     staleClosed,
   });
 }
