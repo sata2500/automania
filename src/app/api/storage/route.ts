@@ -47,12 +47,13 @@ export async function GET(_request: Request) {
         etsyCustomSizes: userWorkspaces.etsyCustomSizes,
         etsyCustomColors: userWorkspaces.etsyCustomColors,
         etsyGeneratedMockups: userWorkspaces.etsyGeneratedMockups,
+        updatedAt: userWorkspaces.updatedAt,
       })
       .from(userWorkspaces)
       .where(eq(userWorkspaces.userId, userId));
 
     if (rows.length === 0) {
-      return NextResponse.json({ mockups: [], designs: [], folders: [] }, { status: 200 });
+      return NextResponse.json({ mockups: [], designs: [], folders: [], updatedAt: null }, { status: 200 });
     }
 
     const data = rows[0];
@@ -84,6 +85,8 @@ export async function GET(_request: Request) {
       etsyCustomSizes: data.etsyCustomSizes || [],
       etsyCustomColors: data.etsyCustomColors || [],
       etsyGeneratedMockups: data.etsyGeneratedMockups || [],
+      // İstemci bu sürümü sonraki kayıtta geri gönderir (iyimser eşzamanlılık kontrolü).
+      updatedAt: data.updatedAt ? new Date(data.updatedAt).getTime() : null,
     });
   } catch (error) {
     console.error('Storage GET Error:', error);
@@ -122,14 +125,17 @@ export async function POST(request: Request) {
       generation: body.modelGeneration || null
     }) : null;
 
-    const lastKnownServerTimestamp = body.lastKnownServerTimestamp ?? null;
+    const lastKnownServerTimestamp = body.lastKnownServerTimestamp;
 
     // 1. Optimistic Concurrency Control
-    if (lastKnownServerTimestamp) {
+    // Sürüm gönderen her istemci kontrol edilir; 0/null "sunucuda henüz veri görmedim" demektir
+    // ve mevcut bir çalışma alanının üzerine yazamaz. Alanı hiç göndermeyen eski istemciler etkilenmez.
+    if (lastKnownServerTimestamp !== undefined) {
+      const knownVersion = lastKnownServerTimestamp ?? 0;
       const checkRows = await db.select({ updatedAt: userWorkspaces.updatedAt }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
       if (checkRows.length > 0 && checkRows[0].updatedAt) {
         const serverTime = new Date(checkRows[0].updatedAt).getTime();
-        if (serverTime > lastKnownServerTimestamp + 2000) {
+        if (serverTime > knownVersion + 2000) {
           return NextResponse.json({ 
             success: false, 
             error: 'Conflict: Server has newer data.', 
@@ -176,17 +182,16 @@ export async function POST(request: Request) {
     if (has('etsyCustomColors')) updateData.etsyCustomColors = body.etsyCustomColors;
     if (has('etsyGeneratedMockups')) updateData.etsyGeneratedMockups = body.etsyGeneratedMockups;
 
-    await db.insert(userWorkspaces)
+    const updatedRows = await db.insert(userWorkspaces)
       .values(insertData)
       .onConflictDoUpdate({
         target: userWorkspaces.userId,
         set: updateData as Partial<WorkspaceInsert>
-      });
+      })
+      .returning({ updatedAt: userWorkspaces.updatedAt });
 
-    // Fetch the exact Postgres timestamp that was just saved
-    const updatedRows = await db.select({ updatedAt: userWorkspaces.updatedAt }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
-    const finalTimestamp = updatedRows.length > 0 && updatedRows[0].updatedAt 
-      ? new Date(updatedRows[0].updatedAt).getTime() 
+    const finalTimestamp = updatedRows[0]?.updatedAt
+      ? new Date(updatedRows[0].updatedAt).getTime()
       : Date.now();
 
     return NextResponse.json({ success: true, timestamp: finalTimestamp });
@@ -205,7 +210,7 @@ export async function DELETE(_request: Request) {
     }
     const userId = session.id;
     
-    await db.insert(userWorkspaces)
+    const deletedRows = await db.insert(userWorkspaces)
       .values({
         userId,
         mockups: [],
@@ -227,9 +232,11 @@ export async function DELETE(_request: Request) {
           etsyGeneratedMockups: [],
           updatedAt: new Date()
         }
-      });
+      })
+      .returning({ updatedAt: userWorkspaces.updatedAt });
 
-    return NextResponse.json({ success: true, timestamp: Date.now() });
+    const timestamp = deletedRows[0]?.updatedAt ? new Date(deletedRows[0].updatedAt).getTime() : Date.now();
+    return NextResponse.json({ success: true, timestamp });
   } catch (error) {
     console.error('Storage DELETE Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown delete error';

@@ -46,6 +46,7 @@ export async function storeEtsyTokens(input: {
   const refresh = sealSecret(input.refreshToken);
   const expiresAt = input.expiresAt.toISOString();
 
+  // updated_at çalışma alanı verisinin sürümüdür (istemci senkronu bunu izler); token yazımları onu değiştirmez.
   if (input.shopId !== undefined) {
     await sql`
       INSERT INTO user_workspaces (user_id, etsy_access_token, etsy_refresh_token, etsy_token_expires_at, etsy_shop_id, updated_at)
@@ -54,8 +55,7 @@ export async function storeEtsyTokens(input: {
         etsy_access_token = EXCLUDED.etsy_access_token,
         etsy_refresh_token = EXCLUDED.etsy_refresh_token,
         etsy_token_expires_at = EXCLUDED.etsy_token_expires_at,
-        etsy_shop_id = EXCLUDED.etsy_shop_id,
-        updated_at = CURRENT_TIMESTAMP
+        etsy_shop_id = EXCLUDED.etsy_shop_id
     `;
     return;
   }
@@ -64,8 +64,7 @@ export async function storeEtsyTokens(input: {
     UPDATE user_workspaces
     SET etsy_access_token = ${access},
         etsy_refresh_token = ${refresh},
-        etsy_token_expires_at = ${expiresAt},
-        updated_at = CURRENT_TIMESTAMP
+        etsy_token_expires_at = ${expiresAt}
     WHERE user_id = ${input.userId}
   `;
 }
@@ -152,8 +151,7 @@ export async function getValidEtsyToken(userId: string): Promise<EtsyTokenRespon
       UPDATE user_workspaces
       SET etsy_access_token = ${sealSecret(access_token)},
           etsy_refresh_token = ${sealSecret(refresh_token)},
-          etsy_token_expires_at = ${newExpiresAt},
-          updated_at = CURRENT_TIMESTAMP
+          etsy_token_expires_at = ${newExpiresAt}
       WHERE user_id = ${userId}
         AND etsy_refresh_token IS NOT DISTINCT FROM ${stored.etsy_refresh_token}
       RETURNING user_id

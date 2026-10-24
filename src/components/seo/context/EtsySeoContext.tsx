@@ -2,7 +2,7 @@
 import { getErrorMessage } from '@/lib/errors';
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { useToast } from '@/components/common/ToastContext';
-import { deleteBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
+import { deleteUnreferencedBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, EtsyVariationRow, EtsyVariationTemplate, EvaluatedKeyword, RenderedMatch } from '@/types/pod';
 import type {
   EtsyInventoryProduct,
@@ -275,9 +275,13 @@ function useEtsySeoState() {
     data.etsyGeneratedMockups = updated;
     await saveAppData(data);
 
-    // Kalıcı Olarak Vercel'dan Sil
+    // Dosya yalnızca başka hiçbir yerde (ör. kaynak video mockup'ı) kullanılmıyorsa silinir.
     if (mockupToDelete && mockupToDelete.previewUrl) {
-      deleteBlobs([mockupToDelete.previewUrl]).catch(console.error);
+      deleteUnreferencedBlobs([mockupToDelete.previewUrl], {
+        mockups: data.mockups,
+        designs: data.designs,
+        etsyGeneratedMockups: updated,
+      }).catch(console.error);
     }
     
     toast.success('Öğe klasörden kaldırıldı.');
@@ -312,9 +316,13 @@ function useEtsySeoState() {
     data.etsyGeneratedMockups = updated;
     await saveAppData(data);
     
-    // Kalıcı Olarak Vercel'dan Sil
+    // Dosyalar yalnızca başka hiçbir yerde (ör. kaynak video mockup'ı) kullanılmıyorsa silinir.
     if (urlsToDelete.length > 0) {
-      deleteBlobs(urlsToDelete).catch(console.error);
+      deleteUnreferencedBlobs(urlsToDelete, {
+        mockups: data.mockups,
+        designs: data.designs,
+        etsyGeneratedMockups: updated,
+      }).catch(console.error);
     }
 
     toast.success('Klasör silindi.');

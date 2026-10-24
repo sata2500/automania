@@ -68,10 +68,10 @@ export async function uploadMediaToServer(
       // Base64 or blob URL to File
       const res = await fetch(dataUrlOrFile);
       const blob = await res.blob();
-      let actualType = mimeType || blob.type || 'image/webp';
-      if (blob.type && blob.type.startsWith('video/')) {
-        actualType = blob.type;
-      }
+      // data:/blob: URL'nin kendi türü belirleyicidir; çağıranın verdiği değer yalnızca yedektir
+      // (yanlış değer — ör. dosya adı — yüklemenin 415/400 ile reddedilmesine yol açar).
+      const hintedType = mimeType && /^[a-z]+\/[\w.+-]+$/i.test(mimeType) ? mimeType : undefined;
+      const actualType = blob.type || hintedType || 'image/webp';
 
       let ext = 'webp';
       if (actualType.startsWith('video/')) {

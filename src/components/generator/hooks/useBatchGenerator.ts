@@ -308,12 +308,6 @@ export function useBatchGenerator({
       return;
     }
 
-    const currentData = await loadAppData();
-    if (!currentData) {
-      toast.error('Kullanıcı verisi yüklenemedi.');
-      return;
-    }
-
     setIsGenerating(true);
     setExportProgress(0);
     const uploadToastId = toast.progress('Görseller Etsy için hazırlanıyor...', 5);
@@ -322,6 +316,7 @@ export function useBatchGenerator({
       const updatedMatches: RenderedMatch[] = new Array(renderedMatches.length);
       let completedCount = 0;
       const concurrency = 4;
+      let aborted = false;
 
       const uploadItem = async (index: number) => {
         const match = renderedMatches[index];
@@ -338,6 +333,7 @@ export function useBatchGenerator({
             persistentUrl = await uploadMediaToServer(file, match.isVideo ? 'video/mp4' : 'image/webp', { requireDurable: true });
           } catch (e) {
             console.warn(`[Save for Etsy] Mockup #${index + 1} upload failed; durable storage is required:`, e);
+            aborted = true; // Diğer işçiler kuyruktaki yeni yüklemelere başlamasın
             throw e;
           }
         }
@@ -360,7 +356,7 @@ export function useBatchGenerator({
       // Run uploads in parallel with controlled concurrency
       const queue = Array.from({ length: renderedMatches.length }, (_, idx) => idx);
       const workers = Array.from({ length: Math.min(concurrency, renderedMatches.length) }, async () => {
-        while (queue.length > 0) {
+        while (queue.length > 0 && !aborted) {
           const nextIdx = queue.shift();
           if (nextIdx !== undefined) {
             await uploadItem(nextIdx);
@@ -370,13 +366,19 @@ export function useBatchGenerator({
 
       await Promise.all(workers);
 
+      // Yükleme uzun sürebileceği için çalışma alanı kayıttan hemen önce güncel haliyle okunur.
+      const currentData = await loadAppData();
+
       // Preserve mockups from other folders while updating current folder
       const currentEtsyMockups = currentData.etsyGeneratedMockups || [];
       const incomingFolderIds = new Set(updatedMatches.map((m) => m.folderId).filter(Boolean));
       const preservedMockups = currentEtsyMockups.filter((m) => !incomingFolderIds.has(m.folderId));
       currentData.etsyGeneratedMockups = [...preservedMockups, ...updatedMatches];
 
-      await saveAppData(currentData);
+      const saveResult = await saveAppData(currentData);
+      if (!saveResult.success) {
+        throw new Error(saveResult.message || 'Görseller yüklendi ancak çalışma alanına kaydedilemedi.');
+      }
 
       setRenderedMatches(updatedMatches);
       toast.removeToast(uploadToastId);
@@ -390,7 +392,7 @@ export function useBatchGenerator({
       } catch {}
 
       toast.success(
-        `${updatedMatches.length} görsel Etsy Yöneticisi için başarıyla kaydedildi! 'Etsy' sekmesinden ilan taslağınızı oluşturabilirsiniz.`
+        `${updatedMatches.length} görsel başarıyla kaydedildi! "4. Etsy SEO" sekmesinden ilan taslağınızı oluşturabilirsiniz.`
       );
     } catch (error: unknown) {
       console.error('Save for Etsy error:', getErrorMessage(error));

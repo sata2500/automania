@@ -18,13 +18,13 @@ import {
   clearAllAppData,
   exportAppDataFile,
   parseAppDataBackupFile,
-  migrateGuestWorkspaceToUser,
   AppDataPayload,
 } from '@/lib/storage-service';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { AuthModal } from '@/components/common/AuthModal';
 import { GuestMigrationBanner } from '@/components/common/GuestMigrationBanner';
 import { SyncStatusNotification } from '@/components/common/SyncStatusNotification';
+import { SaveStatusBanner } from '@/components/common/SaveStatusBanner';
 import { STORAGE_KEYS } from '@/config/constants';
 import { Sparkles, Info, User, X, LayoutTemplate } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
@@ -134,6 +134,10 @@ function MainContent() {
     isPwaInstalled,
     syncStatus,
     isMigrating,
+    saveStatus,
+    hasSaveConflict,
+    resolveSaveConflict,
+    retrySave,
   } = useWorkspace();
   const toast = useToast();
 
@@ -204,7 +208,13 @@ function MainContent() {
   };
 
   const handleClearAllData = async () => {
-    const data = await clearAllAppData();
+    let data: AppDataPayload;
+    try {
+      data = await clearAllAppData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Veriler temizlenemedi.', 'Temizleme Başarısız');
+      return;
+    }
     setMockups(data.mockups);
     setDesigns(data.designs);
     setFolders(data.folders);
@@ -216,38 +226,17 @@ function MainContent() {
     toast.success('Tüm veriler başarıyla temizlendi, boş çalışma alanı hazır.', 'Veriler Sıfırlandı');
   };
 
-  const handleMigrateGuestData = (payload?: AppDataPayload) => {
-    if (payload) {
-      setMockups(payload.mockups || []);
-      setDesigns(payload.designs || []);
-      setFolders(payload.folders || []);
-      setActiveFolderId(payload.activeFolderId || null);
-      setSelectedMockupId(payload.selectedMockupId || null);
-      if (payload.etsyGeneratedMockups && payload.etsyGeneratedMockups.length > 0) {
-        setRenderedMatches(payload.etsyGeneratedMockups);
-        setHasGenerated(true);
-      }
-    } else {
-      migrateGuestWorkspaceToUser({
-        mockups,
-        designs,
-        folders,
-        etsyGeneratedMockups: renderedMatches,
-      }).then((merged) => {
-        if (merged) {
-          setMockups(merged.mockups || []);
-          setDesigns(merged.designs || []);
-          setFolders(merged.folders || []);
-          setActiveFolderId(merged.activeFolderId || null);
-          setSelectedMockupId(merged.selectedMockupId || null);
-          if (merged.etsyGeneratedMockups && merged.etsyGeneratedMockups.length > 0) {
-            setRenderedMatches(merged.etsyGeneratedMockups);
-            setHasGenerated(true);
-          }
-          toast.success('Misafir taslaklarınız bu hesabınıza başarıyla aktarıldı!', 'Aktarım Tamamlandı');
-        }
-      });
+  const handleMigrateGuestData = (payload: AppDataPayload) => {
+    setMockups(payload.mockups || []);
+    setDesigns(payload.designs || []);
+    setFolders(payload.folders || []);
+    setActiveFolderId(payload.activeFolderId || null);
+    setSelectedMockupId(payload.selectedMockupId || null);
+    if (payload.etsyGeneratedMockups && payload.etsyGeneratedMockups.length > 0) {
+      setRenderedMatches(payload.etsyGeneratedMockups);
+      setHasGenerated(true);
     }
+    toast.success('Misafir taslaklarınız bu hesabınıza başarıyla aktarıldı!', 'Aktarım Tamamlandı');
   };
 
   const handleDismissGuestBanner = () => {
@@ -330,13 +319,21 @@ function MainContent() {
           </div>
         )}
 
+        {/* Bulut kaydı hatası veya başka cihazla sürüm çakışması */}
+        {user && (
+          <SaveStatusBanner
+            saveStatus={saveStatus}
+            hasConflict={hasSaveConflict}
+            onResolveConflict={resolveSaveConflict}
+            onRetry={() => { void retrySave(); }}
+          />
+        )}
+
         {/* Guest Data Migration Prompt for Signed-in Users with existing cloud data */}
         {user && (
           <GuestMigrationBanner
             currentMockups={mockups}
             currentDesigns={designs}
-            currentFolders={folders}
-            currentGeneratedMockups={renderedMatches}
             onMigrationComplete={handleMigrateGuestData}
           />
         )}
@@ -524,6 +521,7 @@ function MainContent() {
       {/* Auth Modal & Profile Management Modal */}
       <AuthModal
         isSaving={isSaving}
+        saveStatus={saveStatus}
         isBackupProcessing={isBackupProcessing}
         onExportBackup={handleExportBackup}
         onImportBackup={handleImportBackup}

@@ -405,3 +405,26 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
   - `listingsPerRun` 10 ↔ şema 5 uyuşmazlığı ve 22 ↔ 20 medya limiti
   - Görsel isteklerinin `/api/*` rate limit'ine dahil olması (`proxy.ts:36-49`)
 - Satır numaraları `32360d5` revizyonuna göredir.
+
+---
+
+## 10. Uygulama Durumu
+
+### Faz 1: Veri güvenliği ✅ Tamamlandı (24 Ekim 2026)
+
+| Bulgu | Yapılan |
+|---|---|
+| §1.1 #1: Birleştirme hesabın Etsy üretim sonuçlarını siliyordu | Birleştirme, hesabın verisini artık her zaman doğrudan sunucudan okuyor (istemci state'i kullanılmıyor). Misafir verisi yalnızca sunucu kaydı onaylandıktan sonra siliniyor. Hata olursa kullanıcıya gösteriliyor ve yerel taslaklar korunuyor. Aynı adlı klasörlerdeki öğeler hesaptaki klasöre taşınıyor. "Yalnızca Bulutu Kullan" artık onay istiyor. |
+| §1.1 #2: Çakışma koruması kapalıydı | Sunucu çalışma alanı sürümünü (`updatedAt`) döndürüyor; istemci bu sürümü tek bir kaynaktan, her kayıtta gönderiyor. Sürümü 0 olan ya da eski kalan istemci mevcut veriyi ezemiyor (409). Çakışmada "Buluttaki sürümü yükle / Bu cihazdakini kaydet" seçimi sunuluyor. Arka plan senkronu, bekleyen yerel değişiklik varken sunucu verisini uygulamıyor. Başka bir bileşen daha yeni veri okursa ana çalışma alanı da güncelleniyor. Etsy token yenilemeleri artık çalışma alanı sürümünü değiştirmiyor. |
+| §1.1 #3: Kayıt hataları görünmezdi | Her bulut kaydının sonucu yayınlanıyor. Hata ve çakışmalar ana sayfada uyarı olarak gösteriliyor ("Tekrar dene"). Ağ ve sunucu hatalarında kayıt 30 sn'de bir ve bağlantı gelince otomatik yeniden deneniyor. 3,8 MB sınırı aşılırsa neden ve kaç görselin tarayıcıda kaldığı yazıyor. Kaydedilmemiş değişiklik varken sayfa kapatılırsa uyarı çıkıyor. Hesap penceresi artık hatada "Güncel ✓" göstermiyor. |
+| §1.1 #4: AI tasarımları yüklenemiyordu | Yükleme MIME türünü dosyanın kendisinden alıyor. AI tasarımları kalıcı depolamaya yükleniyor (başarısızsa base64 olarak eklenmiyor, hata gösteriliyor). Gerçek boyut ve "Tüm Kumaşlar" hedefiyle kaydediliyor. Oturum açıkken tarayıcıda kalmış görseller kayıttan önce otomatik olarak buluta taşınıyor. |
+| §1.1 #5: Paylaşılan dosyalar siliniyordu | Mockup, tasarım ve Etsy klasörü silme ile kırpma işlemleri dosyayı yalnızca çalışma alanında başka hiçbir yerde kullanılmıyorsa siliyor. |
+| UI durumunun kayda girmesi | Klasör ve mockup seçimi artık sunucuya kayıt tetiklemiyor; yalnızca bu cihazda saklanıyor. |
+| Ek: Tüm verileri temizle | Önce sunucu siliniyor ve yanıt kontrol ediliyor; başarısızsa hiçbir şey silinmiyor. Dosyalar 100'lük parçalarla siliniyor. |
+| Ek: "Etsy'ye Gönder" | Kayıt sonucu kontrol ediliyor (başarısızsa konfeti yerine hata çıkıyor). İlk yükleme hatasında kuyruk duruyor. Çalışma alanı kayıttan hemen önce güncel haliyle okunuyor. |
+| Ek: Otomasyon çalıştırıcı | Yeni tasarım çalışma alanına atomik olarak ekleniyor (paralel çalıştırmalar birbirini silmiyor) ve sürüm güncelleniyor. |
+
+**Doğrulama:**
+- 215 birim testi geçiyor (yeni: OCC, kayıt durumu, birleştirme, referans kontrolü).
+- Sahte bir sunucuyla gerçek tarayıcıda 14 adımlık uçtan uca senkron senaryosu çalıştırıldı ve tamamı geçti: açılışta ve klasör tıklamasında gereksiz kayıt yok, doğru sürüm gönderiliyor, çakışma uyarısı çıkıyor ve veri ezilmiyor, bulut sürümü yükleniyor, hata görünür ve "Tekrar dene" çalışıyor, başka cihazın değişikliği alınıyor.
+- Proje E2E testleri (3/3) üretim derlemesine karşı geçti; mobil ve tablette taşma yok.

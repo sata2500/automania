@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
 import {
   loadAppData,
@@ -9,6 +9,15 @@ import {
   subscribeSyncStatus,
   getSyncStatus,
   SyncStatus,
+  subscribeSaveStatus,
+  getSaveStatus,
+  SaveStatus,
+  getKnownServerVersion,
+  setKnownServerVersion,
+  forceSyncFromServer,
+  countLocalOnlyMedia,
+  promoteTemporaryMediaUrls,
+  subscribeRemoteWorkspace,
 } from '@/lib/storage-service';
 import { get } from 'idb-keyval';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
@@ -53,6 +62,11 @@ export function useWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBackupProcessing, setIsBackupProcessing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(getSaveStatus);
+  /** Sunucuda daha yeni bir sürüm var; kullanıcı karar verene kadar buluta yazılmaz. */
+  const [hasSaveConflict, setHasSaveConflict] = useState(false);
+
+  useEffect(() => subscribeSaveStatus(setSaveStatus), []);
 
   // Subscribe to live synchronization and migration status
   useEffect(() => {
@@ -83,10 +97,34 @@ export function useWorkspace() {
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const lastSyncTimestampRef = useRef<number>(0);
-  const syncedFromServerRef = useRef<boolean>(false);
   const isSyncFetchingRef = useRef<boolean>(false);
   const isFirstRenderAfterInit = useRef<boolean>(true);
+  /** Sunucudan/önbellekten yüklenen son koleksiyonlar: bunlar değişmediyse tekrar kaydetmeye gerek yok. */
+  const loadedSnapshotRef = useRef<{ mockups: MockupItem[]; designs: DesignItem[]; folders: MockupFolder[] } | null>(null);
+  /** Henüz sunucuya ulaşmamış yerel değişiklik var mı (zamanlanmış ya da süren kayıt)? */
+  const hasPendingSaveRef = useRef<boolean>(false);
+  const isSaveInFlightRef = useRef<boolean>(false);
+  const needsRetryRef = useRef<boolean>(false);
+  const hasSaveConflictRef = useRef<boolean>(false);
+  /** Buluta taşınması denenmiş ama başarısız olmuş yerel (data:) görseller; her kayıtta tekrar denenmez. */
+  const failedPromotionsRef = useRef<Set<string>>(new Set());
+  const latestRef = useRef({ mockups, designs, folders, activeFolderId, selectedMockupId });
+  useEffect(() => {
+    latestRef.current = { mockups, designs, folders, activeFolderId, selectedMockupId };
+  });
+
+  /** Sunucudan gelen veriyi, otomatik kaydı tetiklemeden state'e uygular. */
+  const applyLoadedCollections = useCallback((data: { mockups?: MockupItem[]; designs?: DesignItem[]; folders?: MockupFolder[] }) => {
+    const snapshot = {
+      mockups: data.mockups || [],
+      designs: data.designs || [],
+      folders: data.folders || [],
+    };
+    loadedSnapshotRef.current = snapshot;
+    setMockups(snapshot.mockups);
+    setDesigns(snapshot.designs);
+    setFolders(snapshot.folders);
+  }, []);
 
   useEffect(() => {
     const preferenceTimer = window.setTimeout(() => {
@@ -126,9 +164,7 @@ export function useWorkspace() {
         ]);
 
         if (isMounted && (hasInit || (savedMockups && savedMockups.length > 0) || (savedDesigns && savedDesigns.length > 0))) {
-          setMockups(savedMockups || []);
-          setDesigns(savedDesigns || []);
-          setFolders(savedFolders || []);
+          applyLoadedCollections({ mockups: savedMockups, designs: savedDesigns, folders: savedFolders });
           setActiveFolderId(savedActiveFolder ?? null);
           setSelectedMockupId(savedSelectedMockup ?? (savedMockups?.[0]?.id || null));
           setActiveDesignFolderId(savedActiveDesignFolder ?? null);
@@ -143,9 +179,7 @@ export function useWorkspace() {
         const data = await loadAppData();
         if (!isMounted) return;
 
-        setMockups(data.mockups || []);
-        setDesigns(data.designs || []);
-        setFolders(data.folders || []);
+        applyLoadedCollections(data);
         setActiveFolderId(data.activeFolderId || null);
         setSelectedMockupId(data.selectedMockupId || null);
         setActiveDesignFolderId(data.activeDesignFolderId || null);
@@ -160,44 +194,153 @@ export function useWorkspace() {
 
     initializeWorkspace();
     return () => { isMounted = false; };
-  }, [initializationAttempt, user?.id]);
+  }, [initializationAttempt, user?.id, applyLoadedCollections]);
 
-  // Auto-save data
+  /** Güncel koleksiyonları kaydeder (yerel önbellek + bulut). Çakışma varken yalnızca yerel önbelleğe yazar. */
+  const persistNow = useCallback(async () => {
+    const current = latestRef.current;
+    const payload = {
+      mockups: current.mockups,
+      designs: current.designs,
+      folders: current.folders,
+      activeFolderId: current.activeFolderId,
+      selectedMockupId: current.selectedMockupId,
+    };
+
+    if (hasSaveConflictRef.current) {
+      await updateLocalCache(payload).catch(() => {});
+      hasPendingSaveRef.current = false;
+      setIsSaving(false);
+      return;
+    }
+
+    isSaveInFlightRef.current = true;
+
+    // Oturum açıkken tarayıcıda kalmış (data:) görselleri önce kalıcı depolamaya taşı. Aksi halde
+    // çalışma alanı bulut sınırını aşar ve hiçbir değişiklik kaydedilemez.
+    if (user && countLocalOnlyMedia(payload) > 0) {
+      const pending = {
+        ...payload,
+        mockups: payload.mockups.filter((m) => !failedPromotionsRef.current.has(m.src)),
+        designs: payload.designs.filter((d) => !failedPromotionsRef.current.has(d.src)),
+      };
+      if (countLocalOnlyMedia(pending) > 0) {
+        const promoted = await promoteTemporaryMediaUrls(pending);
+        const replacements = new Map<string, string>();
+        [...pending.mockups, ...pending.designs].forEach((item, index) => {
+          const next = index < pending.mockups.length ? promoted.payload.mockups[index] : promoted.payload.designs[index - pending.mockups.length];
+          if (item.src.startsWith('data:')) {
+            if (next && next.src !== item.src) replacements.set(item.src, next.src);
+            else failedPromotionsRef.current.add(item.src);
+          }
+        });
+        if (replacements.size > 0) {
+          isSaveInFlightRef.current = false;
+          // State güncellemesi yeni bir otomatik kaydı tetikler; o kayıt kalıcı URL'lerle yapılır.
+          setMockups((prev) => prev.map((m) => (replacements.has(m.src) ? { ...m, src: replacements.get(m.src)! } : m)));
+          setDesigns((prev) => prev.map((d) => (replacements.has(d.src) ? { ...d, src: replacements.get(d.src)! } : d)));
+          return;
+        }
+      }
+    }
+
+    const result = await saveAppData(payload);
+    isSaveInFlightRef.current = false;
+
+    // Kayıt sürerken yeni bir değişiklik zamanlandıysa bekleyen durumu o kayıt temizler.
+    if (!saveTimeoutRef.current) hasPendingSaveRef.current = false;
+    needsRetryRef.current = !result.success && (result.reason === 'network' || result.reason === 'server');
+    if (result.conflict) {
+      hasSaveConflictRef.current = true;
+      setHasSaveConflict(true);
+    }
+    setIsSaving(false);
+  }, [user]);
+
+  // Auto-save data. Yalnızca çalışma alanı verisi değişince çalışır; klasör/mockup seçimi gibi
+  // arayüz durumları aşağıdaki ayrı efektle yalnızca bu cihaza kaydedilir.
   useEffect(() => {
     if (!isInitialized) return;
     if (isFirstRenderAfterInit.current) {
       isFirstRenderAfterInit.current = false;
       return;
     }
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    if (syncedFromServerRef.current) {
-      syncedFromServerRef.current = false;
+    const snapshot = loadedSnapshotRef.current;
+    if (snapshot && snapshot.mockups === mockups && snapshot.designs === designs && snapshot.folders === folders) {
+      // Sunucudan/önbellekten yeni yüklenen veri: geri yazmaya gerek yok. Önceki çalıştırmanın
+      // zamanlanmış kaydı React temizliğinde iptal edildiği için bekleyen durum da sıfırlanır.
+      hasPendingSaveRef.current = false;
       setIsSaving(false);
       return;
     }
+    loadedSnapshotRef.current = null;
 
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    hasPendingSaveRef.current = true;
     setIsSaving(true);
-    saveTimeoutRef.current = setTimeout(async () => {
-      const result = await saveAppData({
-        mockups,
-        designs,
-        folders,
-        activeFolderId,
-        selectedMockupId,
-      }, lastSyncTimestampRef.current);
-
-      if (result.conflict) {
-        lastSyncTimestampRef.current = 0;
-      } else if (result.success && result.timestamp) {
-        lastSyncTimestampRef.current = result.timestamp;
-      }
-      setIsSaving(false);
-    }, 400);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      void persistNow();
+    }, TIMING.SAVE_DEBOUNCE_MS);
 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [mockups, designs, folders, activeFolderId, selectedMockupId, isInitialized]);
+  }, [mockups, designs, folders, isInitialized, persistNow]);
+
+  // Ağ/sunucu hatasıyla kaydedilemeyen değişiklikleri bağlantı gelince veya periyodik olarak yeniden dene.
+  useEffect(() => {
+    if (!isInitialized) return;
+    const retry = () => {
+      if (needsRetryRef.current && !isSaveInFlightRef.current && !saveTimeoutRef.current) {
+        void persistNow();
+      }
+    };
+    const interval = window.setInterval(retry, 30_000);
+    window.addEventListener('online', retry);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', retry);
+    };
+  }, [isInitialized, persistNow]);
+
+  // Kaydedilmemiş değişiklik varken sayfayı kapatmaya karşı uyar.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasPendingSaveRef.current && !needsRetryRef.current && !hasSaveConflictRef.current) return;
+      e.preventDefault();
+      e.returnValue = 'Kaydedilmemiş değişiklikleriniz var.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  /**
+   * Çakışmayı çözer. 'server': buluttaki sürümü yükler (bu cihazdaki kaydedilmemiş değişiklikler atılır).
+   * 'local': bu cihazdaki sürümü buluttakinin üzerine kaydeder.
+   */
+  const resolveSaveConflict = useCallback(async (choice: 'server' | 'local') => {
+    if (choice === 'server') {
+      const data = await forceSyncFromServer();
+      if (!data) return false;
+      hasSaveConflictRef.current = false;
+      setHasSaveConflict(false);
+      needsRetryRef.current = false;
+      hasPendingSaveRef.current = false;
+      applyLoadedCollections(data);
+      return true;
+    }
+
+    const res = await fetch('/api/storage/version', { cache: 'no-store' }).catch(() => null);
+    if (!res?.ok) return false;
+    const { updatedAt } = await res.json();
+    setKnownServerVersion(typeof updatedAt === 'number' ? updatedAt : null);
+    hasSaveConflictRef.current = false;
+    setHasSaveConflict(false);
+    await persistNow();
+    return !hasSaveConflictRef.current;
+  }, [applyLoadedCollections, persistNow]);
 
   // Auto-save UI state locally
   useEffect(() => {
@@ -208,34 +351,50 @@ export function useWorkspace() {
     return () => clearTimeout(uiSaveTimer);
   }, [activeFolderId, selectedMockupId, activeDesignFolderId, isInitialized]);
 
-  // Sync with server
+  // Başka bir bileşen sunucudan daha yeni veri okuduysa: bekleyen yerel değişiklik yoksa uygula,
+  // varsa kullanıcıya hangi sürümün korunacağını sor.
+  useEffect(() => {
+    if (!isInitialized) return;
+    return subscribeRemoteWorkspace((payload) => {
+      if (hasPendingSaveRef.current || isSaveInFlightRef.current) {
+        hasSaveConflictRef.current = true;
+        setHasSaveConflict(true);
+        return;
+      }
+      applyLoadedCollections(payload);
+    });
+  }, [isInitialized, applyLoadedCollections]);
+
+  // Sync with server: başka cihaz/sekmedeki değişiklikleri al. Bekleyen yerel değişiklik varken
+  // sunucu verisi uygulanmaz (aksi halde kullanıcının son düzenlemesi silinir).
   useEffect(() => {
     if (!isInitialized || !user) return;
     const interval = setInterval(async () => {
       if (isSyncFetchingRef.current || document.visibilityState === 'hidden') return;
+      if (hasPendingSaveRef.current || isSaveInFlightRef.current || hasSaveConflictRef.current) return;
       try {
-        const res = await fetch(`/api/storage/version?userId=${user.id}`);
+        const res = await fetch('/api/storage/version', { cache: 'no-store' });
         if (!res.ok) return;
         const { updatedAt } = await res.json();
         if (!updatedAt) return;
-        if (updatedAt > lastSyncTimestampRef.current + TIMING.SYNC_CLOCK_DRIFT_MS) {
+        if (updatedAt > getKnownServerVersion() + TIMING.SYNC_CLOCK_DRIFT_MS) {
           isSyncFetchingRef.current = true;
-          const dataRes = await fetch(`/api/storage?userId=${user.id}`);
+          const dataRes = await fetch('/api/storage', { cache: 'no-store' });
           if (dataRes.ok) {
             const serverData = await dataRes.json();
-            if (serverData && Array.isArray(serverData.mockups)) {
+            // İstek sürerken kullanıcı bir şey değiştirdiyse sunucu verisini uygulama.
+            if (serverData && Array.isArray(serverData.mockups) && !hasPendingSaveRef.current && !isSaveInFlightRef.current) {
+              const local = latestRef.current;
               const isServerEmpty = (serverData.mockups?.length || 0) === 0 && (serverData.designs?.length || 0) === 0;
-              if (isServerEmpty && (mockups.length > 0 || designs.length > 0)) {
-                // Do not overwrite non-empty local workspace with an empty server state during background sync
-                isSyncFetchingRef.current = false;
-                return;
+              if (!(isServerEmpty && (local.mockups.length > 0 || local.designs.length > 0))) {
+                setKnownServerVersion(typeof serverData.updatedAt === 'number' ? serverData.updatedAt : updatedAt);
+                applyLoadedCollections(serverData);
+                await updateLocalCache({
+                  ...serverData,
+                  activeFolderId: local.activeFolderId,
+                  selectedMockupId: local.selectedMockupId,
+                });
               }
-              syncedFromServerRef.current = true;
-              setMockups(serverData.mockups || []);
-              setDesigns(serverData.designs || []);
-              setFolders(serverData.folders || []);
-              lastSyncTimestampRef.current = updatedAt;
-              await updateLocalCache(serverData);
             }
           }
           isSyncFetchingRef.current = false;
@@ -245,7 +404,7 @@ export function useWorkspace() {
       }
     }, TIMING.SYNC_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isInitialized, user]);
+  }, [isInitialized, user, applyLoadedCollections]);
 
   return {
     folders, setFolders,
@@ -266,6 +425,10 @@ export function useWorkspace() {
     isPwaInfoDismissed, setIsPwaInfoDismissed,
     isPwaInstalled, setIsPwaInstalled,
     syncStatus,
+    saveStatus,
+    hasSaveConflict,
+    resolveSaveConflict,
+    retrySave: persistNow,
     isSyncing: syncStatus.isSyncing,
     isMigrating: syncStatus.isMigrating,
     syncMessage: syncStatus.message,

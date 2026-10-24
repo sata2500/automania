@@ -2,6 +2,7 @@ import { get, set, del } from 'idb-keyval';
 import { uploadMediaToServer } from './image-optimizer';
 import { downloadBlob } from './download';
 import { MockupItem, DesignItem, MockupFolder, RenderedMatch, EtsyVariationTemplate } from '@/types/pod';
+import { filterUnreferencedUrls, mergeGuestIntoAccount, type WorkspaceCollections } from './workspace-merge';
 
 export interface SyncStatus {
   isSyncing: boolean;
@@ -75,11 +76,115 @@ export function notifySyncStatus(status: Partial<SyncStatus>) {
 let inFlightMigrationPromise: Promise<AppDataPayload | null> | null = null;
 let inFlightSyncPromise: Promise<AppDataPayload | null> | null = null;
 
+// ─── Sunucu sürümü (iyimser eşzamanlılık) ────────────────────────────────────
+// Bu sekmenin sunucuda en son gördüğü çalışma alanı sürümü (updated_at, ms). Tüm kayıtlar
+// bu değeri gönderir; sunucu daha yeni bir sürüm görürse 409 döner ve veri ezilmez.
+let knownServerVersion = { userId: '', version: 0 };
+
+export function getKnownServerVersion(): number {
+  return knownServerVersion.userId === getCurrentUserId() ? knownServerVersion.version : 0;
+}
+
+export function setKnownServerVersion(version: number | null | undefined): void {
+  knownServerVersion = {
+    userId: getCurrentUserId(),
+    version: typeof version === 'number' && Number.isFinite(version) ? version : 0,
+  };
+}
+
+// Başka bir bileşen (ör. SEO stüdyosu) sunucudan daha yeni bir çalışma alanı okuduğunda ana çalışma
+// alanı state'i de haberdar edilir; aksi halde sürüm "görüldü" sayılır ama ekrandaki veri eski kalır
+// ve sonraki kayıt diğer cihazın değişikliğini ezer.
+type RemoteWorkspaceListener = (payload: AppDataPayload) => void;
+const remoteWorkspaceListeners = new Set<RemoteWorkspaceListener>();
+
+export function subscribeRemoteWorkspace(listener: RemoteWorkspaceListener): () => void {
+  remoteWorkspaceListeners.add(listener);
+  return () => {
+    remoteWorkspaceListeners.delete(listener);
+  };
+}
+
+function notifyRemoteWorkspace(payload: AppDataPayload) {
+  remoteWorkspaceListeners.forEach((listener) => {
+    try {
+      listener(payload);
+    } catch (e) {
+      console.error('[Workspace] Remote workspace listener error:', e);
+    }
+  });
+}
+
+// ─── Kayıt durumu ────────────────────────────────────────────────────────────
+export type SaveFailureReason = 'conflict' | 'too_large' | 'network' | 'server' | 'temporary_media' | 'unauthorized';
+
+export interface SaveStatus {
+  state: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+  message: string;
+  reason?: SaveFailureReason;
+  at: number;
+}
+
+export interface SaveResult {
+  success: boolean;
+  conflict?: boolean;
+  timestamp?: number;
+  reason?: SaveFailureReason;
+  message?: string;
+}
+
+type SaveStatusListener = (status: SaveStatus) => void;
+const saveStatusListeners = new Set<SaveStatusListener>();
+let currentSaveStatus: SaveStatus = { state: 'idle', message: '', at: 0 };
+
+export function getSaveStatus(): SaveStatus {
+  return currentSaveStatus;
+}
+
+export function subscribeSaveStatus(listener: SaveStatusListener): () => void {
+  saveStatusListeners.add(listener);
+  listener(currentSaveStatus);
+  return () => {
+    saveStatusListeners.delete(listener);
+  };
+}
+
+function emitSaveStatus(status: Omit<SaveStatus, 'at'>) {
+  currentSaveStatus = { ...status, at: Date.now() };
+  saveStatusListeners.forEach((listener) => {
+    try {
+      listener(currentSaveStatus);
+    } catch (e) {
+      console.error('[SaveStatus] Listener error:', e);
+    }
+  });
+}
+
+/** Sunucuya yazılamayan (tarayıcıda yerel duran) data: URL'li öğe sayısı. */
+export function countLocalOnlyMedia(payload: Partial<AppDataPayload>): number {
+  const isData = (value: unknown) => typeof value === 'string' && value.startsWith('data:');
+  return (payload.mockups || []).filter((m) => isData(m.src)).length
+    + (payload.designs || []).filter((d) => isData(d.src)).length
+    + (payload.etsyGeneratedMockups || []).filter((g) => isData(g.previewUrl)).length;
+}
+
+export const MAX_SYNC_PAYLOAD_BYTES = 3.8 * 1024 * 1024;
+
+function formatMegabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+}
+
+/** data: URL'nin gerçek MIME türü (yoksa yedek değer). */
+export function mimeTypeOfDataUrl(value: string, fallback: string): string {
+  const match = /^data:([^;,]+)[;,]/.exec(value);
+  return match?.[1] || fallback;
+}
+
 function isTemporaryMediaUrl(value: unknown): value is string {
   return typeof value === 'string' && (value.startsWith('blob:') || value.startsWith('data:'));
 }
 
-async function promoteTemporaryMediaUrls(
+export async function promoteTemporaryMediaUrls(
   payload: AppDataPayload,
   onProgress?: (current: number, total: number) => void
 ): Promise<{ payload: AppDataPayload; changed: boolean }> {
@@ -99,7 +204,8 @@ async function promoteTemporaryMediaUrls(
   const promote = async (value: string, mimeType: string): Promise<string> => {
     if (!isTemporaryMediaUrl(value)) return value;
     try {
-      const promotedUrl = await uploadMediaToServer(value, mimeType, { requireDurable: false });
+      const actualMime = value.startsWith('data:') ? mimeTypeOfDataUrl(value, mimeType) : mimeType;
+      const promotedUrl = await uploadMediaToServer(value, actualMime, { requireDurable: true });
       completedItems++;
       if (totalTemporaryItems > 0 && onProgress) {
         onProgress(completedItems, totalTemporaryItems);
@@ -170,6 +276,30 @@ export function getStorageKeys(overrideUserId?: string | null) {
 }
 
 /**
+ * Oturum açmış kullanıcının çalışma alanını doğrudan sunucudan okur ve bilinen sunucu sürümünü günceller.
+ * Okunamazsa null döner (çağıran, eksik veriyle yazma yapmamalıdır).
+ */
+async function fetchServerWorkspace(): Promise<(WorkspaceCollections & { updatedAt: number | null }) | null> {
+  try {
+    const res = await fetch('/api/storage', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.mockups)) return null;
+    const updatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : null;
+    setKnownServerVersion(updatedAt);
+    return {
+      mockups: data.mockups || [],
+      designs: data.designs || [],
+      folders: data.folders || [],
+      etsyGeneratedMockups: data.etsyGeneratedMockups || [],
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Checks if there is draft data in the guest workspace (e.g. created before signing in).
  */
 export async function getGuestWorkspace(): Promise<AppDataPayload | null> {
@@ -231,6 +361,8 @@ export async function clearGuestWorkspace(): Promise<void> {
 
 /**
  * Migrates local guest workspace items (mockups, designs, folders, generated mockups) into the signed-in user's account.
+ * Returns null when there is nothing to migrate; throws when the merge could not be persisted
+ * (the guest workspace is then kept intact so the user can retry).
  */
 export async function migrateGuestWorkspaceToUser(
   currentUserPayload?: Partial<AppDataPayload>
@@ -254,69 +386,19 @@ export async function migrateGuestWorkspaceToUser(
         progress: 10,
       });
 
-      const userKeys = getStorageKeys();
-      let existingMockups = currentUserPayload?.mockups;
-      let existingDesigns = currentUserPayload?.designs;
-      let existingFolders = currentUserPayload?.folders;
-      let existingGenerated = currentUserPayload?.etsyGeneratedMockups;
-
-      if (existingMockups === undefined || existingDesigns === undefined || existingFolders === undefined || existingGenerated === undefined) {
-        const [savedMockups, savedDesigns, savedFolders, savedGenerated] = await Promise.all([
-          get<MockupItem[]>(userKeys.MOCKUPS),
-          get<DesignItem[]>(userKeys.DESIGNS),
-          get<MockupFolder[]>(userKeys.FOLDERS),
-          get<RenderedMatch[]>(userKeys.ETSY_GENERATED_MOCKUPS),
-        ]);
-        if (existingMockups === undefined) existingMockups = savedMockups || [];
-        if (existingDesigns === undefined) existingDesigns = savedDesigns || [];
-        if (existingFolders === undefined) existingFolders = savedFolders || [];
-        if (existingGenerated === undefined) existingGenerated = savedGenerated || [];
+      // Hesabın mevcut verisi her zaman sunucudan okunur. İstemci state'i (ör. yalnızca bellekte tutulan
+      // toplu üretim sonuçları) eksik olabileceği için kaynak olarak kullanılmaz; aksi halde birleştirme
+      // hesabın kayıtlı verisinin üzerine yazar.
+      const account = await fetchServerWorkspace();
+      if (!account) {
+        throw new Error('Bulut hesabınızdaki veriler okunamadı. Bağlantınızı kontrol edip tekrar deneyin.');
       }
 
-      const currentMockups = existingMockups || [];
-      const currentDesigns = existingDesigns || [];
-      const currentFolders = existingFolders || [];
-      const currentGenerated = existingGenerated || [];
-
-      // Merge folders without duplicate names
-      const mergedFolders = [...currentFolders];
-      for (const gf of guestData.folders || []) {
-        if (!mergedFolders.some(f => f.id === gf.id || f.name === gf.name)) {
-          mergedFolders.push(gf);
-        }
-      }
-
-      // Merge mockups without duplicate IDs
-      const mergedMockups = [...currentMockups];
-      for (const gm of guestData.mockups || []) {
-        if (!mergedMockups.some(m => m.id === gm.id || (m.src && gm.src && m.src === gm.src))) {
-          mergedMockups.push(gm);
-        }
-      }
-
-      // Merge designs without duplicate IDs
-      const mergedDesigns = [...currentDesigns];
-      for (const gd of guestData.designs || []) {
-        if (!mergedDesigns.some(d => d.id === gd.id || (d.src && gd.src && d.src === gd.src))) {
-          mergedDesigns.push(gd);
-        }
-      }
-
-      // Merge generated mockups without duplicate IDs
-      const mergedGenerated = [...currentGenerated];
-      for (const gg of guestData.etsyGeneratedMockups || []) {
-        if (!mergedGenerated.some(g => g.id === gg.id)) {
-          mergedGenerated.push(gg);
-        }
-      }
-
+      const merged = mergeGuestIntoAccount(account, guestData);
       let mergedPayload: AppDataPayload = {
-        mockups: mergedMockups,
-        designs: mergedDesigns,
-        folders: mergedFolders,
-        etsyGeneratedMockups: mergedGenerated,
+        ...merged,
         activeFolderId: guestData.activeFolderId || currentUserPayload?.activeFolderId || null,
-        selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (mergedMockups[0]?.id || null),
+        selectedMockupId: guestData.selectedMockupId || currentUserPayload?.selectedMockupId || (merged.mockups[0]?.id || null),
         lastUpdated: Date.now(),
       };
 
@@ -341,9 +423,13 @@ export async function migrateGuestWorkspaceToUser(
         message: 'Verileriniz bulut hesabınıza kaydediliyor...',
         progress: 92,
       });
-      await saveAppData(mergedPayload);
+      const saveResult = await saveAppData(mergedPayload);
+      if (!saveResult.success) {
+        // Misafir verisi silinmez; kullanıcı daha sonra yeniden deneyebilir.
+        throw new Error(saveResult.message || 'Birleştirilen veriler buluta kaydedilemedi.');
+      }
 
-      // 3. Clear guest workspace so migration prompt doesn't trigger again
+      // 3. Clear guest workspace only after the server confirmed the merge
       await clearGuestWorkspace();
 
       notifySyncStatus({
@@ -359,10 +445,10 @@ export async function migrateGuestWorkspaceToUser(
       notifySyncStatus({
         isSyncing: false,
         isMigrating: false,
-        message: 'Aktarım sırasında bir hata oluştu.',
+        message: '',
         progress: 0,
       });
-      return null;
+      throw err instanceof Error ? err : new Error('Aktarım sırasında bir hata oluştu.');
     } finally {
       inFlightMigrationPromise = null;
     }
@@ -409,10 +495,14 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
 
   inFlightSyncPromise = (async () => {
     try {
-      const res = await fetch('/api/storage');
+      const res = await fetch('/api/storage', { cache: 'no-store' });
       if (res.ok) {
         const serverData = await res.json();
         if (serverData && (Array.isArray(serverData.mockups) || Array.isArray(serverData.designs) || Array.isArray(serverData.folders))) {
+          const previousVersion = getKnownServerVersion();
+          const serverVersion = typeof serverData.updatedAt === 'number' ? serverData.updatedAt : null;
+          const isNewerThanSeen = previousVersion > 0 && serverVersion !== null && serverVersion > previousVersion + 2000;
+          setKnownServerVersion(serverVersion);
           const keys = getStorageKeys();
           // Check if user has local items in IndexedDB
           const [
@@ -462,9 +552,14 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
                 (guestData.designs?.length || 0) > 0 ||
                 (guestData.etsyGeneratedMockups?.length || 0) > 0)
             ) {
-              const migrated = await migrateGuestWorkspaceToUser();
-              if (migrated) {
-                return migrated;
+              try {
+                const migrated = await migrateGuestWorkspaceToUser();
+                if (migrated) {
+                  return migrated;
+                }
+              } catch (migrationError) {
+                // Misafir verisi korunur; birleştirme banner'ı üzerinden yeniden denenebilir.
+                console.warn('[Workspace] Automatic guest migration failed:', migrationError);
               }
             }
           }
@@ -505,6 +600,7 @@ export async function forceSyncFromServer(): Promise<AppDataPayload | null> {
 
           // Write the fresh server data back to local IndexedDB
           await saveToIndexedDB(payload);
+          if (isNewerThanSeen) notifyRemoteWorkspace(payload);
 
           if (serverData.modelVision) {
             try { localStorage.setItem('automania_model_vision', serverData.modelVision); } catch {}
@@ -623,15 +719,45 @@ export async function loadSampleAppData(): Promise<AppDataPayload> {
  */
 export async function deleteBlobs(urls: string[]): Promise<void> {
   if (!urls || urls.length === 0) return;
-  try {
-    await fetch('/api/storage/blob', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
-    });
-  } catch (err) {
-    console.error('Failed to delete blobs:', err);
+  const unique = [...new Set(urls.filter(Boolean))];
+  // Sunucu tek istekte en fazla 100 URL kabul eder.
+  for (let i = 0; i < unique.length; i += 100) {
+    try {
+      await fetch('/api/storage/blob', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: unique.slice(i, i + 100) }),
+      });
+    } catch (err) {
+      console.error('Failed to delete blobs:', err);
+    }
   }
+}
+
+/**
+ * Dosyaları yalnızca işlem sonrasında çalışma alanının başka hiçbir yerinde kullanılmıyorsa siler.
+ * `remaining`, çağıranın değiştirdiği koleksiyonların işlem SONRASI halidir; verilmeyen koleksiyonlar
+ * yerel önbellekten (sunucunun son bilinen hali) okunur.
+ */
+export async function deleteUnreferencedBlobs(
+  urls: Iterable<string>,
+  remaining: Partial<WorkspaceCollections>,
+): Promise<string[]> {
+  const keys = getStorageKeys();
+  const [cachedMockups, cachedDesigns, cachedGenerated] = await Promise.all([
+    remaining.mockups ? Promise.resolve(remaining.mockups) : get<MockupItem[]>(keys.MOCKUPS).catch(() => undefined),
+    remaining.designs ? Promise.resolve(remaining.designs) : get<DesignItem[]>(keys.DESIGNS).catch(() => undefined),
+    remaining.etsyGeneratedMockups
+      ? Promise.resolve(remaining.etsyGeneratedMockups)
+      : get<RenderedMatch[]>(keys.ETSY_GENERATED_MOCKUPS).catch(() => undefined),
+  ]);
+  const deletable = filterUnreferencedUrls(urls, {
+    mockups: cachedMockups || [],
+    designs: cachedDesigns || [],
+    etsyGeneratedMockups: cachedGenerated || [],
+  });
+  await deleteBlobs(deletable);
+  return deletable;
 }
 
 /**
@@ -640,23 +766,38 @@ export async function deleteBlobs(urls: string[]): Promise<void> {
 export async function clearAllAppData(): Promise<AppDataPayload> {
   const keys = getStorageKeys();
   const userId = getCurrentUserId();
+  const isSignedIn = Boolean(userId && userId !== 'default_user');
+
+  // 1. Önce sunucudaki çalışma alanı silinir. Başarısız olursa hiçbir şey silinmez; aksi halde
+  //    dosyalar silinip sunucu kaydı kalır ve kırık görseller oluşur.
+  if (isSignedIn) {
+    const res = await fetch('/api/storage', { method: 'DELETE' }).catch(() => null);
+    if (!res?.ok) {
+      throw new Error('Buluttaki veriler silinemedi. Hiçbir veri silinmedi; lütfen tekrar deneyin.');
+    }
+    const body = await res.json().catch(() => ({} as { timestamp?: number }));
+    setKnownServerVersion(typeof body.timestamp === 'number' ? body.timestamp : null);
+  }
+
   try {
-    // Toplayıp sileceğimiz remote HTTP blob'ları bulalım (base64/data URL'ler sunucuya gönderilmez)
+    // 2. Kalıcı medya dosyaları (data: URL'ler sunucuda değil, tarayıcıdadır)
     const [mockups, designs, generatedMockups] = await Promise.all([
       get<MockupItem[]>(keys.MOCKUPS),
       get<DesignItem[]>(keys.DESIGNS),
       get<RenderedMatch[]>(keys.ETSY_GENERATED_MOCKUPS),
     ]);
-    
+
+    const isStoredMedia = (url?: string) => Boolean(url && (/^https?:\/\//.test(url) || url.startsWith('/api/')));
     const urlsToDelete: string[] = [];
-    if (mockups) mockups.forEach(m => { if (m.src && (m.src.startsWith('http://') || m.src.startsWith('https://'))) urlsToDelete.push(m.src); });
-    if (designs) designs.forEach(d => { if (d.src && (d.src.startsWith('http://') || d.src.startsWith('https://'))) urlsToDelete.push(d.src); });
-    if (generatedMockups) generatedMockups.forEach(item => { if (item.previewUrl && (item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://'))) urlsToDelete.push(item.previewUrl); });
-    
-    if (urlsToDelete.length > 0) {
-      await deleteBlobs(Array.from(new Set(urlsToDelete))).catch(() => {});
+    mockups?.forEach((m) => { if (isStoredMedia(m.src)) urlsToDelete.push(m.src); });
+    designs?.forEach((d) => { if (isStoredMedia(d.src)) urlsToDelete.push(d.src); });
+    generatedMockups?.forEach((item) => { if (isStoredMedia(item.previewUrl)) urlsToDelete.push(item.previewUrl); });
+
+    if (isSignedIn && urlsToDelete.length > 0) {
+      await deleteBlobs(urlsToDelete).catch(() => {});
     }
 
+    // 3. Yerel önbellek
     await Promise.all([
       del(keys.MOCKUPS),
       del(keys.DESIGNS),
@@ -688,10 +829,6 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
       del('automania_etsy_custom_colors_v1'),
       set(keys.HAS_INITIALIZED, true),
     ]);
-
-    if (userId && userId !== 'default_user') {
-      await fetch(`/api/storage?userId=${userId}`, { method: 'DELETE' }).catch(() => {});
-    }
   } catch (err) {
     console.error('Failed to clear storage:', err);
   }
@@ -709,65 +846,91 @@ export async function clearAllAppData(): Promise<AppDataPayload> {
 }
 
 /**
- * Saves current application state to IndexedDB and syncs asynchronously with Server API.
+ * Saves current application state to IndexedDB and syncs with the Server API.
+ * Every server write carries the last server version this tab has seen; if another device or tab
+ * saved in between, the server answers 409 and nothing is overwritten. The outcome is published
+ * through `subscribeSaveStatus` so failures are never silent.
  */
 export async function saveAppData(
   payload: AppDataPayload,
   lastKnownServerTimestamp?: number
-): Promise<{ success: boolean; conflict?: boolean; timestamp?: number }> {
+): Promise<SaveResult> {
   const userId = getCurrentUserId();
   try {
     // 1. ALWAYS save to IndexedDB first (Client side instant persistence for guest & signed-in users)
     await saveToIndexedDB(payload);
+  } catch (err) {
+    console.error('Error saving app data locally:', err);
+    const message = 'Değişiklikler bu cihaza kaydedilemedi (tarayıcı depolama alanı dolu olabilir).';
+    emitSaveStatus({ state: 'error', reason: 'server', message });
+    return { success: false, reason: 'server', message };
+  }
 
-    // 2. If guest user (not logged in), IndexedDB is their sole permanent storage.
-    if (!userId || userId === 'default_user') {
-      return { success: true };
-    }
+  // 2. If guest user (not logged in), IndexedDB is their sole permanent storage.
+  if (!userId || userId === 'default_user') {
+    return { success: true };
+  }
 
-    // Sync to Server side API (Disk persistence)
-    const query = `?userId=${userId}`;
-    
-    // UI state'lerini (activeFolderId, selectedMockupId) sunucuya gönderme! Sadece yerel cihazda kalsın.
-    const dataPayload = Object.fromEntries(
-      Object.entries(payload).filter(([key]) => key !== 'activeFolderId' && key !== 'selectedMockupId')
-    ) as Omit<AppDataPayload, 'activeFolderId' | 'selectedMockupId'>;
-    
-    const payloadString = JSON.stringify({
-      ...dataPayload,
-      lastUpdated: Date.now(),
-      lastKnownServerTimestamp,
+  // UI state'lerini (activeFolderId, selectedMockupId) sunucuya gönderme! Sadece yerel cihazda kalsın.
+  const dataPayload = Object.fromEntries(
+    Object.entries(payload).filter(([key]) => key !== 'activeFolderId' && key !== 'selectedMockupId' && key !== 'activeDesignFolderId')
+  ) as Omit<AppDataPayload, 'activeFolderId' | 'selectedMockupId'>;
+
+  const payloadString = JSON.stringify({
+    ...dataPayload,
+    lastUpdated: Date.now(),
+    lastKnownServerTimestamp: lastKnownServerTimestamp ?? getKnownServerVersion(),
+  });
+
+  // Vercel Serverless Limit is 4.5MB. Sync is refused above the limit and the user is told why.
+  if (payloadString.length > MAX_SYNC_PAYLOAD_BYTES) {
+    const localOnly = countLocalOnlyMedia(payload);
+    const message = `Çalışma alanınız bulut sınırını aşıyor (${formatMegabytes(payloadString.length)} MB / ${formatMegabytes(MAX_SYNC_PAYLOAD_BYTES)} MB).`
+      + (localOnly > 0 ? ` ${localOnly} görsel henüz buluta yüklenmemiş ve tarayıcıda duruyor.` : '')
+      + ' Değişiklikleriniz şimdilik yalnızca bu cihazda saklanıyor.';
+    console.warn('Sync aborted: payload exceeds the server limit.');
+    emitSaveStatus({ state: 'error', reason: 'too_large', message });
+    return { success: false, reason: 'too_large', message };
+  }
+
+  emitSaveStatus({ state: 'saving', message: 'Kaydediliyor...' });
+
+  try {
+    const res = await fetch(`/api/storage?userId=${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payloadString,
     });
 
-    // Vercel Serverless Limit is 4.5MB. Prevent sync if JSON is too heavy (e.g., contains raw base64 images from old caches)
-    if (payloadString.length > 3.8 * 1024 * 1024) {
-      console.warn('Sync aborted: Payload exceeds 3.8MB Vercel limit. Please delete large local designs or clear cache.');
-      return { success: false };
+    if (res.status === 409) {
+      const message = 'Çalışma alanınız başka bir cihazda veya sekmede değiştirildi. Üzerine yazılmaması için kayıt durduruldu.';
+      emitSaveStatus({ state: 'conflict', reason: 'conflict', message });
+      return { success: false, conflict: true, reason: 'conflict', message };
     }
 
-    try {
-      const res = await fetch(`/api/storage${query}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payloadString,
-      });
-      
-      if (res.status === 409) {
-        return { success: false, conflict: true };
-      }
-      
-      if (res.ok) {
-        const responseData = await res.json();
-        return { success: true, timestamp: responseData.timestamp };
-      }
-      return { success: false };
-    } catch (err) {
-      console.warn('Server sync background warning:', err);
-      return { success: false };
+    if (res.ok) {
+      const responseData = await res.json();
+      if (typeof responseData.timestamp === 'number') setKnownServerVersion(responseData.timestamp);
+      emitSaveStatus({ state: 'saved', message: 'Tüm değişiklikler kaydedildi' });
+      return { success: true, timestamp: responseData.timestamp };
     }
+
+    const errorBody = await res.json().catch(() => ({} as { error?: string; code?: string }));
+    const reason: SaveFailureReason = res.status === 401 ? 'unauthorized'
+      : errorBody.code === 'TEMPORARY_MEDIA_URL' ? 'temporary_media'
+      : 'server';
+    const message = reason === 'unauthorized'
+      ? 'Oturumunuz sona erdi. Değişikliklerin buluta kaydedilmesi için yeniden giriş yapın.'
+      : reason === 'temporary_media'
+        ? 'Bazı görseller henüz buluta yüklenmediği için kayıt yapılamadı.'
+        : `Sunucu geçici bir hata verdi (HTTP ${res.status}). Değişiklikleriniz bu cihazda saklandı ve otomatik olarak yeniden denenecek.`;
+    emitSaveStatus({ state: 'error', reason, message });
+    return { success: false, reason, message };
   } catch (err) {
-    console.error('Error saving app data:', err);
-    return { success: false };
+    console.warn('Server sync background warning:', err);
+    const message = 'Sunucuya ulaşılamadı. Değişiklikler bu cihazda saklandı; bağlantı gelince yeniden kaydedilecek.';
+    emitSaveStatus({ state: 'error', reason: 'network', message });
+    return { success: false, reason: 'network', message };
   }
 }
 

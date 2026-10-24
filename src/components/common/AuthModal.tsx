@@ -14,12 +14,16 @@ import {
   Sparkles,
   Trash2,
   Database,
+  AlertTriangle,
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
+import type { SaveStatus } from '@/lib/storage-service';
 
 
 interface AuthModalProps {
   isSaving?: boolean;
+  /** Son bulut kaydının sonucu; hata/çakışma varsa "güncel" gösterilmez. */
+  saveStatus?: SaveStatus;
   isBackupProcessing?: boolean;
   onExportBackup?: () => void;
   onImportBackup?: (file: File) => void;
@@ -30,6 +34,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isSaving = false,
+  saveStatus,
   isBackupProcessing = false,
   onExportBackup,
   onImportBackup,
@@ -130,7 +135,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Kişisel Bulut Veritabanı</span>
               </div>
               <div className="flex items-center space-x-1.5 text-xs font-medium">
-                {isSaving ? (
+                {saveStatus && (saveStatus.state === 'error' || saveStatus.state === 'conflict') ? (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <span className="text-red-600 dark:text-red-400 text-[11px] font-semibold" title={saveStatus.message}>
+                      {saveStatus.state === 'conflict' ? 'Sürüm Çakışması' : 'Kaydedilemedi'}
+                    </span>
+                  </>
+                ) : isSaving ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 text-amber-500 animate-spin" />
                     <span className="text-amber-500 text-[11px] font-semibold">Buluta Eşitleniyor...</span>

@@ -20,7 +20,7 @@ export const SyncStatusNotification: React.FC<SyncStatusNotificationProps> = ({ 
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-5 right-5 z-50 max-w-sm w-full pointer-events-auto px-3 sm:px-0 animate-in fade-in slide-in-from-bottom-4 duration-300"
+      className="fixed bottom-[calc(env(safe-area-inset-bottom)+92px)] lg:bottom-5 right-0 sm:right-5 z-50 max-w-sm w-full pointer-events-auto px-3 sm:px-0 animate-in fade-in slide-in-from-bottom-4 duration-300"
     >
       <div
         className={`relative overflow-hidden rounded-2xl border p-4 shadow-2xl backdrop-blur-xl transition-all duration-500 ${

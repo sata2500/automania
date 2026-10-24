@@ -46,6 +46,16 @@ interface AIDesignGeneratorModalProps {
 
 // ─── Bileşen ──────────────────────────────────────────────────────────────────
 
+/** Görselin gerçek piksel boyutları (okunamazsa üretim varsayılanı 1024). */
+function readImageSize(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth || 1024, height: img.naturalHeight || 1024 });
+    img.onerror = () => resolve({ width: 1024, height: 1024 });
+    img.src = src;
+  });
+}
+
 export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
   isOpen,
   onClose,
@@ -165,17 +175,22 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
         // data URL oluştur
         const dataUrl = `data:${finalMime};base64,${finalData}`;
 
-        // Blob storage'a yükle
-        const src = await uploadMediaToServer(dataUrl, `ai-design-${Date.now()}.png`);
+        // Kalıcı depolamaya yükle. Başarısız olursa görsel base64 olarak çalışma alanına eklenmez;
+        // aksi halde çalışma alanı bulut sınırını aşar ve senkron durur.
+        const [src, size] = await Promise.all([
+          uploadMediaToServer(dataUrl, finalMime, { requireDurable: true }),
+          readImageSize(dataUrl),
+        ]);
 
         const designItem: DesignItem = {
           id: `design-ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           name: `AI Tasarım — ${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}`,
           src,
-          width: 1024,
-          height: 1024,
+          width: size.width,
+          height: size.height,
           folderId: activeDesignFolderId ?? undefined,
-          isProductionActive: false,
+          targetApparel: 'both',
+          isSelected: false,
           createdAt: Date.now(),
           tags: [],
           generatedByAI: true,

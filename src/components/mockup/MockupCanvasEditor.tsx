@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
-import { deleteBlobs } from '@/lib/storage-service';
+import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
@@ -178,9 +178,11 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         const urlsToDelete = mockups
           .filter((m) => selectedIds.includes(m.id) && m.src)
           .map((m) => m.src);
+        const remaining = mockups.filter((m) => !selectedIds.includes(m.id));
 
+        // Çoğaltılmış klasörler aynı dosyayı paylaşır: yalnızca artık hiçbir yerde kullanılmayanlar silinir.
         if (urlsToDelete.length > 0) {
-          deleteBlobs(urlsToDelete);
+          void deleteUnreferencedBlobs(urlsToDelete, { mockups: remaining });
         }
 
         setMockups((prev) => prev.filter((m) => !selectedIds.includes(m.id)));
@@ -203,7 +205,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         message: 'Bu mockup kalıcı olarak silinecektir. Devam etmek istiyor musunuz?',
         onConfirm: () => {
           if (target.src) {
-            deleteBlobs([target.src]);
+            void deleteUnreferencedBlobs([target.src], { mockups: mockups.filter((m) => m.id !== id) });
           }
           setMockups((prev) => prev.filter((m) => m.id !== id));
           if (selectedMockupId === id) {
@@ -343,7 +345,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             .map((m) => m.src);
 
           if (urlsToDelete.length > 0) {
-            deleteBlobs(urlsToDelete);
+            void deleteUnreferencedBlobs(urlsToDelete, { mockups: mockups.filter((m) => m.folderId !== folderId) });
           }
 
           setMockupFolders((prev) => prev.filter((f) => f.id !== folderId));
@@ -371,8 +373,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           console.warn('Direct R2 upload skipped or failed:', e);
         }
 
-        if (oldSrc && oldSrc !== finalSrc && oldSrc.startsWith('http')) {
-          deleteBlobs([oldSrc]).catch(() => {});
+        if (oldSrc && oldSrc !== finalSrc) {
+          const nextMockups = mockups.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m));
+          void deleteUnreferencedBlobs([oldSrc], { mockups: nextMockups }).catch(() => {});
         }
 
         setMockups((prev) =>
@@ -385,7 +388,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         toast.error('Kırpılan görsel kaydedilemedi.');
       }
     },
-    [selectedMockup, setMockups, toast]
+    [selectedMockup, mockups, setMockups, toast]
   );
 
   // Common Settings Panel Props

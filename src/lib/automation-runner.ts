@@ -7,7 +7,7 @@
  */
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeGreenBackground } from '@/lib/chroma-key';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
@@ -115,14 +115,17 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
       promptUsed: finalPrompt,
     };
 
-    const [workspace] = await db.select().from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
-    if (workspace) {
-      await db.update(userWorkspaces)
-        .set({ designs: [...((workspace.designs as DesignItem[]) || []), newDesign] })
-        .where(eq(userWorkspaces.userId, userId));
-    } else {
-      await db.insert(userWorkspaces).values({ userId, designs: [newDesign] });
-    }
+    // Atomik ekleme: eşzamanlı çalıştırmalar birbirinin tasarımını silmez; updated_at değiştiği için
+    // açık istemciler yeni tasarımı senkronla görür.
+    await db.insert(userWorkspaces)
+      .values({ userId, designs: [newDesign], updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: userWorkspaces.userId,
+        set: {
+          designs: drizzleSql`COALESCE(${userWorkspaces.designs}, '[]'::jsonb) || ${JSON.stringify([newDesign])}::jsonb`,
+          updatedAt: new Date(),
+        },
+      });
 
     steps.backgroundRemoval = { status: 'completed', completedAt: new Date().toISOString() };
     await updateRunState({ steps, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url });
@@ -136,6 +139,10 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
     if (targetMockupId) {
       try {
         const { renderDesignOnMockup } = await import('@/lib/backend-render');
+        const [workspace] = await db
+          .select({ mockups: userWorkspaces.mockups })
+          .from(userWorkspaces)
+          .where(eq(userWorkspaces.userId, userId));
         const mockups = (workspace?.mockups as MockupItem[] | undefined) ?? [];
         const targetMockup = mockups.find((m) => m.id === targetMockupId);
 

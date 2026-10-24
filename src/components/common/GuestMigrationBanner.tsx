@@ -6,21 +6,17 @@ import { useToast } from './ToastContext';
 import { getGuestWorkspace, migrateGuestWorkspaceToUser, clearGuestWorkspace, AppDataPayload } from '@/lib/storage-service';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-import { MockupItem, DesignItem, MockupFolder, RenderedMatch } from '@/types/pod';
+import { MockupItem, DesignItem } from '@/types/pod';
 
 interface GuestMigrationBannerProps {
   currentMockups?: MockupItem[];
   currentDesigns?: DesignItem[];
-  currentFolders?: MockupFolder[];
-  currentGeneratedMockups?: RenderedMatch[];
   onMigrationComplete?: (payload: AppDataPayload) => void;
 }
 
 export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   currentMockups = [],
   currentDesigns = [],
-  currentFolders = [],
-  currentGeneratedMockups = [],
   onMigrationComplete,
 }) => {
   const { user } = useAuth();
@@ -28,6 +24,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   const [guestData, setGuestData] = useState<AppDataPayload | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -53,9 +50,9 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [user, currentMockups.length, currentDesigns.length, currentGeneratedMockups.length]);
+  }, [user, currentMockups.length, currentDesigns.length]);
 
-  const hasAccountData = currentMockups.length > 0 || currentDesigns.length > 0 || currentGeneratedMockups.length > 0;
+  const hasAccountData = currentMockups.length > 0 || currentDesigns.length > 0;
 
   // Do not show merge banner if user is logged out, no guest data, dismissed, or if account is completely empty (auto-migrated)
   if (!user || !guestData || isDismissed || !hasAccountData) return null;
@@ -74,12 +71,8 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   const handleMigrate = async () => {
     setIsMigrating(true);
     try {
-      const merged = await migrateGuestWorkspaceToUser({
-        mockups: currentMockups,
-        designs: currentDesigns,
-        folders: currentFolders,
-        etsyGeneratedMockups: currentGeneratedMockups,
-      });
+      // Hesabın mevcut verisi birleştirme sırasında sunucudan okunur.
+      const merged = await migrateGuestWorkspaceToUser();
       if (merged) {
         if (onMigrationComplete) {
           onMigrationComplete(merged);
@@ -88,7 +81,8 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
       }
     } catch (err) {
       console.error('Migration failed:', err);
-      toast.error('Taslaklar birleştirilirken bir sorun oluştu.', 'Hata');
+      const detail = err instanceof Error ? err.message : '';
+      toast.error(`${detail ? `${detail} ` : ''}Yerel taslaklarınız silinmedi; tekrar deneyebilirsiniz.`, 'Birleştirme Başarısız');
     } finally {
       setIsMigrating(false);
     }
@@ -99,8 +93,13 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   };
 
   const handleClearGuest = async () => {
+    if (!confirmClear) {
+      setConfirmClear(true);
+      return;
+    }
     await clearGuestWorkspace();
     setGuestData(null);
+    setConfirmClear(false);
   };
 
   return (
@@ -126,7 +125,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+          <div className="flex flex-wrap justify-end items-center gap-2 self-end sm:self-center shrink-0">
             <button
               onClick={handleMigrate}
               disabled={isMigrating}
@@ -139,10 +138,14 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
 
             <button
               onClick={handleClearGuest}
-              className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-              title="Yalnızca bulut hesabındaki verileri kullan"
+              className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                confirmClear
+                  ? 'bg-red-600 hover:bg-red-500 text-white border-red-600'
+                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+              }`}
+              title="Yalnızca bulut hesabındaki verileri kullan (yerel taslaklar bu cihazdan silinir)"
             >
-              Yalnızca Bulutu Kullan
+              {confirmClear ? 'Yerel taslaklar silinsin mi? Evet' : 'Yalnızca Bulutu Kullan'}
             </button>
 
             <button

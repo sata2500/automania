@@ -5,7 +5,7 @@ import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
 import { optimizeDesignImage } from '@/lib/image-optimizer';
-import { deleteBlobs } from '@/lib/storage-service';
+import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 
 // Modular Hooks
 import { useDesignUpload } from './hooks/useDesignUpload';
@@ -174,7 +174,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   const deleteDesign = (id: string) => {
     const target = designs.find((d) => d.id === id);
     if (target?.src) {
-      deleteBlobs([target.src]);
+      void deleteUnreferencedBlobs([target.src], { designs: designs.filter((d) => d.id !== id) });
     }
     setDesigns((prev) => prev.filter((d) => d.id !== id));
     setSelectedDesignIds((prev) => prev.filter((x) => x !== id));
@@ -191,7 +191,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         const targets = designs.filter((d) => selectedDesignIds.includes(d.id));
         const blobsToDelete = targets.map((t) => t.src).filter(Boolean);
         if (blobsToDelete.length > 0) {
-          deleteBlobs(blobsToDelete);
+          void deleteUnreferencedBlobs(blobsToDelete, { designs: designs.filter((d) => !selectedDesignIds.includes(d.id)) });
         }
 
         setDesigns((prev) => prev.filter((d) => !selectedDesignIds.includes(d.id)));
@@ -209,7 +209,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     const optimized = await optimizeDesignImage(croppedDataUrl, 2000);
     const serverUrl = optimized.url || optimized.dataUrl;
     if (oldSrc && oldSrc !== serverUrl) {
-      deleteBlobs([oldSrc]);
+      const nextDesigns = designs.map((d) => (d.id === cropTargetDesign.id ? { ...d, src: serverUrl } : d));
+      void deleteUnreferencedBlobs([oldSrc], { designs: nextDesigns });
     }
     setDesigns((prev) =>
       prev.map((d) =>
