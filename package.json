@@ -38,13 +38,13 @@
     "jose": "^6.2.8",
     "jszip": "^3.10.1",
     "lucide-react": "^1.28.0",
-    "next": "16.3.8",
+    "next": "^16.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "serwist": "^9.5.12",
     "sharp": "^0.35.5",
     "sql.js": "^1.14.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -58,10 +58,13 @@
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "^16.4.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.7",
     "typescript": "^5",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "zod": "$zod"
   }
 }
