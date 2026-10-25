@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Layers, RefreshCw, CheckCircle, ShoppingBag, Send, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { Spinner } from '@/components/common/Spinner';
 
 export const VariationControlsBar: React.FC = () => {
   const [showAllColors, setShowAllColors] = useState(false);
@@ -67,7 +68,7 @@ export const VariationControlsBar: React.FC = () => {
             disabled={isFetchingListings || isFetchingInventory}
             className="flex-1 sm:flex-none text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
           >
-            {isFetchingListings || isFetchingInventory ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
+            {isFetchingListings || isFetchingInventory ? <Spinner className="w-3.5 h-3.5" /> : <ShoppingBag className="w-3.5 h-3.5" />}
             Etsy&apos;den Şablon İlan Çek
           </button>
           <button

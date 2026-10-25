@@ -82,7 +82,7 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow transition-opacity"
+              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow transition-opacity"
             >
               {isEditing ? 'Kaydet' : 'Oluştur'}
             </button>

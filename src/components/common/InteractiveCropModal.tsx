@@ -274,7 +274,7 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
           <button
             onClick={handleSave}
             disabled={isSaving || !previewUrl}
-            className="px-5 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-opacity"
+            className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-opacity"
           >
             <Check className="w-4 h-4" />
             <span>{isSaving ? 'Kaydediliyor...' : 'Kırpmayı Kaydet & Uygula'}</span>

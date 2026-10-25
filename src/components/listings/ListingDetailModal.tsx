@@ -32,6 +32,8 @@ import type { SeoEvaluationResult, VisionAnalysisData } from '@/lib/etsy-seo-eva
 import { parseJsonObject } from '@/lib/json-utils';
 import { isLivePublishEnabled, LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
+import { formatListingState } from '@/lib/etsy-format';
 
 interface ListingDetailModalProps {
   listing: StoredEtsyListing | null;
@@ -43,10 +45,10 @@ interface ListingDetailModalProps {
 }
 
 const STATE_LABELS: Record<string, string> = {
-  active: '🟢 Aktif (mağazada satışta)',
-  inactive: '⏸️ Pasif (yayında değil)',
-  draft: '📝 Taslak',
-  sold_out: '📦 Tükendi',
+  active: 'Aktif (mağazada satışta)',
+  inactive: 'Pasif (yayında değil)',
+  draft: 'Taslak',
+  sold_out: 'Tükendi',
   expired: '⌛ Süresi doldu',
 };
 
@@ -341,28 +343,28 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <DialogPanel aria-labelledby="listing-detail-title" onClose={onClose} className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <DialogPanel aria-labelledby="listing-detail-title" onClose={onClose} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/70 shrink-0">
           <div className="flex items-center space-x-3 min-w-0">
-            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shrink-0">
               <img src={imageUrl} alt={listing.title ?? undefined} className="w-full h-full object-cover" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono uppercase bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                <span className="text-[11px] font-mono uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">
                   ID: #{listing.listing_id}
                 </span>
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase ${
                   listing.state === 'active' 
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
-                    : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
+                    : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30'
                 }`}>
-                  {listing.state === 'active' ? 'Aktif (Live)' : listing.state}
+                  {listing.state === 'active' ? 'Aktif (yayında)' : formatListingState(listing.state)}
                 </span>
               </div>
-              <h3 id="listing-detail-title" className="text-sm sm:text-base font-bold text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title ?? undefined}>
+              <h3 id="listing-detail-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate max-w-md sm:max-w-xl mt-0.5" title={listing.title ?? undefined}>
                 {listing.title || 'Başlıksız İlan'}
               </h3>
             </div>
@@ -374,7 +376,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 href={listing.url}
                 target="_blank"
                 rel="noreferrer"
-                className="hidden sm:flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg transition-all"
+                className="hidden sm:flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg transition-all"
               >
                 <span>Etsy&apos;de Aç</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -382,7 +384,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800/60 hover:bg-slate-800 transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg bg-slate-100/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -390,13 +392,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 sm:px-6 gap-2 overflow-x-auto shrink-0">
+        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-950/40 px-4 sm:px-6 gap-2 overflow-x-auto shrink-0">
           <button
             onClick={() => setActiveTab('seo')}
             className={`py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'seo'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                : 'border-transparent text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <TrendingUp className="w-4 h-4" />
@@ -407,8 +409,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             onClick={() => setActiveTab('vision')}
             className={`py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'vision'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Eye className="w-4 h-4" />
@@ -419,8 +421,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             onClick={() => setActiveTab('optimize')}
             className={`py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'optimize'
-                ? 'border-purple-500 text-purple-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-purple-500 text-purple-600 dark:text-purple-400'
+                : 'border-transparent text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Sparkles className="w-4 h-4" />
@@ -431,8 +433,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             onClick={() => setActiveTab('edit')}
             className={`py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'edit'
-                ? 'border-teal-500 text-teal-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-teal-500 text-teal-600 dark:text-teal-400'
+                : 'border-transparent text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Send className="w-4 h-4" />
@@ -443,8 +445,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         {/* Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
           {isDetailLoading && (
-            <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/70 border border-slate-700 text-xs text-slate-300">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100/70 dark:bg-slate-800/70 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
+              <Spinner className="w-3.5 h-3.5" />
               İlan ayrıntıları (açıklama, SEO analizi, AI önerileri) yükleniyor…
             </div>
           )}
@@ -454,7 +456,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             <div className="space-y-6">
               {/* Score Header Card */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col items-center justify-center text-center">
+                <div className="p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center">
                   <span className="text-xs text-slate-400 font-medium">Toplam SEO Skoru</span>
                   <div className="flex items-baseline gap-2 mt-2">
                     <span className={`text-4xl font-extrabold ${getScoreColor(score)} px-3 py-1 rounded-xl border`}>
@@ -463,21 +465,21 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <span className="text-sm text-slate-500 font-bold">/100</span>
                   </div>
                   <span className="text-xs font-mono mt-2 text-slate-400">
-                    Not Derecesi: <strong className="text-white">{grade}</strong>
+                    Not Derecesi: <strong className="text-slate-900 dark:text-white">{grade}</strong>
                   </span>
                 </div>
 
-                <div className="md:col-span-3 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">SEO Puan Dağılımı</h4>
+                <div className="md:col-span-3 p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">SEO Puan Dağılımı</h4>
                   
                   {/* Breakdown Bars */}
                   <div className="space-y-2.5">
                     <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-                        <span>🏷️ 13 Etiket & Kelime Havuzu Kalitesi</span>
+                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        <span>13 Etiket & Kelime Havuzu Kalitesi</span>
                         <span>{evaluation.breakdown?.tagsScore ?? 0} / 40 Puan</span>
                       </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                           style={{ width: `${((evaluation.breakdown?.tagsScore ?? 0) / 40) * 100}%` }}
@@ -486,11 +488,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-                        <span>📝 Başlık Uzunluğu & Odak Kelimeler</span>
+                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        <span>Başlık Uzunluğu & Odak Kelimeler</span>
                         <span>{evaluation.breakdown?.titleScore ?? 0} / 35 Puan</span>
                       </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-blue-500 rounded-full transition-all duration-500"
                           style={{ width: `${((evaluation.breakdown?.titleScore ?? 0) / 35) * 100}%` }}
@@ -499,11 +501,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-                        <span>📄 Açıklama & Bölüm Zenginliği</span>
+                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        <span>Açıklama & Bölüm Zenginliği</span>
                         <span>{evaluation.breakdown?.descriptionScore ?? 0} / 25 Puan</span>
                       </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-purple-500 rounded-full transition-all duration-500"
                           style={{ width: `${((evaluation.breakdown?.descriptionScore ?? 0) / 25) * 100}%` }}
@@ -515,16 +517,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               </div>
 
               {/* TAG & KEYWORD POOL MATRIX CARD */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
+                    <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/20">
                       <Tag className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <span>Etiket & Kelime Havuzu Fırsat Puanları Matrisi</span>
-                        <span className="text-[11px] font-mono bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700">
+                        <span className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-700">
                           {Array.isArray(evaluation.tagBreakdown) ? evaluation.tagBreakdown.length : (Array.isArray(listing.tags) ? listing.tags.length : 0)} / 13 Etiket
                         </span>
                       </h4>
@@ -539,14 +541,14 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     disabled={isSeoScraping}
                     className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSeoScraping ? 'animate-spin' : ''}`} />
-                    <span>{isSeoScraping ? 'Havuz Taranıyor...' : '🔄 Etiketleri Havuzda Yeniden Tara'}</span>
+                    {isSeoScraping ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    <span>{isSeoScraping ? 'Havuz Taranıyor...' : 'Etiketleri Havuzda Yeniden Tara'}</span>
                   </button>
                 </div>
 
                 {/* Tag Breakdown Grid */}
                 {(!evaluation.tagBreakdown || evaluation.tagBreakdown.length === 0) ? (
-                  <div className="text-center py-6 text-xs text-slate-500 bg-slate-900/50 rounded-xl border border-dashed border-slate-800">
+                  <div className="text-center py-6 text-xs text-slate-500 bg-white/50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
                     <p>Etiket analizi henüz hesaplanmadı. Lütfen yukarıdaki &quot;Etiketleri Havuzda Yeniden Tara&quot; butonuna tıklayın.</p>
                   </div>
                 ) : (
@@ -560,40 +562,40 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       return (
                         <div
                           key={idx}
-                          className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between gap-2 text-xs"
+                          className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between gap-2 text-xs"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className="text-[10px] font-mono font-bold text-slate-500">#{idx + 1}</span>
-                              <span className="font-bold text-white truncate" title={t.keyword}>
+                              <span className="font-bold text-slate-900 dark:text-white truncate" title={t.keyword}>
                                 {t.keyword}
                               </span>
                             </div>
                             <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border shrink-0 ${
                               isHigh
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                                 : isMid
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
                                 : isLow
-                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                                ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'
                             }`}>
                               {scoreVal > 0 ? `${scoreVal} Puan` : 'Taranmamış'}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5 mt-0.5">
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200 dark:border-slate-800/80 pt-1.5 mt-0.5">
                             <span className="truncate text-[10px]">
                               {t.competitionLevel || (t.totalListings ? `${t.totalListings.toLocaleString()} İlan` : 'Havuzda Mevcut')}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {(t.bestsellerCount ?? 0) > 0 && (
-                                <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30 px-1.5 py-0.2 rounded font-medium" title="Bestseller Kanıtı">
-                                  🔥 Bestseller
+                                <span className="text-[10px] bg-orange-500/20 text-orange-700 dark:text-orange-300 border border-orange-500/30 px-1.5 py-0.2 rounded font-medium" title="Bestseller Kanıtı">
+                                  Bestseller
                                 </span>
                               )}
                               <span className={`text-[10px] font-mono px-1 rounded ${
-                                t.isValidLength ? 'text-slate-400' : 'bg-rose-500/20 text-rose-400 font-bold'
+                                t.isValidLength ? 'text-slate-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold'
                               }`}>
                                 {t.charLength}/20
                               </span>
@@ -609,8 +611,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               {/* Strengths & Issues */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Strengths */}
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <h4 className="text-xs font-bold text-emerald-400 flex items-center gap-2">
+                <div className="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <h4 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Güçlü SEO Yönleri ({evaluation.strengths?.length || 0})</span>
                   </h4>
@@ -619,8 +621,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   ) : (
                     <ul className="space-y-2">
                       {evaluation.strengths.map((str: string, i: number) => (
-                        <li key={i} className="text-xs text-slate-300 flex items-start gap-2 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
-                          <span className="text-emerald-400 mt-0.5">•</span>
+                        <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
+                          <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">•</span>
                           <span>{str}</span>
                         </li>
                       ))}
@@ -629,32 +631,32 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 </div>
 
                 {/* Issues */}
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <h4 className="text-xs font-bold text-amber-400 flex items-center gap-2">
+                <div className="p-4 rounded-xl bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <h4 className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
                     <span>İyileştirme Gereken Noktalar ({evaluation.issues?.length || 0})</span>
                   </h4>
                   {(!evaluation.issues || evaluation.issues.length === 0) ? (
-                    <p className="text-xs text-emerald-400 italic">Tebrikler! Belirgin bir SEO sorunu tespit edilmedi.</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 italic">Tebrikler! Belirgin bir SEO sorunu tespit edilmedi.</p>
                   ) : (
                     <ul className="space-y-2 max-h-60 overflow-y-auto">
                       {evaluation.issues.map((iss, i) => (
                         <li key={i} className={`text-xs p-2.5 rounded-lg border flex flex-col gap-1 ${
                           iss.severity === 'critical'
-                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300'
                             : iss.severity === 'warning'
-                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
-                            : 'bg-blue-500/10 border-blue-500/20 text-blue-300'
+                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300'
+                            : 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-300'
                         }`}>
                           <div className="font-semibold flex items-center gap-1.5">
-                            {iss.severity === 'critical' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                            {iss.severity === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                            {iss.severity === 'tip' && <HelpCircle className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                            {iss.severity === 'critical' && <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />}
+                            {iss.severity === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />}
+                            {iss.severity === 'tip' && <HelpCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />}
                             <span>{iss.message}</span>
                           </div>
                           {iss.fixSuggestion && (
                             <p className="text-[11px] opacity-80 pl-5">
-                              💡 Öneri: {iss.fixSuggestion}
+                              Öneri: {iss.fixSuggestion}
                             </p>
                           )}
                         </li>
@@ -666,10 +668,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
               {/* Missing Pool Keywords */}
               {evaluation.missingPoolKeywords && evaluation.missingPoolKeywords.length > 0 && (
-                <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-300 flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-orange-400" />
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <Flame className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                       <span>Kelime Havuzunuzdan Önerilen Yüksek Fırsatlı Kelimeler</span>
                     </h4>
                     <span className="text-[11px] text-slate-400">Tıklayarak doğrudan etiketlerinize ekleyebilirsiniz</span>
@@ -690,13 +692,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                           }
                         }}
 
-                        className="px-3 py-1.5 rounded-lg text-xs bg-slate-800/80 hover:bg-emerald-500/20 text-slate-300 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/40 transition-all flex items-center gap-1.5 group"
+                        className="px-3 py-1.5 rounded-lg text-xs bg-slate-100/80 dark:bg-slate-800/80 hover:bg-emerald-500/20 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 border border-slate-300 dark:border-slate-700 hover:border-emerald-500/40 transition-all flex items-center gap-1.5 group"
                       >
                         <span>{kw.keyword}</span>
-                        <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded">
+                        <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded">
                           {kw.opportunityScore} Skoru
                         </span>
-                        <span className="text-slate-500 group-hover:text-emerald-400 font-bold">+</span>
+                        <span className="text-slate-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 font-bold">+</span>
                       </button>
                     ))}
                   </div>
@@ -710,8 +712,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row gap-6 items-start">
                 {/* Image Preview Box */}
-                <div className="w-full md:w-72 bg-slate-950 p-3 rounded-2xl border border-slate-800 shrink-0 flex flex-col items-center">
-                  <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
+                <div className="w-full md:w-72 bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shrink-0 flex flex-col items-center">
+                  <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <img src={imageUrl} alt={listing.title ?? undefined} className="w-full h-full object-cover" />
                   </div>
                   <button
@@ -719,19 +721,19 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     disabled={isVisionLoading}
                     className="w-full mt-3 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 disabled:opacity-50"
                   >
-                    <Eye className={`w-4 h-4 ${isVisionLoading ? 'animate-spin' : ''}`} />
-                    {isVisionLoading ? 'Vision AI Analiz Ediyor...' : '👁️ Kapak Görselini Analiz Et'}
+                    {isVisionLoading ? <Spinner className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {isVisionLoading ? 'Vision AI Analiz Ediyor...' : 'Kapak Görselini Analiz Et'}
                   </button>
                 </div>
 
                 {/* Analysis Results Display */}
                 <div className="flex-1 space-y-4">
                   {!vision.primarySubject && !vision.description ? (
-                    <div className="p-8 text-center bg-slate-950/60 rounded-2xl border border-dashed border-slate-800 space-y-3">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto">
+                    <div className="p-8 text-center bg-slate-50/60 dark:bg-slate-950/60 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
                         <Eye className="w-6 h-6" />
                       </div>
-                      <h4 className="text-sm font-bold text-white">Bu ilan için henüz Görsel Analizi yapılmamış</h4>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">Bu ilan için henüz Görsel Analizi yapılmamış</h4>
                       <p className="text-xs text-slate-400 max-w-md mx-auto">
                         Admin panelinizde ayarladığınız Vision AI modeli (Google Gemini veya OpenRouter) ile kapak fotoğrafındaki tasarım konusunu, renklerini ve estetiğini otomatik çıkarın.
                       </p>
@@ -747,35 +749,35 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <div className="space-y-4">
                       {/* Attributes Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800">
                           <span className="text-[11px] text-slate-400 font-medium">Ana Konu (Primary Subject)</span>
-                          <p className="text-xs font-bold text-white mt-1">{vision.primarySubject || '-'}</p>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">{vision.primarySubject || '-'}</p>
                         </div>
 
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800">
                           <span className="text-[11px] text-slate-400 font-medium">Estetik & Tarz (Aesthetic)</span>
-                          <p className="text-xs font-bold text-indigo-300 mt-1">{vision.primaryAesthetic || '-'}</p>
+                          <p className="text-xs font-bold text-indigo-700 dark:text-indigo-300 mt-1">{vision.primaryAesthetic || '-'}</p>
                         </div>
 
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800">
                           <span className="text-[11px] text-slate-400 font-medium">Tasarım Tekniği / Stil</span>
-                          <p className="text-xs font-bold text-white mt-1">{vision.detectedStyle || '-'}</p>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white mt-1">{vision.detectedStyle || '-'}</p>
                         </div>
 
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800">
                           <span className="text-[11px] text-slate-400 font-medium">Tespit Edilen Ürün Tipi</span>
-                          <p className="text-xs font-bold text-teal-300 mt-1">{vision.productType || 'Apparel POD'}</p>
+                          <p className="text-xs font-bold text-teal-700 dark:text-teal-300 mt-1">{vision.productType || 'Apparel POD'}</p>
                         </div>
                       </div>
 
                       {/* Colors */}
                       {vision.detectedColors && vision.detectedColors.length > 0 && (
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-2">
                           <span className="text-[11px] text-slate-400 font-medium">Tespit Edilen Renkler</span>
                           <div className="flex flex-wrap gap-1.5">
                             {vision.detectedColors.map((color: string, i: number) => (
-                              <span key={i} className="text-xs bg-slate-800 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700">
-                                🎨 {color}
+                              <span key={i} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700">
+                                {color}
                               </span>
                             ))}
                           </div>
@@ -784,19 +786,19 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                       {/* Visual Description */}
                       {vision.description && (
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-1.5">
                           <span className="text-[11px] text-slate-400 font-medium">Görsel Betimlemesi (AI Description)</span>
-                          <p className="text-xs text-slate-300 leading-relaxed">{vision.description}</p>
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{vision.description}</p>
                         </div>
                       )}
 
                       {/* Keywords */}
                       {vision.keywords && vision.keywords.length > 0 && (
-                        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                        <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-2">
                           <span className="text-[11px] text-slate-400 font-medium">Görselden Çıkarılan Anahtar Kelimeler</span>
                           <div className="flex flex-wrap gap-1.5">
                             {vision.keywords.map((kw: string, i: number) => (
-                              <span key={i} className="text-xs bg-indigo-500/10 text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                              <span key={i} className="text-xs bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-lg border border-indigo-500/20">
                                 #{kw}
                               </span>
                             ))}
@@ -813,10 +815,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           {/* TAB 3: AI SEO OPTIMIZE & COMPARISON */}
           {activeTab === 'optimize' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between bg-slate-50/80 dark:bg-slate-950/80 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
                 <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                     <span>Yapay Zeka SEO Yenileme & Karşılaştırma</span>
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -830,8 +832,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     disabled={isOptimizeLoading}
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
                   >
-                    <Sparkles className={`w-4 h-4 ${isOptimizeLoading ? 'animate-spin' : ''}`} />
-                    {isOptimizeLoading ? 'AI SEO Üretiyor...' : '🪄 AI SEO Üret'}
+                    {isOptimizeLoading ? <Spinner className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                    {isOptimizeLoading ? 'AI SEO Üretiyor...' : 'AI SEO Üret'}
                   </button>
 
                   {listing.ai_optimized_title && (
@@ -847,51 +849,51 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               </div>
 
               {!listing.ai_optimized_title ? (
-                <div className="p-8 text-center bg-slate-950/40 rounded-2xl border border-dashed border-slate-800 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+                <div className="p-8 text-center bg-slate-50/40 dark:bg-slate-950/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
                     <Sparkles className="w-6 h-6" />
                   </div>
-                  <h4 className="text-sm font-bold text-white">Henüz AI Optimizasyon Önerisi Üretilmedi</h4>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Henüz AI Optimizasyon Önerisi Üretilmedi</h4>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Yukarıdaki &quot;🪄 AI SEO Üret&quot; butonuna tıklayarak bu ilan için optimize edilmiş 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama hazırlatabilirsiniz.
+                    Yukarıdaki &quot;AI SEO Üret&quot; butonuna tıklayarak bu ilan için optimize edilmiş 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama hazırlatabilirsiniz.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-6">
                   {/* Before vs After Title */}
-                  <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-indigo-400" />
+                  <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                       <span>Başlık Karşılaştırması (Title Comparison)</span>
                     </span>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Current Title */}
-                      <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-2">
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span className="font-semibold text-rose-400">Mevcut Etsy Başlığı</span>
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">Mevcut Etsy Başlığı</span>
                           <span>{listing.title?.length || 0} / 140 Karakter</span>
                         </div>
-                        <p className="text-xs text-slate-300 leading-relaxed font-mono">
+                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-mono">
                           {listing.title || 'Başlık yok'}
                         </p>
                       </div>
 
                       {/* AI Optimized Title */}
-                      <div className="p-3 bg-purple-950/20 rounded-xl border border-purple-500/30 space-y-2">
+                      <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-500/30 space-y-2">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-purple-300 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-purple-400" />
+                          <span className="font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                             <span>AI Optimize Başlık</span>
                           </span>
-                          <span className="text-purple-400">{listing.ai_optimized_title.length} / 140 Karakter</span>
+                          <span className="text-purple-600 dark:text-purple-400">{listing.ai_optimized_title.length} / 140 Karakter</span>
                         </div>
-                        <p className="text-xs text-white leading-relaxed font-mono font-medium">
+                        <p className="text-xs text-slate-900 dark:text-white leading-relaxed font-mono font-medium">
                           {listing.ai_optimized_title}
                         </p>
                         <button
                           onClick={() => handleCopy(listing.ai_optimized_title ?? '', 'aiTitle')}
-                          className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 mt-1"
+                          className="text-[10px] text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-1 mt-1"
                         >
                           <Copy className="w-3 h-3" />
                           <span>{copiedField === 'aiTitle' ? 'Kopyalandı!' : 'Başlığı Kopyala'}</span>
@@ -901,22 +903,22 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   </div>
 
                   {/* Before vs After Tags */}
-                  <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-emerald-400" />
+                  <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-3">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       <span>13 Altın Etiket Karşılaştırması</span>
                     </span>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Current Tags */}
-                      <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-2">
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span className="font-semibold text-rose-400">Mevcut Etiketler</span>
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">Mevcut Etiketler</span>
                           <span>{editTags.length} / 13</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {editTags.map((t, i) => (
-                            <span key={i} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
+                            <span key={i} className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700">
                               {t}
                             </span>
                           ))}
@@ -924,24 +926,24 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       </div>
 
                       {/* AI Optimized Tags */}
-                      <div className="p-3 bg-emerald-950/20 rounded-xl border border-emerald-500/30 space-y-2">
+                      <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/30 space-y-2">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-emerald-300 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-emerald-400" />
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                             <span>AI 13 Altın Etiket</span>
                           </span>
-                          <span className="text-emerald-400">{aiOptimizedTags.length} / 13</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{aiOptimizedTags.length} / 13</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {aiOptimizedTags.map((t, i) => (
-                            <span key={i} className="text-xs bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-medium">
+                            <span key={i} className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-medium">
                               #{t}
                             </span>
                           ))}
                         </div>
                         <button
                           onClick={() => handleCopy(aiOptimizedTags.join(', '), 'aiTags')}
-                          className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 mt-1"
+                          className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1"
                         >
                           <Copy className="w-3 h-3" />
                           <span>{copiedField === 'aiTags' ? 'Kopyalandı!' : 'Etiketleri Kopyala (Virgüllü)'}</span>
@@ -952,21 +954,21 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                   {/* AI Description Preview */}
                   {listing.ai_optimized_description && (
-                    <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                    <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-purple-400" />
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                           <span>AI Optimize Açıklama Metni ({listing.ai_optimized_description.length} Karakter)</span>
                         </span>
                         <button
                           onClick={() => handleCopy(listing.ai_optimized_description ?? '', 'aiDesc')}
-                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                          className="text-xs text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-1"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           <span>{copiedField === 'aiDesc' ? 'Kopyalandı!' : 'Açıklamayı Kopyala'}</span>
                         </button>
                       </div>
-                      <pre className="p-3 bg-slate-900 rounded-xl border border-slate-800 text-xs text-slate-300 whitespace-pre-wrap font-sans max-h-48 overflow-y-auto leading-relaxed">
+                      <pre className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-sans max-h-48 overflow-y-auto leading-relaxed">
                         {listing.ai_optimized_description}
                       </pre>
                     </div>
@@ -982,11 +984,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               {/* Top Action Prompt */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-teal-500/10 border border-teal-500/20 p-4 rounded-xl gap-3">
                 <div>
-                  <h4 className="text-xs font-bold text-teal-300 flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-teal-700 dark:text-teal-300 flex items-center gap-1.5">
                     <Send className="w-4 h-4" />
                     <span>Etsy Mağazanızda Canlı Güncelleme</span>
                   </h4>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
+                  <p className="text-[11px] text-slate-700 dark:text-slate-300 mt-0.5">
                     Aşağıdaki formu düzenleyin ve tek tıkla Etsy mağazanızdaki bu ilanı güncelleyin.
                   </p>
                 </div>
@@ -997,16 +999,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   title={changedFields.length > 0 ? `Değişenler: ${changedFields.join(', ')}` : 'Henüz bir değişiklik yapılmadı'}
                   className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
                 >
-                  <Send className={`w-4 h-4 ${isUpdatingEtsy ? 'animate-spin' : ''}`} />
-                  {isUpdatingEtsy ? 'Etsy Güncelleniyor...' : changedFields.length > 0 ? `🚀 Etsy'de Güncelle (${changedFields.join(', ')})` : 'Değişiklik yok'}
+                  {isUpdatingEtsy ? <Spinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                  {isUpdatingEtsy ? 'Etsy Güncelleniyor...' : changedFields.length > 0 ? `Etsy'de Güncelle (${changedFields.join(', ')})` : 'Değişiklik yok'}
                 </button>
               </div>
 
               {/* Title Input */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-slate-300">Etsy İlan Başlığı (Title)</label>
-                  <span className={`font-mono text-[11px] ${editTitle.length > 140 ? 'text-rose-400 font-bold' : 'text-slate-400'}`}>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Etsy İlan Başlığı (Title)</label>
+                  <span className={`font-mono text-[11px] ${editTitle.length > 140 ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400'}`}>
                     {editTitle.length} / 140 Karakter
                   </span>
                 </div>
@@ -1015,7 +1017,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   maxLength={140}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors"
                   placeholder="Örn: Vintage Japanese Cat T-Shirt, Retro Graphic Anime Tee..."
                 />
               </div>
@@ -1023,11 +1025,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               {/* Tags Manager (13 slots) */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-slate-300 flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Etsy 13 Altın Etiket (Tags)</span>
                   </label>
-                  <span className={`font-mono text-[11px] font-bold ${editTags.length === 13 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <span className={`font-mono text-[11px] font-bold ${editTags.length === 13 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     {editTags.length} / 13 Etiket
                   </span>
                 </div>
@@ -1047,35 +1049,35 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     maxLength={20}
                     disabled={editTags.length >= 13}
                     placeholder={editTags.length >= 13 ? '13 etiket sınırı doldu' : 'Yeni etiket yazıp Enter veya Ekle\'ye basın (max 20 char)'}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 disabled:opacity-50"
+                    className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 disabled:opacity-50"
                   />
                   <button
                     type="button"
                     onClick={handleAddTag}
                     disabled={editTags.length >= 13 || !newTagInput.trim()}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-40"
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-40"
                   >
                     Ekle
                   </button>
                 </div>
 
                 {/* Tag Pills */}
-                <div className="flex flex-wrap gap-2 p-3 bg-slate-950/60 rounded-xl border border-slate-800 min-h-[50px] items-center">
+                <div className="flex flex-wrap gap-2 p-3 bg-slate-50/60 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800 min-h-[50px] items-center">
                   {editTags.length === 0 ? (
                     <span className="text-xs text-slate-500 italic">Henüz etiket eklenmemiş.</span>
                   ) : (
                     editTags.map((tag, index) => (
                       <span
                         key={index}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs bg-slate-800/90 text-slate-200 border border-slate-700 group hover:border-slate-600"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs bg-slate-100/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 group hover:border-slate-300 dark:hover:border-slate-600"
                       >
-                        <span className="font-mono text-emerald-400 font-bold">{index + 1}.</span>
+                        <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{index + 1}.</span>
                         <span>{tag}</span>
                         <span className="text-[10px] text-slate-500 font-mono">({tag.length}k)</span>
                         <button
                           type="button"
                           onClick={() => handleRemoveTag(index)}
-                          className="text-slate-400 hover:text-rose-400 ml-1 transition-colors"
+                          className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 ml-1 transition-colors"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1088,7 +1090,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               {/* Description Input */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-slate-300">Etsy Açıklama Metni (Description)</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Etsy Açıklama Metni (Description)</label>
                   <span className="text-[11px] text-slate-400 font-mono">
                     {editDescription.length} Karakter
                   </span>
@@ -1097,23 +1099,23 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={8}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors leading-relaxed font-sans"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 transition-colors leading-relaxed font-sans"
                   placeholder="Ürün özelliklerini, kumaş/beden detaylarını ve bakım talimatlarını yazın..."
                 />
               </div>
 
               {/* İlan durumu: içerik güncellemesinden bağımsız, onaylı işlem */}
-              <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 space-y-2.5">
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/60 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs">
-                    <span className="font-bold text-slate-300">İlan Durumu: </span>
-                    <span className="text-slate-200">{STATE_LABELS[listing.state || ''] || listing.state || 'Bilinmiyor'}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">İlan Durumu: </span>
+                    <span className="text-slate-800 dark:text-slate-200">{STATE_LABELS[listing.state || ''] || listing.state || 'Bilinmiyor'}</span>
                   </div>
                   {listing.state === 'active' && stateAction === 'idle' && (
                     <button
                       type="button"
                       onClick={() => setStateAction('confirm-deactivate')}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
                     >
                       Yayından kaldır…
                     </button>
@@ -1122,7 +1124,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setStateAction('confirm-activate')}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
                     >
                       Yeniden yayına al…
                     </button>
@@ -1133,8 +1135,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 </p>
                 {stateAction === 'confirm-deactivate' && (
                   <div role="alertdialog" aria-label="Yayından kaldırma onayı" className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                    <span className="text-xs text-amber-200 flex-1 min-w-[200px]">İlan mağazanızda görünmez olacak ve satışa kapanacak. Emin misiniz?</span>
-                    <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-200">Vazgeç</button>
+                    <span className="text-xs text-amber-700 dark:text-amber-200 flex-1 min-w-[200px]">İlan mağazanızda görünmez olacak ve satışa kapanacak. Emin misiniz?</span>
+                    <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">Vazgeç</button>
                     <button
                       type="button"
                       onClick={() => handleChangeState('inactive')}
@@ -1147,16 +1149,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 )}
                 {stateAction === 'confirm-activate' && (
                   <div role="alertdialog" aria-label="Yayına alma onayı" className="space-y-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <p className="text-xs text-emerald-200">İlan mağazanızda yeniden satışa açılacak ve Etsy listeleme ücreti alınabilir. Onaylamak için <b>{LIVE_PUBLISH_CONFIRMATION}</b> yazın.</p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-200">İlan mağazanızda yeniden satışa açılacak ve Etsy listeleme ücreti alınabilir. Onaylamak için <b>{LIVE_PUBLISH_CONFIRMATION}</b> yazın.</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         value={activationPhrase}
                         onChange={(e) => setActivationPhrase(e.target.value)}
                         placeholder={LIVE_PUBLISH_CONFIRMATION}
                         aria-label="Onay ifadesi"
-                        className="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg px-3 py-1.5 w-32"
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs rounded-lg px-3 py-1.5 w-32"
                       />
-                      <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-200">Vazgeç</button>
+                      <button type="button" onClick={() => setStateAction('idle')} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">Vazgeç</button>
                       <button
                         type="button"
                         onClick={() => handleChangeState('active')}
@@ -1175,7 +1177,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-950/70 shrink-0">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2">
             <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${getScoreColor(score)}`}>
               SEO: {score}/100 ({grade})
@@ -1188,7 +1190,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors"
             >
               Kapat
             </button>
@@ -1200,7 +1202,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 title={changedFields.length > 0 ? `Değişenler: ${changedFields.join(', ')}` : 'Henüz bir değişiklik yapılmadı'}
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                <Send className={`w-3.5 h-3.5 ${isUpdatingEtsy ? 'animate-spin' : ''}`} />
+                {isUpdatingEtsy ? <Spinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
                 {isUpdatingEtsy
                   ? 'Etsy Güncelleniyor...'
                   : changedFields.length > 0

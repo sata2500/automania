@@ -6,10 +6,11 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Store, Video, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Store, Video, FileText, AlertCircle } from 'lucide-react';
 import type { PodTemplateAutomationSchedule, PodTemplateEtsyListingSettings } from '@/types/templates';
 import type { EtsyReadinessState, EtsyReturnPolicy, EtsyShippingProfile, EtsyShopSection } from '@/types/etsy';
 import { formatReturnPolicy } from '@/lib/etsy-format';
+import { Spinner } from '@/components/common/Spinner';
 
 interface EtsyListingSectionProps {
   schedule: PodTemplateAutomationSchedule;
@@ -130,7 +131,7 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
       {createListing && (
         <>
           {isLoading ? (
-            <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="w-4 h-4 animate-spin" /> Etsy mağaza ayarları yükleniyor…</div>
+            <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Etsy mağaza ayarları yükleniyor…</div>
           ) : !options?.connected ? (
             <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

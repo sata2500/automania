@@ -11,14 +11,23 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  X, Settings2, Layers, FolderTree, Clock,
-  Save, Loader2, CheckCircle2, AlertCircle,
-  RefreshCw, Search, Check
+  X,
+  Settings2,
+  Layers,
+  FolderTree,
+  Clock,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Search,
+  Check,
 } from 'lucide-react';
 import { MockupFolder } from '@/types/pod';
 import { PodTemplateAutomationSchedule } from '@/types/templates';
 import { ScheduleSection } from '../../templates/sections/ScheduleSection';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -200,7 +209,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
             </div>
             <div>
               <h2 id="folder-template-title" className="text-sm font-bold text-slate-800 dark:text-slate-100">Şablon Ayarları</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">📁 {folder.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{folder.name}</p>
             </div>
           </div>
           <button
@@ -233,7 +242,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-5 h-5 animate-spin text-purple-500" />
+              <Spinner className="w-5 h-5 text-purple-500" />
               <span className="ml-2 text-sm text-slate-500">Yükleniyor...</span>
             </div>
           ) : (
@@ -255,13 +264,13 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
                       className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
                       title="Yenile"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${loadingVariations ? 'animate-spin' : ''}`} />
+                      {loadingVariations ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                     </button>
                   </div>
 
                   {loadingVariations ? (
                     <div className="text-center py-8 text-slate-400 text-sm">
-                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                      <Spinner className="w-4 h-4 mx-auto mb-2" />
                       Şablonlar yükleniyor...
                     </div>
                   ) : variationTemplates.length === 0 ? (
@@ -345,7 +354,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
                       className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors"
                       title="Yenile"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 ${loadingCategories ? 'animate-spin' : ''}`} />
+                      {loadingCategories ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                     </button>
                   </div>
 
@@ -363,7 +372,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
 
                   {loadingCategories ? (
                     <div className="text-center py-8 text-slate-400 text-sm">
-                      <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                      <Spinner className="w-4 h-4 mx-auto mb-2" />
                       Kategoriler yükleniyor...
                     </div>
                   ) : categories.length === 0 ? (
@@ -494,7 +503,7 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
               disabled={saving}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-all shadow-sm"
             >
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {saving ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
               Kaydet
             </button>
           </div>

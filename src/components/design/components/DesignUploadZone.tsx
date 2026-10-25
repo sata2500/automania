@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { Upload, Loader2, Sparkles } from 'lucide-react';
+import { Upload, Sparkles } from 'lucide-react';
+import { Spinner } from '@/components/common/Spinner';
 
 interface DesignUploadZoneProps {
   dragActive: boolean;
@@ -60,7 +61,7 @@ export const DesignUploadZone: React.FC<DesignUploadZoneProps> = ({
         >
           {isOptimizing ? (
             <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-indigo-500 animate-spin shrink-0" />
+              <Spinner className="w-5 h-5 text-indigo-500 shrink-0" />
               <div className="text-left">
                 <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
                   Optimize ediliyor...

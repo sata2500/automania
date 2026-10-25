@@ -5,6 +5,7 @@ import { buildPublishChecklist } from '@/lib/etsy-preflight';
 import { LIVE_PUBLISH_CONFIRMATION, isLivePublishEnabled } from '@/lib/etsy-publish-mode';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { Spinner } from '@/components/common/Spinner';
 
 type MockupPreview = {
   folderId?: string;
@@ -141,7 +142,7 @@ export const SeoPublishSection: React.FC = () => {
                     disabled={!canPublish}
                     className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    <Send className={`w-3.5 h-3.5 ${isPublishing ? 'animate-spin' : ''}`} />
+                    {isPublishing ? <Spinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
                     Taslak (Draft) Olarak Aktar
                   </button>
                   <button

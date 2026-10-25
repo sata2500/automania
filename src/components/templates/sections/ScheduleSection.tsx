@@ -286,7 +286,7 @@ export function ScheduleSection({ schedule, onChange }: ScheduleSectionProps) {
           {/* Özet Kutusu */}
           <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-700/40 rounded-xl">
             <p className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide mb-1.5">
-              📋 Zamanlama Özeti
+              Zamanlama Özeti
             </p>
             <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
               Günde <strong>{freq}×</strong> çalışacak — {

@@ -14,7 +14,9 @@ import {
   Rocket,
   BarChart3,
   RefreshCw,
-  Loader2,
+  Image as ImageIcon,
+  Film,
+  Palette,
 } from 'lucide-react';
 import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from '@/types/templates';
 import { MockupItem } from '@/types/pod';
@@ -23,6 +25,7 @@ import { TemplateBuilderModal } from './TemplateBuilderModal';
 import { computeNextRunAt, parseScheduledHours } from '@/lib/automation-schedule';
 import { RunDetailsDialog, STEP_LABELS, getRunListingUrl, getRunWarnings } from './RunDetailsDialog';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
+import { Spinner } from '@/components/common/Spinner';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
@@ -283,7 +286,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+        <Spinner className="w-8 h-8 text-amber-500" />
         <p className="text-sm text-slate-500 dark:text-slate-400">Şablonlar yükleniyor...</p>
       </div>
     );
@@ -301,22 +304,22 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
           isCancelling={cancellingRunId === latestRuns[detailsTemplateId].id}
         />
       )}
-      {/* Başlık */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center shadow">
-              <LayoutTemplate className="w-4 h-4 text-white" />
-            </div>
-            Otomasyon Şablonları
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Her şablon, kur-ve-unut mantığıyla otomatik listing üretir. Mockupları, varyasyonları, SEO ipuçlarını ve zamanlamayı bir kere ayarlayın — gerisini sistem halleder.
-          </p>
+      {/* Başlık: diğer sekmelerle aynı kart yapısı */}
+      <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 bg-amber-500/10 border border-amber-200/60 dark:border-amber-800/40 rounded-xl text-amber-600 dark:text-amber-400 shrink-0">
+            <LayoutTemplate className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Otomasyon Şablonları</h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Tasarım, mockup, SEO metni ve Etsy taslağını zamanlanmış olarak otomatik üretin.
+            </p>
+          </div>
         </div>
         <button
           onClick={() => { setEditingTemplate(null); setIsBuilderOpen(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-amber-500/25 transition-all active:scale-95 shrink-0 cursor-pointer"
+          className="btn btn-primary shrink-0"
         >
           <Plus className="w-4 h-4" />
           Yeni Şablon
@@ -349,7 +352,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
               bg: 'bg-indigo-50 dark:bg-indigo-500/10',
             },
             {
-              label: 'Toplam Listing',
+              label: 'Tamamlanan Çalıştırma',
               value: templates.reduce((s, t) => s + (t.totalListingsGenerated ?? 0), 0),
               icon: BarChart3,
               color: 'text-purple-600 dark:text-purple-400',
@@ -446,12 +449,12 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                 {/* Şablon Özellikleri */}
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   {[
-                    { label: 'Görsel', value: total, max: 20, icon: '🖼️' },
-                    { label: 'Video', value: video, max: 2, icon: '🎬' },
-                    { label: 'Varyasyon', value: variationCount, max: null, icon: '🎨' },
+                    { label: 'Görsel', value: total, max: 20, icon: ImageIcon },
+                    { label: 'Video', value: video, max: 2, icon: Film },
+                    { label: 'Varyasyon', value: variationCount, max: null, icon: Palette },
                   ].map(item => (
                     <div key={item.label} className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-2.5 text-center">
-                      <p className="text-base">{item.icon}</p>
+                      <item.icon className="w-4 h-4 mx-auto mb-0.5 text-slate-400" aria-hidden="true" />
                       <p className="text-sm font-bold text-slate-900 dark:text-white">
                         {item.value}{item.max && <span className="text-xs font-normal text-slate-400">/{item.max}</span>}
                       </p>
@@ -479,7 +482,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                       ? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600'
                       : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                   }`}>
-                    {template.mockupConfig?.fabricType === 'light' ? '☀️ Açık Kumaş' : template.mockupConfig?.fabricType === 'dark' ? '🌑 Koyu Kumaş' : '✦ Tüm Kumaşlar'}
+                    {template.mockupConfig?.fabricType === 'light' ? 'Açık kumaş' : template.mockupConfig?.fabricType === 'dark' ? 'Koyu kumaş' : 'Tüm kumaşlar'}
                   </span>
                   <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
                     template.automationSchedule?.createListing === true
@@ -528,7 +531,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                     }`}
                   >
                     {isRunActive ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0 mt-px" />
+                      <Spinner className="w-3.5 h-3.5 shrink-0 mt-px" />
                     ) : latestRun.status === 'completed' ? (
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-px" />
                     ) : (
@@ -592,7 +595,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isStarting || isRunActive ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Spinner className="w-3 h-3" />
                     ) : (
                       <Rocket className="w-3 h-3" />
                     )}
@@ -610,7 +613,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                     }`}
                   >
                     {isToggling ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Spinner className="w-3 h-3" />
                     ) : template.isActive ? (
                       <Pause className="w-3 h-3" />
                     ) : (
@@ -635,7 +638,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                     className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-xs font-semibold transition-all cursor-pointer border border-red-200 dark:border-red-500/30"
                   >
                     {isDeleting ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Spinner className="w-3 h-3" />
                     ) : (
                       <Trash2 className="w-3 h-3" />
                     )}

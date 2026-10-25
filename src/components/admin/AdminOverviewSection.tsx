@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react';
+import { Spinner } from '@/components/common/Spinner';
 
 export type AdminGlobalStats = {
   users?: { total?: number; active?: number; blocked?: number };
@@ -34,7 +35,7 @@ export function AdminOverviewSection({ globalStats, isLoadingStats, onRefresh }:
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true"></span>
           <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Canlı Sistem İstatistikleri</span>
-          <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+          <span className="hidden sm:inline text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
             Cloudflare R2 + PostgreSQL
           </span>
         </div>
@@ -45,7 +46,7 @@ export function AdminOverviewSection({ globalStats, isLoadingStats, onRefresh }:
           aria-label={isLoadingStats ? 'İstatistikler güncelleniyor' : 'İstatistikleri yenile'}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStats ? 'animate-spin text-indigo-500' : ''}`} aria-hidden="true" />
+          {isLoadingStats ? <Spinner className="w-3.5 h-3.5 text-indigo-500" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
           <span>{isLoadingStats ? 'Güncelleniyor...' : 'Verileri Yenile'}</span>
         </button>
       </div>

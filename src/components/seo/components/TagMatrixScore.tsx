@@ -147,27 +147,27 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
       {/* 5-Bucket Distribution Badges */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🏷️ Özne / Ürün</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">Özne / Ürün</span>
           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.subject} Etiket</span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">💬 Tipografi / Mesaj</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">Tipografi / Mesaj</span>
           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.typography} Etiket</span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🎨 Estetik / Stil</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">Estetik / Stil</span>
           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.aesthetic} Etiket</span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🎁 Hediye / Alıcı</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">Hediye / Alıcı</span>
           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.gift} Etiket</span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center col-span-2 sm:col-span-1">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">🌟 Yaşam Tarzı / Trend</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5 font-medium">Yaşam Tarzı / Trend</span>
           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{analysis.buckets.lifestyle} Etiket</span>
         </div>
       </div>

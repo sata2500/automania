@@ -14,13 +14,16 @@ import {
   Square,
   ExternalLink,
   Tag,
-  ShoppingBag
+  ShoppingBag,
+  Heart,
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { ListingDetailModal } from './ListingDetailModal';
 import { BulkActionModal, BulkActionType } from './BulkActionModal';
 
 import type { StoredEtsyListing } from '@/types/etsy';
+import { Spinner } from '@/components/common/Spinner';
+import { formatListingState } from '@/lib/etsy-format';
 
 type EtsyListingRecord = StoredEtsyListing;
 
@@ -320,9 +323,9 @@ export const EtsyListingManager: React.FC = () => {
 
   // Score color helper
   const getScoreColor = (sc: number) => {
-    if (sc >= 85) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    if (sc >= 60) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-    return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+    if (sc >= 85) return 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+    if (sc >= 60) return 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30';
+    return 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30';
   };
 
   const selectedListingsList = useMemo(() => listings.filter(l => selectedIds.includes(l.listing_id)), [listings, selectedIds]);
@@ -335,21 +338,21 @@ export const EtsyListingManager: React.FC = () => {
         <div className="bg-gradient-to-r from-indigo-900/80 via-purple-900/80 to-indigo-900/80 border border-indigo-500/50 rounded-2xl p-4 text-indigo-100 flex items-center justify-between gap-3 shadow-xl backdrop-blur animate-pulse">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-500/20 rounded-xl">
-              <RefreshCw className="w-5 h-5 text-indigo-300 animate-spin" />
+              <Spinner className="w-5 h-5 text-indigo-700 dark:text-indigo-300" />
             </div>
             <div>
-              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Otomatik Arka Plan Senkronizasyonu</span>
-                <span className="text-[10px] bg-indigo-500/30 text-indigo-200 px-2 py-0.5 rounded-full font-mono">24 Saat Kuralı</span>
+                <span className="text-[10px] bg-indigo-500/30 text-indigo-700 dark:text-indigo-200 px-2 py-0.5 rounded-full font-mono">24 Saat Kuralı</span>
               </div>
-              <p className="text-xs text-indigo-200/90 mt-0.5">{autoSyncBanner}</p>
+              <p className="text-xs text-indigo-700 dark:text-indigo-200/90 mt-0.5">{autoSyncBanner}</p>
             </div>
           </div>
         </div>
       )}
       
       {/* 1. TOP STATS & HEADER BANNER */}
-      <div className="bg-slate-900 text-white p-4 sm:p-6 rounded-2xl border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
         
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 relative z-10">
@@ -359,14 +362,14 @@ export const EtsyListingManager: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-white">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
                   Etsy İlan Yönetimi & AI SEO Denetçisi
                 </h2>
-                <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full uppercase font-mono font-bold">
+                <span className="text-[10px] bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full uppercase font-mono font-bold">
                   DB Önbellekli
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
                 Etsy mağazanızdaki tüm ilanları senkronize edin, kapak görsellerini Vision AI ile analiz edin, SEO puanlarını 0-100 arası denetleyin ve tek tıkla yapay zeka ile güncelleyin.
               </p>
             </div>
@@ -380,55 +383,55 @@ export const EtsyListingManager: React.FC = () => {
               className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               title="Etsy'deki en güncel ilan, görüntülenme ve favori verilerini çeker (24 saatte bir otomatik güncellenir)"
             >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Senkronize Ediliyor...' : '🔄 Etsy Verilerini Güncelle'}</span>
+              {isSyncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+              <span>{isSyncing ? 'Senkronize Ediliyor...' : 'Etsy Verilerini Güncelle'}</span>
             </button>
           </div>
 
         </div>
 
         {/* 4 Metrics Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
-          <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-200 dark:border-slate-800/80">
+          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <span className="text-[11px] text-slate-400 font-medium">Toplam İlan</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-extrabold text-white">{stats.total}</span>
+              <span className="text-xl font-extrabold text-slate-900 dark:text-white">{stats.total}</span>
               <span className="text-[10px] text-slate-500 font-mono">
                 ({stats.active} Aktif / {stats.draft} Taslak)
               </span>
             </div>
           </div>
 
-          <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <span className="text-[11px] text-slate-400 font-medium">Ortalama Mağaza SEO Skoru</span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className={`text-xl font-extrabold ${getScoreColor(stats.avgScore)}`}>
                 {stats.avgScore}/100
               </span>
               <span className="text-[10px] text-slate-400">
-                {stats.avgScore >= 85 ? '🌟 Mükemmel' : stats.avgScore >= 65 ? '✅ İyi' : '⚠️ Geliştirilmeli'}
+                {stats.avgScore >= 85 ? 'Mükemmel' : stats.avgScore >= 65 ? 'İyi' : 'Geliştirilmeli'}
               </span>
             </div>
           </div>
 
-          <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <span className="text-[11px] text-slate-400 font-medium">Görsel (Vision) Analizi</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-extrabold text-indigo-400">{stats.analyzedCount}</span>
+              <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400">{stats.analyzedCount}</span>
               <span className="text-[10px] text-slate-500">/ {stats.total} İlan</span>
             </div>
           </div>
 
-          <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-slate-400 font-medium">Son Senkronizasyon</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
-                stats.isStale ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                stats.isStale ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
               }`}>
-                {stats.isStale ? '🕒 Yenilenmeli' : '✅ Güncel'}
+                {stats.isStale ? 'Yenilenmeli' : 'Güncel'}
               </span>
             </div>
-            <div className="text-xs font-semibold text-slate-200 mt-1 truncate">
+            <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 truncate">
               {stats.lastSyncedAt 
                 ? `${new Date(stats.lastSyncedAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${stats.hoursSinceLastSync !== null && stats.hoursSinceLastSync < 24 ? ` (${stats.hoursSinceLastSync < 1 ? 'Az önce' : `${Math.floor(stats.hoursSinceLastSync)} sa önce`})` : ''}`
                 : 'Henüz senkronize edilmedi'}
@@ -462,10 +465,10 @@ export const EtsyListingManager: React.FC = () => {
               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
             >
               <option value="all">Durum: Tümü ({stats.total})</option>
-              <option value="active">🟢 Aktif ({stats.active})</option>
-              <option value="draft">📝 Taslak ({stats.draft})</option>
-              <option value="inactive">⏸️ Pasif ({stats.inactive})</option>
-              {stats.other > 0 && <option value="sold_out">📦 Tükendi</option>}
+              <option value="active">Aktif ({stats.active})</option>
+              <option value="draft">Taslak ({stats.draft})</option>
+              <option value="inactive">Pasif ({stats.inactive})</option>
+              {stats.other > 0 && <option value="sold_out">Tükendi</option>}
               {stats.other > 0 && <option value="expired">⌛ Süresi Doldu</option>}
             </select>
 
@@ -476,10 +479,10 @@ export const EtsyListingManager: React.FC = () => {
               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
             >
               <option value="all">SEO Skoru: Tümü</option>
-              <option value="excellent">🌟 Mükemmel (90-100)</option>
-              <option value="good">✅ İyi (75-89)</option>
-              <option value="warning">⚠️ Geliştirilmeli (50-74)</option>
-              <option value="critical">🚨 Kritik (&lt;50)</option>
+              <option value="excellent">Mükemmel (90-100)</option>
+              <option value="good">İyi (75-89)</option>
+              <option value="warning">Geliştirilmeli (50-74)</option>
+              <option value="critical">Kritik (&lt;50)</option>
             </select>
 
             {/* Vision Filter */}
@@ -489,8 +492,8 @@ export const EtsyListingManager: React.FC = () => {
               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
             >
               <option value="all">Görsel Analiz: Tümü</option>
-              <option value="analyzed">👁️ Analiz Edilenler ({stats.analyzedCount})</option>
-              <option value="not_analyzed">⏳ Analiz Bekleyenler ({stats.total - stats.analyzedCount})</option>
+              <option value="analyzed">Analiz Edilenler ({stats.analyzedCount})</option>
+              <option value="not_analyzed">Analiz Bekleyenler ({stats.total - stats.analyzedCount})</option>
             </select>
 
             {/* Sort Filter */}
@@ -501,16 +504,16 @@ export const EtsyListingManager: React.FC = () => {
             >
               <option value="newest">Sıralama: En Yeni</option>
               <option value="oldest">Sıralama: En Eski</option>
-              <option value="views_desc">👁️ En Çok Görüntülenen</option>
-              <option value="views_asc">👁️ En Az Görüntülenen</option>
-              <option value="favorers_desc">❤️ En Çok Favorilenen</option>
-              <option value="favorers_asc">❤️ En Az Favorilenen</option>
-              <option value="score_desc">📈 SEO: Yüksekten Düşüğe</option>
-              <option value="score_asc">📉 SEO: Düşükten Yükseğe</option>
-              <option value="price_desc">💵 Fiyat: Yüksekten Düşüğe</option>
-              <option value="price_asc">💵 Fiyat: Düşükten Yükseğe</option>
-              <option value="title_asc">🔤 Başlık (A-Z)</option>
-              <option value="title_desc">🔤 Başlık (Z-A)</option>
+              <option value="views_desc">En Çok Görüntülenen</option>
+              <option value="views_asc">En Az Görüntülenen</option>
+              <option value="favorers_desc">En Çok Favorilenen</option>
+              <option value="favorers_asc">En Az Favorilenen</option>
+              <option value="score_desc">SEO: Yüksekten Düşüğe</option>
+              <option value="score_asc">SEO: Düşükten Yükseğe</option>
+              <option value="price_desc">Fiyat: Yüksekten Düşüğe</option>
+              <option value="price_asc">Fiyat: Düşükten Yükseğe</option>
+              <option value="title_asc">Başlık (A-Z)</option>
+              <option value="title_desc">Başlık (Z-A)</option>
             </select>
 
             {/* View Mode Toggle */}
@@ -560,33 +563,33 @@ export const EtsyListingManager: React.FC = () => {
 
             {selectedIds.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 font-mono text-[11px] bg-slate-800/60 px-2 py-1 rounded-md">
+                <span className="text-slate-400 font-mono text-[11px] bg-slate-100/60 dark:bg-slate-800/60 px-2 py-1 rounded-md">
                   {selectedIds.length} ilan seçildi:
                 </span>
                 <button
                   onClick={() => handleOpenBulkModal('evaluate_seo')}
-                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                 >
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>📊 Seçilileri Puanla</span>
+                  <span>Seçilileri Puanla</span>
                 </button>
                 <button
                   onClick={() => handleOpenBulkModal('vision')}
-                  className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>👁️ Seçilileri Analiz Et</span>
+                  <span>Seçilileri Analiz Et</span>
                 </button>
                 <button
                   onClick={() => handleOpenBulkModal('optimize')}
-                  className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>🪄 Seçililere AI SEO Üret</span>
+                  <span>Seçililere AI SEO Üret</span>
                 </button>
                 <button
                   onClick={() => setSelectedIds([])}
-                  className="text-slate-400 hover:text-slate-200 text-xs underline ml-1"
+                  className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-xs underline ml-1"
                 >
                   Vazgeç
                 </button>
@@ -599,7 +602,7 @@ export const EtsyListingManager: React.FC = () => {
       {/* 3. LISTINGS CONTENT (GRID OR TABLE) */}
       {isLoading ? (
         <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-          <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+          <Spinner className="w-8 h-8 text-indigo-500 mx-auto" />
           <h4 className="text-sm font-bold text-slate-900 dark:text-white">İlanlar Yükleniyor...</h4>
           <p className="text-xs text-slate-500">Veritabanından önbellek kayıtları çekiliyor</p>
         </div>
@@ -634,8 +637,8 @@ export const EtsyListingManager: React.FC = () => {
               disabled={isSyncing}
               className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2 disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Etsy Verileri Çekiliyor...' : '🔄 Etsy Verilerini Güncelle'}</span>
+              {isSyncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+              <span>{isSyncing ? 'Etsy Verileri Çekiliyor...' : 'Etsy Verilerini Güncelle'}</span>
             </button>
           )}
 
@@ -667,7 +670,7 @@ export const EtsyListingManager: React.FC = () => {
                 }`}
               >
                 {/* Card Top: Image + Badges */}
-                <div className="relative aspect-video bg-slate-950 overflow-hidden">
+                <div className="relative aspect-video bg-slate-50 dark:bg-slate-950 overflow-hidden">
                   <Image
                     loader={({ src }) => src}
                     src={imageUrl}
@@ -684,20 +687,20 @@ export const EtsyListingManager: React.FC = () => {
                     className="absolute top-2.5 left-2.5 z-10 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white hover:bg-black/80 transition-colors"
                   >
                     {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-indigo-400" />
+                      <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                     ) : (
-                      <Square className="w-4 h-4 text-slate-300" />
+                      <Square className="w-4 h-4 text-slate-700 dark:text-slate-300" />
                     )}
                   </button>
 
                   {/* State badge */}
                   <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-md uppercase tracking-wider ${
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-md tracking-wide ${
                       item.state === 'active'
                         ? 'bg-emerald-500/90 text-white'
                         : 'bg-amber-500/90 text-slate-950'
                     }`}>
-                      {item.state === 'active' ? 'Aktif' : item.state}
+                      {formatListingState(item.state)}
                     </span>
                   </div>
 
@@ -705,10 +708,10 @@ export const EtsyListingManager: React.FC = () => {
                   <div className="absolute bottom-2.5 left-2.5">
                     <div className={`px-2.5 py-1 rounded-lg backdrop-blur-md border text-xs font-black flex items-center gap-1.5 shadow-md ${
                       score >= 85
-                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-300 border-emerald-500/50'
                         : score >= 60
-                        ? 'bg-amber-950/90 text-amber-300 border-amber-500/50'
-                        : 'bg-rose-950/90 text-rose-300 border-rose-500/50'
+                        ? 'bg-amber-50 dark:bg-amber-950/90 text-amber-700 dark:text-amber-300 border-amber-500/50'
+                        : 'bg-rose-50 dark:bg-rose-950/90 text-rose-700 dark:text-rose-300 border-rose-500/50'
                     }`}>
                       <TrendingUp className="w-3.5 h-3.5" />
                       <span>SEO: {score}/100 ({score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F'})</span>
@@ -717,8 +720,8 @@ export const EtsyListingManager: React.FC = () => {
 
                   {/* Views & Favs */}
                   <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2 text-[10px] font-bold text-white bg-black/70 backdrop-blur-md px-2 py-1 rounded-lg">
-                    <span>👁️ {item.views || 0}</span>
-                    <span>❤️ {item.num_favorers || 0}</span>
+                    <span className="inline-flex items-center gap-1"><Eye className="w-3 h-3" aria-label="Görüntülenme" />{item.views || 0}</span>
+                    <span className="inline-flex items-center gap-1"><Heart className="w-3 h-3" aria-label="Favori" />{item.num_favorers || 0}</span>
                   </div>
                 </div>
 
@@ -813,7 +816,7 @@ export const EtsyListingManager: React.FC = () => {
                   <th className="p-3.5">İlan / Görsel</th>
                   <th className="p-3.5">SEO Skoru</th>
                   <th className="p-3.5">Etiketler</th>
-                  <th className="p-3.5">Vision Analizi</th>
+                  <th className="p-3.5">Görsel Analiz</th>
                   <th className="p-3.5">Fiyat / Durum</th>
                   <th className="p-3.5">Görüntülenme</th>
                   <th className="p-3.5 text-right">İşlemler</th>
@@ -852,7 +855,7 @@ export const EtsyListingManager: React.FC = () => {
 
                       <td className="p-3.5">
                         <div className="flex items-center space-x-3">
-                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 shrink-0">
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shrink-0">
                             <Image
                               loader={({ src }) => src}
                               src={imageUrl}
@@ -891,8 +894,8 @@ export const EtsyListingManager: React.FC = () => {
 
                       <td className="p-3.5">
                         {vision.primarySubject ? (
-                          <span className="text-xs text-indigo-400 font-medium truncate max-w-xs block" title={vision.primarySubject}>
-                            👁️ {vision.primarySubject}
+                          <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium truncate max-w-xs block" title={vision.primarySubject}>
+                            {vision.primarySubject}
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500 italic">Analiz Yok</span>
@@ -903,21 +906,21 @@ export const EtsyListingManager: React.FC = () => {
                         <div className="font-bold text-slate-900 dark:text-white">
                           ${item.price} {item.currency_code}
                         </div>
-                        <span className={`text-[10px] font-bold uppercase ${item.state === 'active' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                          {item.state}
+                        <span className={`text-[10px] font-bold ${item.state === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {formatListingState(item.state)}
                         </span>
                       </td>
 
                       <td className="p-3.5 text-slate-500 dark:text-slate-400">
-                        <div>👁️ {item.views || 0}</div>
-                        <div>❤️ {item.num_favorers || 0}</div>
+                        <div className="flex items-center gap-1"><Eye className="w-3 h-3" aria-label="Görüntülenme" />{item.views || 0}</div>
+                        <div className="flex items-center gap-1"><Heart className="w-3 h-3" aria-label="Favori" />{item.num_favorers || 0}</div>
                       </td>
 
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleOpenDetail(item)}
-                            className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg font-bold text-xs transition-colors"
+                            className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg font-bold text-xs transition-colors"
                           >
                             İncele & SEO
                           </button>
@@ -926,7 +929,7 @@ export const EtsyListingManager: React.FC = () => {
                               href={item.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg"
+                              className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>

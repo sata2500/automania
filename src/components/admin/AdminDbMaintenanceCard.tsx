@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Database, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
+import { Spinner } from '@/components/common/Spinner';
 
 type MaintenanceStatus = {
   migrations: { total: number; applied: Array<{ tag: string; appliedAt: string }>; pending: Array<{ tag: string }> };
@@ -122,7 +123,7 @@ export function AdminDbMaintenanceCard() {
           disabled={isLoading || isRunning}
           className="self-start sm:self-auto px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          {isLoading ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
           Durumu Yenile
         </button>
       </div>
@@ -253,7 +254,7 @@ export function AdminDbMaintenanceCard() {
               disabled={confirmation !== CONFIRMATION_WORD || isRunning}
               className="flex-1 py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {isRunning && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+              {isRunning && <Spinner className="w-4 h-4" />}
               {isRunning ? 'Çalışıyor…' : 'Onayla ve Çalıştır'}
             </button>
             <button

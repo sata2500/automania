@@ -37,3 +37,19 @@ export function sanitizeEtsyTags(tags: unknown): string[] {
   }
   return result;
 }
+
+const LISTING_STATE_LABELS: Record<string, string> = {
+  active: 'Aktif',
+  draft: 'Taslak',
+  inactive: 'Pasif',
+  sold_out: 'Tükendi',
+  expired: 'Süresi doldu',
+  removed: 'Kaldırıldı',
+  edit: 'Düzenleniyor',
+};
+
+/** Etsy ilan durumunu Türkçe etikete çevirir (ör. "inactive" → "Pasif"). */
+export function formatListingState(state: string | null | undefined): string {
+  if (!state) return '—';
+  return LISTING_STATE_LABELS[state] ?? state;
+}

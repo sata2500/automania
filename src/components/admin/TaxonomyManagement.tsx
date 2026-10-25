@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { Spinner } from '@/components/common/Spinner';
 
 interface TaxonomyCategory {
   id: number;
@@ -224,7 +225,7 @@ export default function TaxonomyManagement() {
               disabled={syncing}
               className="flex-1 sm:flex-initial px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20"
             >
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
               <span>{syncing ? 'Etsy Senkronize Ediliyor...' : "Etsy'den Güncelle"}</span>
             </button>
           </div>
@@ -356,7 +357,7 @@ export default function TaxonomyManagement() {
               {loading ? (
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
-                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+                    <Spinner className="w-5 h-5 mx-auto mb-2 text-indigo-500" />
                     Kategoriler yükleniyor...
                   </td>
                 </tr>
@@ -453,7 +454,7 @@ export default function TaxonomyManagement() {
         <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800">
           {loading ? (
             <div className="p-8 text-center text-slate-500 text-sm">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+              <Spinner className="w-5 h-5 mx-auto mb-2 text-indigo-500" />
               Kategoriler yükleniyor...
             </div>
           ) : displayedCategories.length === 0 ? (

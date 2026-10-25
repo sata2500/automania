@@ -84,7 +84,7 @@ export const SeoAiCopySection: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              🎯 Seçilmiş 13 Etsy Etiketi ({selectedTags.length}/13)
+              Seçilmiş 13 Etsy Etiketi ({selectedTags.length}/13)
               <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold">≤20 Karakter Uyumlu</span>
             </h3>
             <p className="text-xs text-slate-500">Canlı matematiksel fırsat puanları en yüksek olan 13 etiket seçilmiştir.</p>

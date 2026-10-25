@@ -7,6 +7,7 @@ import {
 import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
 import { DesignItemMenu } from './DesignItemMenu';
 import { activateOnKey } from '@/lib/a11y';
+import { Spinner } from '@/components/common/Spinner';
 
 interface DesignCardProps {
   design: DesignItem;
@@ -103,8 +104,8 @@ export const DesignCard: React.FC<DesignCardProps> = ({
           )}
 
           {isAnalyzing && (
-            <span className="p-1 text-purple-500 bg-purple-50 dark:bg-purple-950 rounded-lg animate-pulse">
-              <Sparkles className="w-3 h-3" />
+            <span className="p-1 text-purple-500 bg-purple-50 dark:bg-purple-950 rounded-lg" title="Yapay zeka analiz ediyor">
+              <Spinner className="w-3 h-3" label="Analiz ediliyor" />
             </span>
           )}
 

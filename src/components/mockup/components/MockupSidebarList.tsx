@@ -262,7 +262,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
         </div>
 
         {/* Upload Button */}
-        <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow cursor-pointer transition-all active:scale-95">
+        <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow cursor-pointer transition-all active:scale-95">
           <UploadCloud className="w-3.5 h-3.5" />
           <span>Yükle</span>
           <input

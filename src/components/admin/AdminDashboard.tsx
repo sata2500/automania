@@ -18,10 +18,11 @@ import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import dynamic from 'next/dynamic';
+import { LoadingState } from '@/components/common/Spinner';
 import { AdminSettingsSection } from './AdminSettingsSection';
 
 // Büyük sekmeler yalnızca açıldıklarında indirilir; genel bakış daha hızlı açılır.
-const AdminTabLoading = () => <div className="p-8 text-center text-xs text-slate-500 animate-pulse">Yükleniyor...</div>;
+const AdminTabLoading = () => <LoadingState label="Bölüm yükleniyor…" />;
 const KeywordPoolManagement = dynamic(() => import('./KeywordPoolManagement'), { ssr: false, loading: AdminTabLoading });
 const TaxonomyManagement = dynamic(() => import('./TaxonomyManagement'), { ssr: false, loading: AdminTabLoading });
 const AdminAiSettingsSection = dynamic(() => import('./AdminAiSettingsSection').then((mod) => mod.AdminAiSettingsSection), { ssr: false, loading: AdminTabLoading });
@@ -256,7 +257,7 @@ export const AdminDashboard: React.FC = () => {
                   Yönetici Kumanda Merkezi
                 </h1>
                 <span className="px-2.5 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-extrabold rounded-full uppercase tracking-wider whitespace-nowrap">
-                  Admin Privileged
+                  Yönetici Yetkisi
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 max-w-xl">

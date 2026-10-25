@@ -3,13 +3,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Header, TabKey } from '@/components/common/Header';
 import dynamic from 'next/dynamic';
+import { AppSplash, TabSkeleton } from '@/components/common/LoadingScreens';
+import { LoadingState } from '@/components/common/Spinner';
 import { useRouter } from 'next/navigation';
-const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Editör yükleniyor...</div> });
-const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Tasarımlar yükleniyor...</div> });
-const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Üretim stüdyosu yükleniyor...</div> });
-const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy SEO Asistanı yükleniyor...</div> });
-const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Otomasyon şablonları yükleniyor...</div> });
-const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <div className="p-8 text-center text-slate-500 animate-pulse">Etsy İlan Paneli yükleniyor...</div> });
+const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <TabSkeleton label="Editör yükleniyor" layout="editor" /> });
+const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <TabSkeleton label="Tasarımlar yükleniyor" layout="grid" /> });
+const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <TabSkeleton label="Üretim stüdyosu yükleniyor" layout="grid" /> });
+const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <TabSkeleton label="Etsy SEO asistanı yükleniyor" layout="list" /> });
+const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <TabSkeleton label="Otomasyon şablonları yükleniyor" layout="list" /> });
+const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <TabSkeleton label="Etsy ilan paneli yükleniyor" layout="list" /> });
 
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
@@ -89,7 +91,7 @@ const ETSY_ERROR_MESSAGES: Record<string, string> = {
 /** Giriş gerektiren sekmeler: oturum doğrulanırken bekleme, misafire giriş çağrısı gösterir. */
 function ProtectedTabPlaceholder({ loading, onLogin }: { loading: boolean; onLogin: () => void }) {
   if (loading) {
-    return <div className="p-8 text-center text-slate-500 animate-pulse">Oturum doğrulanıyor...</div>;
+    return <LoadingState label="Oturum doğrulanıyor…" />;
   }
   return (
     <div className="max-w-lg mx-auto my-10 p-6 text-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
@@ -344,6 +346,8 @@ function MainContent() {
       onTouchEnd={handleTouchEnd}
       className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-indigo-500 selection:text-white pb-24 lg:pb-16 transition-colors duration-200"
     >
+      {/* Açılış ekranı: çalışma alanı yüklenene kadar (hata olursa hemen kapanır) */}
+      <AppSplash visible={!isInitialized && !initializationError} />
       {/* Top Header */}
       <Header
         activeTab={activeTab}
@@ -396,7 +400,7 @@ function MainContent() {
               </div>
               <div className="space-y-1 pr-6 md:pr-0">
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>☁️ Çalışmalarınızı Kaydetmek & Tüm Cihazlardan Erişmek İçin Giriş Yapın</span>
+                  <span>Çalışmalarınızı Kaydetmek & Tüm Cihazlardan Erişmek İçin Giriş Yapın</span>
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
                   Oturum açarak kendi özel mockup&apos;larınızı, tasarımlarınızı ve baskı ayarlarınızı kişisel hesabınıza kaydedebilir ve tüm cihazlarınızdan güvenle erişebilirsiniz. <i>(Giriş yapmadan da örnek taslağımızı yükleyip hemen kullanmaya başlayabilirsiniz.)</i>
@@ -511,9 +515,7 @@ function MainContent() {
                     onClick={() => setGeneratorView(key)}
                     className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-all cursor-pointer ${
                       isActive
-                        ? key === 'templates'
-                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
-                          : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
                     }`}
                   >

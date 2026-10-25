@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, Layers, Play, RefreshCw, AlertTriangle, Lightbulb } from 'lucide-react';
+import { Sparkles, Layers, Play, AlertTriangle, Lightbulb } from 'lucide-react';
+import { Spinner } from '@/components/common/Spinner';
 
 interface BatchEmptyStateProps {
   selectedFolderName: string;
@@ -91,7 +92,7 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
           }
         >
           {isGenerating ? (
-            <RefreshCw className="w-4 h-4 animate-spin" />
+            <Spinner className="w-4 h-4" />
           ) : !isEligible ? (
             <AlertTriangle className="w-4 h-4 text-amber-500/70" />
           ) : (

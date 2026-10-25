@@ -144,7 +144,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
           onClick={() => setActiveFolderId(null)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
             activeFolderId === null
-              ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-md shadow-indigo-500/20'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
               : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/50'
           }`}
         >
@@ -196,7 +196,7 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
                   : ''
               } ${
                 isActive && !isBeingDragged && !isDropTarget
-                  ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
                   : !isBeingDragged && !isDropTarget
                   ? 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   : ''

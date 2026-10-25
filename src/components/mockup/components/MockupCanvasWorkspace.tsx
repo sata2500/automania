@@ -101,7 +101,7 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
           {/* Mobile Settings Button */}
           <button
             onClick={onOpenMobileSettings}
-            className="lg:hidden p-2 rounded-xl bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow flex items-center gap-1 text-xs font-bold active:scale-95"
+            className="lg:hidden p-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow flex items-center gap-1 text-xs font-bold active:scale-95"
             aria-label="Ayarları aç"
           >
             <SlidersHorizontal className="w-4 h-4" />

@@ -6,10 +6,11 @@
  * ve tarayıcıya hiçbir zaman geri gönderilmez.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Cloud, Upload, CheckCircle2, AlertTriangle, Trash2, RefreshCw, ChevronDown } from 'lucide-react';
+import { Cloud, Upload, CheckCircle2, AlertTriangle, Trash2, ChevronDown } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { VERTEX_LOCATIONS, type GoogleModelCategory, type GoogleModelInfo } from '@/lib/google-cloud-credentials';
+import { Spinner } from '@/components/common/Spinner';
 
 export type GoogleCloudStatus = {
   mode: 'api_key' | 'vertex';
@@ -167,7 +168,7 @@ export function GoogleCloudConnectionCard({ onChanged }: { onChanged?: (status: 
             htmlFor="gcp-key-file"
             className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold cursor-pointer focus-within:ring-2 focus-within:ring-sky-400 ${isSaving ? 'opacity-60 pointer-events-none' : ''}`}
           >
-            {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {isSaving ? <Spinner className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
             {status?.serviceAccount ? 'Yeni JSON yükle' : 'JSON anahtarını yükle'}
           </label>
           {status?.serviceAccount && (

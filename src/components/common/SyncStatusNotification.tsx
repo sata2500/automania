@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { CloudUpload, CheckCircle2, RefreshCw } from 'lucide-react';
+import { CloudUpload, CheckCircle2 } from 'lucide-react';
 import { SyncStatus } from '@/lib/storage-service';
+import { Spinner } from '@/components/common/Spinner';
 
 interface SyncStatusNotificationProps {
   syncStatus: SyncStatus;
@@ -34,7 +35,7 @@ export const SyncStatusNotification: React.FC<SyncStatusNotificationProps> = ({ 
           className={`absolute top-0 left-0 right-0 h-1 ${
             isCompleted
               ? 'bg-emerald-500'
-              : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-pulse'
+              : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'
           }`}
         />
 
@@ -50,9 +51,9 @@ export const SyncStatusNotification: React.FC<SyncStatusNotificationProps> = ({ 
             {isCompleted ? (
               <CheckCircle2 className="w-5 h-5 animate-in zoom-in-50" />
             ) : total && total > 0 ? (
-              <CloudUpload className="w-5 h-5 animate-bounce" />
+              <CloudUpload className="w-5 h-5" />
             ) : (
-              <RefreshCw className="w-4 h-4 animate-spin" />
+              <Spinner className="w-4 h-4" />
             )}
           </div>
 

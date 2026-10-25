@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* ============================================================
    Tailwind v4 — CSS-first Dark Mode (2026 Best Practice)
@@ -6,6 +7,12 @@
    whenever the .dark class exists on any ancestor element.
    ============================================================ */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Uygulama yazı tipi: layout'ta yüklenen Geist (next/font). `font-sans` / `font-mono` bunları kullanır. */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 
 /* ============================================================
    Design Token System — Semantic CSS Variables
@@ -88,8 +95,7 @@
   body {
     background-color: var(--color-surface-base);
     color: var(--color-text-primary);
-    font-family: 'Inter', 'Geist', system-ui, -apple-system, BlinkMacSystemFont,
-      'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: var(--font-sans);
     min-height: 100vh;
     transition: background-color 0.2s ease, color 0.2s ease;
     -webkit-font-smoothing: antialiased;
@@ -186,4 +192,69 @@
    ============================================================ */
 input[type="range"] {
   accent-color: #f59e0b;
+}
+
+/* ============================================================
+   Hareket azaltma tercihi: animasyonlar kısaltılır, dönen
+   göstergeler yavaşlatılarak korunur (işlemin sürdüğü belli olsun).
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* İskelet (skeleton) yükleme parıltısı */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background-color: var(--color-surface-muted);
+  background-image: linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+  background-size: 400px 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 0.75rem;
+}
+.dark .skeleton {
+  background-image: linear-gradient(90deg, transparent 0, rgba(148, 163, 184, 0.12) 50%, transparent 100%);
+}
+
+/* Bildirim kalan süre çubuğu */
+@keyframes toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* ============================================================
+   Ortak düğme stilleri — tüm ekranlarda aynı görünüm
+   ============================================================ */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all duration-150 cursor-pointer select-none
+      disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/20
+      hover:from-indigo-500 hover:to-purple-500;
+  }
+  .btn-secondary {
+    @apply border border-slate-200 bg-white text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300
+      dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+  .btn-etsy {
+    @apply bg-orange-500 text-white shadow-md shadow-orange-500/20 hover:bg-orange-600;
+  }
+  .btn-ghost-danger {
+    @apply border border-slate-200 bg-slate-50 text-rose-500 hover:bg-rose-50 hover:border-rose-300
+      dark:border-slate-700 dark:bg-slate-800 dark:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:border-rose-500/50;
+  }
 }

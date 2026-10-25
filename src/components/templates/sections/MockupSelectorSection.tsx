@@ -12,9 +12,9 @@ interface MockupSelectorSectionProps {
 }
 
 const FABRIC_OPTIONS = [
-  { value: 'light', label: '☀️ Açık Kumaş', desc: 'Beyaz, krem, açık gri vb.' },
-  { value: 'dark', label: '🌑 Koyu Kumaş', desc: 'Siyah, lacivert, koyu gri vb.' },
-  { value: 'all', label: '✦ Tüm Kumaşlar', desc: 'Açık ve koyu renk birlikte' },
+  { value: 'light', label: 'Açık Kumaş', desc: 'Beyaz, krem, açık gri vb.', swatch: 'bg-white border-slate-300' },
+  { value: 'dark', label: 'Koyu Kumaş', desc: 'Siyah, lacivert, koyu gri vb.', swatch: 'bg-slate-800 border-slate-700' },
+  { value: 'all', label: 'Tüm Kumaşlar', desc: 'Açık ve koyu renk birlikte', swatch: 'bg-gradient-to-r from-white to-slate-800 border-slate-400' },
 ] as const;
 
 export function MockupSelectorSection({ mockups, config, onChange }: MockupSelectorSectionProps) {
@@ -134,13 +134,13 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
               }`}
             >
-              <span className="text-sm">{opt.label.split(' ')[0]}</span>
+              <span className={`w-4 h-4 rounded-full border ${opt.swatch}`} aria-hidden="true" />
               <span className={`text-[10px] font-semibold mt-0.5 ${
                 config.fabricType === opt.value
                   ? 'text-amber-700 dark:text-amber-400'
                   : 'text-slate-600 dark:text-slate-400'
               }`}>
-                {opt.label.split(' ').slice(1).join(' ')}
+                {opt.label}
               </span>
               <span className="text-[9px] text-slate-400 mt-0.5">{opt.desc}</span>
             </button>

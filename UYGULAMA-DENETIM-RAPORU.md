@@ -523,3 +523,20 @@ Aşağıdaki maddelerde kodun davranışı kesin, ancak Etsy'nin bu davranışa 
 **Doğrulama:** 272 birim testi geçiyor. Yeni testler: mockup seçimi ve kumaş filtresi, 20 görsel sınırı, prompt ve anahtar kelime üretimi, adım ilerleme ve sonuç, zamanlama telafisi ve sonraki çalışma (saat dilimiyle). Çalıştırıcı sahte veritabanıyla uçtan uca test edildi: tam akışta tek taslak ilan, devam eden çalıştırmada ikinci ilan açılmaması, kuru çalıştırma, eksik kargo ayarında anlaşılır atlama, Etsy reddinde başarısız durum, iptalin korunması. TypeScript ve ESLint temiz; üretim derlemesi ve E2E testleri (3/3) geçti; yeni sihirbaz adımı ve ayrıntılar penceresi telefon ve masaüstünde taşmasız.
 
 **Canlı ortamda yapılması gerekenler:** Gerçek Etsy mağazasıyla bir "Şimdi Çalıştır" denemesi (taslak ilan, görseller ve envanter Etsy panelinden kontrol edilmeli). `INTERNAL_API_TOKEN` tanımlanması önerilir; tanımlı değilse uzun çalıştırmalar şablon ekranı açıkken veya saatlik zamanlayıcıyla tamamlanır.
+
+### Arayüz geçişi: tutarlılık, yükleme ekranları ve bildirimler ✅ (25 Ekim 2026)
+
+| Konu | Yapılan |
+|---|---|
+| Dönen ikonlar | 72 yerde işlem sürerken düğmenin kendi ikonu (yıldız, göz, gönder, yenile) döndürülüyordu. Hepsi tek tip, ince halka şeklindeki `Spinner` göstergesiyle değiştirildi; ikon dönmüyor, yerine gösterge geliyor. Zıplayan/yanıp sönen göstergeler de kaldırıldı. |
+| Giriş animasyonları çalışmıyordu | 17 dosyada kullanılan `animate-in / fade-in / zoom-in` sınıflarını sağlayan eklenti yüklü değildi. `tw-animate-css` eklendi; pencere ve panel geçişleri artık yumuşak. "Hareketi azalt" tercihine uyuluyor. |
+| Yazı tipi | Geist yükleniyordu ama kullanılmıyordu (sistem yazı tipine düşüyordu). Tüm uygulama artık Geist kullanıyor. |
+| Yükleniyor ekranları | Açılışta marka logolu karşılama ekranı; sekmeler yüklenirken sayfa düzenine benzeyen iskeletler (parıltı efektli); admin paneli için yükleme sayfası; "Yükleniyor..." yazıları ortak `LoadingState` bileşenine geçti. |
+| Bildirimler | Sağ altta küçük kart: renkli şerit, ikon, başlık, kapatma ve kalan süre çubuğu. Fareyle üzerine gelince süre duruyor; en fazla 3 bildirim; mobil/tablette alt menünün üstünde ortalı. |
+| Tema uyumu | İlan düzenleme ve toplu işlem pencereleri, İlanlarım ve Etsy SEO üst kartları açık temada da koyu görünüyordu; artık iki temaya da uyuyor. |
+| Renk ve düğme tutarlılığı | Seçili sekme/klasör vurgusu tüm sekmelerde aynı (indigo→mor). Ortak düğme sınıfları (`btn-primary`, `btn-secondary`, `btn-etsy`, `btn-ghost-danger`). Otomasyon Şablonları başlığı diğer sekmelerdeki kart yapısına getirildi. |
+| Emoji temizliği | Düğme, başlık ve listelerde ikonun yanında tekrar eden 78 dekoratif emoji kaldırıldı; görüntülenme/favori ve şablon istatistikleri gerçek ikonlarla gösteriliyor. |
+| Türkçe büyük harf hatası | Türkçe sayfada büyük harfe çevrilen İngilizce kelimeler "ACTİVE", "LİVE", "ADMİN PRİVİLEGED" gibi görünüyordu. İlan durumları Türkçe etiketlerle (Aktif, Taslak, Pasif…) gösteriliyor. |
+| Responsive | Tablette alt menü ortalı ve dar; sayı rozetleri ikonlara bağlı. Toplu Üretim düğmeleri tablette tek satırda, mobilde kısa etiketli. Projede tanımsız `xs:` boyutu nedeniyle hiç görünmeyen "Temizle" etiketi düzeltildi. Admin başlık satırı mobilde sadeleştirildi. |
+
+**Doğrulama:** Tüm ana sekmeler ve admin ekranları telefon (375), tablet (768) ve masaüstünde (1440) açık ve koyu temada görüntülendi; taşma ve sayfa hatası yok. Klavye testleri, 280 birim testi, derleme ve E2E testleri geçti.

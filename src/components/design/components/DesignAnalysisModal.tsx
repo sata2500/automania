@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, X, Clock, FileText, Hash, RefreshCw, Trophy, Tag, Layers } from 'lucide-react';
 import { DesignItem, EvaluatedKeyword } from '@/types/pod';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
 
 interface DesignAnalysisModalProps {
   analysisModalData: DesignItem | null;
@@ -88,7 +89,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
                 Yapay zeka çıkarımları ve Etsy resmi API pazar metrikleri
                 {isRefreshing && (
                   <span className="inline-flex items-center gap-1 text-indigo-500" role="status">
-                    <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" />
+                    <Spinner className="w-3 h-3" />
                     güncelleniyor…
                   </span>
                 )}

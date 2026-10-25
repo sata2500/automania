@@ -89,7 +89,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
             </button>
             <button
               onClick={onSaveChanges}
-              className="px-3 py-1 text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 rounded-xl shadow flex items-center gap-1 transition-all active:scale-95"
+              className="px-3 py-1 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl shadow flex items-center gap-1 transition-all active:scale-95"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Kaydet</span>

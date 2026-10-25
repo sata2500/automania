@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, CloudOff, RefreshCw, Download, Upload } from 'lucide-react';
 import type { SaveStatus } from '@/lib/storage-service';
+import { Spinner } from '@/components/common/Spinner';
 
 interface SaveStatusBannerProps {
   saveStatus: SaveStatus;
@@ -56,7 +57,7 @@ export const SaveStatusBanner: React.FC<SaveStatusBannerProps> = ({ saveStatus, 
                 disabled={busy !== null}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-sm disabled:opacity-60 cursor-pointer"
               >
-                {busy === 'server' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {busy === 'server' ? <Spinner className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
                 Buluttaki sürümü yükle
               </button>
               {confirmLocal ? (
@@ -66,7 +67,7 @@ export const SaveStatusBanner: React.FC<SaveStatusBannerProps> = ({ saveStatus, 
                   disabled={busy !== null}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-sm disabled:opacity-60 cursor-pointer"
                 >
-                  {busy === 'local' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {busy === 'local' ? <Spinner className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
                   Evet, buluttakinin üzerine yaz
                 </button>
               ) : (

@@ -8,7 +8,6 @@ import {
   User,
   ShieldCheck,
   CheckCircle2,
-  RefreshCw,
   Download,
   Upload,
   Sparkles,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 import type { SaveStatus } from '@/lib/storage-service';
+import { Spinner } from '@/components/common/Spinner';
 
 
 interface AuthModalProps {
@@ -144,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </>
                 ) : isSaving ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 text-amber-500 animate-spin" />
+                    <Spinner className="w-3.5 h-3.5 text-amber-500" />
                     <span className="text-amber-500 text-[11px] font-semibold">Buluta Eşitleniyor...</span>
                   </>
                 ) : (
@@ -169,7 +169,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 <div className="flex items-center space-x-2.5">
                   {isBackupProcessing ? (
-                    <RefreshCw className="w-4 h-4 text-indigo-500 animate-spin" />
+                    <Spinner className="w-4 h-4 text-indigo-500" />
                   ) : (
                     <Download className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                   )}
@@ -189,7 +189,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               >
                 <div className="flex items-center space-x-2.5">
                   {isBackupProcessing ? (
-                    <RefreshCw className="w-4 h-4 text-purple-500 animate-spin" />
+                    <Spinner className="w-4 h-4 text-purple-500" />
                   ) : (
                     <Upload className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                   )}

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { CheckCircle2, AlertCircle, Info, AlertTriangle, X, Loader2 } from 'lucide-react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode } from 'react';
+import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
+import { Spinner } from '@/components/common/Spinner';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'progress';
 
@@ -11,9 +12,10 @@ export interface ToastItem {
   title?: string;
   message: string;
   progress?: number; // 0 to 100
-  duration?: number; // ms, default 3500ms
-  _timerId?: number; // internal: auto-dismiss timer handle
+  duration?: number; // ms; 0 = kullanıcı kapatana kadar
 }
+
+const MAX_VISIBLE_TOASTS = 3;
 
 interface ToastContextType {
   addToast: (toast: Omit<ToastItem, 'id'>) => string;
@@ -40,12 +42,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => {
-      const toast = prev.find((t) => t.id === id);
-      // Clear any pending auto-dismiss timer to avoid redundant state updates
-      if (toast?._timerId) clearTimeout(toast._timerId);
-      return prev.filter((t) => t.id !== id);
-    });
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const addToast = useCallback(
@@ -53,23 +50,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : Math.random().toString(36).substring(2, 9);
-
-      const newToast: ToastItem = { ...toast, id };
-
-      setToasts((prev) => [...prev.slice(-4), newToast]); // Keep max 5 toasts visible
-
       const duration = toast.duration ?? (toast.type === 'progress' ? 0 : 4000);
-      if (duration > 0) {
-        const timerId = setTimeout(() => {
-          removeToast(id);
-        }, duration);
-        // Store timerId on the toast so manual dismiss can cancel it
-        newToast._timerId = timerId as unknown as number;
-      }
-
+      // Aynı anda en fazla 3 bildirim: en eskisi düşer. Otomatik kapanma kartın kendisinde yönetilir
+      // (fareyle üzerine gelince duraklar).
+      setToasts((prev) => [...prev.slice(-(MAX_VISIBLE_TOASTS - 1)), { ...toast, id, duration }]);
       return id;
     },
-    [removeToast]
+    []
   );
 
   const updateProgressToast = useCallback((id: string, progress: number, message?: string) => {
@@ -129,11 +116,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* Toast Notification Layer — aria-live for screen reader announcements */}
+      {/* Bildirim katmanı: masaüstünde sağ alt köşe; mobil ve tablette alt gezinme çubuğunun üstünde ortalı */}
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+92px)] left-3 right-3 sm:left-auto sm:w-full sm:max-w-sm lg:bottom-4 lg:right-4 z-[60] flex flex-col gap-2.5 pointer-events-none"
+        className="fixed z-[60] flex flex-col gap-2 pointer-events-none bottom-[calc(env(safe-area-inset-bottom)+88px)] left-1/2 -translate-x-1/2 w-[calc(100%-1.5rem)] max-w-sm lg:bottom-5 lg:right-5 lg:left-auto lg:translate-x-0 lg:w-80"
       >
         {toasts.map((toast) => (
           <ToastCard key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
@@ -143,76 +130,75 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const TOAST_STYLES: Record<ToastType, { icon: React.ReactNode; accent: string; bar: string }> = {
+  success: { icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />, accent: 'bg-emerald-500', bar: 'bg-emerald-500/70' },
+  error: { icon: <AlertCircle className="w-4 h-4 text-rose-500" />, accent: 'bg-rose-500', bar: 'bg-rose-500/70' },
+  warning: { icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, accent: 'bg-amber-500', bar: 'bg-amber-500/70' },
+  info: { icon: <Info className="w-4 h-4 text-sky-500" />, accent: 'bg-sky-500', bar: 'bg-sky-500/70' },
+  progress: { icon: <Spinner className="w-4 h-4 text-indigo-500" />, accent: 'bg-indigo-500', bar: 'bg-indigo-500' },
+};
+
 function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }) {
-  const getIcon = () => {
-    switch (toast.type) {
-      case 'success':
-        return <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />;
-      case 'error':
-        return <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />;
-      case 'warning':
-        return <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />;
-      case 'progress':
-        return <Loader2 className="w-5 h-5 text-indigo-500 animate-spin shrink-0 mt-0.5" />;
-      case 'info':
-      default:
-        return <Info className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />;
-    }
-  };
+  const duration = toast.duration ?? 0;
+  const [isPaused, setIsPaused] = useState(false);
+  const remainingRef = useRef(duration);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
-  const getCardStyle = () => {
-    switch (toast.type) {
-      case 'success':
-        return 'border-emerald-200 dark:border-emerald-500/30 bg-white dark:bg-slate-900/98 shadow-emerald-100 dark:shadow-emerald-950/20';
-      case 'error':
-        return 'border-rose-200 dark:border-rose-500/30 bg-white dark:bg-slate-900/98 shadow-rose-100 dark:shadow-rose-950/20';
-      case 'warning':
-        return 'border-amber-200 dark:border-amber-500/30 bg-white dark:bg-slate-900/98 shadow-amber-100 dark:shadow-amber-950/20';
-      case 'progress':
-        return 'border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900/98 shadow-indigo-100 dark:shadow-indigo-950/20';
-      case 'info':
-      default:
-        return 'border-sky-200 dark:border-sky-500/30 bg-white dark:bg-slate-900/98 shadow-sky-100 dark:shadow-sky-950/20';
-    }
-  };
+  // Otomatik kapanma: fare kartın üzerindeyken (veya odak içindeyken) süre durur, kalan süreden devam eder.
+  useEffect(() => {
+    if (duration <= 0 || isPaused) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => onCloseRef.current(), remainingRef.current);
+    return () => {
+      window.clearTimeout(timer);
+      remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAt));
+    };
+  }, [duration, isPaused]);
 
-  // Only error/warning toasts use role="alert" (interrupts screen reader immediately).
-  // Informational toasts use role="status" (politely announced).
+  const style = TOAST_STYLES[toast.type] ?? TOAST_STYLES.info;
+  // Yalnızca hata/uyarı ekran okuyucuyu hemen keser; diğerleri sırayla duyurulur.
   const ariaRole = (toast.type === 'error' || toast.type === 'warning') ? 'alert' : 'status';
 
   return (
     <div
-      className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-md transition-all duration-300 transform translate-y-0 animate-in fade-in slide-in-from-bottom-3 ${getCardStyle()}`}
       role={ariaRole}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onFocus={() => setIsPaused(true)}
+      onBlur={() => setIsPaused(false)}
+      className="group pointer-events-auto relative overflow-hidden flex items-start gap-2.5 pl-3.5 pr-2 py-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg shadow-slate-900/10 dark:shadow-black/40 animate-in fade-in slide-in-from-bottom-2 duration-200"
     >
-      {getIcon()}
-      <div className="flex-1 min-w-0 pr-1">
+      <span className={`absolute left-0 top-0 bottom-0 w-1 ${style.accent}`} aria-hidden="true" />
+      <span className="mt-0.5 shrink-0">{style.icon}</span>
+      <div className="flex-1 min-w-0">
         {toast.title && (
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-0.5">
-            {toast.title}
-          </h4>
+          <p className="text-[12px] font-semibold text-slate-900 dark:text-white leading-tight">{toast.title}</p>
         )}
-        <p className="text-xs font-medium text-slate-700 dark:text-slate-200 leading-relaxed break-words">
+        <p className={`text-[12px] text-slate-600 dark:text-slate-300 leading-snug break-words ${toast.title ? 'mt-0.5' : ''}`}>
           {toast.message}
         </p>
-
         {toast.type === 'progress' && typeof toast.progress === 'number' && (
-          <div className="mt-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${toast.progress}%` }}
-            />
+          <div className="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1 overflow-hidden" role="progressbar" aria-valuenow={Math.round(toast.progress)} aria-valuemin={0} aria-valuemax={100}>
+            <div className={`${style.bar} h-1 rounded-full transition-all duration-300 ease-out`} style={{ width: `${toast.progress}%` }} />
           </div>
         )}
       </div>
-
       <button
+        type="button"
         onClick={onClose}
-        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60"
-        aria-label="Kapat"
+        className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+        aria-label="Bildirimi kapat"
       >
         <X className="w-3.5 h-3.5" />
       </button>
+      {duration > 0 && (
+        <span
+          aria-hidden="true"
+          className={`absolute bottom-0 left-0 h-0.5 ${style.bar} origin-left`}
+          style={{ width: '100%', animation: `toast-countdown ${duration}ms linear forwards`, animationPlayState: isPaused ? 'paused' : 'running' }}
+        />
+      )}
     </div>
   );
 }

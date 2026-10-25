@@ -146,22 +146,22 @@ export const SeoStoreParamsAccordion: React.FC = () => {
           <div className="flex flex-wrap gap-1.5 pt-1 pl-8">
             {currentShippingProfile && (
               <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 border border-slate-200 dark:border-slate-700">
-                📦 {currentShippingProfile.title}
+                {currentShippingProfile.title}
               </span>
             )}
             {currentReadiness && (
               <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 border border-slate-200 dark:border-slate-700">
-                ⏱️ {currentReadiness.processing_days_display_label}
+                {currentReadiness.processing_days_display_label}
               </span>
             )}
             {currentSection && (
               <span className="text-[10px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-md font-semibold flex items-center gap-1 border border-purple-200 dark:border-purple-800">
-                📁 {currentSection.title}
+                {currentSection.title}
               </span>
             )}
             {sku && (
               <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md font-mono font-bold flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
-                🏷️ {sku}
+                {sku}
               </span>
             )}
           </div>
@@ -284,7 +284,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                     const isDefault = taxonomyId && defaultTemplates[taxonomyId] === t.id;
                     return (
                       <option key={t.id} value={t.id}>
-                        {t.name} ({t.variations?.length || 0} Varyasyon) {isDefault ? ' ⭐ (VARSAYILAN)' : ''}
+                        {t.name} ({t.variations?.length || 0} Varyasyon) {isDefault ? ' (VARSAYILAN)' : ''}
                       </option>
                     );
                   })}
@@ -296,7 +296,7 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                     onClick={() => handleSetDefaultTemplate(selectedTemplateForDefault)}
                     className="px-3.5 py-2.5 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/80 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl transition-all shrink-0 flex items-center justify-center gap-1.5 border border-emerald-300 dark:border-emerald-800 shadow-xs"
                   >
-                    ⭐ Bu Kategoriye Varsayılan Yap
+                    Bu Kategoriye Varsayılan Yap
                   </button>
                 )}
               </div>

@@ -114,21 +114,11 @@ export const Header: React.FC<HeaderProps> = ({
                     title={isLocked ? 'Bu adım için giriş yapın' : undefined}
                     className={`flex items-center space-x-2 px-2.5 xl:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${isLocked ? 'opacity-60 ' : ''}${
                       isActive
-                        ? key === 'generator'
-                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md'
-                          : 'bg-indigo-600 text-white shadow-md'
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
                         : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'
                     }`}
                   >
-                    <Icon
-                      className={`w-4 h-4 ${
-                        key === 'generator'
-                          ? 'text-amber-300 animate-pulse'
-                          : key === 'seo'
-                          ? 'text-emerald-400'
-                          : ''
-                      }`}
-                    />
+                    <Icon className="w-4 h-4" />
                     <span className="xl:hidden">{shortLabel}</span>
                     <span className="hidden xl:inline">{label}</span>
                     {isLocked && <Lock className="w-3 h-3" aria-label="Giriş gerekli" />}
@@ -195,7 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Floating Bottom Navigation Bar for Mobile */}
       <nav
         aria-label="Mobil navigasyon"
-        className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
+        className="lg:hidden fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[32rem] z-50 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-1.5 flex items-center justify-around transition-colors duration-200 select-none touch-manipulation"
       >
         {TABS.map(({ key, shortLabel, icon: Icon }) => { const isActive = activeTab === key;
           const badge = getBadge(key);
@@ -208,30 +198,23 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label={`${shortLabel}${isLocked ? ', giriş gerekli' : ''}${badge ? `, ${badge} öğe` : ''}`}
               className={`relative flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-xl text-[10px] font-bold transition-all active:scale-95 ${
                 isActive
-                  ? key === 'generator'
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                    : 'bg-indigo-600 text-white shadow-lg'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <Icon
-                className={`w-4 h-4 mb-0.5 ${
-                  key === 'generator' && !isActive
-                    ? 'text-amber-500'
-                    : key === 'seo' && !isActive
-                    ? 'text-emerald-500 dark:text-emerald-400'
-                    : ''
-                }`}
-              />
+              {/* Rozet ve kilit ikona bağlı konumlanır; geniş ekranda da ikonun yanında kalır. */}
+              <span className="relative mb-0.5">
+                <Icon className="w-4 h-4" />
+                {isLocked && (
+                  <Lock className="absolute -top-1.5 -right-2.5 w-3 h-3 text-slate-400" aria-hidden="true" />
+                )}
+                {!isLocked && badge !== null && badge > 0 && (
+                  <span className="absolute -top-2 -right-3 min-w-4 h-4 px-0.5 bg-pink-500 text-white text-[8px] font-extrabold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </span>
               <span className={`leading-none ${isLocked ? 'opacity-60' : ''}`}>{shortLabel}</span>
-              {isLocked && (
-                <Lock className="absolute top-1 right-2 w-3 h-3 text-slate-400" aria-hidden="true" />
-              )}
-              {badge !== null && badge > 0 && (
-                <span className="absolute top-1 right-2 w-4 h-4 bg-pink-500 text-white text-[8px] font-extrabold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow">
-                  {badge > 99 ? '99+' : badge}
-                </span>
-              )}
             </button>
           );
         })}

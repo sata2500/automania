@@ -4,6 +4,8 @@ import { ShoppingBag, CheckCircle, RefreshCw, Send, AlertTriangle, X } from 'luc
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { BULK_INVENTORY_CONFIRMATION } from '@/lib/etsy-variations';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
+import { formatListingState } from '@/lib/etsy-format';
 
 /** Sunucu tek istekte en fazla 100 ilanın envanterini günceller. */
 const MAX_BULK_LISTINGS = 100;
@@ -238,7 +240,7 @@ export const VariationModals: React.FC = () => {
 
               {isFetchingListings ? (
                 <div className="text-center py-8 text-slate-500 text-sm font-semibold flex flex-col items-center">
-                  <RefreshCw className="w-6 h-6 animate-spin text-emerald-500 mb-2" />
+                  <Spinner className="w-6 h-6 text-emerald-500 mb-2" />
                   İlanlarınız Yükleniyor...
                 </div>
               ) : etsyListings.length === 0 ? (
@@ -278,7 +280,7 @@ export const VariationModals: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={listing.title ?? undefined}>{listing.title}</p>
                           <div className="flex gap-2 text-[10px] mt-1 text-slate-500">
-                            <span className="uppercase">{listing.state}</span>
+                            <span>{formatListingState(listing.state)}</span>
                             <span>ID: {listing.listing_id}</span>
                           </div>
                         </div>
@@ -312,7 +314,7 @@ export const VariationModals: React.FC = () => {
               >
                 {isSyncing ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <Spinner className="w-4 h-4" />
                     Güncelleniyor... Lütfen bekleyin
                   </>
                 ) : (

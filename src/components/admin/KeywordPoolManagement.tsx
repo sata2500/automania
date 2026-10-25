@@ -10,6 +10,7 @@ import { useToast } from '@/components/common/ToastContext';
 import { parseJsonObject } from '@/lib/json-utils';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
+import { Spinner } from '@/components/common/Spinner';
 
 // Ham Etsy metrikleri (raw_metrics JSONB); alanlar kaynağa göre değişebilir.
 type RawKeywordMetrics = {
@@ -519,7 +520,7 @@ export default function KeywordPoolManagement() {
     if (score === null || score === 0) {
       return <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">Puan Yok</span>;
     }
-    if (score >= 80) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300">🔥 {score}</span>;
+    if (score >= 80) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300">{score}</span>;
     if (score >= 50) return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300">{score}</span>;
     return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300">{score}</span>;
   };
@@ -589,7 +590,7 @@ export default function KeywordPoolManagement() {
             {etsyStatus.connected ? (
               <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1.5 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                🟢 Etsy Resmi API (Mağaza: {etsyStatus.shopId || 'Bağlı'})
+                Etsy Resmi API (Mağaza: {etsyStatus.shopId || 'Bağlı'})
               </span>
             ) : (
               <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 flex items-center gap-1.5 shadow-sm">
@@ -610,8 +611,8 @@ export default function KeywordPoolManagement() {
             disabled={isBulkRunning || isEvaluating || isExporting}
             className="col-span-2 sm:col-auto px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 min-h-[40px]"
           >
-            <RefreshCw className={`w-4 h-4 ${isBulkRunning ? 'animate-spin' : ''}`} />
-            <span>{isBulkRunning ? 'Tüm Havuz Taranıyor...' : '⚡ Tüm Havuzu Güncelle'}</span>
+            {isBulkRunning ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+            <span>{isBulkRunning ? 'Tüm Havuz Taranıyor...' : 'Tüm Havuzu Güncelle'}</span>
           </button>
 
           <button 
@@ -619,7 +620,7 @@ export default function KeywordPoolManagement() {
             disabled={isEvaluating || isBulkRunning || isExporting}
             className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[40px]"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isEvaluating ? 'animate-spin' : ''}`} />
+            {isEvaluating ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
             <span>{selectedIds.size > 0 ? `Seçilenleri Güncelle (${selectedIds.size})` : 'Eskimişleri Tara'}</span>
           </button>
           
@@ -627,7 +628,7 @@ export default function KeywordPoolManagement() {
             onClick={() => setShowTestModal(true)}
             className="px-3 py-2.5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 text-blue-700 dark:text-blue-300 text-xs sm:text-sm font-semibold rounded-xl border border-blue-200 dark:border-blue-800 transition-colors flex items-center justify-center gap-1.5 min-h-[40px]"
           >
-            🧪 Test Et
+            Test Et
           </button>
 
           <button 
@@ -636,7 +637,7 @@ export default function KeywordPoolManagement() {
             className="px-3 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 min-h-[40px]"
             title="Tüm kelimeleri Excel uyumlu CSV olarak indir"
           >
-            <Download className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />
+            {isExporting ? <Spinner className="w-4 h-4" /> : <Download className="w-4 h-4" />}
             <span>{isExporting ? 'Hazırlanıyor...' : 'CSV İndir'}</span>
           </button>
           
@@ -657,7 +658,7 @@ export default function KeywordPoolManagement() {
         <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 sm:p-4 space-y-2">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs sm:text-sm font-bold text-emerald-900 dark:text-emerald-200">
             <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+              <Spinner className="w-4 h-4 text-emerald-600 shrink-0" />
               Etsy API Toplu Tarama: {bulkProgress.current} / {bulkProgress.total} kelime
             </span>
             <div className="flex items-center gap-3 self-end sm:self-auto">
@@ -679,8 +680,8 @@ export default function KeywordPoolManagement() {
             />
           </div>
           <div className="flex justify-between text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-            <span>✅ Güncellenen: {bulkProgress.updated}</span>
-            {bulkProgress.blocked > 0 && <span className="text-rose-600 font-bold">⚠️ Engellenen/Hata: {bulkProgress.blocked}</span>}
+            <span>Güncellenen: {bulkProgress.updated}</span>
+            {bulkProgress.blocked > 0 && <span className="text-rose-600 font-bold">Engellenen/Hata: {bulkProgress.blocked}</span>}
           </div>
         </div>
       )}
@@ -705,21 +706,21 @@ export default function KeywordPoolManagement() {
           className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'unevaluated' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'}`}
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          🕒 Taranmamış / Bekleyen
+          Taranmamış / Bekleyen
         </button>
         <button
           onClick={() => { setFilter('gold'); setPage(0); }}
           className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'gold' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'}`}
         >
           <Trophy className="w-3.5 h-3.5" />
-          🏆 Altın Nişler (Skor ≥70 &amp; İlan &lt; 5K)
+          Altın Nişler (Skor ≥70 &amp; İlan &lt; 5K)
         </button>
         <button
           onClick={() => { setFilter('error'); setPage(0); }}
           className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-colors flex items-center gap-1.5 ${filter === 'error' ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'}`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          ⚠️ Engellenen / Hatalı Olanlar
+          Engellenen / Hatalı Olanlar
         </button>
       </div>
 
@@ -900,7 +901,7 @@ export default function KeywordPoolManagement() {
                               title="Bu kelimeyi gerçek Etsy verisiyle güncelle"
                               className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition-colors disabled:opacity-40"
                             >
-                              <RefreshCw className={`w-3.5 h-3.5 ${evaluatingSingleId === kw.id ? 'animate-spin' : ''}`} />
+                              {evaluatingSingleId === kw.id ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                             </button>
                             <button
                               onClick={() => handleDeleteSingle(kw)}
@@ -1028,7 +1029,7 @@ export default function KeywordPoolManagement() {
                         className="p-2 text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors disabled:opacity-40"
                         title="Güncelle"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${evaluatingSingleId === kw.id ? 'animate-spin' : ''}`} />
+                        {evaluatingSingleId === kw.id ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                       </button>
                       <button
                         onClick={() => handleDeleteSingle(kw)}
@@ -1076,7 +1077,7 @@ export default function KeywordPoolManagement() {
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <h4 id="keyword-details-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  🏷️ &quot;{activeDetailsKeyword.keyword}&quot; Analiz Detayları
+                  &quot;{activeDetailsKeyword.keyword}&quot; Analiz Detayları
                 </h4>
                 <p className="text-xs text-slate-500">Etsy&apos;de bu kelimeyle en çok satan rakiplerin kullandığı etiketler</p>
               </div>
@@ -1170,7 +1171,7 @@ export default function KeywordPoolManagement() {
           <DialogPanel aria-labelledby="keyword-test-title" onClose={() => setShowTestModal(false)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 id="keyword-test-title" className="text-sm sm:text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                🧪 Etsy Kazıyıcı &amp; Canlı API Testi
+                Etsy Kazıyıcı &amp; Canlı API Testi
               </h3>
               <button 
                 onClick={() => setShowTestModal(false)}
@@ -1186,13 +1187,13 @@ export default function KeywordPoolManagement() {
                    onClick={() => setTestMode('server')}
                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'server' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
                  >
-                   🌐 Etsy Resmi API / Sunucu Testi
+                   Etsy Resmi API / Sunucu Testi
                  </button>
                  <button
                    onClick={() => setTestMode('browser')}
                    className={`flex-1 py-2 rounded-lg transition-all ${testMode === 'browser' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'}`}
                  >
-                   ⚡ İstemci Tarayıcı Modu
+                   İstemci Tarayıcı Modu
                  </button>
                </div>
 
@@ -1213,7 +1214,7 @@ export default function KeywordPoolManagement() {
                      disabled={isTestingScraper}
                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0 min-h-[38px]"
                    >
-                     <RefreshCw className={`w-3.5 h-3.5 ${isTestingScraper ? 'animate-spin' : ''}`} />
+                     {isTestingScraper ? <Spinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                      {testMode === 'server' ? 'Etsy API ile Test Et' : 'Tarayıcıda Test Et'}
                    </button>
                  </div>

@@ -1,7 +1,8 @@
 'use client';
 import React from 'react';
-import { Sparkles, ShoppingBag, FileText, Save, RefreshCw } from 'lucide-react';
+import { Sparkles, ShoppingBag, FileText, Save } from 'lucide-react';
 import { useEtsySeo } from '../context/EtsySeoContext';
+import { Spinner } from '@/components/common/Spinner';
 
 export const SeoDesignConfigSection: React.FC = () => {
   const {
@@ -34,7 +35,7 @@ export const SeoDesignConfigSection: React.FC = () => {
           disabled={isSavingSettings}
           className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
         >
-          {isSavingSettings ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+          {isSavingSettings ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
           Ayarları Veritabanına Kaydet
         </button>
       </div>

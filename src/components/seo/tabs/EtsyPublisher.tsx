@@ -5,6 +5,7 @@ import type { EtsyTaxonomyProperty } from '@/types/etsy';
 import { formatReturnPolicy } from '@/lib/etsy-format';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { useToast } from '@/components/common/ToastContext';
+import { Spinner } from '@/components/common/Spinner';
 
 const MultiSelectDropdown = ({ propItem, selectedValues = [], onChange }: { propItem: EtsyTaxonomyProperty, selectedValues: number[], onChange: (vals: number[]) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -421,8 +422,8 @@ export const EtsyPublisher = () => {
                     disabled={isPublishing || !selectedShippingProfileId}
                     className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    <Send className={`w-4 h-4 ${isPublishing ? 'animate-spin' : ''}`} />
-                    🚀 Etsy&apos;ye Taslak (Draft) Olarak Aktar
+                    {isPublishing ? <Spinner className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                    Etsy&apos;ye Taslak (Draft) Olarak Aktar
                   </button>
 
                 </div>

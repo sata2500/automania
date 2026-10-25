@@ -8,8 +8,6 @@ import {
   Eye,
   TrendingUp,
   CheckCircle2,
-  
-  Loader2
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -17,6 +15,7 @@ export type BulkActionType = 'vision' | 'evaluate_seo' | 'optimize';
 
 import type { StoredEtsyListing } from '@/types/etsy';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
 
 interface BulkActionModalProps {
   isOpen: boolean;
@@ -71,9 +70,9 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
   const isAiAction = actionType === 'vision' || actionType === 'optimize';
 
   const getActionTitle = () => {
-    if (actionType === 'vision') return '👁️ Toplu Görsel (Vision AI) Analizi';
-    if (actionType === 'evaluate_seo') return '📊 Toplu SEO Değerlendirme & Skorlama';
-    if (actionType === 'optimize') return '🪄 Toplu AI SEO Optimizasyonu';
+    if (actionType === 'vision') return 'Toplu Görsel (Vision AI) Analizi';
+    if (actionType === 'evaluate_seo') return 'Toplu SEO Değerlendirme & Skorlama';
+    if (actionType === 'optimize') return 'Toplu AI SEO Optimizasyonu';
     return 'Toplu İşlem';
   };
 
@@ -185,18 +184,18 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <DialogPanel aria-labelledby="bulk-action-title" onClose={isProcessing ? undefined : onClose} className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <DialogPanel aria-labelledby="bulk-action-title" onClose={isProcessing ? undefined : onClose} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/70">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20">
+            <div className="p-2.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl border border-purple-500/20">
               {actionType === 'vision' && <Eye className="w-5 h-5" />}
               {actionType === 'evaluate_seo' && <TrendingUp className="w-5 h-5" />}
               {actionType === 'optimize' && <Sparkles className="w-5 h-5" />}
             </div>
             <div>
-              <h3 id="bulk-action-title" className="text-sm sm:text-base font-bold text-white">
+              <h3 id="bulk-action-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                 {getActionTitle()}
               </h3>
               <p className="text-xs text-slate-400">
@@ -208,7 +207,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
           <button
             onClick={onClose}
             disabled={isProcessing}
-            className="p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800/60 hover:bg-slate-800 transition-colors disabled:opacity-40"
+            className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg bg-slate-100/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
@@ -216,12 +215,12 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
         {/* Content */}
         <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-300 leading-relaxed">
+          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
             {getActionDescription()}
           </p>
 
           {isAiAction && !isProcessing && !isFinished && totalItems > AI_BATCH_LIMIT && (
-            <p role="note" className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 leading-relaxed">
+            <p role="note" className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 leading-relaxed">
               Maliyet koruması nedeniyle bu işlem 10 dakikada en fazla {AI_BATCH_LIMIT} ilan işleyebilir. Sınıra ulaşıldığında işlem durur
               ve kalan ilanlar için ne zaman tekrar çalıştırabileceğiniz gösterilir.
             </p>
@@ -230,7 +229,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
           {/* Scope Selector */}
           {!isProcessing && !isFinished && (
             <div className="space-y-2 pt-2">
-              <label className="text-xs font-bold text-slate-300">İşlem Kapsamı:</label>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">İşlem Kapsamı:</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -239,11 +238,11 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
                   className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${
                     scope === 'selected'
                       ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                   } ${selectedListings.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
                 >
                   <div>Seçili İlanlar</div>
-                  <div className="text-[11px] font-normal text-purple-300 mt-0.5">
+                  <div className="text-[11px] font-normal text-purple-700 dark:text-purple-300 mt-0.5">
                     {selectedListings.length} ilan seçildi
                   </div>
                 </button>
@@ -254,11 +253,11 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
                   className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${
                     scope === 'all'
                       ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
                 >
                   <div>Tüm İlanlar</div>
-                  <div className="text-[11px] font-normal text-purple-300 mt-0.5">
+                  <div className="text-[11px] font-normal text-purple-700 dark:text-purple-300 mt-0.5">
                     Toplam {allListings.length} ilan
                   </div>
                 </button>
@@ -268,18 +267,18 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
           {/* Progress Box */}
           {(isProcessing || isFinished) && (
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-300 font-bold flex items-center gap-2">
-                  {isProcessing && <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
-                  {isFinished && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center gap-2">
+                  {isProcessing && <Spinner className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+                  {isFinished && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
                   <span>{isFinished ? 'İşlem Tamamlandı' : currentStepText}</span>
                 </span>
-                <span className="font-mono text-purple-400 font-bold">%{progress}</span>
+                <span className="font-mono text-purple-600 dark:text-purple-400 font-bold">%{progress}</span>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
@@ -289,13 +288,13 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
               <div className="text-[11px] text-slate-400 flex justify-between">
                 <span>İşlenen: {processedCount} / {totalItems}</span>
                 {errorLogs.length > 0 && (
-                  <span className="text-rose-400 font-bold">{errorLogs.length} hata</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-bold">{errorLogs.length} hata</span>
                 )}
               </div>
 
               {errorLogs.length > 0 && (
                 <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 max-h-24 overflow-y-auto">
-                  <ul className="text-[11px] text-rose-300 space-y-1">
+                  <ul className="text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
                     {errorLogs.map((err, i) => (
                       <li key={i}>• {err}</li>
                     ))}
@@ -307,12 +306,12 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 flex items-center justify-end gap-2 bg-slate-950/70">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/70 dark:bg-slate-950/70">
           {!isProcessing && !isFinished && (
             <>
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors"
               >
                 İptal
               </button>
@@ -331,7 +330,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
             <button
               type="button"
               onClick={() => { cancelRef.current = true; }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors"
             >
               Durdur
             </button>

@@ -11,6 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 import { AdminDbMaintenanceCard } from './AdminDbMaintenanceCard';
+import { Spinner } from '@/components/common/Spinner';
 
 type SampleStats = {
   mockupsCount: number;
@@ -114,7 +115,7 @@ export function AdminSettingsSection({
               disabled={isUpdatingSampleData}
               className="w-full sm:w-auto flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20 disabled:opacity-50"
             >
-              <Sparkles className={`w-4 h-4 text-amber-300 ${isUpdatingSampleData ? 'animate-spin' : ''}`} />
+              {isUpdatingSampleData ? <Spinner className="w-4 h-4 text-amber-300" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
               <span>{isUpdatingSampleData ? 'Örnek Taslak Güncelleniyor...' : 'Mevcut Çalışma Alanımı Genel Örnek Taslak Yap'}</span>
             </button>
 
@@ -144,7 +145,7 @@ export function AdminSettingsSection({
             disabled={isTestingDb}
             className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/20 disabled:opacity-50"
           >
-            <Activity className={`w-4 h-4 text-emerald-300 ${isTestingDb ? 'animate-spin' : ''}`} />
+            {isTestingDb ? <Spinner className="w-4 h-4 text-emerald-300" /> : <Activity className="w-4 h-4 text-emerald-300" />}
             <span>{isTestingDb ? 'Bağlantı Ölçülüyor...' : 'Veritabanı Sağlığını Test Et (Ping)'}</span>
           </button>
 
@@ -174,7 +175,7 @@ export function AdminSettingsSection({
             disabled={isCheckingStorage}
             className="w-full py-3 px-4 bg-white dark:bg-slate-900 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-200 dark:border-amber-800/60 disabled:opacity-50"
           >
-            <Search className={`w-4 h-4 text-amber-500 ${isCheckingStorage ? 'animate-spin' : ''}`} />
+            {isCheckingStorage ? <Spinner className="w-4 h-4 text-amber-500" /> : <Search className="w-4 h-4 text-amber-500" />}
             <span>{isCheckingStorage ? 'Depolama Kontrol Ediliyor...' : 'Depolama Kayıtlarını Doğrula (Silmez)'}</span>
           </button>
 

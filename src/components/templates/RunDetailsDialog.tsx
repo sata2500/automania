@@ -1,10 +1,11 @@
 'use client';
 
 import React from 'react';
-import { X, CheckCircle2, XCircle, Loader2, MinusCircle, Circle, ExternalLink, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, XCircle, MinusCircle, Circle, ExternalLink, AlertTriangle } from 'lucide-react';
 import type { AutomationRun, AutomationStepName, AutomationStepResult, GeneratedSeoData } from '@/types/templates';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { AUTOMATION_STEP_ORDER } from '@/lib/automation-plan';
+import { Spinner } from '@/components/common/Spinner';
 
 export const STEP_LABELS: Record<AutomationStepName, string> = {
   designGeneration: 'Tasarım üretimi',
@@ -40,7 +41,7 @@ export function getRunWarnings(run: AutomationRun): string[] {
 function StepIcon({ status }: { status: AutomationStepResult['status'] }) {
   if (status === 'completed') return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" aria-label="Tamamlandı" />;
   if (status === 'failed') return <XCircle className="w-4 h-4 text-red-500 shrink-0" aria-label="Başarısız" />;
-  if (status === 'running') return <Loader2 className="w-4 h-4 text-amber-500 animate-spin shrink-0" aria-label="Çalışıyor" />;
+  if (status === 'running') return <Spinner className="w-4 h-4 text-amber-500 shrink-0" label="Çalışıyor" />;
   if (status === 'skipped') return <MinusCircle className="w-4 h-4 text-slate-400 shrink-0" aria-label="Atlandı" />;
   return <Circle className="w-4 h-4 text-slate-300 dark:text-slate-600 shrink-0" aria-label="Bekliyor" />;
 }
