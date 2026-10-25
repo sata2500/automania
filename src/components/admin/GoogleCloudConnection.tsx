@@ -66,15 +66,37 @@ export function GoogleCloudConnectionCard({ onChanged }: { onChanged?: (status: 
     }
   };
 
+  /** Gönderilmeden önce hızlı kontrol: yanlış dosya seçildiyse sunucuya gitmeden açıklayıcı hata verir. */
+  const submitKeyText = async (raw: string) => {
+    const text = raw.replace(/^\uFEFF/, '').trim();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      setError('Seçilen dosya/metin geçerli bir JSON değil. Google Cloud\'dan indirdiğiniz hizmet hesabı anahtarını (…json) seçin.');
+      return false;
+    }
+    if (!parsed || typeof parsed !== 'object' || (parsed as { type?: unknown }).type !== 'service_account') {
+      setError('Bu bir hizmet hesabı anahtarı değil ("type": "service_account" bulunamadı). IAM › Hizmet Hesapları › Anahtarlar bölümünden JSON anahtar oluşturun.');
+      return false;
+    }
+    await save({ serviceAccountJson: text, mode: 'vertex' });
+    return true;
+  };
+
   const handleFile = async (file: File | undefined) => {
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
     if (file.size > 20_000) {
       setError('Dosya çok büyük; hizmet hesabı JSON anahtarı birkaç KB olmalıdır.');
       return;
     }
-    const text = await file.text();
-    await save({ serviceAccountJson: text, mode: 'vertex' });
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    await submitKeyText(await file.text());
+  };
+
+  const [pasteText, setPasteText] = useState('');
+  const handlePasteSubmit = async () => {
+    if (await submitKeyText(pasteText)) setPasteText('');
   };
 
   const handleRemove = async () => {
@@ -133,13 +155,15 @@ export function GoogleCloudConnectionCard({ onChanged }: { onChanged?: (status: 
           type="button"
           role="radio"
           aria-checked={isVertex}
-          disabled={isSaving || !status || !status.serviceAccount}
-          onClick={() => save({ mode: 'vertex' })}
-          title={!status?.serviceAccount ? 'Önce hizmet hesabı JSON dosyasını yükleyin' : undefined}
+          disabled={isSaving || !status}
+          // Anahtar henüz yüklenmediyse dokunmak doğrudan dosya seçiciyi açar.
+          onClick={() => (status?.serviceAccount ? save({ mode: 'vertex' }) : fileInputRef.current?.click())}
           className={`text-left p-3 rounded-xl border text-xs transition-all disabled:opacity-60 ${isVertex ? 'border-emerald-400 bg-white dark:bg-slate-900 ring-2 ring-emerald-500/20' : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60'}`}
         >
           <span className="font-bold text-slate-900 dark:text-white">Google Cloud hizmet hesabı (Vertex AI)</span>
-          <span className="block text-[11px] text-slate-500 mt-0.5">Kullanım Google Cloud kredinizden/faturanızdan düşer.</span>
+          <span className="block text-[11px] text-slate-500 mt-0.5">
+            {status?.serviceAccount ? 'Kullanım Google Cloud kredinizden/faturanızdan düşer.' : 'Seçmek için dokunun ve JSON anahtar dosyanızı yükleyin.'}
+          </span>
         </button>
       </div>
 
@@ -159,7 +183,6 @@ export function GoogleCloudConnectionCard({ onChanged }: { onChanged?: (status: 
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/json,.json"
             className="sr-only"
             id="gcp-key-file"
             onChange={(e) => void handleFile(e.target.files?.[0])}
@@ -183,6 +206,33 @@ export function GoogleCloudConnectionCard({ onChanged }: { onChanged?: (status: 
           )}
         </div>
       </div>
+
+      {/* Dosya seçici JSON'u göstermezse (bazı telefonlar), içerik doğrudan yapıştırılabilir. */}
+      <details className="text-[11px] text-slate-600 dark:text-slate-300">
+        <summary className="cursor-pointer font-bold">Dosya seçilemiyor mu? JSON içeriğini yapıştırın</summary>
+        <div className="mt-2 space-y-2">
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={5}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="off"
+            aria-label="Hizmet hesabı JSON içeriği"
+            placeholder='{ "type": "service_account", "project_id": "…", … }'
+            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => void handlePasteSubmit()}
+            disabled={isSaving || !pasteText.trim()}
+            className="btn btn-primary"
+          >
+            {isSaving ? <Spinner className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
+            Doğrula ve kaydet
+          </button>
+        </div>
+      </details>
 
       {status?.serviceAccount && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px]">
