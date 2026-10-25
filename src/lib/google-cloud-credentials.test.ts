@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categorizeGoogleModels, isValidVertexLocation, parseServiceAccountJson, ServiceAccountError } from './google-cloud-credentials';
+import { categorizeGoogleModels, isValidVertexLocation, normalizeVideoModel, parseServiceAccountJson, ServiceAccountError } from './google-cloud-credentials';
 
 const valid = {
   type: 'service_account',
@@ -50,5 +50,14 @@ describe('categorizeGoogleModels', () => {
       ['gemini-2.5-flash-image', 'image'],
       ['gemini-2.5-flash', 'text'],
     ]);
+  });
+});
+
+describe('normalizeVideoModel', () => {
+  it('moves retired Veo 3.1 preview ids to their GA ids', () => {
+    expect(normalizeVideoModel('veo-3.1-fast-generate-preview')).toBe('veo-3.1-fast-generate-001');
+    expect(normalizeVideoModel('veo-3.1-generate-preview')).toBe('veo-3.1-generate-001');
+    expect(normalizeVideoModel('veo-3.1-lite-generate-preview')).toBe('veo-3.1-lite-generate-001');
+    expect(normalizeVideoModel('veo-3.0-generate-001')).toBe('veo-3.0-generate-001');
   });
 });

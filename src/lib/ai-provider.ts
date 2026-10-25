@@ -18,6 +18,7 @@
 
 import type { GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
+import { DEFAULT_VIDEO_MODEL, normalizeVideoModel } from '@/lib/google-cloud-credentials';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -126,9 +127,10 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
     imageModel,
     textModel,
     // Video her zaman Google Veo ile üretilir; bu yüzden yalnızca Gemini video modeli ayarı geçerlidir.
-    videoModel: settings['gemini_model_video'] ?? process.env.AI_VIDEO_MODEL ?? 'veo-3.1-fast-generate-preview',
+    videoModel: normalizeVideoModel(settings['gemini_model_video'] || process.env.AI_VIDEO_MODEL || DEFAULT_VIDEO_MODEL),
   };
 }
+
 
 // ─── Google Gemini Client ────────────────────────────────────────────────────
 
@@ -412,27 +414,4 @@ export async function fetchOpenRouterImageModels(apiKey: string): Promise<{id: s
   } catch {
     return [];
   }
-}
-
-/**
- * Sabit Google görsel modellerini döner (güncel, Ağustos 2026).
- */
-export function getGoogleImageModels() {
-  return [
-    { id: 'gemini-3.1-flash-image', name: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
-    { id: 'gemini-3-pro-image', name: 'Gemini 3 Pro Image (Nano Banana 2 Pro)' },
-    { id: 'gemini-3.1-flash-lite-image', name: 'Gemini 3.1 Flash-Lite Image (Hızlı)' },
-    { id: 'gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image' },
-  ];
-}
-
-/**
- * Google video modellerini döner.
- */
-export function getGoogleVideoModels() {
-  return [
-    { id: 'veo-3.1-fast-generate-preview', name: 'Veo 3.1 Fast (Hız Odaklı)' },
-    { id: 'veo-3.1-generate-preview', name: 'Veo 3.1 (Kalite Odaklı)' },
-    { id: 'veo-3.1-lite-generate-preview', name: 'Veo 3.1 Lite (Düşük Maliyet)' },
-  ];
 }

@@ -32,7 +32,7 @@ import { saveAppData, loadAppData } from '@/lib/storage-service';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT, DEFAULT_GENERATE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { GoogleCloudConnectionCard, GoogleModelOptions } from './GoogleCloudConnection';
-import type { GoogleModelInfo } from '@/lib/google-cloud-credentials';
+import { normalizeVideoModel, type GoogleModelInfo } from '@/lib/google-cloud-credentials';
 import { Spinner } from '@/components/common/Spinner';
 
 export interface PromptVariable {
@@ -456,7 +456,7 @@ export const AdminAiSettingsSection: React.FC = () => {
             if (data.settings.gemini_model_vision) setGeminiModelVision(data.settings.gemini_model_vision);
             if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
-            if (data.settings.gemini_model_video) setGeminiModelVideo(data.settings.gemini_model_video);
+            if (data.settings.gemini_model_video) setGeminiModelVideo(normalizeVideoModel(data.settings.gemini_model_video));
             
             if (data.settings.openrouter_model_video) setModelVideo(data.settings.openrouter_model_video);
             
@@ -1203,9 +1203,9 @@ export const AdminAiSettingsSection: React.FC = () => {
                           <GoogleModelOptions models={googleModels} category="video" current={geminiModelVideo} />
                         ) : (
                         <optgroup label="Google Veo Video Modelleri (T2V)">
-                          <option value="veo-3.1-fast-generate-preview">Google Veo 3.1 Fast (Hız Odaklı)</option>
-                          <option value="veo-3.1-generate-preview">Google Veo 3.1 (Yüksek Kalite)</option>
-                          <option value="veo-3.1-lite-generate-preview">Google Veo 3.1 Lite (Ekonomik)</option>
+                          <option value="veo-3.1-fast-generate-001">Google Veo 3.1 Fast (Hız Odaklı)</option>
+                          <option value="veo-3.1-generate-001">Google Veo 3.1 (Yüksek Kalite)</option>
+                          <option value="veo-3.1-lite-generate-001">Google Veo 3.1 Lite (Ekonomik)</option>
                         </optgroup>
                         )}
                       </select>

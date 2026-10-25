@@ -64,10 +64,20 @@ export function isValidVertexLocation(value: unknown): value is string {
   return typeof value === 'string' && VERTEX_LOCATIONS.some((loc) => loc.id === value);
 }
 
+export const DEFAULT_VIDEO_MODEL = 'veo-3.1-fast-generate-001';
+
+/**
+ * Veo 3.1 önizleme kimlikleri (…-generate-preview) Google tarafından kapatıldı;
+ * kayıtlı eski ayarlar aynı modelin genel kullanıma açık (GA) sürümüne yönlendirilir.
+ */
+export function normalizeVideoModel(model: string): string {
+  return model.replace(/^(veo-3\.1-(?:fast-|lite-)?generate)-preview$/, '$1-001');
+}
+
 export type GoogleModelCategory = 'text' | 'image' | 'video';
 export type GoogleModelInfo = { id: string; displayName: string; category: GoogleModelCategory; description?: string };
 
-const EXCLUDED_MODEL_PATTERN = /(embedding|embed|gecko|chirp|tts|audio|live|computer-use|aqa|codey|code-|text-bison|chat-bison|-tuning|robotics|native-audio|transcribe)/i;
+const EXCLUDED_MODEL_PATTERN = /(embedding|embed|gecko|chirp|tts|audio|live|computer-use|aqa|codey|code-|text-bison|chat-bison|-tuning|robotics|native-audio|transcribe|omni)/i;
 
 /**
  * Google'ın döndürdüğü model listesini uygulamanın kullandığı üç gruba ayırır:

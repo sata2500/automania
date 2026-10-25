@@ -23,8 +23,21 @@ export type GoogleConnection =
   | { mode: 'vertex'; projectId: string; location: string; clientEmail: string; credentials: ServiceAccountCredentials }
   | { mode: 'api_key'; apiKey: string };
 
-/** Imagen ve Veo "global" uç noktada sunulmaz; bu durumda bölgesel uç nokta kullanılır. */
+/**
+ * Imagen ve Veo "global" uç noktada sunulmaz; Veo 3.x yalnızca us-central1'de sunulur.
+ * Bu modeller için bölgesel uç nokta kullanılır.
+ */
 export const VERTEX_MEDIA_FALLBACK_LOCATION = 'us-central1';
+
+/** Veo modelleri liste yanıtında görünmezse doğrudan sorgulanan bilinen kimlikler (yeniden eskiye). */
+export const KNOWN_VEO_MODELS = [
+  'veo-3.1-generate-001',
+  'veo-3.1-fast-generate-001',
+  'veo-3.1-lite-generate-001',
+  'veo-3.0-generate-001',
+  'veo-3.0-fast-generate-001',
+  'veo-2.0-generate-001',
+] as const;
 
 export function resolveGoogleConnection(settings: Record<string, string | undefined>, env: NodeJS.ProcessEnv = process.env): GoogleConnection | null {
   const mode = settings.google_auth_mode === 'vertex' ? 'vertex' : 'api_key';
@@ -65,11 +78,16 @@ export function isMediaModel(model: string | undefined): boolean {
   return Boolean(model && (model.startsWith('imagen') || model.startsWith('veo')));
 }
 
-export function createGoogleClient(connection: GoogleConnection, options: { model?: string } = {}): GoogleGenAI {
+/** Modelin çağrılacağı Vertex bölgesi: Veo her zaman us-central1, Imagen "global" seçiliyse us-central1. */
+export function resolveVertexLocation(location: string, model: string | undefined): string {
+  if (model?.startsWith('veo')) return VERTEX_MEDIA_FALLBACK_LOCATION;
+  if (location === 'global' && isMediaModel(model)) return VERTEX_MEDIA_FALLBACK_LOCATION;
+  return location;
+}
+
+export function createGoogleClient(connection: GoogleConnection, options: { model?: string; location?: string } = {}): GoogleGenAI {
   if (connection.mode === 'api_key') return new GoogleGenAI({ apiKey: connection.apiKey });
-  const location = connection.location === 'global' && isMediaModel(options.model)
-    ? VERTEX_MEDIA_FALLBACK_LOCATION
-    : connection.location;
+  const location = options.location ?? resolveVertexLocation(connection.location, options.model);
   return new GoogleGenAI({
     vertexai: true,
     project: connection.projectId,
@@ -91,16 +109,50 @@ export async function getGoogleClient(options: { model?: string } = {}): Promise
   return createGoogleClient(connection, options);
 }
 
-const MAX_LISTED_MODELS = 500;
+const MAX_LISTED_MODELS = 1000;
 
-/** Bağlantının erişebildiği güncel modelleri Google'dan çeker ve gruplara ayırır. */
-export async function listGoogleModels(connection: GoogleConnection): Promise<GoogleModelInfo[]> {
-  const client = createGoogleClient(connection);
+type RawModel = { name?: string; displayName?: string; description?: string };
+
+async function fetchModelList(client: GoogleGenAI): Promise<RawModel[]> {
   const pager = await client.models.list({ config: { pageSize: 100 } });
-  const raw: Array<{ name?: string; displayName?: string; description?: string }> = [];
+  const raw: RawModel[] = [];
   for await (const model of pager) {
     raw.push({ name: model.name, displayName: model.displayName, description: model.description });
     if (raw.length >= MAX_LISTED_MODELS) break;
+  }
+  return raw;
+}
+
+/** Liste yanıtında olmayan bilinen Veo modellerini tek tek sorgular; erişilebilir olanları döner. */
+async function probeKnownVeoModels(client: GoogleGenAI, exclude: Set<string>): Promise<RawModel[]> {
+  const results = await Promise.allSettled(
+    KNOWN_VEO_MODELS.filter((id) => !exclude.has(id)).map(async (id) => {
+      const model = await client.models.get({ model: id });
+      return { name: model.name || id, displayName: model.displayName, description: model.description };
+    }),
+  );
+  return results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+}
+
+/**
+ * Bağlantının erişebildiği güncel modelleri Google'dan çeker ve gruplara ayırır.
+ * Vertex AI'da Imagen/Veo seçili bölgede (ör. "global") listelenmediği için bu modeller
+ * bölgesel uç noktadan ayrıca çekilir; Veo listede yoksa bilinen sürümler doğrudan sorgulanır.
+ */
+export async function listGoogleModels(connection: GoogleConnection): Promise<GoogleModelInfo[]> {
+  const raw = await fetchModelList(createGoogleClient(connection));
+  if (connection.mode === 'vertex') {
+    const mediaClient = createGoogleClient(connection, { location: VERTEX_MEDIA_FALLBACK_LOCATION });
+    if (connection.location !== VERTEX_MEDIA_FALLBACK_LOCATION) {
+      try {
+        const regional = await fetchModelList(mediaClient);
+        raw.push(...regional.filter((m) => isMediaModel(String(m.name || '').split('/').pop())));
+      } catch (error) {
+        console.error('[Google AI] Regional model list failed:', error instanceof Error ? error.message : error);
+      }
+    }
+    const listed = new Set(categorizeGoogleModels(raw).filter((m) => m.category === 'video').map((m) => m.id));
+    raw.push(...(await probeKnownVeoModels(mediaClient, listed)));
   }
   return categorizeGoogleModels(raw);
 }
