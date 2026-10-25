@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -14,6 +14,17 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'automania_pod_theme_preference';
 
+const subscribeToNothing = () => () => {};
+
+function readStoredTheme(): Theme | null {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved === 'system' || saved === 'light' || saved === 'dark' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * ThemeProvider — 2026 approach:
  * - Manages system/light/dark preference
@@ -22,22 +33,12 @@ const THEME_STORAGE_KEY = 'automania_pod_theme_preference';
  * - dark: Tailwind prefix is activated via @custom-variant in globals.css
  */
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>('system');
+  // Kayıtlı tercih hidrasyondan sonra okunur (blocking script zaten uygulamış olabilir); kullanıcı seçimi önceliklidir.
+  const [chosenTheme, setThemeState] = useState<Theme | null>(null);
+  const storedTheme = useSyncExternalStore(subscribeToNothing, readStoredTheme, () => null);
+  const isMounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
+  const theme: Theme = chosenTheme ?? storedTheme ?? 'system';
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('dark');
-  const [isMounted, setIsMounted] = useState(false);
-
-  // On mount, read saved preference (may already be applied by blocking script)
-  useEffect(() => {
-    let initialTheme: Theme = 'system';
-    try {
-      const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-      if (saved && (saved === 'system' || saved === 'light' || saved === 'dark')) {
-        initialTheme = saved;
-      }
-    } catch {}
-    setThemeState(initialTheme);
-    setIsMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!isMounted) return;

@@ -1,6 +1,6 @@
 'use client';
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   RefreshCw, Trash2, Search, Download, CheckSquare, Square, 
   ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Tag, 
@@ -96,38 +96,48 @@ export default function KeywordPoolManagement() {
   }, [search]);
 
 
-  const fetchKeywords = async () => {
+  // Sayfa/sıralama/arama/filtre değişince seçim sıfırlanır ve liste yeniden yüklenir.
+  const queryKey = `${page}|${sortBy}|${order}|${debouncedSearch}|${filter}`;
+  const [loadedQueryKey, setLoadedQueryKey] = useState(queryKey);
+  if (loadedQueryKey !== queryKey) {
+    setLoadedQueryKey(queryKey);
+    setSelectedIds(new Set());
     setIsLoading(true);
-    try {
-      const offset = page * limit;
-      const query = new URLSearchParams({
-        search: debouncedSearch,
-        filter,
-        sortBy,
-        order,
-        limit: limit.toString(),
-        offset: offset.toString()
-      });
-      const res = await fetch(`/api/admin/keywords?${query}`);
-      const data = await res.json();
-      if (data.success) {
-        setKeywords(data.keywords || []);
-        setTotal(data.total || 0);
-        if (data.etsyStatus) {
-          setEtsyStatus(data.etsyStatus);
+  }
+
+  // Promise zinciri: durum yalnızca yanıt geldikten sonra güncellenir (efektten güvenle çağrılabilir).
+  const loadKeywords = useCallback(() => {
+    const query = new URLSearchParams({
+      search: debouncedSearch,
+      filter,
+      sortBy,
+      order,
+      limit: limit.toString(),
+      offset: (page * limit).toString()
+    });
+    return fetch(`/api/admin/keywords?${query}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setKeywords(data.keywords || []);
+          setTotal(data.total || 0);
+          if (data.etsyStatus) {
+            setEtsyStatus(data.etsyStatus);
+          }
         }
-      }
-    } catch {
-      toast.error('Kelimeler yüklenirken hata oluştu.');
-    } finally {
-      setIsLoading(false);
-    }
+      })
+      .catch(() => toast.error('Kelimeler yüklenirken hata oluştu.'))
+      .finally(() => setIsLoading(false));
+  }, [page, sortBy, order, debouncedSearch, filter, toast]);
+
+  const fetchKeywords = () => {
+    setIsLoading(true);
+    void loadKeywords();
   };
 
   useEffect(() => {
-    fetchKeywords();
-    setSelectedIds(new Set());
-  }, [page, sortBy, order, debouncedSearch, filter]);
+    void loadKeywords();
+  }, [loadKeywords]);
 
   const handleSelect = (id: string) => {
     const newSelected = new Set(selectedIds);

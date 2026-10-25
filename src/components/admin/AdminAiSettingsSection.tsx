@@ -275,6 +275,15 @@ const MODEL_VISION_STORAGE = 'automania_model_vision';
 const MODEL_REASONING_STORAGE = 'automania_model_reasoning';
 const MODEL_GENERATION_STORAGE = 'automania_model_generation';
 
+function readStoredModel(key: string): string {
+  try {
+    return localStorage.getItem(key) || '';
+  } catch (e) {
+    console.error('Failed to load OpenRouter storage', e);
+    return '';
+  }
+}
+
 type ScrapingProvider = 'scraperapi' | 'scrapingbee' | 'zenrows';
 
 type OpenRouterModel = {
@@ -304,9 +313,10 @@ export const AdminAiSettingsSection: React.FC = () => {
   const [scrapingApiKey, setScrapingApiKey] = useState('');
   const [cloudflareWorkerUrl, setCloudflareWorkerUrl] = useState('');
   
-  const [modelVision, setModelVision] = useState('');
-  const [modelReasoning, setModelReasoning] = useState('');
-  const [modelGeneration, setModelGeneration] = useState('');
+  // Bileşen yalnızca istemcide (ssr: false) yüklenir; kayıtlı seçimler ilk render'da okunur.
+  const [modelVision, setModelVision] = useState(() => readStoredModel(MODEL_VISION_STORAGE));
+  const [modelReasoning, setModelReasoning] = useState(() => readStoredModel(MODEL_REASONING_STORAGE));
+  const [modelGeneration, setModelGeneration] = useState(() => readStoredModel(MODEL_GENERATION_STORAGE));
   const [modelVideo, setModelVideo] = useState('');
   
   const [geminiModelVision, setGeminiModelVision] = useState('');
@@ -363,26 +373,13 @@ export const AdminAiSettingsSection: React.FC = () => {
 
   // OpenRouter Dynamic Models State
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  // Modeller bileşen açılırken yüklenir.
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Connection Test state
   const [testingModel, setTestingModel] = useState<string | null>(null);
   const [testResponseData, setTestResponseData] = useState<{model: string, content: string, imageUrl?: string} | null>(null);
-
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(MODEL_VISION_STORAGE) || '';
-      const r = localStorage.getItem(MODEL_REASONING_STORAGE) || '';
-      const g = localStorage.getItem(MODEL_GENERATION_STORAGE) || '';
-      setModelVision(v);
-      setModelReasoning(r);
-      setModelGeneration(g);
-    } catch (e) {
-      console.error('Failed to load OpenRouter storage', e);
-    }
-  }, []);
 
   // Yeni Cihaz / Çapraz Cihaz Senkronizasyonu
   useEffect(() => {
@@ -393,15 +390,15 @@ export const AdminAiSettingsSection: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           if (data) {
-            if (data.modelVision && data.modelVision !== modelVision) {
+            if (data.modelVision) {
               setModelVision(data.modelVision);
               localStorage.setItem(MODEL_VISION_STORAGE, data.modelVision);
             }
-            if (data.modelReasoning && data.modelReasoning !== modelReasoning) {
+            if (data.modelReasoning) {
               setModelReasoning(data.modelReasoning);
               localStorage.setItem(MODEL_REASONING_STORAGE, data.modelReasoning);
             }
-            if (data.modelGeneration && data.modelGeneration !== modelGeneration) {
+            if (data.modelGeneration) {
               setModelGeneration(data.modelGeneration);
               localStorage.setItem(MODEL_GENERATION_STORAGE, data.modelGeneration);
             }
@@ -414,25 +411,16 @@ export const AdminAiSettingsSection: React.FC = () => {
     syncApiSettingsFromServer();
   }, [user?.id]);
 
-  const fetchOpenRouterModels = async () => {
-    setIsLoadingModels(true);
-    try {
-      const res = await fetch('/api/ai/proxy?endpoint=https://openrouter.ai/api/v1/models');
-      const data = await res.json();
-      if (data && data.success && data.data.data) {
-        setOpenRouterModels(data.data.data);
-      }
-    } catch {
-      toast.error('OpenRouter modelleri çekilirken hata oluştu.');
-    } finally {
-      setIsLoadingModels(false);
-    }
-  };
-
   useEffect(() => {
     // Bileşen yalnızca AI sekmesi açıkken render edilir; ayarlar açılışta bir kez yüklenir.
     {
-      fetchOpenRouterModels();
+      fetch('/api/ai/proxy?endpoint=https://openrouter.ai/api/v1/models')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.success && data.data.data) setOpenRouterModels(data.data.data);
+        })
+        .catch(() => toast.error('OpenRouter modelleri çekilirken hata oluştu.'))
+        .finally(() => setIsLoadingModels(false));
       // Fetch global settings
       fetch('/api/admin/settings')
         .then(res => res.json())
@@ -484,7 +472,7 @@ export const AdminAiSettingsSection: React.FC = () => {
         })
         .catch(e => console.error("Could not fetch global settings", e));
     }
-  }, []);
+  }, [toast]);
 
   const insertVariable = (
     setter: React.Dispatch<React.SetStateAction<string>>,

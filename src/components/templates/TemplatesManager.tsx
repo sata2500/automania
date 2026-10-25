@@ -112,35 +112,33 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   }, [showError, showSuccess, stopPolling]);
 
   // Şablonları yükle
-  const loadTemplates = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [res, runsRes] = await Promise.all([
-        fetch('/api/templates'),
-        fetch('/api/automation/run').catch(() => null),
-      ]);
-      if (!res.ok) throw new Error('Şablonlar yüklenemedi.');
-      const data = await res.json();
-      setTemplates(data.templates ?? []);
+  // Yalnızca açılışta çağrılır; isLoading başlangıçta true olduğundan burada yeniden açılmaz.
+  // Promise zinciri: durum yalnızca yanıt geldikten sonra güncellenir (efektten güvenle çağrılabilir).
+  const loadTemplates = useCallback(() =>
+    Promise.all([
+      fetch('/api/templates'),
+      fetch('/api/automation/run').catch(() => null),
+    ])
+      .then(async ([res, runsRes]) => {
+        if (!res.ok) throw new Error('Şablonlar yüklenemedi.');
+        const data = await res.json();
+        setTemplates(data.templates ?? []);
 
-      // Çalıştırma geçmişi isteğe bağlıdır; alınamazsa şablonlar yine gösterilir.
-      if (runsRes?.ok) {
-        const { runs } = (await runsRes.json()) as { runs: AutomationRun[] };
-        const latest: Record<string, AutomationRun> = {};
-        for (const run of runs ?? []) {
-          if (!latest[run.templateId]) latest[run.templateId] = run; // en yeniden eskiye sıralı
+        // Çalıştırma geçmişi isteğe bağlıdır; alınamazsa şablonlar yine gösterilir.
+        if (runsRes?.ok) {
+          const { runs } = (await runsRes.json()) as { runs: AutomationRun[] };
+          const latest: Record<string, AutomationRun> = {};
+          for (const run of runs ?? []) {
+            if (!latest[run.templateId]) latest[run.templateId] = run; // en yeniden eskiye sıralı
+          }
+          setLatestRuns(latest);
+          Object.values(latest)
+            .filter(run => ACTIVE_RUN_STATUSES.has(run.status))
+            .forEach(run => pollRun(run.templateId, run.id));
         }
-        setLatestRuns(latest);
-        Object.values(latest)
-          .filter(run => ACTIVE_RUN_STATUSES.has(run.status))
-          .forEach(run => pollRun(run.templateId, run.id));
-      }
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'Şablonlar yüklenirken hata oluştu.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [showError, pollRun]);
+      })
+      .catch((err) => showError(err instanceof Error ? err.message : 'Şablonlar yüklenirken hata oluştu.'))
+      .finally(() => setIsLoading(false)), [showError, pollRun]);
 
   // Süren çalıştırmayı iptal et
   const handleCancelRun = async (templateId: string, runId: string) => {
@@ -194,7 +192,7 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   };
 
   useEffect(() => {
-    loadTemplates();
+    void loadTemplates();
   }, [loadTemplates]);
 
   // Şablon sil

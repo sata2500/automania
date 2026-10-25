@@ -1,7 +1,7 @@
 'use client';
 
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Sparkles,
@@ -118,21 +118,21 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   };
 
-  // Sync state with incoming listing
-  useEffect(() => {
-    if (listing) {
-      setEditTitle(listing.title || '');
-      setEditDescription(listing.description || '');
-      const rawTags = Array.isArray(listing.tags)
-        ? listing.tags
-        : typeof listing.tags === 'string'
-        ? JSON.parse(listing.tags)
-        : [];
-      setEditTags(rawTags);
-      setStateAction('idle');
-      setActivationPhrase('');
-    }
-  }, [listing]);
+  // Sync state with incoming listing (render sırasında, yalnızca ilan nesnesi değiştiğinde)
+  const [syncedListing, setSyncedListing] = useState<typeof listing | null>(null);
+  if (listing && listing !== syncedListing) {
+    setSyncedListing(listing);
+    setEditTitle(listing.title || '');
+    setEditDescription(listing.description || '');
+    const rawTags = Array.isArray(listing.tags)
+      ? listing.tags
+      : typeof listing.tags === 'string'
+      ? JSON.parse(listing.tags)
+      : [];
+    setEditTags(rawTags);
+    setStateAction('idle');
+    setActivationPhrase('');
+  }
 
   if (!isOpen || !listing) return null;
 

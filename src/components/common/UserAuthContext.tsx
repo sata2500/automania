@@ -134,7 +134,8 @@ export const UserAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     initializeSession().finally(() => setAuthStatus('ready'));
-  }, []);
+    // toast sabit bir bağlam değeridir; efekt yalnızca açılışta bir kez çalışır.
+  }, [toast]);
 
   const saveUserSession = async (userProfile: UserProfile | null) => {
     setUser(null);

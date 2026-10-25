@@ -1,7 +1,7 @@
 'use client';
 
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   RefreshCw, Search, CheckCircle2, XCircle, FolderTree, 
   Sparkles, ChevronRight, Check, 
@@ -54,26 +54,28 @@ export default function TaxonomyManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
-  const fetchCategories = async () => {
+  // Promise zinciri: durum yalnızca yanıt geldikten sonra güncellenir (efektten güvenle çağrılabilir).
+  const loadCategories = useCallback(() =>
+    fetch('/api/admin/taxonomy-sync')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setCategories(data.categories || []);
+        } else {
+          toast.error('Kategoriler alınırken hata: ' + (data.error || 'Bilinmeyen hata'));
+        }
+      })
+      .catch(() => toast.error('Kategoriler yüklenirken sunucu hatası oluştu.'))
+      .finally(() => setLoading(false)), [toast]);
+
+  const fetchCategories = () => {
     setLoading(true);
-    try {
-      const res = await fetch('/api/admin/taxonomy-sync');
-      const data = await res.json();
-      if (data.success) {
-        setCategories(data.categories || []);
-      } else {
-        toast.error('Kategoriler alınırken hata: ' + (data.error || 'Bilinmeyen hata'));
-      }
-    } catch {
-      toast.error('Kategoriler yüklenirken sunucu hatası oluştu.');
-    } finally {
-      setLoading(false);
-    }
+    void loadCategories();
   };
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    void loadCategories();
+  }, [loadCategories]);
 
   const handleSyncFromEtsy = () => {
     setConfirmConfig({
@@ -170,9 +172,12 @@ export default function TaxonomyManagement() {
   }, [categories, searchTerm, filterMode]);
 
   // Reset pagination when filter or search changes
-  useEffect(() => {
+  const filterKey = `${searchTerm}|${filterMode}`;
+  const [pagedFilterKey, setPagedFilterKey] = useState(filterKey);
+  if (pagedFilterKey !== filterKey) {
+    setPagedFilterKey(filterKey);
     setCurrentPage(1);
-  }, [searchTerm, filterMode]);
+  }
 
   const totalPages = Math.max(1, Math.ceil(filteredCategories.length / itemsPerPage));
   const displayedCategories = useMemo(() => {

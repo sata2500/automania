@@ -55,19 +55,9 @@ export const EtsyListingManager: React.FC = () => {
   const [scoreFilter, setScoreFilter] = useState('all');
   const [visionFilter, setVisionFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  // Bileşen yalnızca istemcide (ssr: false) yüklenir: masaüstünde tablo, mobilde kart görünümü.
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => (window.innerWidth < 768 ? 'grid' : 'table'));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // Auto-detect view mode based on device screen width (desktop: table, mobile: grid)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (window.innerWidth < 768) {
-        setViewMode('grid');
-      } else {
-        setViewMode('table');
-      }
-    }
-  }, []);
 
   // Auto-sync trigger guard (run once on mount if stale)
   const hasCheckedAutoSyncRef = useRef(false);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { MockupItem, ApparelType, PrintArea } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -20,8 +20,11 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
     apparelType: ApparelType;
   } | null>(null);
 
-  // Sync draft state whenever selectedMockup changes
-  useEffect(() => {
+  // Sync draft state whenever the selected mockup (by id) changes — render sırasında, efekt olmadan.
+  const [draftMockupId, setDraftMockupId] = useState<string | null>(null);
+  const selectedMockupId = selectedMockup?.id ?? null;
+  if (selectedMockupId !== draftMockupId) {
+    setDraftMockupId(selectedMockupId);
     if (selectedMockup) {
       setDraftAreas(structuredClone(selectedMockup.printAreas || []));
       setDraftApparelType(selectedMockup.apparelType);
@@ -30,7 +33,7 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
         setActiveAreaIndex(0);
       }
     }
-  }, [selectedMockup?.id]);
+  }
 
   // Check if current draft has unsaved changes
   const isDirty = useMemo(() => {

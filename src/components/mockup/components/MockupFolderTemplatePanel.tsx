@@ -100,66 +100,76 @@ export const MockupFolderTemplatePanel: React.FC<MockupFolderTemplatePanelProps>
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [categorySearch, setCategorySearch] = useState('');
 
+  // Yükleyiciler Promise zinciriyle yazılır: durum yalnızca yanıt geldikten sonra güncellenir
+  // (efektten güvenle çağrılabilir). "Yükleniyor" bayrakları çağıran tarafta açılır.
+
   // ── Mevcut config'i yükle ─────────────────────────────────────────────────
-  const loadConfig = useCallback(async () => {
-    if (!folder.id) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/templates/folder-config?folderId=${folder.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.config) {
-          setConfig(data.config);
-        }
-      }
-    } catch {
-      // Yeni klasör — config yok
-    } finally {
-      setLoading(false);
-    }
+  const fetchConfig = useCallback(() => {
+    if (!folder.id) return Promise.resolve();
+    return fetch(`/api/templates/folder-config?folderId=${folder.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.config) setConfig(data.config);
+      })
+      .catch(() => {
+        // Yeni klasör — config yok
+      })
+      .finally(() => setLoading(false));
   }, [folder.id]);
 
   // ── Varyasyon şablonlarını yükle ─────────────────────────────────────────
-  const loadVariationTemplates = useCallback(async () => {
-    setLoadingVariations(true);
-    try {
-      const res = await fetch('/api/workspace/variation-templates');
-      if (res.ok) {
-        const data = await res.json();
-        setVariationTemplates(data?.templates ?? []);
-      }
-    } catch {
-      setVariationTemplates([]);
-    } finally {
-      setLoadingVariations(false);
-    }
-  }, []);
+  const fetchVariationTemplates = useCallback(() =>
+    fetch('/api/workspace/variation-templates')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setVariationTemplates(data?.templates ?? []);
+      })
+      .catch(() => setVariationTemplates([]))
+      .finally(() => setLoadingVariations(false)), []);
 
   // ── Aktif Etsy kategorilerini yükle ──────────────────────────────────────
-  const loadCategories = useCallback(async () => {
+  const fetchCategories = useCallback(() =>
+    fetch('/api/admin/taxonomy-sync')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          const all: TaxonomyCategory[] = data?.categories ?? [];
+          setCategories(all.filter((c) => c.isActive));
+        }
+      })
+      .catch(() => setCategories([]))
+      .finally(() => setLoadingCategories(false)), []);
+
+  const loadVariationTemplates = () => {
+    setLoadingVariations(true);
+    void fetchVariationTemplates();
+  };
+
+  const loadCategories = () => {
     setLoadingCategories(true);
-    try {
-      const res = await fetch('/api/admin/taxonomy-sync');
-      if (res.ok) {
-        const data = await res.json();
-        const all: TaxonomyCategory[] = data?.categories ?? [];
-        setCategories(all.filter((c) => c.isActive));
-      }
-    } catch {
-      setCategories([]);
-    } finally {
-      setLoadingCategories(false);
+    void fetchCategories();
+  };
+
+  // Panel açıldığında (veya açıkken klasör değiştiğinde) sekme ve durum sıfırlanır, veriler yüklenir.
+  const openKey = isOpen ? folder.id ?? '' : null;
+  const [loadedOpenKey, setLoadedOpenKey] = useState<string | null>(null);
+  if (loadedOpenKey !== openKey) {
+    setLoadedOpenKey(openKey);
+    if (openKey !== null) {
+      setActiveTab('variation');
+      setSaveStatus('idle');
+      if (folder.id) setLoading(true);
+      setLoadingVariations(true);
+      setLoadingCategories(true);
     }
-  }, []);
+  }
 
   useEffect(() => {
     if (!isOpen) return;
-    loadConfig();
-    loadVariationTemplates();
-    loadCategories();
-    setActiveTab('variation');
-    setSaveStatus('idle');
-  }, [isOpen, loadConfig, loadVariationTemplates, loadCategories]);
+    void fetchConfig();
+    void fetchVariationTemplates();
+    void fetchCategories();
+  }, [isOpen, fetchConfig, fetchVariationTemplates, fetchCategories]);
 
   // ── Kaydet ───────────────────────────────────────────────────────────────
   const handleSave = async () => {

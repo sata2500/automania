@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
@@ -64,9 +64,11 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   // UI States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // Klasör değişince toplu seçim temizlenir (görünmeyen mockup'lar yanlışlıkla silinmesin/taşınmasın).
-  useEffect(() => {
+  const [selectionFolderId, setSelectionFolderId] = useState(activeFolderId);
+  if (selectionFolderId !== activeFolderId) {
+    setSelectionFolderId(activeFolderId);
     setSelectedIds([]);
-  }, [activeFolderId]);
+  }
   const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'canvas'>('canvas');

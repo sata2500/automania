@@ -15,6 +15,46 @@ interface UseMockupUploadProps {
   setSelectedMockupId: (id: string | null) => void;
 }
 
+/** Tarayıcının video öğesiyle süreyi okur. */
+function getVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.style.display = 'none';
+    document.body.appendChild(video);
+
+    const cleanup = () => {
+      video.onloadedmetadata = null;
+      video.ondurationchange = null;
+      video.onerror = null;
+      window.URL.revokeObjectURL(video.src);
+      if (document.body.contains(video)) document.body.removeChild(video);
+    };
+
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    const checkDuration = () => {
+      if (video.duration && video.duration !== Infinity && !isNaN(video.duration)) {
+        const dur = video.duration;
+        cleanup();
+        resolve(dur);
+      }
+    };
+
+    video.onloadedmetadata = checkDuration;
+    video.ondurationchange = checkDuration;
+
+    video.onerror = () => {
+      cleanup();
+      reject(new Error('Desteklenmeyen veya bozuk video formatı. FFmpeg fallback denenecek.'));
+    };
+
+    video.src = URL.createObjectURL(file);
+    video.load();
+  });
+}
+
 export function useMockupUpload({
   mockups,
   setMockups,
@@ -26,46 +66,7 @@ export function useMockupUpload({
 }: UseMockupUploadProps) {
   const toast = useToast();
 
-  const getVideoDuration = (file: File): Promise<number> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.style.display = 'none';
-      document.body.appendChild(video);
-
-      const cleanup = () => {
-        video.onloadedmetadata = null;
-        video.ondurationchange = null;
-        video.onerror = null;
-        window.URL.revokeObjectURL(video.src);
-        if (document.body.contains(video)) document.body.removeChild(video);
-      };
-
-      video.preload = 'metadata';
-      video.muted = true;
-      video.playsInline = true;
-
-      const checkDuration = () => {
-        if (video.duration && video.duration !== Infinity && !isNaN(video.duration)) {
-          const dur = video.duration;
-          cleanup();
-          resolve(dur);
-        }
-      };
-
-      video.onloadedmetadata = checkDuration;
-      video.ondurationchange = checkDuration;
-
-      video.onerror = () => {
-        cleanup();
-        reject(new Error('Desteklenmeyen veya bozuk video formatı. FFmpeg fallback denenecek.'));
-      };
-
-      video.src = URL.createObjectURL(file);
-      video.load();
-    });
-  };
-
-  const getVideoDurationWithFallback = async (file: File): Promise<number> => {
+  const getVideoDurationWithFallback = useCallback(async (file: File): Promise<number> => {
     try {
       return await getVideoDuration(file);
     } catch (e) {
@@ -77,7 +78,7 @@ export function useMockupUpload({
         throw new Error('Video süresi hem tarayıcı hem FFmpeg tarafından okunamadı.');
       }
     }
-  };
+  }, [toast]);
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -239,6 +240,7 @@ export function useMockupUpload({
       setMockups,
       setSelectedMockupId,
       toast,
+      getVideoDurationWithFallback,
     ]
   );
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { DesignItem, TargetApparel } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 
@@ -30,9 +30,11 @@ export function useDesignSelection({
   }, [designs, activeDesignFolderId]);
 
   // Klasör değişince seçim temizlenir: toplu sil/taşı ekranda görünmeyen tasarımları etkilemesin.
-  useEffect(() => {
+  const [selectionFolderId, setSelectionFolderId] = useState(activeDesignFolderId);
+  if (selectionFolderId !== activeDesignFolderId) {
+    setSelectionFolderId(activeDesignFolderId);
     setSelectedDesignIds([]);
-  }, [activeDesignFolderId]);
+  }
 
   // Management (Checkbox) Selection Toggle
   const toggleManagementSelection = useCallback((id: string) => {

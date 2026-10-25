@@ -21,17 +21,17 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
 }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const [guestData, setGuestData] = useState<AppDataPayload | null>(null);
+  // Misafir verisi, okunduğu kullanıcıya bağlı tutulur; oturum değişince eski kayıt gösterilmez.
+  const [guestState, setGuestState] = useState<{ userId: string; data: AppDataPayload } | null>(null);
+  const guestData = user && guestState?.userId === user.id ? guestState.data : null;
   const [isDismissed, setIsDismissed] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setGuestData(null);
-      return;
-    }
+    if (!user) return;
 
+    const userId = user.id;
     let isMounted = true;
     getGuestWorkspace().then((data) => {
       if (!isMounted) return;
@@ -41,9 +41,9 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
           (data.designs && data.designs.length > 0) ||
           (data.etsyGeneratedMockups && data.etsyGeneratedMockups.length > 0))
       ) {
-        setGuestData(data);
+        setGuestState({ userId, data });
       } else {
-        setGuestData(null);
+        setGuestState(null);
       }
     });
 
@@ -77,7 +77,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
         if (onMigrationComplete) {
           onMigrationComplete(merged);
         }
-        setGuestData(null);
+        setGuestState(null);
       }
     } catch (err) {
       console.error('Migration failed:', err);
@@ -98,7 +98,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
       return;
     }
     await clearGuestWorkspace();
-    setGuestData(null);
+    setGuestState(null);
     setConfirmClear(false);
   };
 

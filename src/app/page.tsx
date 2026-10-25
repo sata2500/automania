@@ -121,15 +121,6 @@ function MainContent() {
     return () => window.clearTimeout(tabTimer);
   }, []);
 
-  // If user is guest and on a protected tab (seo or listings), show mockups — but only once the
-  // stored session has been checked; otherwise a signed-in user loses their tab on every reload.
-  // The saved tab is kept so it is restored after the user signs in.
-  useEffect(() => {
-    if (authStatus === 'ready' && !user && (activeTabState === 'seo' || activeTabState === 'listings')) {
-      setActiveTabState('mockups');
-    }
-  }, [authStatus, user, activeTabState]);
-
   const setActiveTab = (tab: TabKey) => {
     // Prevent guest from navigating to protected tabs
     if (!user && (tab === 'seo' || tab === 'listings')) {
@@ -142,7 +133,11 @@ function MainContent() {
     } catch {}
   };
 
-  const activeTab = activeTabState;
+  // If user is guest and on a protected tab (seo or listings), show mockups — but only once the
+  // stored session has been checked; otherwise a signed-in user loses their tab on every reload.
+  // The saved tab is kept so it is restored after the user signs in.
+  const isProtectedTab = activeTabState === 'seo' || activeTabState === 'listings';
+  const activeTab: TabKey = authStatus === 'ready' && !user && isProtectedTab ? 'mockups' : activeTabState;
 
   const {
     folders, setFolders,

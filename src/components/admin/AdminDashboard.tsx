@@ -1,7 +1,7 @@
 'use client';
 
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import {
   ShieldCheck,
   Cpu,
@@ -31,15 +31,32 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 type AdminSubTab = 'overview' | 'ai' | 'keywords' | 'taxonomy' | 'users' | 'settings';
 
+const ADMIN_SUBTAB_STORAGE_KEY = 'automania_admin_subtab_v1';
+const ADMIN_SUBTABS: readonly AdminSubTab[] = ['overview', 'ai', 'keywords', 'taxonomy', 'users', 'settings'];
+
+const subscribeToNothing = () => () => {};
+
+function readStoredSubTab(): AdminSubTab | null {
+  try {
+    const saved = localStorage.getItem(ADMIN_SUBTAB_STORAGE_KEY) as AdminSubTab | null;
+    return saved && ADMIN_SUBTABS.includes(saved) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 export const AdminDashboard: React.FC = () => {
   const toast = useToast();
   const [confirmConfig, setConfirmConfig] = useState<{isOpen: boolean; title: string; message: string; action: (() => void) | null}>({ isOpen: false, title: '', message: '', action: null });
 
-  // Active Sub Tab state
-  const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('overview');
+  // Active Sub Tab state: kullanıcı seçmediyse son açık sekme (hidrasyondan sonra localStorage'dan) gösterilir.
+  const [chosenSubTab, setActiveSubTab] = useState<AdminSubTab | null>(null);
+  const storedSubTab = useSyncExternalStore(subscribeToNothing, readStoredSubTab, () => null);
+  const activeSubTab: AdminSubTab = chosenSubTab ?? storedSubTab ?? 'overview';
 
   const [globalStats, setGlobalStats] = useState<AdminGlobalStats | null>(null);
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  // İstatistikler açılışta otomatik yüklendiği için başlangıçta yükleniyor kabul edilir.
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [sampleStats, setSampleStats] = useState<{ mockupsCount: number; designsCount: number; foldersCount: number } | null>(null);
   const [isUpdatingSampleData, setIsUpdatingSampleData] = useState(false);
   const [storageDiagnostics, setStorageDiagnostics] = useState<{
@@ -49,31 +66,31 @@ export const AdminDashboard: React.FC = () => {
   } | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
 
-  const fetchGlobalStats = async (showToast: boolean = false) => {
-    setIsLoadingStats(true);
-    try {
-      const res = await fetch(`/api/admin/stats?_t=${Date.now()}${showToast ? '&fresh=1' : ''}`, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store' }
-      });
-      const data = await res.json();
-      if (data.success && data.stats) {
-        setGlobalStats(data.stats);
-        if (showToast) {
-          toast.success(`İstatistikler güncellendi: ${data.stats.assets.mockups} Mockup, ${data.stats.assets.designs} Tasarım, ${data.stats.storage.blobCount} R2 Dosyası.`);
-        }
-      } else {
-        if (showToast) {
+  // Promise zinciri: durum güncellemeleri yalnızca yanıt geldikten sonra yapılır (efektten güvenle çağrılabilir).
+  const loadGlobalStats = useCallback((showToast: boolean = false) =>
+    fetch(`/api/admin/stats?_t=${Date.now()}${showToast ? '&fresh=1' : ''}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store' }
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.stats) {
+          setGlobalStats(data.stats);
+          if (showToast) {
+            toast.success(`İstatistikler güncellendi: ${data.stats.assets.mockups} Mockup, ${data.stats.assets.designs} Tasarım, ${data.stats.storage.blobCount} R2 Dosyası.`);
+          }
+        } else if (showToast) {
           toast.error(data.message || data.error || 'İstatistikler alınamadı.');
         }
-      }
-    } catch {
-      if (showToast) {
-        toast.error('İstatistikler yüklenirken bağlantı hatası oluştu.');
-      }
-    } finally {
-      setIsLoadingStats(false);
-    }
+      })
+      .catch(() => {
+        if (showToast) toast.error('İstatistikler yüklenirken bağlantı hatası oluştu.');
+      })
+      .finally(() => setIsLoadingStats(false)), [toast]);
+
+  const fetchGlobalStats = (showToast: boolean = false) => {
+    setIsLoadingStats(true);
+    void loadGlobalStats(showToast);
   };
 
   const handleCheckStorage = async () => {
@@ -96,39 +113,28 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const fetchSampleStats = async () => {
-    try {
-      const res = await fetch(`/api/admin/sample-data?_t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' }
-      });
-      const data = await res.json();
-      if (data.success && data.stats) {
-        setSampleStats(data.stats);
-      }
-    } catch {}
-  };
+  const fetchSampleStats = useCallback(() =>
+    fetch(`/api/admin/sample-data?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' }
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.stats) setSampleStats(data.stats);
+      })
+      .catch(() => {}), []);
 
   useEffect(() => {
     if (activeSubTab === 'overview' || activeSubTab === 'settings') {
-      fetchGlobalStats();
-      fetchSampleStats();
+      void loadGlobalStats();
+      void fetchSampleStats();
     }
-  }, [activeSubTab]);
-
-  useEffect(() => {
-    try {
-      const savedTab = localStorage.getItem('automania_admin_subtab_v1') as AdminSubTab;
-      if (savedTab && ['overview', 'ai', 'keywords', 'taxonomy', 'users', 'settings'].includes(savedTab)) {
-        setActiveSubTab(savedTab);
-      }
-    } catch {}
-  }, []);
+  }, [activeSubTab, loadGlobalStats, fetchSampleStats]);
 
   const handleSubTabChange = (tab: AdminSubTab) => {
     setActiveSubTab(tab);
     try {
-      localStorage.setItem('automania_admin_subtab_v1', tab);
+      localStorage.setItem(ADMIN_SUBTAB_STORAGE_KEY, tab);
     } catch {}
   };
 

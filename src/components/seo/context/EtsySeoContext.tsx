@@ -1,6 +1,6 @@
 'use client';
 import { getErrorMessage } from '@/lib/errors';
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useToast } from '@/components/common/ToastContext';
 import { deleteUnreferencedBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, EtsyVariationRow, EtsyVariationTemplate, EvaluatedKeyword, RenderedMatch } from '@/types/pod';
@@ -219,13 +219,24 @@ function useEtsySeoState() {
     }).catch(console.warn);
   }, []);
 
+  // Seçili tasarım yalnızca karşılaştırma için okunur; değişmesi aşağıdaki efekti yeniden tetiklememeli
+  // (aksi halde kullanıcının seçtiği tasarım klasörün AI tasarımıyla ezilirdi).
+  const selectedDesignRef = useRef(selectedDesign);
+  useEffect(() => {
+    selectedDesignRef.current = selectedDesign;
+  }, [selectedDesign]);
+
   // When a folder is selected or mockups load, automatically select the first folder and extract AI data
   useEffect(() => {
     if (dbGeneratedMockups.length === 0 || allDesigns.length === 0) return;
+    const selectedDesign = selectedDesignRef.current;
 
     let targetFolderId = selectedFolderId;
     if ((!targetFolderId || !foldersWithMockups.some(f => f.id === targetFolderId)) && foldersWithMockups.length > 0) {
       targetFolderId = foldersWithMockups[0].id;
+      // Bilinçli eşitleme: veriler yüklendiğinde ilk klasör seçilir ve AI verisi aynı geçişte uygulanır
+      // (kullanıcıya bildirim gösterildiği için render sırasında yapılamaz).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedFolderId(targetFolderId);
     }
 
@@ -264,7 +275,7 @@ function useEtsySeoState() {
         toast.warning('Seçilen klasördeki hiçbir tasarımda Yapay Zeka SEO analizi bulunamadı!');
       }
     }
-  }, [selectedFolderId, dbGeneratedMockups, allDesigns, foldersWithMockups]);
+  }, [selectedFolderId, dbGeneratedMockups, allDesigns, foldersWithMockups, toast]);
 
   // Handler for manual folder selection
   const handleSelectFolder = (folderId: string) => {
@@ -764,9 +775,11 @@ function useEtsySeoState() {
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   /** Seçili klasör daha önce bu cihazdan Etsy'ye aktarıldıysa kaydı (mükerrer ilan uyarısı için). */
   const [duplicatePublish, setDuplicatePublish] = useState<PublishedFolderRecord | null>(null);
-  useEffect(() => {
+  const [duplicateCheckFolderId, setDuplicateCheckFolderId] = useState(selectedFolderId);
+  if (duplicateCheckFolderId !== selectedFolderId) {
+    setDuplicateCheckFolderId(selectedFolderId);
     setDuplicatePublish(null);
-  }, [selectedFolderId]);
+  }
   
   // Etsy Integration state
   const [etsyConnected, setEtsyConnected] = useState(false);
@@ -1341,7 +1354,7 @@ function useEtsySeoState() {
     return () => {
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, filteredVariations]);
+  }, [dragState, filteredVariations, toast]);
 
   const handlePublishToEtsy = async (
     requestedState: 'draft' | 'active' = 'draft',
