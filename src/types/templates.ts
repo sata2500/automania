@@ -177,46 +177,5 @@ export interface AutomationRun {
   updatedAt: string;
 }
 
-// ─── Etsy Mağaza Tipleri ─────────────────────────────────────────────────────
-
-/** Etsy mağaza kaydı */
-export interface UserEtsyShop {
-  id: string;
-  userId: string;
-  shopId: string;
-  shopName: string | null;
-  shopUrl: string | null;
-  iconUrl: string | null;
-  isActive: boolean;
-  isPrimary: boolean;
-  totalActiveListings: number;
-  totalDraftListings: number;
-  avgSeoScore: number;
-  lastSyncedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ─── Yardımcı Tipler ─────────────────────────────────────────────────────────
-
-/** Şablon listesi API yanıtı */
-export interface TemplatesListResponse {
-  templates: PodTemplate[];
-  total: number;
-}
-
-/** Şablon oluşturma API yanıtı */
-export interface TemplateCreateResponse {
-  template: PodTemplate;
-  message: string;
-}
-
-/** Otomasyon başlatma yanıtı */
-export interface AutomationRunResponse {
-  runId: string;
-  status: string;
-  message: string;
-}
-
 /** Pipeline adım adları */
 export type AutomationStepName = keyof AutomationRunSteps;

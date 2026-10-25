@@ -1,4 +1,4 @@
-import { MockupItem, DesignItem, MockupFolder, MockupPreset } from '@/types/pod';
+import { MockupItem, DesignItem, MockupFolder } from '@/types/pod';
 
 const DEMO_ASSET_PATHS = [
   '/demo/mockup-light.svg',
@@ -64,8 +64,6 @@ export const SAMPLE_DESIGNS: DesignItem[] = [
     folderId: 'demo-folder-designs',
   },
 ];
-
-export const SAMPLE_PRESETS: MockupPreset[] = [];
 
 export function isProtectedUrl(url: string): boolean {
   return DEMO_ASSET_PATHS.some((assetPath) => url === assetPath || url.endsWith(assetPath));

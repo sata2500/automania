@@ -134,29 +134,6 @@ export async function removeGreenBackground(
 }
 
 /**
- * Birden fazla görseli paralel olarak işler.
- */
-export async function removeGreenBackgroundBatch(
-  inputs: Array<{ id: string; data: string | Buffer }>,
-  options: ChromaKeyOptions = {}
-): Promise<Map<string, ChromaKeyResult>> {
-  const results = new Map<string, ChromaKeyResult>();
-
-  await Promise.all(
-    inputs.map(async ({ id, data }) => {
-      try {
-        const result = await removeGreenBackground(data, options);
-        results.set(id, result);
-      } catch (error) {
-        console.error(`[ChromaKey] ${id} işlenirken hata:`, error);
-      }
-    })
-  );
-
-  return results;
-}
-
-/**
  * Chroma key kalitesini değerlendirir.
  */
 export function evaluateChromaKeyQuality(result: ChromaKeyResult): {

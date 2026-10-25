@@ -48,7 +48,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
   // Filter mockup folders (exclude design folders)
   const mockupFolders = folders.filter((f) => f.type !== 'design');
-  const setMockupFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>> = (action) => {
+  const setMockupFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>> = useCallback((action) => {
     setFolders((prev) => {
       const nonMockupFolders = prev.filter((f) => f.type === 'design');
       const updatedMockupFolders =
@@ -59,7 +59,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           : action;
       return [...nonMockupFolders, ...updatedMockupFolders];
     });
-  };
+  }, [setFolders]);
 
   // UI States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

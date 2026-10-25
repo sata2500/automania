@@ -77,7 +77,3 @@ export function openSecretOrNull(value: unknown): string | null {
     return null;
   }
 }
-
-export function sealSecretOrNull(value: string | null | undefined): string | null {
-  return value ? sealSecret(value) : null;
-}

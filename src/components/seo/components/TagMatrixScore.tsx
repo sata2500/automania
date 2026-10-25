@@ -7,11 +7,10 @@ import { gradeForSeoScore } from '@/lib/etsy-seo-evaluator';
 
 interface TagMatrixScoreProps {
   tags: string[];
-  title?: string;
   className?: string;
 }
 
-export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMatrixScoreProps) {
+export function TagMatrixScore({ tags = [], className = '' }: TagMatrixScoreProps) {
   // Real-time analysis of the 13 tags
   const analysis = useMemo(() => {
     const validTags = tags.map((t) => (typeof t === 'string' ? t.trim() : '')).filter(Boolean);
@@ -121,7 +120,7 @@ export function TagMatrixScore({ tags = [], title = '', className = '' }: TagMat
       grade,
       gradeColor,
     };
-  }, [tags, title]);
+  }, [tags]);
 
   return (
     <div className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 ${className}`}>

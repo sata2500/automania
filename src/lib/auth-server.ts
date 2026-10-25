@@ -143,10 +143,6 @@ export async function getAuthoritativeSession(): Promise<TokenPayload | null> {
   }
 }
 
-export async function requireActiveSession() {
-  return await getAuthoritativeSession();
-}
-
 export async function requireAdmin() {
   const session = await getAuthoritativeSession();
   if (!session || session.role !== 'admin') {

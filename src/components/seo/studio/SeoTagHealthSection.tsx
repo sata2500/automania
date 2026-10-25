@@ -61,10 +61,7 @@ export const SeoTagHealthSection: React.FC = () => {
       </div>
 
       {/* Real-time Tag Health Matrix & Intent Distribution Score */}
-      <TagMatrixScore
-        tags={selectedTags}
-        title={generatedTitle}
-      />
+      <TagMatrixScore tags={selectedTags} />
     </div>
   );
 };

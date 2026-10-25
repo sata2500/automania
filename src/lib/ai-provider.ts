@@ -51,15 +51,6 @@ export interface GenerateImageOptions {
   numberOfImages?: number;
 }
 
-export interface GenerateTextOptions {
-  prompt: string;
-  systemInstruction?: string;
-  maxOutputTokens?: number;
-  temperature?: number;
-  /** JSON formatında yanıt istiyorsak true */
-  jsonOutput?: boolean;
-}
-
 export interface GenerateVideoOptions {
   prompt: string;
   /** Saniye (5 veya 8) */
@@ -251,97 +242,6 @@ export async function generateImage(
   return generateImageGoogle(config, options);
 }
 
-// ─── Metin Üretimi ───────────────────────────────────────────────────────────
-
-/**
- * Aktif provider'a göre metin üretir (SEO, başlık, açıklama vb.)
- */
-export async function generateText(
-  config: AIProviderConfig,
-  options: GenerateTextOptions
-): Promise<string> {
-  if (config.provider === 'openrouter' && config.openRouterApiKey) {
-    return generateTextOpenRouter(config, options);
-  }
-  return generateTextGoogle(config, options);
-}
-
-async function generateTextGoogle(
-  config: AIProviderConfig,
-  options: GenerateTextOptions
-): Promise<string> {
-  const client = getGoogleClient(config);
-  const primaryModel = config.textModel || 'gemini-3.8-flash';
-
-  // Model havuzu: Seçilen model hata verirse (503 / 429 / 404), güvenilir alternatiflere otomatik fallback
-  const fallbackCandidates = Array.from(new Set([
-    primaryModel,
-    'gemini-3.8-flash',
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite'
-  ]));
-
-  let lastError: unknown = null;
-
-  for (const modelToTry of fallbackCandidates) {
-    try {
-      const response = await client.models.generateContent({
-        model: modelToTry,
-        contents: options.prompt,
-        config: {
-          systemInstruction: options.systemInstruction,
-          maxOutputTokens: options.maxOutputTokens ?? 8192,
-          temperature: options.temperature ?? 0.7,
-          responseMimeType: options.jsonOutput ? 'application/json' : 'text/plain',
-        },
-      });
-
-      return response.text ?? '';
-    } catch (err: unknown) {
-      lastError = err;
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Google AI Text] Model '${modelToTry}' failed: ${errMsg.slice(0, 100)}. Trying fallback candidate...`);
-      continue;
-    }
-  }
-
-  throw lastError || new Error('Google metin üretimi tüm aday modellerle başarısız oldu.');
-}
-
-async function generateTextOpenRouter(
-  config: AIProviderConfig,
-  options: GenerateTextOptions
-): Promise<string> {
-  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
-  if (options.systemInstruction) {
-    messages.push({ role: 'system', content: options.systemInstruction });
-  }
-  messages.push({ role: 'user', content: options.prompt });
-
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.openRouterApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: config.textModel,
-      messages,
-      max_tokens: options.maxOutputTokens ?? 2048,
-      temperature: options.temperature ?? 0.7,
-      ...(options.jsonOutput ? { response_format: { type: 'json_object' } } : {}),
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenRouter metin hatası: ${err}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? '';
-}
-
 // ─── Video Üretimi (Veo 3.1) ─────────────────────────────────────────────────
 
 /**
@@ -396,22 +296,4 @@ export async function generateVideo(
   }
 
   return { uri, mimeType };
-}
-
-// ─── Kullanılabilir Modeller ──────────────────────────────────────────────────
-
-/**
- * OpenRouter'dan mevcut görsel üretim modellerini çeker.
- */
-export async function fetchOpenRouterImageModels(apiKey: string): Promise<{id: string; name: string}[]> {
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/models?output_modalities=image', {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return ((data.data ?? []) as Array<{ id: string; name?: string }>).map((m) => ({ id: m.id, name: m.name ?? m.id }));
-  } catch {
-    return [];
-  }
 }

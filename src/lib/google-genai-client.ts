@@ -100,15 +100,6 @@ export function createGoogleClient(connection: GoogleConnection, options: { mode
   });
 }
 
-/** Ayarlardaki bağlantıyla istemci oluşturur; yapılandırılmamışsa açıklayıcı bir hata fırlatır. */
-export async function getGoogleClient(options: { model?: string } = {}): Promise<GoogleGenAI> {
-  const connection = await loadGoogleConnection();
-  if (!connection) {
-    throw new Error('Google AI bağlantısı yapılandırılmamış. Admin panelinden Gemini API anahtarı veya Google Cloud hizmet hesabı ekleyin.');
-  }
-  return createGoogleClient(connection, options);
-}
-
 const MAX_LISTED_MODELS = 1000;
 
 type RawModel = { name?: string; displayName?: string; description?: string };
