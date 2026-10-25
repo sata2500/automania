@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { estimateKeyColor, keyOutBackground, removeGreenBackground } from './chroma-key';
+import { estimateKeyColor, keyOutBackground, removeChromaBackground } from './chroma-key';
 
 type Rgb = [number, number, number];
 const KEY: Rgb = [0, 255, 0];
@@ -93,14 +93,45 @@ describe('estimateKeyColor', () => {
   });
 });
 
-describe('removeGreenBackground', () => {
+describe('removeChromaBackground', () => {
   it('returns a transparent PNG and the removed ratio', async () => {
     const data = image(20, 20, (x, y) => (inRect(x, y, 5, 5, 15, 15) ? [30, 30, 30] : undefined));
     const input = await sharp(Buffer.from(data), { raw: { width: 20, height: 20, channels: 4 } }).png().toBuffer();
-    const result = await removeGreenBackground(input);
+    const result = await removeChromaBackground(input);
     expect(result.removedRatio).toBeCloseTo(0.75, 1);
     const meta = await sharp(result.pngBuffer).metadata();
     expect(meta.format).toBe('png');
     expect(meta.hasAlpha).toBe(true);
+    expect([result.width, result.height]).toEqual([20, 20]);
+    // Saydam piksellerde perde rengi saklı kalmaz (saydamlığı yok sayan görüntüleyicilerde yeşil görünmez).
+    const raw = await sharp(result.pngBuffer).raw().toBuffer();
+    expect(Array.from(raw.subarray(0, 4))).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe('other screens and framed images', () => {
+  it('keys out a magenta screen while keeping greens and pinks that differ from it', () => {
+    const tree: Rgb = [46, 107, 58];
+    const rose: Rgb = [176, 58, 92]; // koyu pembe, magentadan farklı
+    const data = image(60, 30, (x, y) => {
+      if (inRect(x, y, 5, 5, 25, 25)) return tree;
+      if (inRect(x, y, 35, 5, 55, 25)) return rose;
+      return [255, 0, 255];
+    });
+    keyOutBackground(data, 60, 30);
+    expect(px(data, 60, 0, 0)[3]).toBe(0);
+    expect(px(data, 60, 30, 15)[3]).toBe(0);
+    expect(px(data, 60, 15, 15)).toEqual([...tree, 255]);
+    expect(px(data, 60, 45, 15)).toEqual([...rose, 255]);
+  });
+
+  it('finds the screen even when a dark frame surrounds the image', () => {
+    const data = image(80, 80, (x, y) => {
+      if (!inRect(x, y, 4, 4, 76, 76)) return [0, 0, 0];
+      return inRect(x, y, 30, 30, 50, 50) ? [200, 40, 40] : [8, 227, 49];
+    });
+    keyOutBackground(data, 80, 80);
+    expect(px(data, 80, 15, 15)[3]).toBe(0);
+    expect(px(data, 80, 40, 40)).toEqual([200, 40, 40, 255]);
   });
 });

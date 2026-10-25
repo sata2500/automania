@@ -3,7 +3,7 @@
 /**
  * AIDesignGeneratorModal
  * =======================
- * Kullanıcı prompt girer → Gemini görsel üretir (yeşil arka planlı) →
+ * Kullanıcı prompt girer → Gemini görsel üretir (düz perde arka planlı) →
  * önizleme gösterir → arka planı kaldırıp tasarım olarak kaydeder.
  *
  * Akış:
@@ -35,7 +35,7 @@ import { Spinner } from '@/components/common/Spinner';
 
 interface GeneratedPreview {
   id: string;
-  data: string;        // base64 (yeşil arka planlı)
+  data: string;        // base64 (düz perde arka planlı)
   mimeType: string;
   pngData?: string;    // base64 (transparan PNG, arka plan kaldırıldıktan sonra)
   bgRemoved?: boolean;
@@ -277,7 +277,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
               <div className="flex items-start gap-2.5 p-3.5 bg-indigo-50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-800/40 text-xs text-indigo-700 dark:text-indigo-300">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <p>
-                  Yapay zeka <strong>yeşil arka planlı</strong> tasarım üretir. Sonraki adımda yeşil arka plan otomatik kaldırılarak şeffaf PNG oluşturulur.
+                  Yapay zeka tasarımı <strong>düz renkli bir perde</strong> (yeşil; yeşil ağırlıklı konularda magenta) üzerinde üretir. Sonraki adımda perde otomatik kaldırılarak şeffaf PNG oluşturulur.
                 </p>
               </div>
 
@@ -414,7 +414,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
                             Şeffaf PNG hazır
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-300">Yeşil arka planlı</span>
+                          <span className="text-[10px] text-slate-300">Perde arka planlı</span>
                         )}
                       </div>
 

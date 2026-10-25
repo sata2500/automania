@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { removeGreenBackground, evaluateChromaKeyQuality } from '@/lib/chroma-key';
+import { removeChromaBackground, evaluateChromaKeyQuality } from '@/lib/chroma-key';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'imageData veya imageUrl zorunludur.' }, { status: 400 });
     }
 
-    const result = await removeGreenBackground(input, {
+    const result = await removeChromaBackground(input, {
       keyColor: keyColor && typeof keyColor === 'object'
         ? {
             r: clampNumber(keyColor.r, 0, 255, 0),

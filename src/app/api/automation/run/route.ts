@@ -3,7 +3,7 @@
  * ========================
  * Bir şablon için tam otomasyon pipeline'ını başlatır.
  * Pipeline adımları:
- *  1. designGeneration  — AI ile yeşil arka planlı tasarım üretimi
+ *  1. designGeneration  — AI ile perde (yeşil/magenta) arka planlı tasarım üretimi
  *  2. backgroundRemoval — Chroma key ile arka plan kaldırma
  *  3. mockupRender      — Tasarımı mockuplara yerleştirme
  *  4. videoGeneration   — Veo 3.1 ile video üretimi

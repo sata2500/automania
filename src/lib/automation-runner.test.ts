@@ -61,7 +61,7 @@ vi.mock('@/lib/ai-provider', () => ({
 }));
 const recolor = vi.hoisted(() => vi.fn(async () => ({ pngBuffer: Buffer.from('dark-ink') })));
 vi.mock('@/lib/recolor', () => ({ recolorDesign: recolor }));
-vi.mock('@/lib/chroma-key', () => ({ removeGreenBackground: vi.fn(async () => ({ pngBuffer: Buffer.from('png') })) }));
+vi.mock('@/lib/chroma-key', () => ({ removeChromaBackground: vi.fn(async () => ({ pngBuffer: Buffer.from('png'), width: 2048, height: 2048 })) }));
 vi.mock('@/lib/r2', () => ({
   isR2Configured: () => true,
   uploadToR2: vi.fn(async (_b: Buffer, key: string) => ({ url: `/api/r2/${key}`, key, size: 1 })),

@@ -13,7 +13,8 @@ import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
 import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
-import { removeGreenBackground } from '@/lib/chroma-key';
+import { removeChromaBackground } from '@/lib/chroma-key';
+import { KEY_COLORS, pickKeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { loadSetting } from '@/lib/app-settings';
@@ -106,51 +107,6 @@ async function resolveVariationRows(userId: string, config: TemplateRow['variati
   } catch (error) {
     console.warn('[Automation] Variation template lookup failed; using saved rows.', error instanceof Error ? error.message : error);
     return fallback;
-  }
-}
-
-/**
- * Görselin kenarlarındaki düz koyu çerçeveyi (satır/sütunun %90'ından fazlası çok koyu) kırpar.
- * En fazla kenarın %10'u kırpılır; çerçeve yoksa görsel aynen döner.
- */
-async function cropDarkFrame(image: Buffer): Promise<Buffer> {
-  try {
-    const sharp = (await import('sharp')).default;
-    const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-    const { width, height, channels } = info;
-    const isDark = (x: number, y: number) => {
-      const i = (y * width + x) * channels;
-      return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < 40;
-    };
-    const darkRow = (y: number) => { let n = 0; for (let x = 0; x < width; x++) if (isDark(x, y)) n++; return n / width > 0.9; };
-    const darkCol = (x: number) => { let n = 0; for (let y = 0; y < height; y++) if (isDark(x, y)) n++; return n / height > 0.9; };
-    const maxY = Math.floor(height * 0.1);
-    const maxX = Math.floor(width * 0.1);
-    let top = 0; while (top < maxY && darkRow(top)) top++;
-    let bottom = 0; while (bottom < maxY && darkRow(height - 1 - bottom)) bottom++;
-    let left = 0; while (left < maxX && darkCol(left)) left++;
-    let right = 0; while (right < maxX && darkCol(width - 1 - right)) right++;
-    if (top + bottom + left + right === 0) return image;
-    return await sharp(image)
-      .extract({ left, top, width: width - left - right, height: height - top - bottom })
-      .png()
-      .toBuffer();
-  } catch (error) {
-    console.warn('[Automation] Frame crop failed; using original image.', error instanceof Error ? error.message : error);
-    return image;
-  }
-}
-
-/** Saydam kenar boşluğunu kırpar ve tasarıma %3 nefes payı bırakır; kırpılamazsa orijinali döner. */
-async function trimTransparentMargin(png: Buffer): Promise<Buffer> {
-  try {
-    const sharp = (await import('sharp')).default;
-    const { data, info } = await sharp(png).trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 10 }).png().toBuffer({ resolveWithObject: true });
-    const pad = Math.round(Math.max(info.width, info.height) * 0.03);
-    return await sharp(data).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
-  } catch (error) {
-    console.warn('[Automation] Transparent margin trim failed; using untrimmed design.', error instanceof Error ? error.message : error);
-    return png;
   }
 }
 
@@ -253,18 +209,20 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
         .replace(/\{\{selectedStyle\}\}/g, hints.primaryNiche || '')
     : basePrompt;
 
-  const generatedImages = await generateImage(config, { prompt: finalPrompt, greenBackground: true });
+  // Perde rengi konuya göre seçilir: yeşil ağırlıklı konularda (Noel, orman…) magenta, tasarımın yeşilleri korunur.
+  const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${finalPrompt}`);
+  const generatedImages = await generateImage(config, { prompt: finalPrompt, keyBackground });
   if (!generatedImages || generatedImages.length === 0) throw new Error('AI tasarımı üretemedi.');
 
   steps.designGeneration = { ...steps.designGeneration, status: 'completed', completedAt: new Date().toISOString(), output: { prompt: basePrompt } };
   steps.backgroundRemoval = { status: 'running', startedAt: new Date().toISOString() };
   await persist({ steps });
 
-  // Bazı modeller görselin etrafına koyu bir çerçeve ekler; yeşil kaldırılınca tasarımın etrafında kutu kalmasın.
-  const unframed = await cropDarkFrame(Buffer.from(generatedImages[0].data, 'base64'));
-  const { pngBuffer: rawPng } = await removeGreenBackground(unframed);
-  // Tasarımın etrafındaki saydam boşluk kırpılır; aksi halde tasarım baskı alanında küçük kalır.
-  const pngBuffer = await trimTransparentMargin(rawPng);
+  // Kompozisyon (kare, ortalı, kenar boşlukları) görsel üretiminde istenir; burada kırpma yapılmaz.
+  const { pngBuffer, width: designWidth, height: designHeight } = await removeChromaBackground(
+    Buffer.from(generatedImages[0].data, 'base64'),
+    { keyColor: KEY_COLORS[keyBackground] },
+  );
   if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
   const uploadResult = await uploadToR2(pngBuffer, createOwnedUploadName(userId, `auto-design-${runId}`, 'image/png'), 'image/png');
 
@@ -273,8 +231,8 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
     name: `${hints.primaryNiche || template.name} · ${new Date().toLocaleDateString('tr-TR')}`,
     folderId: AUTOMATION_DESIGN_FOLDER.id,
     src: uploadResult.url,
-    width: 1024,
-    height: 1024,
+    width: designWidth,
+    height: designHeight,
     targetApparel: 'both',
     isProductionActive: false,
     createdAt: Date.now(),
@@ -605,7 +563,7 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
       await persist({ steps });
 
       if (step === 'designGeneration' || step === 'backgroundRemoval') {
-        // Tasarım ve arka plan kaldırma tek birimdir: ara çıktı (yeşil arka planlı görsel) saklanmaz.
+        // Tasarım ve arka plan kaldırma tek birimdir: ara çıktı (perde arka planlı görsel) saklanmaz.
         steps.designGeneration = { status: 'running', startedAt: new Date().toISOString() };
         await runDesignSteps(ctx, steps, persist);
         continue;

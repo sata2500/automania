@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
+import { pickKeyBackground } from '@/lib/key-background';
 import { sql } from '@/lib/db';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 
@@ -88,9 +89,12 @@ export async function POST(req: NextRequest) {
         .replace(/\{\{selectedStyle\}\}/g, typeof selectedStyle === 'string' ? selectedStyle : '');
     }
 
+    // Perde rengi konuya göre seçilir (yeşil ağırlıklı konularda magenta); kaldırma adımı rengi kenarlardan ölçer.
+    const keyBackground = greenBackground ? pickKeyBackground(finalPrompt) : undefined;
+
     // Birden fazla görsel için paralel istek
     const requests = Array.from({ length: count }, () =>
-      generateImage(config, { prompt: finalPrompt, greenBackground })
+      generateImage(config, { prompt: finalPrompt, keyBackground })
     );
 
     const results = await Promise.allSettled(requests);

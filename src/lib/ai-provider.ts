@@ -19,6 +19,7 @@
 import type { GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
 import { DEFAULT_VIDEO_MODEL, normalizeVideoModel } from '@/lib/google-cloud-credentials';
+import { keyBackgroundInstructions, stripBackgroundRules, type KeyBackground } from '@/lib/key-background';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -43,8 +44,8 @@ export interface AIProviderConfig {
 
 export interface GenerateImageOptions {
   prompt: string;
-  /** Arka planı yeşil (#00FF00) yap — chroma key için */
-  greenBackground?: boolean;
+  /** Arka planı düz perde rengi yap (sonradan saydamlaştırmak için). Bkz. `pickKeyBackground`. */
+  keyBackground?: KeyBackground;
   /** Kare (1024x1024) veya özel oran */
   aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
   /** 1–4 adet görsel */
@@ -148,16 +149,17 @@ async function generateImageGoogle(
 ): Promise<GeneratedImage[]> {
   const client = getGoogleClient(config, config.imageModel);
 
-  const promptWithBg = options.greenBackground
-    ? `${options.prompt}. The design must have a solid bright green (#00FF00) background that fills the entire canvas edge to edge, suitable for chroma key removal. No border, frame, margin or vignette around the image, and no shadows or gradients on the background.`
+  const promptWithBg = options.keyBackground
+    ? `${stripBackgroundRules(options.prompt)}\n\n${keyBackgroundInstructions(options.keyBackground)}`
     : options.prompt;
+  const aspectRatio = options.aspectRatio ?? '1:1';
 
   // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
   if (config.imageModel.startsWith('imagen')) {
     const result = await client.models.generateImages({
       model: config.imageModel,
       prompt: promptWithBg,
-      config: { numberOfImages: options.numberOfImages ?? 1, aspectRatio: options.aspectRatio ?? '1:1' },
+      config: { numberOfImages: options.numberOfImages ?? 1, aspectRatio },
     });
     const imagenImages: GeneratedImage[] = (result.generatedImages ?? [])
       .map((item) => item.image)
@@ -167,13 +169,24 @@ async function generateImageGoogle(
     return imagenImages;
   }
 
-  const response = await client.models.generateContent({
+  // Oran açıkça verilmezse model yatay görsel üretip tasarımı bir kenara yerleştirebiliyor. 2K, baskı ve
+  // kenar kalitesi için; desteklemeyen modelde (yalnız 1K) istek boyut olmadan tekrarlanır.
+  const request = (imageSize?: string) => client.models.generateContent({
     model: config.imageModel,
     contents: promptWithBg,
     config: {
       responseModalities: ['image'],
+      imageConfig: { aspectRatio, ...(imageSize ? { imageSize } : {}) },
     },
   });
+  let response;
+  try {
+    response = await request('2K');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/image_?size|imageConfig|INVALID_ARGUMENT|not supported/i.test(message)) throw error;
+    response = await request();
+  }
 
   const images: GeneratedImage[] = [];
   for (const candidate of response.candidates ?? []) {
@@ -202,8 +215,8 @@ async function generateImageOpenRouter(
   config: AIProviderConfig,
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
-  const promptWithBg = options.greenBackground
-    ? `${options.prompt}. Solid bright green (#00FF00) background filling the whole canvas edge to edge, chroma key ready, no border or frame around the image, no shadows on background.`
+  const promptWithBg = options.keyBackground
+    ? `${stripBackgroundRules(options.prompt)}\n\n${keyBackgroundInstructions(options.keyBackground)}`
     : options.prompt;
 
   const res = await fetch('https://openrouter.ai/api/v1/images', {

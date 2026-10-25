@@ -1,11 +1,12 @@
 /**
- * Chroma Key — Yeşil Arka Plan Kaldırma Servisi
+ * Chroma Key — Perde Arka Planını Kaldırma Servisi
  * ================================================
- * AI tarafından yeşil perde (#00FF00) üzerinde üretilen tasarımdan transparan PNG oluşturur.
+ * AI tarafından düz perde rengi (yeşil #00FF00 veya magenta #FF00FF, bkz. `key-background`)
+ * üzerinde üretilen tasarımdan transparan PNG oluşturur.
  *
- * Tasarımın içindeki yeşilleri (çam ağacı, yeşil ampul, kıyafet) korumak ve kenarları pürüzsüz
- * bırakmak için "ton aralığındaki her pikseli sil" yerine şu adımlar izlenir:
- *  1. Perde rengi görselin kenarlarından ölçülür (sabit #00FF00 varsayılmaz).
+ * Tasarımın içindeki perdeye benzer renkleri (çam ağacı, yeşil ampul, kıyafet) korumak ve kenarları
+ * pürüzsüz bırakmak için "ton aralığındaki her pikseli sil" yerine şu adımlar izlenir:
+ *  1. Perde rengi görselin kenarlarından ölçülür (sabit bir renk varsayılmaz).
  *  2. Her pikselin perdeye uzaklığı renklilik (CbCr) düzleminde hesaplanır; parlaklık farkları
  *     (perdedeki hafif gölge/ışık) sonucu etkilemez.
  *  3. Arka plan, kenarlardan başlayan taşma doldurmayla bulunur: yalnızca dışarıya bağlı perde
@@ -13,7 +14,7 @@
  *     neredeyse aynı renkteyse silinir; tasarımın kendi yeşilleri dokunulmadan kalır.
  *  4. Kenar şeridindeki pikseller için alfa, yakındaki tasarım rengi (F) ile perde rengi (K)
  *     arasında doğrusal ayrıştırmayla bulunur: C = a·F + (1−a)·K. Renk de perdeden arındırılır
- *     (yeşil hale/taşma kalmaz), böylece kenarlar tırtıksız ve yumuşak olur.
+ *     (renkli hale/taşma kalmaz), böylece kenarlar tırtıksız ve yumuşak olur.
  */
 
 import sharp from 'sharp';
@@ -22,7 +23,8 @@ import sharp from 'sharp';
 
 export interface ChromaKeyOptions {
   /**
-   * Perde rengi. Verilmezse görselin kenarlarından ölçülür; kenarlar yeşil değilse #00FF00.
+   * Beklenen perde rengi. Gerçek renk her zaman görselin kenarlarından ölçülür; bu değer yalnız
+   * kenarlar düz bir perde rengi değilse kullanılır (varsayılan #00FF00).
    */
   keyColor?: { r: number; g: number; b: number };
 }
@@ -34,6 +36,8 @@ export interface ChromaKeyResult {
   removedRatio: number;
   /** İşlem süresi (ms) */
   processingTimeMs: number;
+  width: number;
+  height: number;
 }
 
 type Rgb = { r: number; g: number; b: number };
@@ -62,8 +66,8 @@ function chroma(r: number, g: number, b: number): [number, number] {
   ];
 }
 
-function isGreenish({ r, g, b }: Rgb): boolean {
-  return g > 80 && g - Math.max(r, b) > 40;
+function isSaturated({ r, g, b }: Rgb): boolean {
+  return Math.max(r, g, b) - Math.min(r, g, b) > 80;
 }
 
 function median(values: number[]): number {
@@ -71,15 +75,15 @@ function median(values: number[]): number {
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
-/** Görselin dış kenarındaki yeşil piksellerin medyan rengi: perde rengi tahmini. */
-export function estimateKeyColor(data: Uint8Array | Buffer, width: number, height: number, channels: number): Rgb {
+/** Görselin dış kenarındaki doygun piksellerin medyan rengi: perde rengi tahmini. */
+export function estimateKeyColor(data: Uint8Array | Buffer, width: number, height: number, channels: number, fallback: Rgb = DEFAULT_KEY): Rgb {
   const rs: number[] = [], gs: number[] = [], bs: number[] = [];
   const ring = Math.max(1, Math.min(4, Math.floor(Math.min(width, height) / 50)));
   const sample = (x: number, y: number) => {
     const i = (y * width + x) * channels;
     if (channels === 4 && data[i + 3]! < 128) return;
     const px = { r: data[i]!, g: data[i + 1]!, b: data[i + 2]! };
-    if (!isGreenish(px)) return;
+    if (!isSaturated(px)) return;
     rs.push(px.r); gs.push(px.g); bs.push(px.b);
   };
   for (let d = 0; d < ring; d++) {
@@ -87,24 +91,65 @@ export function estimateKeyColor(data: Uint8Array | Buffer, width: number, heigh
     for (let y = 0; y < height; y++) { sample(d, y); sample(width - 1 - d, y); }
   }
   const perimeter = 2 * (width + height) * ring;
-  // Kenarların en az %20'si yeşil değilse bu bir yeşil perde görseli sayılmaz.
-  if (rs.length < perimeter * 0.2) return DEFAULT_KEY;
-  return { r: median(rs), g: median(gs), b: median(bs) };
+  // Kenarların en az %20'si aynı doygun renkte değilse kenarlar perde sayılmaz.
+  if (rs.length >= perimeter * 0.2) {
+    const key = { r: median(rs), g: median(gs), b: median(bs) };
+    let close = 0;
+    for (let k = 0; k < rs.length; k++) {
+      if (Math.abs(rs[k]! - key.r) + Math.abs(gs[k]! - key.g) + Math.abs(bs[k]! - key.b) < 90) close++;
+    }
+    if (close >= perimeter * 0.2) return key;
+  }
+  return dominantSaturatedColor(data, width, height, channels) ?? fallback;
+}
+
+/**
+ * Kenarlar perde değilse (ör. görselin etrafında çerçeve): görselin en az %10'unu kaplayan en yaygın
+ * doygun renk perde sayılır. Seyrek örnekleme ile hızlıdır.
+ */
+function dominantSaturatedColor(data: Uint8Array | Buffer, width: number, height: number, channels: number): Rgb | null {
+  const bins = new Map<number, { n: number; r: number; g: number; b: number }>();
+  const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40_000)));
+  let samples = 0;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      samples++;
+      const i = (y * width + x) * channels;
+      if (channels === 4 && data[i + 3]! < 128) continue;
+      const px = { r: data[i]!, g: data[i + 1]!, b: data[i + 2]! };
+      if (!isSaturated(px)) continue;
+      const bin = ((px.r >> 5) << 6) | ((px.g >> 5) << 3) | (px.b >> 5);
+      const entry = bins.get(bin) ?? { n: 0, r: 0, g: 0, b: 0 };
+      entry.n++; entry.r += px.r; entry.g += px.g; entry.b += px.b;
+      bins.set(bin, entry);
+    }
+  }
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  for (const entry of bins.values()) if (!best || entry.n > best.n) best = entry;
+  if (!best || best.n < samples * 0.1) return null;
+  return { r: Math.round(best.r / best.n), g: Math.round(best.g / best.n), b: Math.round(best.b / best.n) };
 }
 
 // ─── Ana algoritma ───────────────────────────────────────────────────────────
 
 /**
  * Ham RGBA pikseller üzerinde perdeyi kaldırır (yerinde değiştirir). Saf fonksiyon; test edilebilir.
+ * @param fallbackKey Kenarlar düz bir perde rengi değilse kullanılacak perde rengi
  * @returns Tamamen saydam yapılan piksel sayısı
  */
-export function keyOutBackground(data: Uint8Array | Buffer, width: number, height: number, key?: Rgb): number {
+export function keyOutBackground(data: Uint8Array | Buffer, width: number, height: number, fallbackKey?: Rgb): number {
   const channels = 4;
   const total = width * height;
-  const K = key ?? estimateKeyColor(data, width, height, channels);
+  const K = estimateKeyColor(data, width, height, channels, fallbackKey);
   const [kCb, kCr] = chroma(K.r, K.g, K.b);
   // Perdenin nötr griye uzaklığı: tüm eşikler buna göre ölçeklenir (soluk perdelerde de çalışır).
   const keyRadius = Math.max(40, Math.hypot(kCb - 128, kCr - 128));
+  // Perde yönündeki birim renklilik vektörü: bir rengin "perdeye çalma" miktarı bu yöndeki bileşenidir.
+  const uCb = (kCb - 128) / keyRadius, uCr = (kCr - 128) / keyRadius;
+  const keyTint = (r: number, g: number, b: number) => {
+    const [cb, cr] = chroma(r, g, b);
+    return ((cb - 128) * uCb + (cr - 128) * uCr) / keyRadius;
+  };
 
   // 1) Perdeye renklilik uzaklığı
   const dist = new Float32Array(total);
@@ -123,9 +168,9 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
   const coreT = Math.min(0.32, Math.max(0.16, p95 * 1.6));
   /** Tasarımın içinde kalan bölgeler çoğunlukla bu kadar perdeye yakınsa silinir (harf boşlukları). */
   const holeT = coreT * 0.6;
-  /** Perdeyle karışmış olabilecek yeşilimsi piksel (tasarımın koyu/doygun yeşilleri bu aralığın dışında). */
-  const isMixedGreen = (p: number, i: number) =>
-    dist[p]! < MIXED_MAX_DIST && data[i + 1]! - Math.max(data[i]!, data[i + 2]!) > 20;
+  /** Perdeyle karışmış olabilecek, perde rengine çalan piksel (tasarımın koyu/doygun tonları bu aralığın dışında). */
+  const isMixedTint = (p: number, i: number) =>
+    dist[p]! < MIXED_MAX_DIST && keyTint(data[i]!, data[i + 1]!, data[i + 2]!) > 0.12;
 
   // 2) Kenarlardan taşma doldurma: dışarıya bağlı perde pikselleri arka plandır.
   const BG = 1;
@@ -166,14 +211,15 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
       if (p < total - width) visit(p + width);
     }
     // Bölgenin çoğu perdeyle neredeyse aynı renkteyse boşluktur; birkaç piksellik parçalar gürültü
-    // olabilir, onları kenar ayrıştırması yumuşatır.
-    if (tail >= 6 && pure >= tail * 0.5) {
+    // olabilir, onları kenar ayrıştırması yumuşatır. Görselin %2'sinden büyük perde bölgesi her durumda
+    // arka plandır (kenara değmese bile, ör. görselin etrafında çerçeve varsa).
+    if ((tail >= 6 && pure >= tail * 0.5) || tail >= total * 0.02) {
       for (let k = 0; k < tail; k++) state[queue[k]!] = BG;
     }
   }
 
   // 4) Ayrıştırılacak pikseller: arka plan sınırına BAND_RADIUS uzaklıktakiler (kenar yumuşaması,
-  //    hale) ve tasarımın içinde perdeyle karışmış yeşilimsi pikseller (ince çatlak, boşluk).
+  //    hale) ve tasarımın içinde perdeyle karışmış, perdeye çalan pikseller (ince çatlak, boşluk).
   // band: 1 = ayrıştırılacak, 2 = ayrıca arka plana EDGE_RADIUS uzaklıkta (kenar yumuşaması bölgesi)
   const band = new Uint8Array(total);
   for (let p = 0; p < total; p++) {
@@ -197,9 +243,9 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
     }
   }
   for (let p = 0, i = 0; p < total; p++, i += 4) {
-    if (!band[p] && state[p] !== BG && isMixedGreen(p, i)) band[p] = 1;
+    if (!band[p] && state[p] !== BG && isMixedTint(p, i)) band[p] = 1;
   }
-  // Arka plandan, perdeyle karışmış yeşilimsi pikseller boyunca ulaşılabilen bölge (parıltı, gölge, hale).
+  // Arka plandan, perdeyle karışmış pikseller boyunca ulaşılabilen bölge (parıltı, gölge, hale).
   const halo = new Uint8Array(total);
   head = 0; tail = 0;
   for (let p = 0; p < total; p++) {
@@ -209,7 +255,7 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
       || (p >= width && state[p - width] !== BG) || (p < total - width && state[p + width] !== BG)) queue[tail++] = p;
   }
   const spread = (q: number) => {
-    if (state[q] !== BG && !halo[q] && isMixedGreen(q, q * 4)) { halo[q] = 1; band[q] = Math.max(band[q]!, 1); queue[tail++] = q; }
+    if (state[q] !== BG && !halo[q] && isMixedTint(q, q * 4)) { halo[q] = 1; band[q] = Math.max(band[q]!, 1); queue[tail++] = q; }
   };
   while (head < tail) {
     const p = queue[head++]!;
@@ -257,10 +303,12 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
 
     // Tasarım rengi (F): komşular arasında, pikselin perde ile kendisi arasındaki doğruya en iyi
     // oturan ve perdeden daha uzak olan renk. Karışım pikseli C = a·F + (1−a)·K bu doğrunun üzerindedir;
-    // tasarımın kendi yeşilleri (ağaç, ampul) hiçbir komşuyla perde arasındaki doğruya oturmaz → korunur.
+    // tasarımın perdeye benzeyen kendi renkleri (ağaç, ampul) hiçbir komşuyla perde arasındaki doğruya
+    // oturmaz → korunur.
     let alpha = -1;
     let fR = 0, fG = 0, fB = 0;
     let bestResidual = Infinity;
+    let bestFitDist = -1;
     let farQ = -1;
     const ownDist = dist[p]!;
     const searchMix = (radius: number, step: number) => {
@@ -283,8 +331,15 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
           if (a < -0.05 || a > 1.05) continue;
           const eR = cR - kR - a * vR, eG = cG - kG - a * vG, eB = cB - kB - a * vB;
           const residual = eR * eR + eG * eG + eB * eB;
-          if (residual < bestResidual) {
+          // Doğruya oturan adaylar arasında perdeden en uzak olan (en saf tasarım rengi) seçilir;
+          // aksi halde kenardaki bir karışım pikseli tasarım rengi sanılabilir.
+          const fits = residual <= FIT_TOLERANCE * FIT_TOLERANCE;
+          const better = fits
+            ? bestResidual > FIT_TOLERANCE * FIT_TOLERANCE || dist[q]! > bestFitDist
+            : residual < bestResidual;
+          if (better) {
             bestResidual = residual; alpha = a;
+            if (fits) bestFitDist = dist[q]!;
             fR = source[j]!; fG = source[j + 1]!; fB = source[j + 2]!;
           }
         }
@@ -302,10 +357,9 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
       continue;
     }
     if (!fitted) {
-      // Kenar yumuşaması bölgesindeki yeşil baskın piksel (sıkıştırma gürültüsü doğruya oturmayı bozar):
-      // alfa, renklilik düzleminde perdeden en uzak komşuya doğru izdüşümle tahmin edilir.
-      const greenDominant = cG - Math.max(cR, cB) > 30;
-      if (band[p] !== 2 || !greenDominant || farQ < 0) continue; // Kendi rengi olan tasarım pikseli: dokunulmaz.
+      // Kenar yumuşaması bölgesinde perdeye belirgin çalan piksel (sıkıştırma gürültüsü doğruya oturmayı
+      // bozar): alfa, renklilik düzleminde perdeden en uzak komşuya doğru izdüşümle tahmin edilir.
+      if (band[p] !== 2 || keyTint(cR, cG, cB) <= 0.2 || farQ < 0) continue; // Kendi rengi olan tasarım pikseli: dokunulmaz.
       const j = farQ * 4;
       fR = source[j]!; fG = source[j + 1]!; fB = source[j + 2]!;
       const [lkCb, lkCr] = chroma(kR, kG, kB);
@@ -335,9 +389,16 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
       const w = alpha / 0.5;
       r = r * w + fR * (1 - w); g = g * w + fG * (1 - w); b = b * w + fB * (1 - w);
     }
-    // Yeşil taşma (spill) bastırma: tasarım rengi yeşil baskın değilse kenarda yeşil hale bırakma.
-    const limit = Math.max(r, b) + Math.max(0, fG - Math.max(fR, fB));
-    if (g > limit) g = limit;
+    // Renk taşması (spill) bastırma: rengin perde yönündeki bileşeni tasarım renginkini aşamaz;
+    // parlaklık korunur, yalnız perdeye çalan renk tonu alınır (kenarda yeşil/pembe hale kalmaz).
+    const excess = keyTint(r, g, b) - Math.max(0, keyTint(fR, fG, fB));
+    if (excess > 0) {
+      const shift = excess * keyRadius;
+      const dCb = -shift * uCb, dCr = -shift * uCr;
+      r += 1.402 * dCr;
+      g += -0.344136 * dCb - 0.714136 * dCr;
+      b += 1.772 * dCb;
+    }
 
     out[i] = Math.round(Math.min(255, Math.max(0, r)));
     out[i + 1] = Math.round(Math.min(255, Math.max(0, g)));
@@ -349,12 +410,12 @@ export function keyOutBackground(data: Uint8Array | Buffer, width: number, heigh
 }
 
 /**
- * Base64 veya Buffer formatındaki görselden yeşil arka planı kaldırır.
+ * Base64 veya Buffer formatındaki görselden perde arka planını kaldırır.
  * @param input  - base64 string veya Buffer
  * @param options - Chroma key parametreleri
  * @returns Transparan PNG buffer
  */
-export async function removeGreenBackground(
+export async function removeChromaBackground(
   input: string | Buffer,
   options: ChromaKeyOptions = {}
 ): Promise<ChromaKeyResult> {
@@ -369,6 +430,12 @@ export async function removeGreenBackground(
   const { width, height } = info;
   const removedCount = keyOutBackground(data, width, height, options.keyColor);
 
+  // Tamamen saydam piksellerin rengi sıfırlanır: saydamlığı yok sayan görüntüleyicilerde perde rengi
+  // görünmez, kenar kırpma (trim) doğru çalışır ve dosya küçülür.
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) { data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; }
+  }
+
   const pngBuffer = await sharp(data, { raw: { width, height, channels: 4 } })
     .png()
     .toBuffer();
@@ -377,6 +444,8 @@ export async function removeGreenBackground(
     pngBuffer,
     removedRatio: removedCount / (width * height),
     processingTimeMs: Date.now() - startTime,
+    width,
+    height,
   };
 }
 
@@ -392,7 +461,7 @@ export function evaluateChromaKeyQuality(result: ChromaKeyResult): {
   if (removedRatio < 0.05) {
     return {
       quality: 'poor',
-      message: 'Çok az piksel kaldırıldı. Görsel yeşil arka plana sahip olmayabilir.',
+      message: 'Çok az piksel kaldırıldı. Görselin arka planı düz bir perde rengi olmayabilir.',
     };
   }
   if (removedRatio > 0.85) {
