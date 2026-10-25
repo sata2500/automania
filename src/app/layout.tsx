@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     "Automania POD, Etsy satıcıları için tasarlanmış güçlü bir Print-on-Demand stüdyosudur. Mockup düzenleme, toplu üretim ve Etsy SEO araçlarını tek bir yerde sunar.",
   keywords: ["etsy", "print on demand", "mockup", "tasarım", "toplu üretim", "pod", "automania"],
   manifest: "/manifest.json",
+  // favicon.ico (16/32/48) app/ klasöründen otomatik eklenir; modern tarayıcılar vektörel SVG simgeyi kullanır.
+  icons: {
+    icon: [{ url: "/icon-logo.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon-apple-180.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
