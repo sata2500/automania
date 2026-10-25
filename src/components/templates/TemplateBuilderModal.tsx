@@ -29,6 +29,10 @@ import { DialogPanel } from '@/components/common/DialogPanel';
 interface TemplateBuilderModalProps {
   mockups: MockupItem[];
   template: PodTemplate | null;
+  /** Yeni şablon için ön doldurma (ör. klasörden açıldığında klasörün mockup'ları) */
+  initial?: Partial<PodTemplateInput>;
+  /** Şablonun bağlı olduğu klasörün adı (başlıkta gösterilir) */
+  folderName?: string;
   onSave: (data: PodTemplateInput, id?: string) => Promise<void>;
   onClose: () => void;
 }
@@ -47,6 +51,8 @@ const STEPS = [
 export function TemplateBuilderModal({
   mockups,
   template,
+  initial,
+  folderName,
   onSave,
   onClose,
 }: TemplateBuilderModalProps) {
@@ -56,10 +62,10 @@ export function TemplateBuilderModal({
   const [isSaving, setIsSaving] = useState(false);
 
   // Form state
-  const [name, setName] = useState(template?.name ?? '');
+  const [name, setName] = useState(template?.name ?? initial?.name ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
   const [mockupConfig, setMockupConfig] = useState(
-    template?.mockupConfig ?? {
+    template?.mockupConfig ?? initial?.mockupConfig ?? {
       printAreaMockupIds: [] as string[],
       staticMockupIds: [] as string[],
       videoMockupIds: [] as string[],
@@ -68,7 +74,7 @@ export function TemplateBuilderModal({
     }
   );
   const [variationConfig, setVariationConfig] = useState(
-    template?.variationConfig ?? {
+    template?.variationConfig ?? initial?.variationConfig ?? {
       rows: [] as TemplateVariationRow[],
       sizes: [] as string[],
       colors: [] as string[],
@@ -108,7 +114,7 @@ export function TemplateBuilderModal({
     const errors: string[] = [];
     if (step === 1) {
       if (totalImages > 20) errors.push('Toplam görsel sayısı 20\'yi aşamaz (Etsy limiti).');
-      if (totalVideos > 2) errors.push('Video sayısı 2\'yi aşamaz (Etsy limiti).');
+      if (totalVideos > 1) errors.push('İlan başına en fazla 1 video eklenebilir (Etsy limiti).');
     }
     return errors;
   };
@@ -161,7 +167,9 @@ export function TemplateBuilderModal({
                 {isEditing ? 'Şablonu Düzenle' : 'Yeni Şablon Oluştur'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isEditing ? template?.name : 'Otomasyon şablonunuzu adım adım yapılandırın'}
+                {folderName
+                  ? `Klasör: ${folderName}`
+                  : isEditing ? template?.name : 'Otomasyon şablonunuzu adım adım yapılandırın'}
               </p>
             </div>
           </div>

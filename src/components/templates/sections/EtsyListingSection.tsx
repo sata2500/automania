@@ -31,6 +31,8 @@ const TAXONOMY_PRESETS = [
   { id: 2202, label: 'Sweatshirt' },
 ];
 
+type TaxonomyOption = { id: number; name: string; path: string | null };
+
 type StoreOptions = {
   connected: boolean;
   profiles: EtsyShippingProfile[];
@@ -57,6 +59,7 @@ const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 m
 export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionProps) {
   const [options, setOptions] = useState<StoreOptions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [categories, setCategories] = useState<TaxonomyOption[]>([]);
   const createListing = schedule.createListing === true;
   const etsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy };
 
@@ -93,8 +96,17 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
       }
     };
     void load();
+    // Admin panelinde etkinleştirilen kategoriler; yoksa kategori kimliği elle girilir.
+    fetch('/api/etsy/taxonomy')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.categories)) setCategories(data.categories);
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  const isKnownCategory = categories.some((c) => c.id === etsy.taxonomyId);
 
   const errors = getEtsyListingSettingsErrors({ ...schedule, etsy });
 
@@ -172,27 +184,41 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className={labelClass} htmlFor="tpl-taxonomy">Etsy kategori kimliği</label>
-              <div className="flex gap-1.5">
-                <input
+              <label className={labelClass} htmlFor="tpl-taxonomy">Etsy kategorisi</label>
+              {categories.length > 0 && (
+                <select
                   id="tpl-taxonomy"
-                  type="number"
-                  min={1}
-                  className={selectClass}
-                  value={etsy.taxonomyId}
-                  onChange={(e) => updateEtsy({ taxonomyId: Number(e.target.value) || 0 })}
-                />
-                {TAXONOMY_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => updateEtsy({ taxonomyId: preset.id })}
-                    className={`px-2 rounded-xl border text-[11px] font-bold shrink-0 ${etsy.taxonomyId === preset.id ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+                  className={`${selectClass} mb-1.5`}
+                  value={isKnownCategory ? String(etsy.taxonomyId) : 'custom'}
+                  onChange={(e) => { if (e.target.value !== 'custom') updateEtsy({ taxonomyId: Number(e.target.value) }); }}
+                >
+                  {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.path || c.name}</option>)}
+                  <option value="custom">Diğer (kimliği elle gir)</option>
+                </select>
+              )}
+              {(categories.length === 0 || !isKnownCategory) && (
+                <div className="flex gap-1.5">
+                  <input
+                    id={categories.length > 0 ? 'tpl-taxonomy-custom' : 'tpl-taxonomy'}
+                    type="number"
+                    min={1}
+                    aria-label="Etsy kategori kimliği"
+                    className={selectClass}
+                    value={etsy.taxonomyId}
+                    onChange={(e) => updateEtsy({ taxonomyId: Number(e.target.value) || 0 })}
+                  />
+                  {categories.length === 0 && TAXONOMY_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => updateEtsy({ taxonomyId: preset.id })}
+                      className={`px-2 rounded-xl border text-[11px] font-bold shrink-0 ${etsy.taxonomyId === preset.id ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className={labelClass} htmlFor="tpl-price">Fiyat (varyasyon yoksa)</label>

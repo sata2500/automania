@@ -9,6 +9,8 @@
 
 /** Mockup ve görsel konfigürasyonu */
 export interface PodTemplateMockupConfig {
+  /** Şablonun bağlı olduğu mockup klasörü (klasör menüsündeki "Otomasyon Şablonu" bu kaydı açar) */
+  folderId?: string;
   /** Baskı alanı olan mockupların ID listesi (ETSY limiti: max 18) */
   printAreaMockupIds: string[];
   /** Baskı alanı olmayan mockupların ID listesi (size chart, color chart vb.) */

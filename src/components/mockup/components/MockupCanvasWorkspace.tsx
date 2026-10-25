@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   SlidersHorizontal,
   RotateCw,
@@ -22,6 +22,32 @@ interface MockupCanvasWorkspaceProps {
   onOpenMobileSettings: () => void;
 }
 
+/**
+ * Tuval kutusunu görselin gerçek en-boy oranıyla, alana sığacak en büyük boyutta tutar.
+ * Baskı alanı yüzdeleri görsele göre hesaplandığından (önizleme ve Etsy çıktısı da böyle çizer)
+ * kutu görselden geniş/uzun olursa alanlar kayık görünür.
+ */
+function useFittedSize(viewportRef: React.RefObject<HTMLDivElement | null>, aspect: number, active: boolean) {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!active || !el || !(aspect > 0)) return;
+    const fit = () => {
+      const style = getComputedStyle(el);
+      const availW = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const availH = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      if (availW <= 0 || availH <= 0) return;
+      const width = Math.min(availW, availH * aspect);
+      setSize({ width: Math.floor(width), height: Math.floor(width / aspect) });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [viewportRef, aspect, active]);
+  return size;
+}
+
 export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
   selectedMockup,
   draftAreas,
@@ -34,6 +60,17 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
   onTogglePrintAreaMode,
   onOpenMobileSettings,
 }) => {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  // Görselin gerçek boyutu (kayıtlı width/height kırpma vb. sonrası eski kalabilir).
+  const [natural, setNatural] = useState<{ src: string; width: number; height: number } | null>(null);
+  const storedAspect = selectedMockup?.width && selectedMockup?.height ? selectedMockup.width / selectedMockup.height : 1;
+  const aspect = natural && natural.src === selectedMockup?.src ? natural.width / natural.height : storedAspect;
+  const fitted = useFittedSize(viewportRef, aspect, Boolean(selectedMockup));
+
+  const recordNaturalSize = (src: string, width: number, height: number) => {
+    if (width > 0 && height > 0) setNatural({ src, width, height });
+  };
+
   if (!selectedMockup) {
     return (
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center h-[520px] lg:h-[560px] shadow-sm text-center">
@@ -111,18 +148,11 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
       </div>
 
       {/* Main Interactive Canvas Viewport (Flex-1, perfectly fitting container) */}
-      <div className="flex-1 min-h-0 relative w-full flex items-center justify-center bg-slate-950/5 dark:bg-slate-950/40 rounded-2xl p-2 sm:p-3 overflow-hidden">
+      <div ref={viewportRef} className="flex-1 min-h-0 relative w-full flex items-center justify-center bg-slate-950/5 dark:bg-slate-950/40 rounded-2xl p-2 sm:p-3 overflow-hidden">
         <div
           ref={containerRef}
-          className="relative max-w-full max-h-full select-none rounded-xl overflow-hidden shadow-md bg-slate-900 flex items-center justify-center touch-none"
-          style={{
-            aspectRatio:
-              selectedMockup.width && selectedMockup.height
-                ? `${selectedMockup.width} / ${selectedMockup.height}`
-                : '1 / 1',
-            maxHeight: '100%',
-            maxWidth: '100%',
-          }}
+          className="relative select-none rounded-xl overflow-hidden shadow-md bg-slate-900 touch-none shrink-0"
+          style={fitted ? { width: fitted.width, height: fitted.height } : { aspectRatio: String(aspect), maxWidth: '100%', maxHeight: '100%' }}
         >
           {/* Media Player / Image */}
           {isVideo ? (
@@ -133,13 +163,15 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
               loop
               muted
               playsInline
-              className="max-w-full max-h-full object-contain pointer-events-auto block"
+              onLoadedMetadata={(e) => recordNaturalSize(selectedMockup.src, e.currentTarget.videoWidth, e.currentTarget.videoHeight)}
+              className="w-full h-full object-contain pointer-events-auto block"
             />
           ) : (
             <img
               src={selectedMockup.src}
               alt={selectedMockup.name}
-              className="max-w-full max-h-full object-contain pointer-events-none block"
+              onLoad={(e) => recordNaturalSize(selectedMockup.src, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
+              className="w-full h-full object-fill pointer-events-none block"
               draggable={false}
             />
           )}
@@ -170,7 +202,7 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
                     transform: `rotate(${rotation}deg)`,
                     transformOrigin: 'center center',
                   }}
-                  className={`absolute transition-all cursor-move select-none touch-none ${
+                  className={`absolute transition-[border-color,background-color,box-shadow] cursor-move select-none touch-none ${
                     isActive
                       ? 'border-2 border-amber-400 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.3)] z-30'
                       : 'border border-dashed border-indigo-400/80 bg-indigo-500/5 hover:border-indigo-400 z-20 cursor-pointer'
@@ -178,25 +210,25 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
                 >
                   {/* Area Label Tag */}
                   <div
-                    className={`absolute -top-6 left-0 px-2 py-0.5 rounded text-[10px] font-bold tracking-wide flex items-center gap-1 shadow-sm whitespace-nowrap pointer-events-none ${
+                    className={`absolute -top-6 left-0 px-2 py-0.5 rounded text-[10px] font-bold tracking-wide flex items-center gap-1 shadow-sm whitespace-nowrap overflow-hidden pointer-events-none ${
                       isActive
                         ? 'bg-amber-500 text-white'
                         : 'bg-indigo-600/90 text-white'
                     }`}
                   >
-                    <span>{area.name || `Alan ${idx + 1}`}</span>
+                    <span className="truncate">{area.name || `Alan ${idx + 1}`}</span>
                     {rotation !== 0 && (
-                      <span className="text-[9px] opacity-80">({rotation}°)</span>
+                      <span className="text-[9px] opacity-80 shrink-0">({rotation}°)</span>
                     )}
                   </div>
 
                   {/* Active Handle Controls */}
                   {isActive && (
                     <>
-                      {/* Top Rotation Handle with Expanded Mobile Touch Area */}
+                      {/* Rotation Handle (sağ üst köşe: alan etiketinin üstüne binmez) with Expanded Mobile Touch Area */}
                       <div
                         onPointerDown={(e) => onPointerDown(e, 'rotate')}
-                        className="absolute -top-8 left-1/2 -translate-x-1/2 flex items-center justify-center p-2 cursor-grab active:cursor-grabbing touch-manipulation z-40 group/rot"
+                        className="absolute -top-5 -right-5 flex items-center justify-center p-2 cursor-grab active:cursor-grabbing touch-manipulation z-40 group/rot"
                         title="Döndürmek için sürükleyin"
                       >
                         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white dark:bg-slate-900 border-2 border-amber-500 text-amber-500 flex items-center justify-center shadow-md group-hover/rot:scale-110 transition-transform">

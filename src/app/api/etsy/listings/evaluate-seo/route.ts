@@ -120,7 +120,7 @@ export async function POST(req: Request) {
             fastMode: true,
           });
 
-          const newId = poolMapByKeyword.get(tag)?.id || `kw-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+          const newId = poolMapByKeyword.get(tag)?.id || `kw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
           if (scraped.scrapeError) {
             // Başarısız tarama mevcut metriklerin üzerine sıfır yazmaz ve kelimeyi "taze" işaretlemez;

@@ -1,9 +1,45 @@
 import { formatValidationError, templateInputSchema } from '@/lib/validation/templates';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { podTemplates } from '@/db/schema';
+import { podTemplates, userWorkspaces } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { convertLegacyFolderTemplate, parseLegacyFolderConfig } from '@/lib/folder-template';
+import type { EtsyVariationRow, MockupItem } from '@/types/pod';
+
+type TemplateRow = typeof podTemplates.$inferSelect;
+
+/**
+ * Eski "klasör şablon ayarları" kayıtlarını (açıklamada JSON) tam otomasyon şablonuna çevirir ve kaydeder.
+ * Dönüştürülemeyen kayıtlar olduğu gibi döner; liste hiçbir durumda bu yüzden başarısız olmaz.
+ */
+async function migrateLegacyFolderTemplates(userId: string, templates: TemplateRow[]): Promise<TemplateRow[]> {
+  if (!templates.some((t) => parseLegacyFolderConfig(t.description))) return templates;
+  try {
+    const [workspace] = await db
+      .select({ mockups: userWorkspaces.mockups, variationTemplates: userWorkspaces.etsyVariationTemplates })
+      .from(userWorkspaces)
+      .where(eq(userWorkspaces.userId, userId))
+      .limit(1);
+    const context = {
+      mockups: (workspace?.mockups as MockupItem[] | null) ?? [],
+      variationTemplates: (workspace?.variationTemplates as Array<{ id: string; variations?: EtsyVariationRow[] }> | null) ?? [],
+    };
+    return await Promise.all(templates.map(async (template) => {
+      const patch = convertLegacyFolderTemplate(template as unknown as Parameters<typeof convertLegacyFolderTemplate>[0], context);
+      if (!patch) return template;
+      const [updated] = await db
+        .update(podTemplates)
+        .set({ ...patch, updatedAt: new Date() } as Partial<TemplateRow>)
+        .where(and(eq(podTemplates.id, template.id), eq(podTemplates.userId, userId)))
+        .returning();
+      return updated ?? template;
+    }));
+  } catch (error) {
+    console.error('[GET /api/templates] Legacy folder template migration failed:', error instanceof Error ? error.message : error);
+    return templates;
+  }
+}
 
 /**
  * GET /api/templates
@@ -21,8 +57,9 @@ export async function GET(_req: NextRequest) {
       .from(podTemplates)
       .where(eq(podTemplates.userId, session.id))
       .orderBy(podTemplates.updatedAt);
+    const migrated = await migrateLegacyFolderTemplates(session.id, templates);
 
-    return NextResponse.json({ templates, total: templates.length });
+    return NextResponse.json({ templates: migrated, total: migrated.length });
   } catch (error) {
     console.error('[GET /api/templates] Error:', error);
     return NextResponse.json(

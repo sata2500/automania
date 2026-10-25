@@ -82,15 +82,17 @@ export function useMockupUpload({
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
+      const input = e.target;
+      const fileList = Array.from(input.files ?? []);
+      // Seçim hemen sıfırlanır: aynı dosya tekrar seçilebilir, hata olsa bile seçici takılı kalmaz.
+      input.value = '';
+      if (fileList.length === 0) return;
       const targetFolder = activeFolderId || mockupFolders[0]?.id || 'folder-women';
 
       const existingInFolder = mockups.filter((m) => m.folderId === targetFolder);
       let currentImageCount = existingInFolder.filter((m) => !m.isVideo).length;
       let currentVideoCount = existingInFolder.filter((m) => m.isVideo).length;
 
-      const fileList = Array.from(files);
       let addedCount = 0;
       let optimizedImageCount = 0;
       let webpImageCount = 0;
@@ -187,7 +189,7 @@ export function useMockupUpload({
           ];
 
           const newMockup: MockupItem = {
-            id: 'mockup-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+            id: 'mockup-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
             name: file.name.replace(/\.[^/.]+$/, ''),
             src: srcUrl,
             folderId: targetFolder,
@@ -228,8 +230,6 @@ export function useMockupUpload({
       if (addedCount > 0) {
         toast.success(`${addedCount} dosya başarıyla klasöre yüklendi!`);
       }
-      // Reset input value
-      e.target.value = '';
     },
     [
       activeFolderId,

@@ -42,7 +42,7 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
 
     if (!isSelected) {
       // Limit kontrolü
-      if (group === 'videoMockupIds' && totalVideos >= 2) return;
+      if (group === 'videoMockupIds' && totalVideos >= 1) return;
       if ((group === 'printAreaMockupIds' || group === 'staticMockupIds') && totalImages >= 20) return;
     }
 
@@ -90,7 +90,7 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
           {
             label: 'Video',
             value: totalVideos,
-            max: 2,
+            max: 1,
             color: 'text-amber-600 dark:text-amber-400',
             bg: 'bg-amber-50 dark:bg-amber-500/10',
           },
@@ -107,13 +107,13 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
 
       {/* Etsy Limit Uyarısı */}
       <div className={`flex items-start gap-2 p-3 rounded-xl border text-xs ${
-        totalImages > 20 || totalVideos > 2
+        totalImages > 20 || totalVideos > 1
           ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400'
           : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-500/30 text-blue-700 dark:text-blue-400'
       }`}>
         <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <span>
-          Etsy limiti: <strong>maksimum 20 görsel</strong> ve <strong>2 video</strong>.
+          Etsy limiti: <strong>maksimum 20 görsel</strong> ve <strong>1 video</strong>.
           {remainingImages >= 0 ? ` ${remainingImages} görsel alanı kaldı.` : ` ${Math.abs(remainingImages)} görsel fazla!`}
         </span>
       </div>
@@ -188,7 +188,7 @@ export function MockupSelectorSection({ mockups, config, onChange }: MockupSelec
             {currentList.map(mockup => {
               const isSelected = (config[currentKey] ?? []).includes(mockup.id);
               const isLimitReached = !isSelected && (
-                (currentKey === 'videoMockupIds' && totalVideos >= 2) ||
+                (currentKey === 'videoMockupIds' && totalVideos >= 1) ||
                 ((currentKey !== 'videoMockupIds') && totalImages >= 20)
               );
 

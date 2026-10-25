@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Edit2, Copy, Trash2, Settings2 } from 'lucide-react';
+import { Edit2, Copy, Trash2, Workflow } from 'lucide-react';
 import { MockupFolder } from '@/types/pod';
 
 interface MockupFolderMenuProps {
@@ -53,8 +53,8 @@ export const MockupFolderMenu: React.FC<MockupFolderMenuProps> = ({
             }}
             className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left"
           >
-            <Settings2 className="w-3.5 h-3.5 text-purple-500" />
-            <span>Şablon Ayarları</span>
+            <Workflow className="w-3.5 h-3.5 text-purple-500" />
+            <span>Otomasyon Şablonu</span>
           </button>
           <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
         </>

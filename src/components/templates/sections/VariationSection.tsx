@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Plus, DollarSign, Palette, Hash } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, DollarSign, Palette, Hash, Download } from 'lucide-react';
 import { PodTemplateVariationConfig, TemplateVariationRow } from '@/types/templates';
+import type { EtsyVariationTemplate } from '@/types/pod';
+import { variationConfigFromRows } from '@/lib/folder-template';
 
 interface VariationSectionProps {
   config: PodTemplateVariationConfig;
@@ -16,13 +18,19 @@ const DEFAULT_COLORS = [
   'Sand', 'Light Pink', 'Heliconia', 'Cornsilk',
 ];
 
-function generateRows(sizes: string[], colors: string[], basePrice: number): TemplateVariationRow[] {
+/**
+ * Beden × renk matrisini üretir. Mevcut satırlar (kullanıcının düzenlediği fiyat, stok, SKU) korunur;
+ * yalnızca eksik kombinasyonlar temel fiyatla eklenir.
+ */
+function generateRows(sizes: string[], colors: string[], basePrice: number, existing: TemplateVariationRow[] = []): TemplateVariationRow[] {
   const rows: TemplateVariationRow[] = [];
   for (const color of colors) {
     for (const size of sizes) {
       const id = `${color}_${size}`.replace(/\s+/g, '_').toLowerCase();
-      const existingIndex = rows.findIndex(r => r.size === size && r.color === color);
-      if (existingIndex === -1) {
+      const current = existing.find(r => r.size === size && r.color === color);
+      if (current) {
+        rows.push(current);
+      } else {
         rows.push({
           id,
           size,
@@ -43,6 +51,28 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
   const [newColor, setNewColor] = useState('');
   const [basePrice, setBasePrice] = useState(config.basePrice ?? 24.99);
   const [activeView, setActiveView] = useState<'setup' | 'matrix'>('setup');
+  const [savedTemplates, setSavedTemplates] = useState<EtsyVariationTemplate[]>([]);
+
+  // Etsy SEO sekmesinde kaydedilen varyasyon şablonları (içe aktarma için)
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/workspace/variation-templates')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.templates)) setSavedTemplates(data.templates);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const importSavedTemplate = (templateId: string) => {
+    const saved = savedTemplates.find((t) => t.id === templateId);
+    if (!saved?.variations?.length) return;
+    const imported = variationConfigFromRows(saved.variations);
+    if (imported.basePrice !== undefined) setBasePrice(imported.basePrice);
+    onChange({ ...imported, basePrice: imported.basePrice ?? basePrice });
+    setActiveView('matrix');
+  };
 
   const sizes = config.sizes ?? [];
   const colors = config.colors ?? [];
@@ -52,7 +82,7 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
     const trimmed = size.trim();
     if (!trimmed || sizes.includes(trimmed)) return;
     const newSizes = [...sizes, trimmed];
-    const newRows = generateRows(newSizes, colors, basePrice);
+    const newRows = generateRows(newSizes, colors, basePrice, rows);
     onChange({ ...config, sizes: newSizes, rows: newRows });
     setNewSize('');
   };
@@ -67,7 +97,7 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
     const trimmed = color.trim();
     if (!trimmed || colors.includes(trimmed)) return;
     const newColors = [...colors, trimmed];
-    const newRows = generateRows(sizes, newColors, basePrice);
+    const newRows = generateRows(sizes, newColors, basePrice, rows);
     onChange({ ...config, colors: newColors, rows: newRows });
     setNewColor('');
   };
@@ -122,6 +152,27 @@ export function VariationSection({ config, onChange }: VariationSectionProps) {
 
       {activeView === 'setup' ? (
         <>
+          {savedTemplates.length > 0 && (
+            <div className="p-4 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-200 dark:border-violet-500/30">
+              <label htmlFor="variation-template-import" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-violet-500" />
+                Kayıtlı varyasyon şablonundan yükle
+              </label>
+              <select
+                id="variation-template-import"
+                value=""
+                onChange={(e) => importSavedTemplate(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+              >
+                <option value="">Şablon seçin…</option>
+                {savedTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.variations?.length ?? 0} varyasyon)</option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Etsy SEO sekmesinde kaydettiğiniz tablo bu şablona kopyalanır; mevcut satırların yerini alır.</p>
+            </div>
+          )}
+
           {/* Temel Fiyat */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5">

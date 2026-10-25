@@ -40,7 +40,7 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
           else fallbackImageCount++;
           savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
           newDesigns.push({
-            id: 'design-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4) + i,
+            id: 'design-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + i,
             name: file.name.replace(/\.[^/.]+$/, ''),
             src: optimized.url || optimized.dataUrl,
             // Yeni tasarım varsayılan olarak tüm kumaşlarla eşleşir; kullanıcı kartta daraltabilir.

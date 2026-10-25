@@ -15,7 +15,7 @@ import { MockupCanvasWorkspace } from './components/MockupCanvasWorkspace';
 import { MockupSettingsPanel } from './components/MockupSettingsPanel';
 import { MockupMobileDrawer } from './components/MockupMobileDrawer';
 import { MockupFolderModal } from './components/MockupFolderModal';
-import { MockupFolderTemplatePanel } from './components/MockupFolderTemplatePanel';
+import { FolderTemplateDialog } from '../templates/FolderTemplateDialog';
 
 // Hooks
 import { useMockupDraft } from './hooks/useMockupDraft';
@@ -31,6 +31,16 @@ interface MockupCanvasEditorProps {
   setActiveFolderId: (id: string | null) => void;
   selectedMockupId: string | null;
   setSelectedMockupId: (id: string | null) => void;
+}
+
+/** Görselin piksel boyutunu okur (okunamazsa null). */
+function readImageSize(src: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
 export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
@@ -78,6 +88,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     isOpen: boolean;
     title: string;
     message: string;
+    confirmText?: string;
     onConfirm: () => void;
   }>({
     isOpen: false,
@@ -86,8 +97,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     onConfirm: () => {},
   });
 
-  // Template Panel State
+  // Klasörün otomasyon şablonu (Toplu Üretim › Otomasyon Şablonları ile aynı kayıt)
   const [templatePanelFolder, setTemplatePanelFolder] = useState<MockupFolder | null>(null);
+  const closeTemplatePanel = useCallback(() => setTemplatePanelFolder(null), []);
 
   // Folder Modal State (Create / Rename)
   const [folderModalState, setFolderModalState] = useState<{
@@ -107,9 +119,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     activeFolderId === null ? true : m.folderId === activeFolderId
   );
 
-  // Selected Mockup reference
+  // Selected Mockup reference — seçim etkin klasörün dışındaysa (ör. klasör değişti) klasörün ilk mockup'ı gösterilir.
   const selectedMockup =
-    mockups.find((m) => m.id === selectedMockupId) ||
+    filteredMockups.find((m) => m.id === selectedMockupId) ||
     filteredMockups[0] ||
     null;
 
@@ -323,7 +335,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       const sourceMockups = mockups.filter((m) => m.folderId === folderId);
       const copiedMockups: MockupItem[] = sourceMockups.map((m) => ({
         ...m,
-        id: 'mockup-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+        id: 'mockup-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         folderId: newFolderId,
         printAreas: structuredClone(m.printAreas || []),
       }));
@@ -368,6 +380,8 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       if (!selectedMockup) return;
       try {
         const oldSrc = selectedMockup.src;
+        // Kırpma en-boy oranını değiştirir; kayıtlı boyut güncellenmezse tuval ve baskı alanları kayar.
+        const size = await readImageSize(croppedDataUrl);
         let finalSrc = croppedDataUrl;
         try {
           const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
@@ -376,14 +390,14 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           console.warn('Direct R2 upload skipped or failed:', e);
         }
 
+        const applyCrop = (m: MockupItem): MockupItem =>
+          m.id === selectedMockup.id ? { ...m, src: finalSrc, ...(size ?? {}) } : m;
+
         if (oldSrc && oldSrc !== finalSrc) {
-          const nextMockups = mockups.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m));
-          void deleteUnreferencedBlobs([oldSrc], { mockups: nextMockups }).catch(() => {});
+          void deleteUnreferencedBlobs([oldSrc], { mockups: mockups.map(applyCrop) }).catch(() => {});
         }
 
-        setMockups((prev) =>
-          prev.map((m) => (m.id === selectedMockup.id ? { ...m, src: finalSrc } : m))
-        );
+        setMockups((prev) => prev.map(applyCrop));
 
         toast.success('Mockup görseli başarıyla kırpıldı ve kaydedildi!');
       } catch (err) {
@@ -393,6 +407,29 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     },
     [selectedMockup, mockups, setMockups, toast]
   );
+
+  // Mockup seçimi: kaydedilmemiş baskı alanı değişiklikleri sessizce kaybolmasın.
+  const handleSelectMockup = (id: string | null) => {
+    const select = () => {
+      setSelectedMockupId(id);
+      // On mobile, auto switch to canvas upon picking a mockup
+      if (window.innerWidth < 1024) setMobileView('canvas');
+    };
+    if (!isDirty || !selectedMockup || id === selectedMockup.id) {
+      select();
+      return;
+    }
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Kaydedilmemiş değişiklikler',
+      message: `'${selectedMockup.name}' üzerindeki baskı alanı değişiklikleri kaydedilmedi. Kaydetmeden devam ederseniz bu değişiklikler kaybolur.`,
+      confirmText: 'Kaydetmeden geç',
+      onConfirm: () => {
+        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        select();
+      },
+    });
+  };
 
   // Common Settings Panel Props
   const settingsPanelProps = {
@@ -471,13 +508,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             allMockups={mockups}
             mockupFolders={mockupFolders}
             selectedMockupId={selectedMockupId}
-            setSelectedMockupId={(id) => {
-              setSelectedMockupId(id);
-              // On mobile, auto switch to canvas upon picking a mockup
-              if (window.innerWidth < 1024) {
-                setMobileView('canvas');
-              }
-            }}
+            setSelectedMockupId={handleSelectMockup}
             selectedIds={selectedIds}
             setSelectedIds={setSelectedIds}
             setMockups={setMockups}
@@ -552,18 +583,19 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         isOpen={confirmModalState.isOpen}
         title={confirmModalState.title}
         message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
         onConfirm={confirmModalState.onConfirm}
         onCancel={() =>
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }))
         }
       />
 
-      {/* Template Settings Panel — yalnızca oturum açmış kullanıcılar için */}
+      {/* Klasörün otomasyon şablonu — yalnızca oturum açmış kullanıcılar için */}
       {user && templatePanelFolder && (
-        <MockupFolderTemplatePanel
+        <FolderTemplateDialog
           folder={templatePanelFolder}
-          isOpen={true}
-          onClose={() => setTemplatePanelFolder(null)}
+          mockups={mockups}
+          onClose={closeTemplatePanel}
         />
       )}
     </div>

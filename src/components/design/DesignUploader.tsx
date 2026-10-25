@@ -146,7 +146,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       toast.success(`Klasör adı "${trimmed}" olarak güncellendi.`);
     } else {
       const newFolder: MockupFolder = {
-        id: 'dfol-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+        id: 'dfol-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         name: trimmed,
         isCustom: true,
         type: 'design',

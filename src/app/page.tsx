@@ -523,7 +523,7 @@ function MainContent() {
           )}
 
           {activeTab === 'generator' && user && generatorView === 'templates' && (
-            <TemplatesManager mockups={mockups} />
+            <TemplatesManager mockups={mockups} folders={folders} />
           )}
 
           {activeTab === 'generator' && (!user || generatorView === 'manual') && (

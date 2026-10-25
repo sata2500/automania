@@ -4,9 +4,10 @@ const id = z.string().trim().min(1).max(255);
 const shortText = (max: number) => z.string().max(max);
 
 export const mockupConfigSchema = z.object({
+  folderId: id.optional(),
   printAreaMockupIds: z.array(id).max(20).default([]),
   staticMockupIds: z.array(id).max(20).default([]),
-  videoMockupIds: z.array(id).max(2, 'Etsy limiti: maksimum 2 video yüklenebilir.').default([]),
+  videoMockupIds: z.array(id).max(1, 'Etsy limiti: ilan başına en fazla 1 video.').default([]),
   fabricType: z.enum(['light', 'dark', 'all']).default('all'),
   multiPrintAreaSupport: z.boolean().default(false),
 }).refine(

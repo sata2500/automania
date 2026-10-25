@@ -149,10 +149,13 @@ export function useMockupTransform({
     if (dragMode) {
       window.addEventListener('pointermove', handlePointerMove);
       window.addEventListener('pointerup', handlePointerUp);
+      // Mobilde dokunma sistem tarafından kesilirse (bildirim, kaydırma hareketi) sürükleme takılı kalmasın.
+      window.addEventListener('pointercancel', handlePointerUp);
     }
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [dragMode, dragStart, updateActivePrintAreaDraft]);
 

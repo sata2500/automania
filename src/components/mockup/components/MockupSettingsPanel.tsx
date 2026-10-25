@@ -257,10 +257,17 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
                       step={0.5}
                       value={Math.round((activePrintArea[key] ?? 0) * 10) / 10}
                       onChange={(e) => {
+                        // Alan temizlenirken (yeni değer yazılırken) değer 0'a zıplamasın.
+                        if (e.target.value.trim() === '') return;
                         const value = Number(e.target.value);
                         if (!Number.isFinite(value)) return;
+                        // Sürüklemeyle aynı kural: baskı alanı görselin dışına taşmaz.
+                        const max = key === 'x' ? 100 - activePrintArea.width
+                          : key === 'y' ? 100 - activePrintArea.height
+                          : key === 'width' ? 100 - activePrintArea.x
+                          : 100 - activePrintArea.y;
                         const min = key === 'width' || key === 'height' ? 1 : 0;
-                        onUpdateActiveArea({ [key]: Math.min(100, Math.max(min, value)) });
+                        onUpdateActiveArea({ [key]: Math.min(Math.max(min, max), Math.max(min, value)) });
                       }}
                       className="mt-0.5 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                     />

@@ -19,16 +19,19 @@ import {
   Palette,
 } from 'lucide-react';
 import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from '@/types/templates';
-import { MockupItem } from '@/types/pod';
+import { MockupFolder, MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
 import { TemplateBuilderModal } from './TemplateBuilderModal';
 import { computeNextRunAt, parseScheduledHours } from '@/lib/automation-schedule';
 import { RunDetailsDialog, STEP_LABELS, getRunListingUrl, getRunWarnings } from './RunDetailsDialog';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { Spinner } from '@/components/common/Spinner';
+import { saveTemplate } from '@/lib/templates-client';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
+  /** Klasöre bağlı şablonlarda klasör adını göstermek için */
+  folders?: MockupFolder[];
 }
 
 const POLL_INTERVAL_MS = 4000;
@@ -52,7 +55,7 @@ function formatRunDate(value: string | null): string {
   return new Date(value).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-export function TemplatesManager({ mockups }: TemplatesManagerProps) {
+export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
   const toast = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
   const { error: showError, success: showSuccess } = toast;
@@ -235,23 +238,12 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
   // Şablon kaydet (oluştur / güncelle)
   const handleSaveTemplate = async (data: PodTemplateInput, id?: string) => {
     try {
-      const url = id ? `/api/templates/${id}` : '/api/templates';
-      const method = id ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Şablon kaydedilemedi.');
-      }
-      const result = await res.json();
+      const saved = await saveTemplate(data, id);
       if (id) {
-        setTemplates(prev => prev.map(t => t.id === id ? result.template : t));
+        setTemplates(prev => prev.map(t => t.id === id ? saved : t));
         toast.success('Şablon güncellendi!');
       } else {
-        setTemplates(prev => [result.template, ...prev]);
+        setTemplates(prev => [saved, ...prev]);
         toast.success('Yeni şablon oluşturuldu!');
       }
       setIsBuilderOpen(false);
@@ -428,6 +420,11 @@ export function TemplatesManager({ mockups }: TemplatesManagerProps) {
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
                         {template.name}
                       </h3>
+                      {template.mockupConfig?.folderId && (
+                        <p className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 truncate">
+                          Klasör: {folders?.find(f => f.id === template.mockupConfig.folderId)?.name ?? 'silinmiş klasör'}
+                        </p>
+                      )}
                       {template.description && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{template.description}</p>
                       )}
