@@ -13,7 +13,9 @@ import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
  * Canlıya alma kararı çağırana aittir; bu servis yalnızca taslak oluşturur.
  */
 
-const IMAGE_UPLOAD_CONCURRENCY = 3;
+// Etsy aynı ilana eşzamanlı görsel yüklemeyi "being edited by another process" (409) ile reddeder.
+const IMAGE_UPLOAD_CONCURRENCY = 1;
+const ETSY_BUSY_RETRY_DELAYS_MS = [2000, 5000];
 const MAX_PUBLISH_MEDIA_BYTES = 50 * 1024 * 1024;
 
 export class EtsyListingError extends Error {
@@ -23,7 +25,7 @@ export class EtsyListingError extends Error {
   }
 }
 
-type EtsyVariationInput = {
+export type EtsyVariationInput = {
   sku?: string;
   size?: string;
   color?: string;
@@ -189,6 +191,31 @@ export async function toEtsyImage(blob: Blob): Promise<{ blob: Blob; ext: string
   return { blob: new Blob([new Uint8Array(jpeg)], { type: 'image/jpeg' }), ext: 'jpg' };
 }
 
+/**
+ * Etsy envanterinde beden × renk kombinasyonlarının tamamı bulunmalıdır ("All combinations of property values
+ * must be supplied"). Ürüne göre farklı renkler kullanan şablonlarda eksik kombinasyonlar satışa kapalı
+ * (is_enabled: false) satırlar olarak eklenir; tekrarlayan kombinasyonlardan ilki tutulur.
+ */
+export function completeVariationMatrix(rows: EtsyVariationInput[], fallbackPrice: number): EtsyVariationInput[] {
+  const key = (size: string, color: string) => `${size}\u0000${color}`;
+  const seen = new Map<string, EtsyVariationInput>();
+  for (const row of rows) {
+    const k = key(row.size || 'M', row.color || 'Black');
+    if (!seen.has(k)) seen.set(k, row);
+  }
+  const sizes = [...new Set(rows.map((r) => r.size || 'M'))];
+  const colors = [...new Set(rows.map((r) => r.color || 'Black'))];
+  const enabledPrices = rows.filter((r) => r.enabled !== false).map((r) => Number(r.price)).filter((p) => p > 0);
+  const placeholderPrice = enabledPrices.length > 0 ? Math.min(...enabledPrices) : fallbackPrice;
+  const result: EtsyVariationInput[] = [];
+  for (const size of sizes) {
+    for (const color of colors) {
+      result.push(seen.get(key(size, color)) ?? { size, color, price: placeholderPrice, quantity: 1, enabled: false });
+    }
+  }
+  return result;
+}
+
 export async function createEtsyDraftListing(
   userId: string,
   credentials: EtsyCredentials,
@@ -312,7 +339,7 @@ export async function createEtsyDraftListing(
   let variationsUpdated = false;
   if (listingId && Array.isArray(variations) && variations.length > 0) {
     try {
-      const productsPayload = (variations as EtsyVariationInput[]).map((v) => ({
+      const productsPayload = completeVariationMatrix(variations as EtsyVariationInput[], Number(price) || 0).map((v) => ({
         ...(v.sku ? { sku: v.sku } : (sku ? { sku: sku } : {})),
         property_values: [
           { property_id: 513, property_name: 'Size', values: [v.size || 'M'] },
@@ -401,7 +428,7 @@ export async function createEtsyDraftListing(
           formData.append('image', blob, `mockup-${listingId}-${rank}.${ext}`);
           formData.append('rank', String(rank));
 
-          const imgRes = await etsyFetch(
+          const postImage = () => etsyFetch(
             `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`,
             {
               method: 'POST',
@@ -412,6 +439,13 @@ export async function createEtsyDraftListing(
               body: formData,
             }
           );
+          let imgRes = await postImage();
+          // İlan Etsy tarafında hâlâ işleniyorsa (envanter güncellemesi vb.) kısa bekleyip tekrar denenir.
+          for (const delay of ETSY_BUSY_RETRY_DELAYS_MS) {
+            if (imgRes.status !== 409) break;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            imgRes = await postImage();
+          }
 
           if (imgRes.ok) {
             imagesUploaded++;

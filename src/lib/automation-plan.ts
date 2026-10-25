@@ -107,6 +107,8 @@ export function buildDesignPrompt(hints: Partial<PodTemplateSeoHints> | null | u
   return [
     `${parts}.`,
     `Creative direction: ${direction}.`,
+    // Ürünler Etsy'de (çoğunlukla ABD) satılır; niş Türkçe yazılsa bile tasarımdaki metin İngilizce olmalı.
+    'Any text in the design must be in English, spelled correctly.',
     notes ? `Additional requirements: ${notes}` : '',
   ].filter(Boolean).join(' ');
 }

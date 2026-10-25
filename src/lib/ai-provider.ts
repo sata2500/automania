@@ -316,7 +316,11 @@ async function generateVideoVeo(config: AIProviderConfig, model: string, options
 type OmniVideoContent = { data?: string; uri?: string; mime_type?: string };
 type OmniInteraction = { id?: string; status?: string; output_video?: OmniVideoContent; error?: unknown };
 
-async function generateVideoOmni(config: AIProviderConfig, model: string, options: GenerateVideoOptions): Promise<GeneratedVideo> {
+async function generateVideoOmni(config: AIProviderConfig, requestedModel: string, options: GenerateVideoOptions): Promise<GeneratedVideo> {
+  // Vertex AI (Agent Platform) Omni Flash'ı yalnızca önizleme adıyla sunar; Gemini API GA adını kullanır.
+  const model = config.googleConnection?.mode === 'vertex' && !requestedModel.endsWith('-preview')
+    ? `${requestedModel}-preview`
+    : requestedModel;
   const client = getGoogleClient(config, model);
   const input = options.image
     ? [

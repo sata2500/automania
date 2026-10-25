@@ -102,6 +102,19 @@ async function resolveVariationRows(userId: string, config: TemplateRow['variati
   }
 }
 
+/** Saydam kenar boşluğunu kırpar ve tasarıma %3 nefes payı bırakır; kırpılamazsa orijinali döner. */
+async function trimTransparentMargin(png: Buffer): Promise<Buffer> {
+  try {
+    const sharp = (await import('sharp')).default;
+    const { data, info } = await sharp(png).trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 10 }).png().toBuffer({ resolveWithObject: true });
+    const pad = Math.round(Math.max(info.width, info.height) * 0.03);
+    return await sharp(data).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  } catch (error) {
+    console.warn('[Automation] Transparent margin trim failed; using untrimmed design.', error instanceof Error ? error.message : error);
+    return png;
+  }
+}
+
 async function jpegForListing(buffer: Buffer): Promise<Buffer> {
   const sharp = (await import('sharp')).default;
   return sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
@@ -180,7 +193,9 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   steps.backgroundRemoval = { status: 'running', startedAt: new Date().toISOString() };
   await persist({ steps });
 
-  const { pngBuffer } = await removeGreenBackground(generatedImages[0].data, { threshold: 80, feather: 40 });
+  const { pngBuffer: rawPng } = await removeGreenBackground(generatedImages[0].data, { threshold: 80, feather: 40 });
+  // Tasarımın etrafındaki saydam boşluk kırpılır; aksi halde tasarım baskı alanında küçük kalır.
+  const pngBuffer = await trimTransparentMargin(rawPng);
   if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
   const uploadResult = await uploadToR2(pngBuffer, createOwnedUploadName(userId, `auto-design-${runId}`, 'image/png'), 'image/png');
 
@@ -312,7 +327,7 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
     generated = await generateVideo(config, { prompt, model, image, maxWaitMs: VIDEO_MAX_WAIT_MS });
   } catch (error) {
     // Omni Flash: Gemini API'de GA adı, Vertex'te önizleme adı geçerli olabilir; diğeri denenir.
-    const alternate = isOmniVideoModel(model) && /NOT_FOUND|404|not found/i.test(error instanceof Error ? error.message : '')
+    const alternate = isOmniVideoModel(model) && /NOT_FOUND|404|not found|not supported/i.test(error instanceof Error ? error.message : '')
       ? (model.endsWith('-preview') ? model.replace(/-preview$/, '') : `${model}-preview`)
       : null;
     if (!alternate) throw error;
@@ -379,9 +394,11 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   const photos = ((run.generatedMockupUrls as string[] | null) ?? []).map((url) => ({ url, isVideo: false }));
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
   const media = run.generatedVideoUrl ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
-  const variations = (await resolveVariationRows(userId, template.variationConfig))
-    .filter((row) => row.enabled !== false)
-    .map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: true }));
+  // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
+  const variationRows = await resolveVariationRows(userId, template.variationConfig);
+  const variations = variationRows.some((row) => row.enabled !== false)
+    ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: row.enabled !== false }))
+    : [];
 
   const draft = await createEtsyDraftListing(userId, {
     etsyAccessToken: tokenRes.access_token,
@@ -417,7 +434,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   return {
     patch: { etsyListingId: String(draft.listingId), generatedListingId: String(draft.listingId) },
     output: { listingId: draft.listingId, listingUrl: draft.listingUrl, imagesUploaded: draft.imagesUploaded, imagesRequested: draft.imageItems.length },
-    warning: blocking.length > 0 ? `İlan taslak olarak açıldı ancak ${blocking.length} adım tamamlanamadı: ${blocking.slice(0, 3).join(' ')}` : undefined,
+    warning: blocking.length > 0 ? `İlan taslak olarak açıldı ancak ${blocking.length} işlem tamamlanamadı: ${blocking.slice(0, 3).join(' ')}` : undefined,
   };
 }
 
