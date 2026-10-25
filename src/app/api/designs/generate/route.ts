@@ -10,7 +10,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { pickKeyBackground } from '@/lib/key-background';
-import { sql } from '@/lib/db';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt } from '@/lib/prompt-settings';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 
 export const maxDuration = 120;
@@ -70,24 +71,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Özel prompt şablonunu veritabanından al
-    let systemPromptTemplate = '';
-    try {
-      const rows = await sql`SELECT setting_value FROM app_settings WHERE setting_key = 'ai_prompt_generate_design'`;
-      if (rows.length > 0 && rows[0].setting_value) {
-        systemPromptTemplate = rows[0].setting_value;
-      }
-    } catch (e) {
-      console.error('[generate design] Failed to fetch custom prompt template', e);
-    }
-
-    // Şablon varsa değişkenleri değiştir, yoksa sadece kullanıcının girdiği promptu kullan
-    let finalPrompt = prompt;
-    if (systemPromptTemplate.trim()) {
-      finalPrompt = systemPromptTemplate
-        .replace(/\{\{userPrompt\}\}/g, prompt)
-        .replace(/\{\{selectedStyle\}\}/g, typeof selectedStyle === 'string' ? selectedStyle : '');
-    }
+    // Admin panelindeki "Tasarım üretimi" talimatı (boşsa varsayılan) kullanıcının konseptiyle doldurulur.
+    const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
+      userPrompt: prompt,
+      selectedStyle: typeof selectedStyle === 'string' && selectedStyle.trim() ? selectedStyle : 'not specified',
+    });
 
     // Perde rengi konuya göre seçilir (yeşil ağırlıklı konularda magenta); kaldırma adımı rengi kenarlardan ölçer.
     const keyBackground = greenBackground ? pickKeyBackground(finalPrompt) : undefined;

@@ -30,27 +30,8 @@ export function pickKeyBackground(text: string | null | undefined): KeyBackgroun
     : 'green';
 }
 
-/**
- * Prompt'taki eski arka plan/perde satırlarını (ör. admin şablonundaki "background MUST be #00FF00")
- * çıkarır; perde rengi ve kompozisyon talimatı `keyBackgroundInstructions` ile tek yerden eklenir.
- */
-export function stripBackgroundRules(prompt: string): string {
-  return prompt
-    .split('\n')
-    .filter((line) => !/#00ff00|#ff00ff|chroma[\s-]?key|green[\s-]?screen|green background|background must be/i.test(line))
-    .join('\n');
-}
-
-/** Görsel modeline eklenecek kompozisyon ve perde talimatları (kare, ortalı, temiz kenarlı, düz perde). */
-export function keyBackgroundInstructions(key: KeyBackground): string {
+/** "Tasarım tuvali ve arka plan" talimatındaki perde rengi değişkenleri. */
+export function keyColorPromptValues(key: KeyBackground): Record<string, string> {
   const color = KEY_COLORS[key];
-  const avoid = key === 'green'
-    ? 'Do not use bright or neon green anywhere in the design; draw any foliage or green elements in dark forest green, olive or teal.'
-    : 'Do not use magenta, hot pink or bright purple anywhere in the design; draw any pink or purple elements in deep burgundy, coral or soft lavender.';
-  return [
-    'COMPOSITION: a single standalone t-shirt graphic on a square canvas, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.',
-    `BACKGROUND: one flat, uniform ${color.name} (${color.hex}) fill covering the entire canvas edge to edge, with no gradient, texture, noise, shadow, vignette, border or frame.`,
-    avoid,
-    'EDGES: the outer silhouette has crisp, clean edges with a solid outline, so it separates sharply from the background. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.',
-  ].join('\n');
+  return { keyColorName: color.name, keyColorHex: color.hex };
 }

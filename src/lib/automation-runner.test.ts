@@ -67,7 +67,7 @@ vi.mock('@/lib/r2', () => ({
   uploadToR2: vi.fn(async (_b: Buffer, key: string) => ({ url: `/api/r2/${key}`, key, size: 1 })),
 }));
 vi.mock('@/lib/upload-security', () => ({ createOwnedUploadName: (u: string, n: string) => `user-${u}-${n}` }));
-vi.mock('@/lib/app-settings', () => ({ loadSetting: vi.fn(async () => '') }));
+vi.mock('@/lib/app-settings', () => ({ loadSetting: vi.fn(async () => ''), loadSettings: vi.fn(async () => ({})) }));
 vi.mock('@/lib/internal-auth', () => ({ getConfiguredSecret: () => undefined }));
 vi.mock('@/lib/media-source', () => ({ loadImageForUser: vi.fn(async () => Buffer.from('img')) }));
 vi.mock('@/lib/audit-log', () => ({ writeAuditLog: vi.fn() }));

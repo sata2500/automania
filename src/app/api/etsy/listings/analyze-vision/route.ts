@@ -7,23 +7,9 @@ import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-cli
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage } from '@/lib/media-source';
+import { loadPrompt } from '@/lib/prompt-settings';
 
 export const maxDuration = 60;
-
-const VISION_PROMPT = `You are a professional Etsy E-Commerce Visual Merchandising and Image Analysis AI.
-Carefully inspect this product listing cover image and extract key design attributes in STRICT JSON format:
-
-{
-  "primarySubject": "Concise main subject (e.g., 'Retro 80s Cyberpunk Samurai Cat', 'Vintage Minimalist Wildflower Bouquet')",
-  "primaryAesthetic": "Aesthetic style (e.g., 'Vintage Distressed Retro', 'Minimalist Cottagecore Boho', 'Y2K Cyberpunk Grunge')",
-  "detectedStyle": "Visual technique (e.g., 'Distressed Vector Illustration', 'Watercolour Painting', 'Typography & Line Art')",
-  "detectedColors": ["Dominant color 1", "Dominant color 2", "Dominant color 3"],
-  "productType": "Specific POD product garment (e.g., 'Comfort Colors 1717 Heavyweight T-Shirt', 'Gildan 18000 Crewneck Sweatshirt', 'Ceramic Coffee Mug')",
-  "description": "2-3 sentences visually detailing the artwork, focal elements, typography, and mood.",
-  "keywords": ["5-8 high intent visual search tags (max 20 chars each)"]
-}
-
-Return ONLY valid JSON matching this schema. No markdown backticks, no explanations.`;
 
 export async function POST(req: Request) {
   try {
@@ -57,6 +43,9 @@ export async function POST(req: Request) {
     if (targetIds.length > 10) {
       return NextResponse.json({ success: false, error: 'Tek istekte en fazla 10 listing analiz edilebilir.' }, { status: 400 });
     }
+
+    // Talimat admin panelindeki "Etsy ilan görseli analizi" prompt'udur (boşsa varsayılanı).
+    const visionPrompt = await loadPrompt('ai_prompt_analyze_listing_image');
 
     // 1. Fetch AI Model Settings from app_settings
     const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision']);
@@ -149,7 +138,7 @@ export async function POST(req: Request) {
                   {
                     role: 'user',
                     parts: [
-                      { text: VISION_PROMPT },
+                      { text: visionPrompt },
                       {
                         inlineData: {
                           mimeType: geminiMimeType,
@@ -188,7 +177,7 @@ export async function POST(req: Request) {
                 {
                   role: 'user',
                   content: [
-                    { type: 'text', text: VISION_PROMPT },
+                    { type: 'text', text: visionPrompt },
                     { type: 'image_url', image_url: { url: dataUrl } }
                   ]
                 }

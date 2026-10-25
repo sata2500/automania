@@ -4,8 +4,9 @@ import { requireAdmin } from '@/lib/auth-server';
 import { maskSettingValue, shouldPreserveSecretValue } from '@/lib/setting-security';
 import { writeAuditLog } from '@/lib/audit-log';
 import { encodeSettingValue, loadSettingRows } from '@/lib/app-settings';
+import { PROMPT_KEYS } from '@/lib/prompt-registry';
 
-const ALLOWED_SETTING_KEYS = new Set([
+const ALLOWED_SETTING_KEYS = new Set<string>([
   'active_ai_provider',
   'openrouter_api_key',
   'gemini_api_key',
@@ -24,10 +25,7 @@ const ALLOWED_SETTING_KEYS = new Set([
   'gemini_model_reasoning',
   'gemini_model_generation',
   'gemini_model_video',
-  'ai_prompt_analyze_design',
-  'ai_prompt_generate_listing',
-  'ai_prompt_generate_design',
-  'ai_prompt_generate_video',
+  ...PROMPT_KEYS,
   'ai_research_web_search',
   'ai_research_model',
 ]);

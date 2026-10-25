@@ -1,5 +1,6 @@
 import sql from '@/lib/db';
-import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
+import { fillPrompt, seasonSection } from '@/lib/prompt-registry';
+import { loadPrompts } from '@/lib/prompt-settings';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
@@ -104,20 +105,18 @@ export async function generateListingContent(userId: string, input: GenerateList
   `;
 
   // Get API Key and Models from app_settings or env
-  const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing']);
+  const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning']);
   
   let activeAiProvider = 'openrouter';
   let dbApiKey = null;
   let dbReasoningModel = null;
   let dbGeminiReasoningModel = null;
-  let customPrompt: string | null = null;
   
   for (const row of settingsRows) {
     if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
     if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
     if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
     if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
-    if (row.setting_key === 'ai_prompt_generate_listing') customPrompt = row.setting_value;
   }
 
   // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
@@ -151,12 +150,8 @@ export async function generateListingContent(userId: string, input: GenerateList
     }
   }
 
-  // Prepare prompt with strict Visual Validation Layer and Anti-Contamination rules
-  let prompt = DEFAULT_GENERATE_LISTING_PROMPT;
-
-  if (customPrompt && customPrompt.trim().length > 10) {
-    prompt = customPrompt;
-  }
+  // Talimatlar admin panelindeki "İlan metni üretimi" ve "Sezon rehberi" prompt'larıdır (boşsa varsayılanları).
+  const prompts = await loadPrompts(['ai_prompt_generate_listing', 'ai_prompt_seasonality']);
 
   // Extract input keyword strings & apply Trademark Safety Shield
   const rawInputKeywords: string[] = keywords
@@ -244,9 +239,9 @@ export async function generateListingContent(userId: string, input: GenerateList
     designDescription: designDescription || 'Apparel design for US market.',
     primarySubject: primarySubject || 'Extracted from design concept',
     primaryAesthetic: primaryAesthetic || 'Extracted from design concept',
-    productType: productType || 'Comfort Colors 1717, Bella Canvas 3001, Youth Unisex Tee',
-    userNotes: userNotes || 'Soft ring-spun cotton, retail fit, size up for oversized aesthetic look.',
-    seasonalityContext: currentSeason.promptGuidance,
+    productType: productType || 'Not specified',
+    userNotes: userNotes || 'None provided',
+    seasonalityContext: seasonSection(prompts.ai_prompt_seasonality, currentSeason.seasonKey) || 'None',
     keywords: formattedKeywords || 'None provided',
     coOccurringTags: formattedCoOccurring,
     taxonomyId: String(taxonomyId || 482),
@@ -256,19 +251,7 @@ export async function generateListingContent(userId: string, input: GenerateList
     ).join('\n   ') : 'None'
   };
 
-  // Replace all placeholders
-  prompt = prompt
-    .replace(/\{\{designDescription\}\}/g, dynamicValues.designDescription)
-    .replace(/\{\{primarySubject\}\}/g, dynamicValues.primarySubject)
-    .replace(/\{\{primaryAesthetic\}\}/g, dynamicValues.primaryAesthetic)
-    .replace(/\{\{productType\}\}/g, dynamicValues.productType)
-    .replace(/\{\{userNotes\}\}/g, dynamicValues.userNotes)
-    .replace(/\{\{seasonalityContext\}\}/g, dynamicValues.seasonalityContext)
-    .replace(/\{\{keywords\}\}/g, dynamicValues.keywords)
-    .replace(/\{\{coOccurringTags\}\}/g, dynamicValues.coOccurringTags)
-    .replace(/\{\{taxonomyId\}\}/g, dynamicValues.taxonomyId)
-    .replace(/\{\{shopSections\}\}/g, dynamicValues.shopSections)
-    .replace(/\{\{taxonomyProperties\}\}/g, dynamicValues.taxonomyProperties);
+  const prompt = fillPrompt(prompts.ai_prompt_generate_listing, dynamicValues);
 
   let content = '';
 

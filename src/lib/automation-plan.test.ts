@@ -3,13 +3,14 @@ import type { MockupItem } from '@/types/pod';
 import {
   buildAutomationKeywords,
   buildDesignPrompt,
-  buildVideoPrompt,
+  fillVideoPromptTemplate,
   deriveRunOutcome,
   needsDarkGarmentDesign,
   nextPendingStep,
   selectAutomationMockups,
   topicSearchTerms,
 } from './automation-plan';
+import { DEFAULT_GENERATE_VIDEO_PROMPT } from './default-prompts';
 
 const mockup = (id: string, extra: Partial<MockupItem> = {}): MockupItem => ({
   id,
@@ -66,6 +67,12 @@ describe('design prompt and keywords', () => {
     expect(buildDesignPrompt(hints, 4)).not.toBe(prompt);
   });
 
+  it('fills the admin concept template and picks a creative direction from the admin list', () => {
+    const prompt = buildDesignPrompt(hints, 1, '{{niche}} / {{audience}} / {{creativeDirection}} / {{notes}}', 'retro\nminimal\n');
+    expect(prompt).toBe('Funny Cat / cat moms / minimal / no violence');
+    expect(buildDesignPrompt({}, 0, '{{productType}} for {{audience}}, notes: {{notes}}', '')).toBe('apparel for a broad Etsy audience, notes: none');
+  });
+
   it('builds unique keyword candidates including pool keywords', () => {
     const keywords = buildAutomationKeywords(hints, ['cat lover gift', 'funny cat']);
     expect(keywords[0]).toBe('funny cat');
@@ -104,12 +111,10 @@ describe('folder-linked templates and video prompt', () => {
     expect(needsDarkGarmentDesign({ apparelType: 'any' })).toBe(false);
   });
 
-  it('builds a product-faithful video prompt for the chosen style', () => {
-    const prompt = buildVideoPrompt({ style: 'mannequin', notes: 'grey studio' }, { productType: 'T-shirt' });
-    expect(prompt).toMatch(/mannequin/);
-    expect(prompt).toMatch(/t-shirt/);
+  it('fills the admin video prompt; the default keeps the product faithful', () => {
+    const prompt = fillVideoPromptTemplate(DEFAULT_GENERATE_VIDEO_PROMPT, { title: 'Cat Tee', designPrompt: 'cat', product: 't-shirt', niche: 'cats' });
+    expect(prompt).toMatch(/exact t-shirt from the reference image/);
     expect(prompt).toMatch(/exactly as in the reference image/);
-    expect(prompt).toMatch(/grey studio/);
-    expect(buildVideoPrompt({ style: 'flatlay' }, null)).toMatch(/lies flat/);
+    expect(fillVideoPromptTemplate('{{title}} | {{niche}} | {{userPrompt}}', { title: 'Cat Tee', designPrompt: 'cat', product: 't-shirt', niche: 'cats' })).toBe('Cat Tee | cats | cat');
   });
 });

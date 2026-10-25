@@ -6,6 +6,7 @@ CRITICAL RULES FOR KEYWORDS (Etsy SEO):
 3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
 4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces)
 
+TAXONOMY: choose the most appropriate taxonomyId ONLY from this list of Etsy categories:
 {{taxonomyHint}}
 
 Return ONLY a valid JSON object in this exact format, with no markdown, no comments, and no explanation.
@@ -114,6 +115,175 @@ CRITICAL INSTRUCTIONS:
 1. SUBJECT: The design subject must be centered, high-contrast, and clearly defined.
 2. STYLE: The artwork should be flat vector style, suitable for screen printing or DTG printing on apparel. Do not include photorealistic elements unless specified.
 3. TYPOGRAPHY: If the concept includes text, render it clearly with bold, readable typography that matches the aesthetic.
-4. ISOLATION: The design is a standalone graphic with a clean outer edge; the background color and composition rules are appended automatically.
+4. ISOLATION: The design is a standalone graphic with a clean outer edge. Background and composition rules follow below.
 
 Output ONLY the image without any text descriptions or chat formatting.`;
+
+/** Eski varsayılan tasarım prompt'u (sabit yeşil arka plan içerir). Kayıtlı değer bununla aynıysa yeni varsayılan kullanılır. */
+export const LEGACY_GENERATE_DESIGN_PROMPT = `Generate a creative and highly detailed vector-style T-shirt design based on the following concept:
+
+CONCEPT / DESCRIPTION:
+{{userPrompt}}
+
+AESTHETIC / STYLE:
+{{selectedStyle}}
+
+CRITICAL INSTRUCTIONS:
+1. BACKGROUND: The background MUST be a solid, pure bright green (chroma key green, #00FF00). DO NOT include any gradients, shadows, or other colors in the background. This is strictly required for background removal.
+2. SUBJECT: The design subject must be centered, high-contrast, and clearly defined.
+3. STYLE: The artwork should be flat vector style, suitable for screen printing or DTG printing on apparel. Do not include photorealistic elements unless specified.
+4. TYPOGRAPHY: If the concept includes text, render it clearly with bold, readable typography that matches the aesthetic.
+5. ISOLATION: Ensure the design does not blend into the green background.
+
+Output ONLY the image without any text descriptions or chat formatting.`;
+
+export const DEFAULT_DESIGN_CANVAS_PROMPT = `COMPOSITION: a single standalone t-shirt graphic on a square canvas, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
+BACKGROUND: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge, with no gradient, texture, noise, shadow, vignette, border or frame.
+COLORS: do not use {{keyColorName}} or similar shades anywhere in the design. Draw any green elements in dark forest green, olive or teal instead of bright green, and any pink or purple elements in burgundy, coral or soft lavender instead of magenta.
+EDGES: the outer silhouette has crisp, clean edges with a solid outline, so it separates sharply from the background. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.`;
+
+export const DEFAULT_AUTOMATION_DESIGN_PROMPT = `Print-ready {{productType}} design about {{niche}} for {{audience}}.
+Creative direction: {{creativeDirection}}.
+Any text in the design must be in English, spelled correctly.
+Additional requirements: {{notes}}`;
+
+export const DEFAULT_CREATIVE_DIRECTIONS = `bold typography-led composition
+minimal line-art illustration
+vintage retro badge style
+playful hand-drawn doodle style
+clean modern flat illustration
+distressed screen-print look
+cute kawaii character style
+elegant botanical-inspired framing`;
+
+export const DEFAULT_GENERATE_VIDEO_PROMPT = `Realistic e-commerce product video. The exact {{product}} from the reference image is displayed on an invisible (ghost) mannequin in a bright, clean photo studio. The camera slowly orbits to show the garment from the front, three-quarter and side angles, then gently pushes in on the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
+Keep the garment color, the printed artwork and its placement exactly as in the reference image; do not change, add or distort any text or graphics.
+No captions, no watermarks, no logos, no on-screen text.`;
+
+export const DEFAULT_NICHE_RESEARCH_PROMPT = `You are a senior Etsy print-on-demand market researcher for the US market.
+Today is {{today}}. Pick ONE design niche for a new {{productType}} listing that is most likely to sell on Etsy.
+Etsy buyers search for seasonal products 6-10 weeks before the date, so favor occasions inside that window; evergreen niches are fine when nothing seasonal fits.
+Etsy category: {{category}}
+The shop owner's general direction (stay within it; "none" means no restriction): {{focus}}
+
+Upcoming US occasions:
+{{upcomingEvents}}
+
+The shop's best performing listings (favorites/views) — learn which themes and styles resonate, but do not copy them:
+{{topListings}}
+
+Etsy keyword data from our research pool (higher score = better opportunity):
+{{poolKeywords}}
+
+Niches already used recently by this automation — choose something clearly different:
+{{recentNiches}}
+
+If a Google Search tool is available, use it to check what is trending right now for this window: Etsy trending searches, Pinterest trends/Pinterest Predicts, Google Trends, social media and pop culture moments. Prefer niches with rising demand and reasonable competition.
+
+Rules: no trademarks, brand names, celebrities, sports teams, copyrighted characters or quotes from movies/songs. All design text must be in English.
+Respond with ONLY a JSON object (no markdown) with these fields:
+{"niche": "short niche phrase in English", "targetAudience": "who buys it", "style": "visual style (e.g. retro distressed, cute kawaii, minimalist line art)",
+ "designBrief": "1-2 sentences describing the artwork and any short English text on it", "occasion": "occasion name or null",
+ "keywords": ["5-10 Etsy search phrases buyers would type"], "reasoning": "2-3 sentences in Turkish explaining why this niche now"}`;
+
+export const DEFAULT_ANALYZE_LISTING_IMAGE_PROMPT = `You are a professional Etsy E-Commerce Visual Merchandising and Image Analysis AI.
+Carefully inspect this product listing cover image and extract key design attributes in STRICT JSON format:
+
+{
+  "primarySubject": "Concise main subject (e.g., 'Retro 80s Cyberpunk Samurai Cat', 'Vintage Minimalist Wildflower Bouquet')",
+  "primaryAesthetic": "Aesthetic style (e.g., 'Vintage Distressed Retro', 'Minimalist Cottagecore Boho', 'Y2K Cyberpunk Grunge')",
+  "detectedStyle": "Visual technique (e.g., 'Distressed Vector Illustration', 'Watercolour Painting', 'Typography & Line Art')",
+  "detectedColors": ["Dominant color 1", "Dominant color 2", "Dominant color 3"],
+  "productType": "Specific POD product type as seen in the image (e.g., 'Heavyweight T-Shirt', 'Crewneck Sweatshirt', 'Ceramic Coffee Mug')",
+  "description": "2-3 sentences visually detailing the artwork, focal elements, typography, and mood.",
+  "keywords": ["5-8 high intent visual search tags (max 20 chars each)"]
+}
+
+Return ONLY valid JSON matching this schema. No markdown backticks, no explanations.`;
+
+export const DEFAULT_OPTIMIZE_LISTING_PROMPT = `You are a World-Class Etsy SEO Strategist, Copywriter, and E-Commerce Conversion Optimization Expert.
+Your goal is to take an existing Etsy listing and optimize its Title, Tags, and Description to maximize search ranking, click-through rate, and conversions.
+
+### Current Seasonal Trend Context:
+- Active Wave: {{seasonName}}
+- Recommended Seasonal Keywords: {{seasonKeywords}}
+
+### Available High-Opportunity Keyword Pool from Database:
+{{poolKeywords}}
+
+### Strict Rules:
+1. **Title**:
+   - MUST be between 120 and 140 characters.
+   - Front-load the most powerful, high-intent niche phrase in the first 40 characters (e.g. "Vintage Japanese Samurai Cat Shirt, Retro Graphic Tee...").
+   - Use clean separators like "|" or ",".
+   - Do NOT repeat the same word more than twice.
+2. **Tags**:
+   - Generate EXACTLY 13 golden tags.
+   - Every single tag MUST be 20 characters or fewer.
+   - Prioritize multi-word long-tail phrases (e.g. "vintage cat shirt", "retro anime tee").
+   - NO trademarks (no Disney, Nike, Marvel, Taylor Swift, etc.).
+3. **Description**:
+   - Engaging opening hook in first 160 chars.
+   - Key Features bullet points (Fabric, Fit, Quality).
+   - Sizing and Fit Guide summary.
+   - Care Instructions (Wash inside out, cool wash, do not iron on print).
+   - Production & Shipping timeline note.
+   - Helpful Gift Idea notes.
+
+### Listing Details to Optimize:
+- Current Title: "{{title}}"
+- Current Tags: [{{tags}}]
+- Product Price: {{price}}
+- Product Type / Niche: {{productType}}
+- Vision AI Primary Subject: "{{primarySubject}}"
+- Vision AI Aesthetic Style: "{{primaryAesthetic}}"
+- Vision Detected Colors: [{{colors}}]
+- Vision Visual Description: "{{visualDescription}}"
+- Extra User Instructions: "{{userInstructions}}"
+
+### Expected Output:
+Return ONLY valid JSON (no markdown backticks, no wrapping text):
+{
+  "title": "Optimized 120-140 chars Etsy Title",
+  "tags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
+  "description": "Full structured markdown/plain text formatted Etsy description.",
+  "rationale": "Short 2-3 sentence summary of why this SEO strategy will boost ranking."
+}`;
+
+export const DEFAULT_SEASONALITY_PROMPT = `[q4_holiday]
+ACTIVE SEASON: Q4 Christmas & Holiday Peak. If the design allows or has gift appeal, strategically weave in holiday gift-giving angles (e.g. Christmas gift, stocking stuffer, holiday present) while preserving the exact design subject.
+
+[fall_halloween]
+ACTIVE SEASON: Autumn, Fall & Halloween Season. If the design has autumnal, spooky, cozy, or nature themes, emphasize fall vibes, pumpkin season, or cozy aesthetic.
+
+[spring_mothers_day]
+ACTIVE SEASON: Spring & Mother's Day Wave. If the design relates to flowers, gardening, animals, moms, or pastel aesthetics, highlight spring rejuvenation and Mother's Day gift potential.
+
+[summer_vacation]
+ACTIVE SEASON: Summer Vacation & Outdoor Adventure. Highlight summer vibes, vacation apparel, outdoor leisure, or Father's Day gift appeal if appropriate.
+
+[winter_valentines]
+ACTIVE SEASON: New Year & Valentine's Season. Highlight self-care, love, romantic gifts, girlfriend/boyfriend gifts, or motivational mindset themes.`;
+
+
+/** Eski varsayılan (kategori talimatı değişkenin içindeydi). */
+export const LEGACY_ANALYZE_DESIGN_PROMPT = `Analyze this T-shirt/apparel design for the US market (Etsy/Pinterest). 
+
+CRITICAL RULES FOR KEYWORDS (Etsy SEO):
+1. READ THE TEXT: Your keywords MUST strongly reflect the actual text/typography written on the design.
+2. PRIORITIZE THE MAIN THEME: Focus on the primary message over background details. Do not generate overly broad tags (like "van life" or "camping") unless they are the central focus of the text/design.
+3. BALANCED TAGS: Extract 20-25 highly relevant keywords. Mix exact-match phrases from the design with highly relevant niche/aesthetic tags.
+4. LENGTH LIMIT: EVERY SINGLE KEYWORD MUST BE AT MOST 20 CHARACTERS LONG (including spaces)
+
+{{taxonomyHint}}
+
+Return ONLY a valid JSON object in this exact format, with no markdown, no comments, and no explanation.
+{
+  "description": "A very detailed, physical and visual description of the design...",
+  "keywords": ["tag1", "tag2", "tag3"],
+  "productType": "T-shirt",
+  "userNotes": "Any text found on the design",
+  "primarySubject": "The main subject (e.g. rabbit, skull, flower)",
+  "primaryAesthetic": "The core aesthetic (e.g. cottagecore, goth, minimalist)",
+  "taxonomyId": 482
+}`;

@@ -1,14 +1,14 @@
 /**
  * Dynamic Seasonality & Trend Multiplier for Etsy SEO
  * Automatically identifies active shopping seasons based on the calendar
- * and boosts relevant long-tail Opportunity Scores and contextualizes AI prompts.
+ * and boosts relevant long-tail Opportunity Scores. The AI guidance text per season lives in the
+ * admin-editable "Sezon rehberi" prompt (ai_prompt_seasonality), keyed by `seasonKey`.
  */
 
 export interface SeasonInfo {
   seasonKey: string;
   seasonName: string;
   activeThemes: string[];
-  promptGuidance: string;
   bonusRules: { keywords: string[]; bonus: number; reason: string }[];
 }
 
@@ -23,8 +23,6 @@ export function getCurrentSeasonInfo(customDate?: Date): SeasonInfo {
       seasonKey: 'q4_holiday',
       seasonName: 'Q4 Holiday & Christmas Peak Shopping Season',
       activeThemes: ['Christmas Gifts', 'Holiday Apparel', 'Stocking Stuffers', 'Family Gathering', 'Winter Aesthetic'],
-      promptGuidance:
-        'ACTIVE SEASON: Q4 Christmas & Holiday Peak. If the design allows or has gift appeal, strategically weave in holiday gift-giving angles (e.g. Christmas gift, stocking stuffer, holiday present) while preserving the exact design subject.',
       bonusRules: [
         { keywords: ['christmas', 'xmas', 'holiday', 'stocking stuffer', 'secret santa'], bonus: 20, reason: 'Q4 Christmas Peak' },
         { keywords: ['gift for her', 'gift for him', 'gift for mom', 'birthday gift', 'best friend gift'], bonus: 15, reason: 'Q4 High Gift Demand' },
@@ -39,8 +37,6 @@ export function getCurrentSeasonInfo(customDate?: Date): SeasonInfo {
       seasonKey: 'fall_halloween',
       seasonName: 'Fall, Spooky Season & Halloween Ramp-up',
       activeThemes: ['Autumn / Fall', 'Halloween & Spooky', 'Thanksgiving', 'Cozy Season', 'Pumpkin / Harvest'],
-      promptGuidance:
-        'ACTIVE SEASON: Autumn, Fall & Halloween Season. If the design has autumnal, spooky, cozy, or nature themes, emphasize fall vibes, pumpkin season, or cozy aesthetic.',
       bonusRules: [
         { keywords: ['halloween', 'spooky', 'ghost', 'witchy', 'pumpkin'], bonus: 20, reason: 'Halloween Season' },
         { keywords: ['fall', 'autumn', 'cozy season', 'fall vibes', 'sweater weather'], bonus: 16, reason: 'Autumn Aesthetic' },
@@ -55,8 +51,6 @@ export function getCurrentSeasonInfo(customDate?: Date): SeasonInfo {
       seasonKey: 'spring_mothers_day',
       seasonName: "Spring, Easter & Mother's Day Shopping Wave",
       activeThemes: ["Mother's Day", 'Spring Floral', 'Gardening & Nature', 'Easter', 'Teacher Appreciation'],
-      promptGuidance:
-        "ACTIVE SEASON: Spring & Mother's Day Wave. If the design relates to flowers, gardening, animals, moms, or pastel aesthetics, highlight spring rejuvenation and Mother's Day gift potential.",
       bonusRules: [
         { keywords: ['mother day', 'mothers day', 'mom gift', 'plant mom', 'dog mom'], bonus: 20, reason: "Mother's Day Gift" },
         { keywords: ['spring', 'wildflower', 'botanical', 'floral', 'gardening'], bonus: 16, reason: 'Spring Nature Trend' },
@@ -71,8 +65,6 @@ export function getCurrentSeasonInfo(customDate?: Date): SeasonInfo {
       seasonKey: 'summer_vacation',
       seasonName: "Summer, Father's Day & Outdoor Vacation Season",
       activeThemes: ['Summer Vacation', 'Beach & Lake', "Father's Day", 'Camping & Outdoor', '4th of July'],
-      promptGuidance:
-        "ACTIVE SEASON: Summer Vacation & Outdoor Adventure. Highlight summer vibes, vacation apparel, outdoor leisure, or Father's Day gift appeal if appropriate.",
       bonusRules: [
         { keywords: ['father day', 'fathers day', 'dad gift', 'papa shirt'], bonus: 20, reason: "Father's Day Gift" },
         { keywords: ['summer', 'beach', 'lake life', 'vacation', 'camp', 'hiking'], bonus: 15, reason: 'Summer Outdoor' },
@@ -86,8 +78,6 @@ export function getCurrentSeasonInfo(customDate?: Date): SeasonInfo {
     seasonKey: 'winter_valentines',
     seasonName: "New Year Goals & Valentine's Day Shopping Season",
     activeThemes: ["Valentine's Day", 'Self Care & Mindset', 'Cozy Winter', 'Love & Couples'],
-    promptGuidance:
-      "ACTIVE SEASON: New Year & Valentine's Season. Highlight self-care, love, romantic gifts, girlfriend/boyfriend gifts, or motivational mindset themes.",
     bonusRules: [
       { keywords: ['valentine', 'love', 'couple gift', 'girlfriend gift', 'boyfriend gift'], bonus: 20, reason: "Valentine's Day" },
       { keywords: ['self care', 'growth mindset', 'mental health', 'positive vibes'], bonus: 14, reason: 'New Year Self-Improvement' },

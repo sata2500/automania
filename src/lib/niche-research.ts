@@ -12,6 +12,9 @@
  */
 import { sql } from '@/lib/db';
 import { loadSettings } from '@/lib/app-settings';
+import { DEFAULT_NICHE_RESEARCH_PROMPT } from '@/lib/default-prompts';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt } from '@/lib/prompt-settings';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 
 export type NicheResearchResult = {
@@ -36,7 +39,6 @@ export type ResearchContext = {
   topListings: Array<{ title: string; favorites: number; views: number; tags: string[] }>;
   poolKeywords: Array<{ keyword: string; score: number | null; listings: number | null }>;
   recentNiches: string[];
-  webSearch: boolean;
 };
 
 // ─── Takvim ──────────────────────────────────────────────────────────────────
@@ -98,43 +100,22 @@ export function upcomingUsEvents(today: Date, horizonDays = 120): Array<{ name: 
 
 // ─── Prompt ve yanıt ─────────────────────────────────────────────────────────
 
-/** Araştırma prompt'u (saf fonksiyon; testlerle doğrulanır). */
-export function buildResearchPrompt(ctx: ResearchContext): string {
-  const lines: string[] = [];
-  lines.push(
-    'You are a senior Etsy print-on-demand market researcher for the US market.',
-    `Today is ${ctx.today.toISOString().slice(0, 10)}. Pick ONE design niche for a new ${ctx.productType} listing that is most likely to sell on Etsy.`,
-    'Etsy buyers search for seasonal products 6-10 weeks before the date, so favor occasions inside that window; evergreen niches are fine when nothing seasonal fits.',
-  );
-  if (ctx.categoryPath) lines.push(`Etsy category: ${ctx.categoryPath}.`);
-  if (ctx.focus?.trim()) lines.push(`The shop owner's general direction (stay within it): ${ctx.focus.trim()}.`);
-
-  if (ctx.upcomingEvents.length > 0) {
-    lines.push('', 'Upcoming US occasions:', ...ctx.upcomingEvents.slice(0, 8).map((e) => `- ${e.name}: ${e.date} (in ${e.daysAway} days)`));
-  }
-  if (ctx.topListings.length > 0) {
-    lines.push('', "The shop's best performing listings (favorites/views) — learn which themes and styles resonate, but do not copy them:",
-      ...ctx.topListings.slice(0, 8).map((l) => `- "${l.title}" (${l.favorites} favorites, ${l.views} views; tags: ${l.tags.slice(0, 6).join(', ')})`));
-  }
-  if (ctx.poolKeywords.length > 0) {
-    lines.push('', 'Etsy keyword data from our research pool (higher score = better opportunity):',
-      ...ctx.poolKeywords.slice(0, 15).map((k) => `- "${k.keyword}"${k.score !== null ? ` score ${k.score}/100` : ''}${k.listings ? `, ${k.listings} competing listings` : ''}`));
-  }
-  if (ctx.recentNiches.length > 0) {
-    lines.push('', `Niches already used recently by this automation — choose something clearly different: ${ctx.recentNiches.map((n) => `"${n}"`).join(', ')}.`);
-  }
-  if (ctx.webSearch) {
-    lines.push('', 'Use Google Search to check what is trending right now for this window: Etsy trending searches, Pinterest trends/Pinterest Predicts, Google Trends, social media and pop culture moments. Prefer niches with rising demand and reasonable competition.');
-  }
-  lines.push(
-    '',
-    'Rules: no trademarks, brand names, celebrities, sports teams, copyrighted characters or quotes from movies/songs. All design text must be in English.',
-    'Respond with ONLY a JSON object (no markdown) with these fields:',
-    '{"niche": "short niche phrase in English", "targetAudience": "who buys it", "style": "visual style (e.g. retro distressed, cute kawaii, minimalist line art)",',
-    ' "designBrief": "1-2 sentences describing the artwork and any short English text on it", "occasion": "occasion name or null",',
-    ' "keywords": ["5-10 Etsy search phrases buyers would type"], "reasoning": "2-3 sentences in Turkish explaining why this niche now"}',
-  );
-  return lines.join('\n');
+/**
+ * Araştırma prompt'u: admin panelindeki "Niş araştırması" talimatı verilerle doldurulur (saf fonksiyon;
+ * testlerle doğrulanır). Boş veri bölümleri "none" yazılır.
+ */
+export function buildResearchPrompt(ctx: ResearchContext, template: string = DEFAULT_NICHE_RESEARCH_PROMPT): string {
+  const list = (items: string[]) => (items.length > 0 ? items.join('\n') : 'none');
+  return fillPrompt(template, {
+    today: ctx.today.toISOString().slice(0, 10),
+    productType: ctx.productType,
+    category: ctx.categoryPath?.trim() || 'not specified',
+    focus: ctx.focus?.trim() || 'none',
+    upcomingEvents: list(ctx.upcomingEvents.slice(0, 8).map((e) => `- ${e.name}: ${e.date} (in ${e.daysAway} days)`)),
+    topListings: list(ctx.topListings.slice(0, 8).map((l) => `- "${l.title}" (${l.favorites} favorites, ${l.views} views; tags: ${l.tags.slice(0, 6).join(', ')})`)),
+    poolKeywords: list(ctx.poolKeywords.slice(0, 15).map((k) => `- "${k.keyword}"${k.score !== null ? ` score ${k.score}/100` : ''}${k.listings ? `, ${k.listings} competing listings` : ''}`)),
+    recentNiches: ctx.recentNiches.length > 0 ? ctx.recentNiches.map((n) => `"${n}"`).join(', ') : 'none',
+  });
 }
 
 const asText = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
@@ -258,8 +239,7 @@ export async function researchNiche(input: {
     topListings,
     poolKeywords,
     recentNiches,
-    webSearch,
-  });
+  }, await loadPrompt('ai_prompt_niche_research'));
 
   const client = createGoogleClient(connection, { model });
   const response = await client.models.generateContent({

@@ -34,7 +34,6 @@ describe('buildResearchPrompt', () => {
       topListings: [{ title: 'Cat Mom Shirt', favorites: 40, views: 900, tags: ['cat mom'] }],
       poolKeywords: [{ keyword: 'dog dad', score: 81, listings: 1200 }],
       recentNiches: ['vampire halloween'],
-      webSearch: true,
     });
     expect(prompt).toMatch(/Halloween: 2026-10-31 \(in 67 days\)/);
     expect(prompt).toMatch(/Cat Mom Shirt/);
@@ -45,9 +44,10 @@ describe('buildResearchPrompt', () => {
     expect(prompt).toMatch(/must be in English/);
   });
 
-  it('omits the web search instruction when disabled', () => {
-    const prompt = buildResearchPrompt({ today: new Date(), productType: 'Mug', upcomingEvents: [], topListings: [], poolKeywords: [], recentNiches: [], webSearch: false });
-    expect(prompt).not.toMatch(/Google Search/);
+  it('fills empty data sections with "none" and uses a custom admin template', () => {
+    const ctx = { today: new Date('2026-08-25T00:00:00Z'), productType: 'Mug', upcomingEvents: [], topListings: [], poolKeywords: [], recentNiches: [] };
+    expect(buildResearchPrompt(ctx)).toMatch(/Upcoming US occasions:\nnone/);
+    expect(buildResearchPrompt(ctx, 'Niche for {{productType}} on {{today}}, focus {{focus}}')).toBe('Niche for Mug on 2026-08-25, focus none');
   });
 });
 

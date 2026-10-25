@@ -7,12 +7,13 @@ import type { MockupItem } from '@/types/pod';
 import type {
   AutomationRunSteps,
   AutomationStepName,
-  AutomationVideoSettings,
   PodTemplateMockupConfig,
   PodTemplateSeoHints,
 } from '@/types/templates';
 import { buildFolderMockupConfig } from '@/lib/folder-template';
 import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
+import { DEFAULT_AUTOMATION_DESIGN_PROMPT, DEFAULT_CREATIVE_DIRECTIONS } from '@/lib/default-prompts';
+import { fillPrompt, parseLines } from '@/lib/prompt-registry';
 
 // Video SEO metninden sonra üretilir: admin video prompt'u ürün başlığını ({{title}}) kullanabilir.
 export const AUTOMATION_STEP_ORDER: AutomationStepName[] = [
@@ -81,40 +82,26 @@ export function selectAutomationMockups(mockups: MockupItem[], templateConfig: P
   return { render: renderLimited, statics: staticLimited, video };
 }
 
-// Aynı şablonun art arda çalıştırmalarında birbirinin kopyası tasarımlar çıkmasın diye prompt'a farklı bir yön eklenir.
-const CREATIVE_DIRECTIONS = [
-  'bold typography-led composition',
-  'minimal line-art illustration',
-  'vintage retro badge style',
-  'playful hand-drawn doodle style',
-  'clean modern flat illustration',
-  'distressed screen-print look',
-  'cute kawaii character style',
-  'elegant botanical-inspired framing',
-];
-
 /**
- * Tasarım prompt'u: niş, hedef kitle ve ürün tipi her zaman korunur; "SEO notları" bunlara eklenir
- * (önceden notlar doluysa prompt'un tamamı oluyordu ve niş bilgisi kayboluyordu).
+ * Otomasyonun tasarım konsepti: admin panelindeki "Otomasyon tasarım konsepti" talimatı niş, hedef kitle,
+ * ürün tipi ve notlarla doldurulur. Aynı otomasyonun art arda tasarımları kopya olmasın diye her
+ * çalıştırmada "Yaratıcı yönler" listesinden farklı bir yön seçilir.
  */
-export function buildDesignPrompt(hints: Partial<PodTemplateSeoHints> | null | undefined, variantSeed: number): string {
-  const niche = hints?.primaryNiche?.trim();
-  const audience = hints?.targetAudience?.trim();
-  const productType = hints?.productType?.trim();
-  const notes = hints?.customNotes?.trim();
-  const direction = CREATIVE_DIRECTIONS[Math.abs(Math.floor(variantSeed)) % CREATIVE_DIRECTIONS.length];
-
-  const parts = [
-    `Print-ready ${productType || 'apparel'} design about ${niche || 'a trending gift theme'}`,
-    audience ? `for ${audience}` : '',
-  ].filter(Boolean).join(' ');
-  return [
-    `${parts}.`,
-    `Creative direction: ${direction}.`,
-    // Ürünler Etsy'de (çoğunlukla ABD) satılır; niş Türkçe yazılsa bile tasarımdaki metin İngilizce olmalı.
-    'Any text in the design must be in English, spelled correctly.',
-    notes ? `Additional requirements: ${notes}` : '',
-  ].filter(Boolean).join(' ');
+export function buildDesignPrompt(
+  hints: Partial<PodTemplateSeoHints> | null | undefined,
+  variantSeed: number,
+  template: string = DEFAULT_AUTOMATION_DESIGN_PROMPT,
+  creativeDirections: string = DEFAULT_CREATIVE_DIRECTIONS,
+): string {
+  const directions = parseLines(creativeDirections);
+  const direction = directions.length > 0 ? directions[Math.abs(Math.floor(variantSeed)) % directions.length]! : 'none';
+  return fillPrompt(template, {
+    productType: hints?.productType?.trim() || 'apparel',
+    niche: hints?.primaryNiche?.trim() || 'a trending gift theme',
+    audience: hints?.targetAudience?.trim() || 'a broad Etsy audience',
+    creativeDirection: direction,
+    notes: hints?.customNotes?.trim() || 'none',
+  }).trim();
 }
 
 /**
@@ -162,36 +149,19 @@ export function needsDarkGarmentDesign(mockup: Pick<MockupItem, 'apparelType'>):
   return mockup.apparelType === 'dark';
 }
 
-const VIDEO_STYLE_PROMPTS: Record<NonNullable<AutomationVideoSettings['style']>, string> = {
-  mannequin:
-    'Realistic e-commerce product video. The exact {{product}} from the reference image is displayed on an invisible (ghost) mannequin in a bright, clean photo studio. ' +
-    'The camera slowly orbits to show the garment from the front, three-quarter and side angles, then gently pushes in on the printed design. ' +
-    'Soft natural lighting, subtle fabric movement, photorealistic.',
-  flatlay:
-    'Realistic e-commerce product video. The exact {{product}} from the reference image lies flat on a styled tabletop. ' +
-    'Slow top-down camera push-in and gentle parallax, soft daylight, subtle fabric texture detail on the printed design, photorealistic.',
-  lifestyle:
-    'Realistic lifestyle product video. An adult model wears the exact {{product}} from the reference image in a bright, casual everyday setting. ' +
-    'Natural movement, medium shots that keep the printed design clearly visible, soft daylight, photorealistic.',
-};
-
-/**
- * Tanıtım videosu prompt'u: seçilen çekim tarzı + ürünün aynı kalması gereken kurallar (+ isteğe bağlı not).
- * Referans görsel (tasarımın basıldığı mockup) ile birlikte gönderilir.
- */
-export function buildVideoPrompt(
-  video: AutomationVideoSettings | undefined,
-  hints: Partial<PodTemplateSeoHints> | null | undefined,
+/** Admin panelindeki "Video üretimi" talimatının değişkenlerini doldurur. */
+export function fillVideoPromptTemplate(
+  template: string,
+  values: { title: string; designPrompt: string; product: string; niche: string },
 ): string {
-  const product = hints?.productType?.trim().toLowerCase() || 't-shirt';
-  const base = VIDEO_STYLE_PROMPTS[video?.style ?? 'mannequin'].replace(/\{\{product\}\}/g, product);
-  const notes = video?.notes?.trim();
-  return [
-    base,
-    'Keep the garment color, the printed artwork and its placement exactly as in the reference image; do not change, add or distort any text or graphics.',
-    'No captions, no watermarks, no logos, no on-screen text.',
-    notes ? `Additional direction: ${notes}` : '',
-  ].filter(Boolean).join(' ');
+  return fillPrompt(template, {
+    title: values.title,
+    designPrompt: values.designPrompt,
+    userPrompt: values.designPrompt,
+    product: values.product,
+    niche: values.niche,
+    selectedStyle: values.niche,
+  });
 }
 
 /** Niş araştırmasının çıktısı (çalıştırma kaydında saklanır). */
@@ -227,18 +197,4 @@ export function effectiveSeoHints(
     targetAudience: research.targetAudience || base.targetAudience,
     customNotes: notes,
   };
-}
-
-/** Admin panelindeki video prompt şablonunun değişkenlerini doldurur. */
-export function fillVideoPromptTemplate(
-  template: string,
-  values: { title: string; designPrompt: string; product: string; niche: string },
-): string {
-  return template
-    .replace(/\{\{title\}\}/g, values.title)
-    .replace(/\{\{designPrompt\}\}/g, values.designPrompt)
-    .replace(/\{\{userPrompt\}\}/g, values.designPrompt)
-    .replace(/\{\{product\}\}/g, values.product)
-    .replace(/\{\{niche\}\}/g, values.niche)
-    .replace(/\{\{selectedStyle\}\}/g, values.niche);
 }

@@ -6,6 +6,8 @@ import { checkRateLimit } from '@/lib/request-rate-limit';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo } from '@/lib/seasonality';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt } from '@/lib/prompt-settings';
 import { loadSettingRows } from '@/lib/app-settings';
 
 export const maxDuration = 60;
@@ -44,7 +46,8 @@ export async function POST(req: Request) {
     }
 
     // 1. Fetch AI Model Settings from app_settings
-    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning', 'ai_prompt_generate_listing']);
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning']);
+    const optimizePrompt = await loadPrompt('ai_prompt_optimize_listing');
 
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;
@@ -101,57 +104,21 @@ export async function POST(req: Request) {
       const currentTags = Array.isArray(item.tags) ? item.tags : (typeof item.tags === 'string' ? JSON.parse(item.tags) : []);
       const vision = typeof item.vision_analysis === 'string' ? JSON.parse(item.vision_analysis) : (item.vision_analysis || {});
 
-      const systemPrompt = `You are a World-Class Etsy SEO Strategist, Copywriter, and E-Commerce Conversion Optimization Expert.
-Your goal is to take an existing Etsy listing and optimize its Title, Tags, and Description to maximize search ranking, click-through rate, and conversions.
-
-### Current Seasonal Trend Context:
-- Active Wave: ${currentSeason.seasonName || 'Standard Shopping Season'}
-- Recommended Seasonal Keywords: ${(currentSeason.activeThemes || []).join(', ')}
-
-### Available High-Opportunity Keyword Pool from Database:
-
-${poolKeywordsList || 'vintage graphic shirt, retro aesthetic tee, trendy apparel, gift for him, gift for her'}
-
-### Strict Rules:
-1. **Title**:
-   - MUST be between 120 and 140 characters.
-   - Front-load the most powerful, high-intent niche phrase in the first 40 characters (e.g. "Vintage Japanese Samurai Cat Shirt, Retro Graphic Tee...").
-   - Use clean separators like "|" or ",".
-   - Do NOT repeat the same word more than twice.
-2. **Tags**:
-   - Generate EXACTLY 13 golden tags.
-   - Every single tag MUST be 20 characters or fewer.
-   - Prioritize multi-word long-tail phrases (e.g. "vintage cat shirt", "retro anime tee").
-   - NO trademarks (no Disney, Nike, Marvel, Taylor Swift, etc.).
-3. **Description**:
-   - Engaging opening hook in first 160 chars.
-   - Key Features bullet points (Fabric, Fit, Quality).
-   - Sizing and Fit Guide summary.
-   - Care Instructions (Wash inside out, cool wash, do not iron on print).
-   - Production & Shipping timeline note.
-   - Helpful Gift Idea notes.
-
-### Expected Output:
-Return ONLY valid JSON (no markdown backticks, no wrapping text):
-{
-  "title": "Optimized 120-140 chars Etsy Title",
-  "tags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
-  "description": "Full structured markdown/plain text formatted Etsy description.",
-  "rationale": "Short 2-3 sentence summary of why this SEO strategy will boost ranking."
-}`;
-
-      const userContent = `Listing Details to Optimize:
-- Current Title: "${item.title || 'Untitled'}"
-- Current Tags: [${currentTags.join(', ')}]
-- Product Price: $${item.price} ${item.currency_code}
-- Product Type / Niche: ${vision.productType || 'Apparel & POD'}
-- Vision AI Primary Subject: "${vision.primarySubject || 'Graphic Art'}"
-- Vision AI Aesthetic Style: "${vision.primaryAesthetic || 'Modern Aesthetic'}"
-- Vision Detected Colors: [${(vision.detectedColors || []).join(', ')}]
-- Vision Visual Description: "${vision.description || ''}"
-${instructions ? `- Extra User Instructions: "${instructions}"` : ''}
-
-Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-converting Description in strict JSON format.`;
+      // Talimat admin panelindeki "Mevcut ilanı SEO optimizasyonu" prompt'udur; kod yalnızca verileri doldurur.
+      const prompt = fillPrompt(optimizePrompt, {
+        seasonName: currentSeason.seasonName || 'Standard Shopping Season',
+        seasonKeywords: (currentSeason.activeThemes || []).join(', ') || 'none',
+        poolKeywords: poolKeywordsList || 'none',
+        title: item.title || 'Untitled',
+        tags: currentTags.join(', '),
+        price: `${item.price} ${item.currency_code}`,
+        productType: vision.productType || 'not analyzed',
+        primarySubject: vision.primarySubject || 'not analyzed',
+        primaryAesthetic: vision.primaryAesthetic || 'not analyzed',
+        colors: (vision.detectedColors || []).join(', '),
+        visualDescription: vision.description || 'not analyzed',
+        userInstructions: typeof instructions === 'string' && instructions.trim() ? instructions.trim() : 'None',
+      });
 
       try {
         let rawAiContent = '';
@@ -170,7 +137,7 @@ Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-conv
               const result = await ai.models.generateContent({
                 model: m,
                 contents: [
-                  { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userContent}` }] }
+                  { role: 'user', parts: [{ text: prompt }] }
                 ],
                 config: {
                   responseMimeType: 'application/json',
@@ -198,8 +165,7 @@ Generate the optimal SEO Title, 13 Golden Tags (<= 20 chars each), and high-conv
             body: JSON.stringify({
               model: seoModel,
               messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userContent }
+                { role: 'user', content: prompt }
               ]
             })
           });

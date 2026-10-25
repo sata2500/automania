@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 import sql, { db } from '@/lib/db';
 import { etsyTaxonomyCache } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { DEFAULT_ANALYZE_DESIGN_PROMPT } from '@/lib/default-prompts';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt } from '@/lib/prompt-settings';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -90,13 +91,12 @@ export async function POST(request: Request) {
     }
 
     // 2. Global Sistem Ayarlarını Çek (API Anahtarları, Vision Modelleri, Prompts, Etsy API Key)
-    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision', 'ai_prompt_analyze_design', 'etsy_keystring', 'etsy_shared_secret', 'scraping_api_key']);
+    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision', 'etsy_keystring', 'etsy_shared_secret', 'scraping_api_key']);
     
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;
     let dbVisionModel = null;
     let dbGeminiVisionModel = null;
-    let customPrompt: string | null = null;
     let etsyApiKey = process.env.ETSY_API_KEY;
     let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
     let scrapingApiKey = process.env.SCRAPER_API_KEY || '';
@@ -108,7 +108,6 @@ export async function POST(request: Request) {
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
       if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
-      if (row.setting_key === 'ai_prompt_analyze_design') customPrompt = row.setting_value;
       if (row.setting_key === 'etsy_keystring' && row.setting_value) etsyApiKey = row.setting_value;
       if (row.setting_key === 'etsy_shared_secret' && row.setting_value) etsySharedSecret = row.setting_value;
       if (row.setting_key === 'scraping_api_key' && row.setting_value) scrapingApiKey = row.setting_value;
@@ -158,19 +157,12 @@ export async function POST(request: Request) {
 
     // Etsy Taxonomy aktif kategorilerini al
     const activeCategories = await db.select().from(etsyTaxonomyCache).where(eq(etsyTaxonomyCache.isActive, true));
-    let taxonomyHint = '';
-    if (activeCategories.length > 0) {
-      taxonomyHint = `Choose the most appropriate taxonomyId from this list ONLY:\n` + activeCategories.map(c => `- ID: ${c.id} (${c.name}, ${c.path})`).join('\n');
-    } else {
-      taxonomyHint = `Choose a taxonomyId like 482 for T-shirts, 2202 for Sweatshirts, etc.`;
-    }
+    const taxonomyHint = activeCategories.length > 0
+      ? activeCategories.map(c => `- ID: ${c.id} (${c.name}, ${c.path})`).join('\n')
+      : '- ID: 482 (T-shirts)\n- ID: 2202 (Sweatshirts)';
 
-    // AI Vision Analiz Prompt'unu Hazırla
-    let prompt = DEFAULT_ANALYZE_DESIGN_PROMPT;
-    if (customPrompt && customPrompt.trim().length > 10) {
-      prompt = customPrompt;
-    }
-    prompt = prompt.replace('{{taxonomyHint}}', taxonomyHint);
+    // Talimat admin panelindeki "Tasarım görsel analizi" prompt'udur (boşsa varsayılanı).
+    const prompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint });
 
     const { buffer, mimeType } = resolvedImage;
     const base64Data = buffer.toString('base64');

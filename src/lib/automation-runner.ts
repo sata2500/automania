@@ -17,7 +17,6 @@ import { removeChromaBackground } from '@/lib/chroma-key';
 import { KEY_COLORS, pickKeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
-import { loadSetting } from '@/lib/app-settings';
 import { getConfiguredSecret } from '@/lib/internal-auth';
 import { loadImageForUser } from '@/lib/media-source';
 import { writeAuditLog } from '@/lib/audit-log';
@@ -28,11 +27,12 @@ import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt, loadPrompts } from '@/lib/prompt-settings';
 import {
   AUTOMATION_STEP_ORDER,
   buildAutomationKeywords,
   buildDesignPrompt,
-  buildVideoPrompt,
   deriveRunOutcome,
   fillVideoPromptTemplate,
   effectiveSeoHints,
@@ -71,15 +71,6 @@ class StepSkipped extends Error {}
 
 /** Otomasyonun ürettiği tasarımların Tasarımlar sekmesindeki klasörü. */
 export const AUTOMATION_DESIGN_FOLDER = { id: 'design-folder-automation', name: 'Otomasyon Tasarımları', isCustom: true, type: 'design' as const };
-
-async function loadPromptSetting(key: string): Promise<string> {
-  try {
-    return (await loadSetting(key)) ?? '';
-  } catch (error) {
-    console.error(`[Automation] Failed to load prompt setting ${key}`, error);
-    return '';
-  }
-}
 
 async function loadWorkspaceMockups(userId: string): Promise<MockupItem[]> {
   const [workspace] = await db
@@ -197,17 +188,16 @@ type StepResult = { patch?: Partial<RunRow>; output?: Record<string, unknown>; s
 async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persist: (patch: Partial<RunRow>) => Promise<void>) {
   const { template, userId, runId } = ctx;
   const config = await loadAIConfig();
-  const systemPromptTemplate = await loadPromptSetting('ai_prompt_generate_design');
+  const prompts = await loadPrompts(['ai_prompt_generate_design', 'ai_prompt_automation_design', 'ai_prompt_creative_directions']);
 
   // Aynı şablonun çalıştırmaları farklı bir yaratıcı yönle başlar (kopya tasarımları önler).
   const seed = Array.from(runId).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   const hints = runHints(ctx);
-  const basePrompt = buildDesignPrompt(hints, seed);
-  const finalPrompt = systemPromptTemplate.trim()
-    ? systemPromptTemplate
-        .replace(/\{\{userPrompt\}\}/g, basePrompt)
-        .replace(/\{\{selectedStyle\}\}/g, hints.primaryNiche || '')
-    : basePrompt;
+  const basePrompt = buildDesignPrompt(hints, seed, prompts.ai_prompt_automation_design, prompts.ai_prompt_creative_directions);
+  const finalPrompt = fillPrompt(prompts.ai_prompt_generate_design, {
+    userPrompt: basePrompt,
+    selectedStyle: hints.primaryNiche || 'not specified',
+  });
 
   // Perde rengi konuya göre seçilir: yeşil ağırlıklı konularda (Noel, orman…) magenta, tasarımın yeşilleri korunur.
   const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${finalPrompt}`);
@@ -353,16 +343,13 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
   const hints = runHints(ctx);
   const seo = ctx.run.generatedSeo as GeneratedSeoData | null;
 
-  // Talimat admin panelindeki video prompt'udur (boşsa gerçekçi ürün tanıtımı varsayılanı).
-  const adminTemplate = (await loadPromptSetting('ai_prompt_generate_video')).trim();
-  const prompt = adminTemplate
-    ? fillVideoPromptTemplate(adminTemplate, {
-        title: seo?.title || hints.primaryNiche || template.name,
-        designPrompt: String((ctx.steps?.designGeneration?.output as { prompt?: unknown } | undefined)?.prompt || buildDesignPrompt(hints, 0)),
-        product: hints.productType || 'T-shirt',
-        niche: hints.primaryNiche || '',
-      })
-    : buildVideoPrompt({ style: 'mannequin' }, hints);
+  // Talimat admin panelindeki "Video üretimi" prompt'udur (boşsa varsayılanı).
+  const prompt = fillVideoPromptTemplate(await loadPrompt('ai_prompt_generate_video'), {
+    title: seo?.title || hints.primaryNiche || template.name,
+    designPrompt: String((ctx.steps?.designGeneration?.output as { prompt?: unknown } | undefined)?.prompt || hints.primaryNiche || template.name),
+    product: hints.productType?.trim().toLowerCase() || 't-shirt',
+    niche: hints.primaryNiche || 'not specified',
+  });
 
   // Referans görsel: tasarımın basıldığı ilk mockup — video bu ürünü gösterir.
   const firstMockupUrl = ((ctx.run.generatedMockupUrls as string[] | null) ?? [])[0];
@@ -403,7 +390,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const keywords = buildAutomationKeywords(hints, [...(research?.keywords ?? []), ...poolKeywords]);
   if (keywords.length === 0) throw new StepSkipped('Şablonda niş veya hedef kitle bilgisi yok; SEO üretilemedi.');
 
-  const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignPrompt(hints, 0));
+  const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignPrompt(hints, 0, await loadPrompt('ai_prompt_automation_design'), await loadPrompt('ai_prompt_creative_directions')));
   const subject = detectPrimarySubject(`${hints?.primaryNiche || ''} ${designPrompt}`);
   const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
   // Mağaza bölümü elle seçilmediyse yapay zekâ mağazadaki bölümlerden en uygununu seçer.
