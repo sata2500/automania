@@ -20,6 +20,7 @@ import {
   subscribeRemoteWorkspace,
 } from '@/lib/storage-service';
 import { get } from 'idb-keyval';
+import { mergeWorkspaceChanges } from '@/lib/workspace-merge';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { useAuth } from '@/components/common/UserAuthContext';
 
@@ -101,6 +102,8 @@ export function useWorkspace() {
   const isFirstRenderAfterInit = useRef<boolean>(true);
   /** Sunucudan/önbellekten yüklenen son koleksiyonlar: bunlar değişmediyse tekrar kaydetmeye gerek yok. */
   const loadedSnapshotRef = useRef<{ mockups: MockupItem[]; designs: DesignItem[]; folders: MockupFolder[] } | null>(null);
+  /** Sunucuyla en son eşit olduğu bilinen koleksiyonlar: çakışmada üç yönlü birleştirmenin tabanı. */
+  const syncedBaseRef = useRef<{ mockups: MockupItem[]; designs: DesignItem[]; folders: MockupFolder[] } | null>(null);
   /** Henüz sunucuya ulaşmamış yerel değişiklik var mı (zamanlanmış ya da süren kayıt)? */
   const hasPendingSaveRef = useRef<boolean>(false);
   const isSaveInFlightRef = useRef<boolean>(false);
@@ -121,9 +124,28 @@ export function useWorkspace() {
       folders: data.folders || [],
     };
     loadedSnapshotRef.current = snapshot;
+    syncedBaseRef.current = snapshot;
     setMockups(snapshot.mockups);
     setDesigns(snapshot.designs);
     setFolders(snapshot.folders);
+  }, []);
+
+  /**
+   * Sunucudaki daha yeni çalışma alanını bu cihazdaki kaydedilmemiş değişikliklerle birleştirir.
+   * Otomasyonun eklediği tasarım ile kullanıcının mockup düzenlemesi gibi farklı öğelere dokunan
+   * değişiklikler kullanıcıya sorulmadan birleşir; aynı öğede bu cihazdaki düzenleme kazanır.
+   */
+  const mergeRemoteIntoLocal = useCallback((server: { mockups?: MockupItem[]; designs?: DesignItem[]; folders?: MockupFolder[] }) => {
+    const remote = { mockups: server.mockups || [], designs: server.designs || [], folders: server.folders || [] };
+    const local = latestRef.current;
+    const base = syncedBaseRef.current ?? remote;
+    const merged = mergeWorkspaceChanges(base, local, remote);
+    syncedBaseRef.current = remote;
+    loadedSnapshotRef.current = null;
+    // Yeni dizi kimlikleri otomatik kaydı tetikler; birleşmiş sürüm güncel sunucu sürümüyle kaydedilir.
+    setMockups(merged.mockups);
+    setDesigns(merged.designs);
+    setFolders(merged.folders);
   }, []);
 
   useEffect(() => {
@@ -246,6 +268,23 @@ export function useWorkspace() {
 
     const result = await saveAppData(payload);
     isSaveInFlightRef.current = false;
+    if (result.success) {
+      syncedBaseRef.current = { mockups: payload.mockups, designs: payload.designs, folders: payload.folders };
+    }
+
+    // Çakışma: sunucudaki yeni sürüm alınıp bu cihazdaki değişikliklerle birleştirilir ve yeniden kaydedilir.
+    // Yalnızca sunucu okunamazsa kullanıcıya sorulur.
+    if (result.conflict && !hasSaveConflictRef.current) {
+      const serverData = await fetch('/api/storage', { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+      if (serverData && Array.isArray(serverData.mockups)) {
+        setKnownServerVersion(typeof serverData.updatedAt === 'number' ? serverData.updatedAt : null);
+        mergeRemoteIntoLocal(serverData);
+        setIsSaving(false);
+        return;
+      }
+    }
 
     // Kayıt sürerken yeni bir değişiklik zamanlandıysa bekleyen durumu o kayıt temizler.
     if (!saveTimeoutRef.current) hasPendingSaveRef.current = false;
@@ -255,7 +294,7 @@ export function useWorkspace() {
       setHasSaveConflict(true);
     }
     setIsSaving(false);
-  }, [user]);
+  }, [user, mergeRemoteIntoLocal]);
 
   // Auto-save data. Yalnızca çalışma alanı verisi değişince çalışır; klasör/mockup seçimi gibi
   // arayüz durumları aşağıdaki ayrı efektle yalnızca bu cihaza kaydedilir.
@@ -357,13 +396,12 @@ export function useWorkspace() {
     if (!isInitialized) return;
     return subscribeRemoteWorkspace((payload) => {
       if (hasPendingSaveRef.current || isSaveInFlightRef.current) {
-        hasSaveConflictRef.current = true;
-        setHasSaveConflict(true);
+        mergeRemoteIntoLocal(payload);
         return;
       }
       applyLoadedCollections(payload);
     });
-  }, [isInitialized, applyLoadedCollections]);
+  }, [isInitialized, applyLoadedCollections, mergeRemoteIntoLocal]);
 
   // Sync with server: başka cihaz/sekmedeki değişiklikleri al. Bekleyen yerel değişiklik varken
   // sunucu verisi uygulanmaz (aksi halde kullanıcının son düzenlemesi silinir).

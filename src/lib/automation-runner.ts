@@ -109,6 +109,38 @@ async function resolveVariationRows(userId: string, config: TemplateRow['variati
   }
 }
 
+/**
+ * Görselin kenarlarındaki düz koyu çerçeveyi (satır/sütunun %90'ından fazlası çok koyu) kırpar.
+ * En fazla kenarın %10'u kırpılır; çerçeve yoksa görsel aynen döner.
+ */
+async function cropDarkFrame(image: Buffer): Promise<Buffer> {
+  try {
+    const sharp = (await import('sharp')).default;
+    const { data, info } = await sharp(image).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const { width, height, channels } = info;
+    const isDark = (x: number, y: number) => {
+      const i = (y * width + x) * channels;
+      return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < 40;
+    };
+    const darkRow = (y: number) => { let n = 0; for (let x = 0; x < width; x++) if (isDark(x, y)) n++; return n / width > 0.9; };
+    const darkCol = (x: number) => { let n = 0; for (let y = 0; y < height; y++) if (isDark(x, y)) n++; return n / height > 0.9; };
+    const maxY = Math.floor(height * 0.1);
+    const maxX = Math.floor(width * 0.1);
+    let top = 0; while (top < maxY && darkRow(top)) top++;
+    let bottom = 0; while (bottom < maxY && darkRow(height - 1 - bottom)) bottom++;
+    let left = 0; while (left < maxX && darkCol(left)) left++;
+    let right = 0; while (right < maxX && darkCol(width - 1 - right)) right++;
+    if (top + bottom + left + right === 0) return image;
+    return await sharp(image)
+      .extract({ left, top, width: width - left - right, height: height - top - bottom })
+      .png()
+      .toBuffer();
+  } catch (error) {
+    console.warn('[Automation] Frame crop failed; using original image.', error instanceof Error ? error.message : error);
+    return image;
+  }
+}
+
 /** Saydam kenar boşluğunu kırpar ve tasarıma %3 nefes payı bırakır; kırpılamazsa orijinali döner. */
 async function trimTransparentMargin(png: Buffer): Promise<Buffer> {
   try {
@@ -228,7 +260,9 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   steps.backgroundRemoval = { status: 'running', startedAt: new Date().toISOString() };
   await persist({ steps });
 
-  const { pngBuffer: rawPng } = await removeGreenBackground(generatedImages[0].data, { threshold: 80, feather: 40 });
+  // Bazı modeller görselin etrafına koyu bir çerçeve ekler; yeşil kaldırılınca tasarımın etrafında kutu kalmasın.
+  const unframed = await cropDarkFrame(Buffer.from(generatedImages[0].data, 'base64'));
+  const { pngBuffer: rawPng } = await removeGreenBackground(unframed, { threshold: 80, feather: 40 });
   // Tasarımın etrafındaki saydam boşluk kırpılır; aksi halde tasarım baskı alanında küçük kalır.
   const pngBuffer = await trimTransparentMargin(rawPng);
   if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');

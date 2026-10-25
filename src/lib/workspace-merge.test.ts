@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterUnreferencedUrls, mergeGuestIntoAccount } from './workspace-merge';
+import { filterUnreferencedUrls, mergeGuestIntoAccount, threeWayMergeById } from './workspace-merge';
 import type { DesignItem, MockupFolder, MockupItem, RenderedMatch } from '@/types/pod';
 
 const mockup = (id: string, src: string, folderId?: string) =>
@@ -69,5 +69,23 @@ describe('filterUnreferencedUrls', () => {
 
   it('deduplicates and drops empty values', () => {
     expect(filterUnreferencedUrls(['/a', '/a', ''], {})).toEqual(['/a']);
+  });
+});
+
+describe('threeWayMergeById', () => {
+  const a = { id: 'a', v: 1 };
+  const b = { id: 'b', v: 1 };
+  it('keeps local edits and adds items created on the server (automation designs)', () => {
+    const merged = threeWayMergeById([a, b], [{ id: 'a', v: 2 }, b], [a, b, { id: 'auto', v: 1 }]);
+    expect(merged).toEqual([{ id: 'a', v: 2 }, b, { id: 'auto', v: 1 }]);
+  });
+  it('takes server edits for items untouched here and respects deletions on both sides', () => {
+    const merged = threeWayMergeById([a, b], [a], [{ id: 'a', v: 3 }, b]);
+    expect(merged).toEqual([{ id: 'a', v: 3 }]); // b burada silindi
+    expect(threeWayMergeById([a, b], [a, b], [a])).toEqual([a]); // b sunucuda silindi
+  });
+  it('lets the local edit win when both sides changed the same item and keeps local order', () => {
+    const merged = threeWayMergeById([a, b], [b, { id: 'a', v: 5 }], [{ id: 'a', v: 9 }, b]);
+    expect(merged).toEqual([b, { id: 'a', v: 5 }]);
   });
 });

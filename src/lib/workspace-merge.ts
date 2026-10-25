@@ -85,3 +85,50 @@ export function filterUnreferencedUrls(urls: Iterable<string>, remaining: Partia
   }
   return [...result];
 }
+
+const sameItem = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Üç yönlü birleştirme (ortak taban, bu cihaz, sunucu) — öğeler kimliğe göre eşleştirilir.
+ * - Yalnızca bir tarafta değişen öğe o taraftan alınır; iki tarafta da değiştiyse bu cihazdaki düzenleme kazanır.
+ * - Bu cihazda silinen öğe silinmiş kalır; sunucuda silinen öğe, burada düzenlenmediyse silinir.
+ * - Sunucuya eklenen öğeler (ör. otomasyonun ürettiği tasarım) eklenir; sıra bu cihazdaki sıradır.
+ */
+export function threeWayMergeById<T extends { id: string }>(base: T[], local: T[], server: T[]): T[] {
+  const baseById = new Map(base.map((item) => [item.id, item]));
+  const serverById = new Map(server.map((item) => [item.id, item]));
+  const localIds = new Set(local.map((item) => item.id));
+  const result: T[] = [];
+
+  for (const item of local) {
+    const before = baseById.get(item.id);
+    const remote = serverById.get(item.id);
+    if (!remote) {
+      // Sunucuda yok: sunucuda silindiyse ve burada değişmediyse düşer; yeni eklendiyse kalır.
+      if (before && sameItem(before, item)) continue;
+      result.push(item);
+      continue;
+    }
+    const changedHere = !before || !sameItem(before, item);
+    result.push(changedHere ? item : remote);
+  }
+  for (const item of server) {
+    if (localIds.has(item.id)) continue;
+    if (baseById.has(item.id)) continue; // bu cihazda silindi
+    result.push(item);
+  }
+  return result;
+}
+
+/** Çalışma alanı koleksiyonlarını üç yönlü birleştirir. */
+export function mergeWorkspaceChanges(
+  base: Pick<WorkspaceCollections, 'mockups' | 'designs' | 'folders'>,
+  local: Pick<WorkspaceCollections, 'mockups' | 'designs' | 'folders'>,
+  server: Pick<WorkspaceCollections, 'mockups' | 'designs' | 'folders'>,
+): Pick<WorkspaceCollections, 'mockups' | 'designs' | 'folders'> {
+  return {
+    mockups: threeWayMergeById(base.mockups, local.mockups, server.mockups),
+    designs: threeWayMergeById(base.designs, local.designs, server.designs),
+    folders: threeWayMergeById(base.folders, local.folders, server.folders),
+  };
+}

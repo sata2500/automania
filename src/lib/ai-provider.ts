@@ -149,7 +149,7 @@ async function generateImageGoogle(
   const client = getGoogleClient(config, config.imageModel);
 
   const promptWithBg = options.greenBackground
-    ? `${options.prompt}. The design must have a solid bright green (#00FF00) background, suitable for chroma key removal. No shadows or gradients on the background.`
+    ? `${options.prompt}. The design must have a solid bright green (#00FF00) background that fills the entire canvas edge to edge, suitable for chroma key removal. No border, frame, margin or vignette around the image, and no shadows or gradients on the background.`
     : options.prompt;
 
   // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
@@ -203,7 +203,7 @@ async function generateImageOpenRouter(
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
   const promptWithBg = options.greenBackground
-    ? `${options.prompt}. Solid bright green (#00FF00) background, chroma key ready, no shadows on background.`
+    ? `${options.prompt}. Solid bright green (#00FF00) background filling the whole canvas edge to edge, chroma key ready, no border or frame around the image, no shadows on background.`
     : options.prompt;
 
   const res = await fetch('https://openrouter.ai/api/v1/images', {
