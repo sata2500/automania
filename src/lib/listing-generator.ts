@@ -1,6 +1,6 @@
 import sql from '@/lib/db';
 import { DEFAULT_GENERATE_LISTING_PROMPT } from '@/lib/default-prompts';
-import { GoogleGenAI } from '@google/genai';
+import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
 import { loadSettingRows } from '@/lib/app-settings';
@@ -109,7 +109,6 @@ export async function generateListingContent(userId: string, input: GenerateList
   let activeAiProvider = 'openrouter';
   let dbApiKey = null;
   let dbReasoningModel = null;
-  let geminiApiKey = null;
   let dbGeminiReasoningModel = null;
   let customPrompt: string | null = null;
   
@@ -117,16 +116,15 @@ export async function generateListingContent(userId: string, input: GenerateList
     if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
     if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
     if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
-    if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
     if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
     if (row.setting_key === 'ai_prompt_generate_listing') customPrompt = row.setting_value;
   }
 
-  const apiKey = activeAiProvider === 'gemini' 
-    ? (geminiApiKey || process.env.GEMINI_API_KEY)
-    : (dbApiKey || process.env.OPENROUTER_API_KEY);
+  // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
+  const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
+  const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
 
-  if (!apiKey) {
+  if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
     throw new ListingGenerationError('Sistem API anahtarı (Admin) yapılandırılmamış.', 500);
   }
   
@@ -275,7 +273,7 @@ export async function generateListingContent(userId: string, input: GenerateList
   let content = '';
 
   if (activeAiProvider === 'gemini') {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = createGoogleClient(googleConnection!);
     const candidates = Array.from(new Set([
       seoModel,
       'gemini-3.8-flash',

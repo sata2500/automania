@@ -95,6 +95,15 @@ Uygulama ilanı her zaman önce taslak (draft) olarak oluşturur. Canlıya alma 
 
 Geliştirme ve CI ortamlarında bu bayrağı açmayın; testler yalnızca mock kullanır.
 
+## Google AI bağlantısı (AI Studio veya Google Cloud Vertex AI)
+
+Gemini, Imagen ve Veo çağrıları tek bir istemci fabrikasından (`src/lib/google-genai-client.ts`) geçer. Admin paneli › Yapay Zeka › "Google bağlantı yöntemi" bölümünden iki yöntemden biri seçilir:
+
+- **API anahtarı (AI Studio):** "Google Gemini API Key" alanı kullanılır.
+- **Google Cloud hizmet hesabı (Vertex AI):** Hizmet hesabı JSON anahtarı yüklenir; kullanım Google Cloud faturalandırma hesabından (ör. ücretsiz deneme kredisi) düşer. Projede Vertex AI API etkin olmalı ve hesaba "Vertex AI User" rolü verilmelidir. Anahtar yüklenirken Google'a bağlanılarak doğrulanır, `DATA_ENCRYPTION_KEY` ile şifreli saklanır ve tarayıcıya geri gönderilmez.
+
+Model seçim kutuları, aktif bağlantının erişebildiği güncel modelleri Google'dan dinamik olarak listeler (`GET /api/admin/google-cloud/models`).
+
 ## Zamanlanmış otomasyon
 
 Şablon zamanlamaları saat bazındadır ve `GET /api/cron/automation` uç noktası saatte bir çağrılmalıdır (`Authorization: Bearer <CRON_SECRET>`). Vercel Hobby planı yalnızca günlük cron desteklediğinden depo, saatlik bir GitHub Actions iş akışı içerir (`.github/workflows/scheduled-automation.yml`). Etkinleştirmek için repository secret olarak `AUTOMATION_APP_URL` ve `CRON_SECRET` ekleyin. `INTERNAL_API_TOKEN` tanımlıysa her çalıştırma ayrı bir fonksiyon çağrısında yürütülür.

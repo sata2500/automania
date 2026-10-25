@@ -31,6 +31,8 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { saveAppData, loadAppData } from '@/lib/storage-service';
 import { DEFAULT_ANALYZE_DESIGN_PROMPT, DEFAULT_GENERATE_LISTING_PROMPT, DEFAULT_GENERATE_DESIGN_PROMPT } from '@/lib/default-prompts';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { GoogleCloudConnectionCard, GoogleModelOptions } from './GoogleCloudConnection';
+import type { GoogleModelInfo } from '@/lib/google-cloud-credentials';
 
 export interface PromptVariable {
   tag: string;
@@ -310,6 +312,30 @@ export const AdminAiSettingsSection: React.FC = () => {
   const [geminiModelReasoning, setGeminiModelReasoning] = useState('');
   const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
   const [geminiModelVideo, setGeminiModelVideo] = useState('');
+  // Aktif Google bağlantısının (API anahtarı veya Vertex AI) Google'dan çekilen güncel model listesi
+  const [googleModels, setGoogleModels] = useState<GoogleModelInfo[] | null>(null);
+  const [googleModelsInfo, setGoogleModelsInfo] = useState<{ mode?: string; error?: string }>({});
+  const [isLoadingGoogleModels, setIsLoadingGoogleModels] = useState(false);
+
+  const fetchGoogleModels = async () => {
+    setIsLoadingGoogleModels(true);
+    try {
+      const res = await fetch('/api/admin/google-cloud/models');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && Array.isArray(data.models)) {
+        setGoogleModels(data.models);
+        setGoogleModelsInfo({ mode: data.mode });
+      } else {
+        setGoogleModels(null);
+        setGoogleModelsInfo({ error: data.error || 'Google model listesi alınamadı.' });
+      }
+    } catch {
+      setGoogleModels(null);
+      setGoogleModelsInfo({ error: 'Google model listesi alınamadı.' });
+    } finally {
+      setIsLoadingGoogleModels(false);
+    }
+  };
 
   // AI Prompts State
   const [promptAnalyzeDesign, setPromptAnalyzeDesign] = useState('');
@@ -713,7 +739,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                     />
                     <div>
                       <div className="text-xs font-bold text-slate-900 dark:text-white">Google Gemini Direkt</div>
-                      <div className="text-[10px] text-slate-500">Gemini 3.6 &amp; 2.5 Flash / Pro (Google AI API)</div>
+                      <div className="text-[10px] text-slate-500">Gemini, Imagen &amp; Veo (AI Studio API anahtarı veya Google Cloud Vertex AI)</div>
                     </div>
                   </label>
                 </div>
@@ -760,6 +786,9 @@ export const AdminAiSettingsSection: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Google bağlantı yöntemi: API anahtarı veya Google Cloud hizmet hesabı (Vertex AI) */}
+              <GoogleCloudConnectionCard onChanged={() => { void fetchGoogleModels(); }} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1024,6 +1053,26 @@ export const AdminAiSettingsSection: React.FC = () => {
                 </div>
               ) : (
                 /* Gemini 4-Tier Model Selectors */
+                <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <span className={googleModelsInfo.error ? 'text-amber-700 dark:text-amber-400' : ''}>
+                    {isLoadingGoogleModels
+                      ? 'Modeller Google\'dan çekiliyor…'
+                      : googleModels
+                        ? `${googleModels.length} model Google'dan güncel olarak listelendi (${googleModelsInfo.mode === 'vertex' ? 'Google Cloud · Vertex AI' : 'AI Studio API anahtarı'}).`
+                        : googleModelsInfo.error
+                          ? `Güncel liste alınamadı: ${googleModelsInfo.error} Varsayılan liste gösteriliyor.`
+                          : 'Varsayılan model listesi gösteriliyor.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { void fetchGoogleModels(); }}
+                    disabled={isLoadingGoogleModels}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 font-bold shrink-0 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingGoogleModels ? 'animate-spin' : ''}`} /> Modelleri Google&apos;dan yenile
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="p-4 bg-sky-50/50 dark:bg-sky-950/30 rounded-2xl border border-sky-100 dark:border-sky-900/50 flex flex-col justify-between space-y-3">
                     <div>
@@ -1037,6 +1086,9 @@ export const AdminAiSettingsSection: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
+                        {googleModels ? (
+                          <GoogleModelOptions models={googleModels} category="text" current={geminiModelVision} />
+                        ) : (
                         <optgroup label="Gemini 3 Serisi (Multimodal & Vision)">
                           <option value="gemini-3.8-flash">Gemini 3.8 Flash (En Yeni & En Zeki)</option>
                           <option value="gemini-3.7-flash">Gemini 3.7 Flash (Yüksek Hız & Çoklu Yetenek)</option>
@@ -1045,6 +1097,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                           <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Hızlı / 0.7s)</option>
                           <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Gelişmiş Mantık)</option>
                         </optgroup>
+                        )}
                       </select>
                     </div>
                     {geminiModelVision && (
@@ -1071,6 +1124,9 @@ export const AdminAiSettingsSection: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
+                        {googleModels ? (
+                          <GoogleModelOptions models={googleModels} category="text" current={geminiModelReasoning} />
+                        ) : (
                         <optgroup label="Gemini 3 Serisi (SEO & Metin Üretimi)">
                           <option value="gemini-3.8-flash">Gemini 3.8 Flash (En Yeni & Üstün Akıl Yürütme)</option>
                           <option value="gemini-3.7-flash">Gemini 3.7 Flash (Yüksek Hız & Ajan Desteği)</option>
@@ -1079,6 +1135,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                           <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite (Ultra Hızlı / 0.7s)</option>
                           <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview (Derin Mantık & Kod)</option>
                         </optgroup>
+                        )}
                       </select>
                     </div>
                     {geminiModelReasoning && (
@@ -1105,12 +1162,16 @@ export const AdminAiSettingsSection: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
+                        {googleModels ? (
+                          <GoogleModelOptions models={googleModels} category="image" current={geminiModelGeneration} />
+                        ) : (
                         <optgroup label="Google Görsel Modelleri (T2I)">
                           <option value="gemini-3.1-flash-image">Gemini 3.1 Flash Image (Nano Banana 2)</option>
                           <option value="gemini-3-pro-image">Gemini 3 Pro Image (Nano Banana 2 Pro)</option>
                           <option value="gemini-3.1-flash-lite-image">Gemini 3.1 Flash-Lite Image (Hızlı)</option>
                           <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
                         </optgroup>
+                        )}
                       </select>
                     </div>
                     {geminiModelGeneration && (
@@ -1137,11 +1198,15 @@ export const AdminAiSettingsSection: React.FC = () => {
                         className="w-full p-2.5 bg-white dark:bg-slate-900 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold"
                       >
                         <option value="">Seçiniz</option>
+                        {googleModels ? (
+                          <GoogleModelOptions models={googleModels} category="video" current={geminiModelVideo} />
+                        ) : (
                         <optgroup label="Google Veo Video Modelleri (T2V)">
                           <option value="veo-3.1-fast-generate-preview">Google Veo 3.1 Fast (Hız Odaklı)</option>
                           <option value="veo-3.1-generate-preview">Google Veo 3.1 (Yüksek Kalite)</option>
                           <option value="veo-3.1-lite-generate-preview">Google Veo 3.1 Lite (Ekonomik)</option>
                         </optgroup>
+                        )}
                       </select>
                     </div>
                     {geminiModelVideo && (
@@ -1155,6 +1220,7 @@ export const AdminAiSettingsSection: React.FC = () => {
                       </button>
                     )}
                   </div>
+                </div>
                 </div>
               )}
             </div>

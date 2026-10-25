@@ -4,6 +4,7 @@ export const SECRET_SETTING_KEYS = new Set([
   'etsy_keystring',
   'etsy_shared_secret',
   'scraping_api_key',
+  'gcp_service_account_json',
 ]);
 
 export function maskSettingValue(key: string, value: unknown): string {

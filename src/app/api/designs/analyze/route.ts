@@ -8,7 +8,7 @@ import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { GoogleGenAI } from '@google/genai';
+import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import type { EvaluatedKeyword } from '@/types/pod';
 import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
@@ -95,7 +95,6 @@ export async function POST(request: Request) {
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;
     let dbVisionModel = null;
-    let geminiApiKey = null;
     let dbGeminiVisionModel = null;
     let customPrompt: string | null = null;
     let etsyApiKey = process.env.ETSY_API_KEY;
@@ -108,7 +107,6 @@ export async function POST(request: Request) {
       if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
-      if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
       if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
       if (row.setting_key === 'ai_prompt_analyze_design') customPrompt = row.setting_value;
       if (row.setting_key === 'etsy_keystring' && row.setting_value) etsyApiKey = row.setting_value;
@@ -116,11 +114,11 @@ export async function POST(request: Request) {
       if (row.setting_key === 'scraping_api_key' && row.setting_value) scrapingApiKey = row.setting_value;
     }
 
-    const apiKey = activeAiProvider === 'gemini' 
-      ? (geminiApiKey || process.env.GEMINI_API_KEY)
-      : (dbApiKey || process.env.OPENROUTER_API_KEY);
+    // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
+    const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
+    const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
 
-    if (!apiKey) {
+    if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
       return NextResponse.json({ success: false, error: 'Sistem Vision AI API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
     }
 
@@ -188,7 +186,7 @@ export async function POST(request: Request) {
     let content = '';
 
     if (activeAiProvider === 'gemini') {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = createGoogleClient(googleConnection!);
       const candidates = Array.from(new Set([
         visionModel,
         'gemini-3.8-flash',

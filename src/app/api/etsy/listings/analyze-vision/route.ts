@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { GoogleGenAI } from '@google/genai';
+import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage } from '@/lib/media-source';
@@ -64,22 +64,20 @@ export async function POST(req: Request) {
     let activeAiProvider = 'openrouter';
     let dbApiKey = null;
     let dbVisionModel = null;
-    let geminiApiKey = null;
     let dbGeminiVisionModel = null;
 
     for (const row of settingsRows) {
       if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
       if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
       if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
-      if (row.setting_key === 'gemini_api_key') geminiApiKey = row.setting_value;
       if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
     }
 
-    const apiKey = activeAiProvider === 'gemini'
-      ? (geminiApiKey || process.env.GEMINI_API_KEY)
-      : (dbApiKey || process.env.OPENROUTER_API_KEY);
+    // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
+    const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
+    const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
 
-    if (!apiKey) {
+    if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
       return NextResponse.json({ success: false, error: 'Admin panelinde Vision AI anahtarı yapılandırılmamış.' }, { status: 500 });
     }
 
@@ -130,7 +128,7 @@ export async function POST(req: Request) {
         let rawAiContent = '';
 
         if (activeAiProvider === 'gemini') {
-          const ai = new GoogleGenAI({ apiKey });
+          const ai = createGoogleClient(googleConnection!);
           let geminiMimeType = mimeType.toLowerCase();
           if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(geminiMimeType)) {
             geminiMimeType = 'image/jpeg';

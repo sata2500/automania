@@ -16,7 +16,8 @@
  *  - Google Veo 3.1: client.models.generate_videos()  (Sadece Google)
  */
 
-import { GoogleGenAI } from '@google/genai';
+import type { GoogleGenAI } from '@google/genai';
+import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -25,8 +26,10 @@ export type AIProvider = 'google' | 'openrouter';
 export interface AIProviderConfig {
   /** Aktif provider */
   provider: AIProvider;
-  /** Google Gemini API Key */
+  /** Google Gemini API Key (yalnızca API anahtarı yönteminde; Veo dosya indirme için) */
   googleApiKey: string;
+  /** Google bağlantısı: API anahtarı veya Vertex AI hizmet hesabı (yapılandırılmamışsa null) */
+  googleConnection: GoogleConnection | null;
   /** OpenRouter API Key */
   openRouterApiKey: string;
   /** Görsel üretim modeli (provider'a göre) */
@@ -113,9 +116,12 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
     ? (settings['openrouter_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash')
     : (settings['gemini_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash');
 
+  const googleConnection = resolveGoogleConnection(settings);
+
   return {
     provider,
-    googleApiKey,
+    googleApiKey: googleConnection?.mode === 'api_key' ? googleConnection.apiKey : googleApiKey,
+    googleConnection,
     openRouterApiKey,
     imageModel,
     textModel,
@@ -126,8 +132,11 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
 
 // ─── Google Gemini Client ────────────────────────────────────────────────────
 
-function getGoogleClient(apiKey: string): GoogleGenAI {
-  return new GoogleGenAI({ apiKey });
+function getGoogleClient(config: AIProviderConfig, model?: string): GoogleGenAI {
+  if (!config.googleConnection) {
+    throw new Error('Google AI bağlantısı yapılandırılmamış. Admin panelinden Gemini API anahtarı veya Google Cloud hizmet hesabı ekleyin.');
+  }
+  return createGoogleClient(config.googleConnection, { model });
 }
 
 // ─── Görsel Üretimi ──────────────────────────────────────────────────────────
@@ -140,11 +149,26 @@ async function generateImageGoogle(
   config: AIProviderConfig,
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
-  const client = getGoogleClient(config.googleApiKey);
+  const client = getGoogleClient(config, config.imageModel);
 
   const promptWithBg = options.greenBackground
     ? `${options.prompt}. The design must have a solid bright green (#00FF00) background, suitable for chroma key removal. No shadows or gradients on the background.`
     : options.prompt;
+
+  // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
+  if (config.imageModel.startsWith('imagen')) {
+    const result = await client.models.generateImages({
+      model: config.imageModel,
+      prompt: promptWithBg,
+      config: { numberOfImages: options.numberOfImages ?? 1, aspectRatio: options.aspectRatio ?? '1:1' },
+    });
+    const imagenImages: GeneratedImage[] = (result.generatedImages ?? [])
+      .map((item) => item.image)
+      .filter((image): image is NonNullable<typeof image> & { imageBytes: string } => Boolean(image?.imageBytes))
+      .map((image) => ({ data: image.imageBytes, mimeType: image.mimeType || 'image/png' }));
+    if (imagenImages.length === 0) throw new Error('Imagen görsel üretimi başarısız: Yanıt boş (içerik filtresi olabilir).');
+    return imagenImages;
+  }
 
   const response = await client.models.generateContent({
     model: config.imageModel,
@@ -244,7 +268,7 @@ async function generateTextGoogle(
   config: AIProviderConfig,
   options: GenerateTextOptions
 ): Promise<string> {
-  const client = getGoogleClient(config.googleApiKey);
+  const client = getGoogleClient(config);
   const primaryModel = config.textModel || 'gemini-3.8-flash';
 
   // Model havuzu: Seçilen model hata verirse (503 / 429 / 404), güvenilir alternatiflere otomatik fallback
@@ -326,11 +350,7 @@ export async function generateVideo(
   config: AIProviderConfig,
   options: GenerateVideoOptions
 ): Promise<GeneratedVideo> {
-  if (!config.googleApiKey) {
-    throw new Error('Video üretimi için Google API Key gereklidir.');
-  }
-
-  const client = getGoogleClient(config.googleApiKey);
+  const client = getGoogleClient(config, config.videoModel);
 
   // Video üretimi başlat
   let operation = await client.models.generateVideos({

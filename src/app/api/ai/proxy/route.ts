@@ -2,6 +2,7 @@ import { loadSetting } from '@/lib/app-settings';
 import { NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
+import { createGoogleClient, describeGoogleError, loadGoogleConnection } from '@/lib/google-genai-client';
 
 const OPENROUTER_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/models';
 const OPENROUTER_CHAT_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -99,29 +100,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Geçersiz messages payload’ı.' }, { status: 400 });
     }
 
-    const apiKey = await getApiKey(provider);
-    if (!apiKey) {
-      return NextResponse.json({ success: false, error: `${provider === 'gemini' ? 'Gemini' : 'OpenRouter'} API anahtarı sunucuda yapılandırılmamış.` }, { status: 500 });
-    }
-
     if (provider === 'gemini') {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
+      // API anahtarı veya Vertex AI hizmet hesabı: admin panelinde seçilen Google bağlantısı kullanılır.
+      const connection = await loadGoogleConnection();
+      if (!connection) {
+        return NextResponse.json({ success: false, error: 'Google bağlantısı yapılandırılmamış (Gemini API anahtarı veya Google Cloud hizmet hesabı ekleyin).' }, { status: 500 });
+      }
       const modelId = typeof body.model === 'string' ? body.model : 'gemini-3.8-flash';
+      const ai = createGoogleClient(connection, { model: modelId });
       const role = body.role;
 
-      // Video modelleri için özel bilgi
+      // Video modelleri: ücretli bir video üretmeden, modelin bu bağlantıyla erişilebilir olduğu doğrulanır.
       if (role === 'video' || modelId.startsWith('veo-')) {
+        try {
+          await ai.models.get({ model: modelId });
+        } catch (videoErr: unknown) {
+          return NextResponse.json({ success: false, error: describeGoogleError(videoErr) }, { status: 502 });
+        }
         return NextResponse.json({
           success: true,
           data: {
             choices: [{
               message: {
-                content: `Google Veo Video Modeli (${modelId}) başarıyla doğrulandı.`
+                content: `Google Veo Video Modeli (${modelId}) bu bağlantıyla erişilebilir.`
               }
             }]
           }
         });
+      }
+
+      // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
+      if (modelId.startsWith('imagen')) {
+        try {
+          const userMsg = body.messages[body.messages.length - 1];
+          const promptText = typeof userMsg?.content === 'string' ? userMsg.content : 'A simple red circle icon';
+          const result = await ai.models.generateImages({ model: modelId, prompt: promptText, config: { numberOfImages: 1 } });
+          const image = result.generatedImages?.[0]?.image;
+          if (!image?.imageBytes) throw new Error('Imagen yanıtı boş (içerik filtresi olabilir).');
+          return NextResponse.json({
+            success: true,
+            data: { choices: [{ message: { content: `![Generated Image](data:${image.mimeType || 'image/png'};base64,${image.imageBytes})` } }] },
+          });
+        } catch (imgErr: unknown) {
+          return NextResponse.json({ success: false, error: describeGoogleError(imgErr) }, { status: 502 });
+        }
       }
 
       // Görsel Üretim Modeli (T2I)
@@ -158,10 +180,9 @@ export async function POST(req: Request) {
             });
           }
         } catch (imgErr: unknown) {
-          const msg = imgErr instanceof Error ? imgErr.message : String(imgErr);
           return NextResponse.json({
             success: false,
-            error: msg || 'Görsel üretimi başarısız oldu.'
+            error: describeGoogleError(imgErr) || 'Görsel üretimi başarısız oldu.'
           }, { status: 500 });
         }
       }
@@ -214,12 +235,16 @@ export async function POST(req: Request) {
           }
         });
       } catch (geminiErr: unknown) {
-        const msg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
         return NextResponse.json({
           success: false,
-          error: msg || 'Gemini model çağrısı başarısız oldu.'
+          error: describeGoogleError(geminiErr) || 'Gemini model çağrısı başarısız oldu.'
         }, { status: 500 });
       }
+    }
+
+    const apiKey = await getApiKey(provider);
+    if (!apiKey) {
+      return NextResponse.json({ success: false, error: 'OpenRouter API anahtarı sunucuda yapılandırılmamış.' }, { status: 500 });
     }
 
     const endpoint = allowedChatEndpoint(provider, body.endpoint);

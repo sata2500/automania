@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
 
     const config = await loadAIConfig();
 
-    if (!config.googleApiKey && config.provider === 'google') {
+    if (config.provider !== 'openrouter' && !config.googleConnection) {
       return NextResponse.json(
-        { error: 'Google API anahtarı yapılandırılmamış. Admin panelinden ayarlayın.' },
+        { error: 'Google AI bağlantısı yapılandırılmamış. Admin panelinden Gemini API anahtarı veya Google Cloud hizmet hesabı ekleyin.' },
         { status: 503 }
       );
     }

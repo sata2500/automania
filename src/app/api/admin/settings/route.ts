@@ -9,6 +9,8 @@ const ALLOWED_SETTING_KEYS = new Set([
   'active_ai_provider',
   'openrouter_api_key',
   'gemini_api_key',
+  'google_auth_mode',
+  'gcp_location',
   'etsy_keystring',
   'etsy_shared_secret',
   'scraping_provider',
