@@ -14,17 +14,20 @@ import type {
 import { buildFolderMockupConfig } from '@/lib/folder-template';
 import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
 
+// Video SEO metninden sonra üretilir: admin video prompt'u ürün başlığını ({{title}}) kullanabilir.
 export const AUTOMATION_STEP_ORDER: AutomationStepName[] = [
+  'nicheResearch',
   'designGeneration',
   'backgroundRemoval',
   'mockupRender',
-  'videoGeneration',
   'seoGeneration',
+  'videoGeneration',
   'listingCreation',
 ];
 
 /** Başarısız olsa da çalıştırmayı başarısız saymayan adımlar. */
-const OPTIONAL_STEPS = new Set<AutomationStepName>(['videoGeneration']);
+// Niş araştırması başarısız olursa şablondaki niş (yoksa genel bir konu) ile devam edilir.
+const OPTIONAL_STEPS = new Set<AutomationStepName>(['nicheResearch', 'videoGeneration']);
 
 export function isStepDone(status: string | undefined): boolean {
   return status === 'completed' || status === 'skipped' || status === 'failed';
@@ -32,7 +35,8 @@ export function isStepDone(status: string | undefined): boolean {
 
 /** Henüz bitmemiş ilk adım (yoksa null). */
 export function nextPendingStep(steps: Partial<AutomationRunSteps>): AutomationStepName | null {
-  return AUTOMATION_STEP_ORDER.find((name) => !isStepDone(steps[name]?.status)) ?? null;
+  // Niş araştırması adımı sonradan eklendi: bu adımı içermeyen eski çalıştırmalar onu atlar.
+  return AUTOMATION_STEP_ORDER.find((name) => (name === 'nicheResearch' && !steps[name] ? false : !isStepDone(steps[name]?.status))) ?? null;
 }
 
 /** Tüm adımlar bittiğinde çalıştırmanın durumu: zorunlu bir adım başarısızsa 'failed'. */
@@ -188,4 +192,53 @@ export function buildVideoPrompt(
     'No captions, no watermarks, no logos, no on-screen text.',
     notes ? `Additional direction: ${notes}` : '',
   ].filter(Boolean).join(' ');
+}
+
+/** Niş araştırmasının çıktısı (çalıştırma kaydında saklanır). */
+export type NicheResearchOutput = {
+  niche?: string;
+  targetAudience?: string;
+  style?: string;
+  designBrief?: string;
+  keywords?: string[];
+};
+
+/**
+ * Çalıştırmada kullanılacak SEO/tasarım ipuçları: otomatik modda araştırmanın bulduğu niş, kitle ve stil
+ * şablondaki değerlerin yerine geçer; ürün tipi ve şablon notları korunur.
+ */
+export function effectiveSeoHints(
+  hints: Partial<PodTemplateSeoHints> | null | undefined,
+  research: NicheResearchOutput | null | undefined,
+): PodTemplateSeoHints {
+  const base: PodTemplateSeoHints = {
+    productType: hints?.productType ?? '',
+    targetAudience: hints?.targetAudience ?? '',
+    customNotes: hints?.customNotes ?? '',
+    primaryNiche: hints?.primaryNiche ?? '',
+    nicheMode: hints?.nicheMode,
+    researchFocus: hints?.researchFocus,
+  };
+  if (!research?.niche) return base;
+  const notes = [research.style ? `Style: ${research.style}.` : '', research.designBrief ?? '', base.customNotes].filter(Boolean).join(' ');
+  return {
+    ...base,
+    primaryNiche: research.niche,
+    targetAudience: research.targetAudience || base.targetAudience,
+    customNotes: notes,
+  };
+}
+
+/** Admin panelindeki video prompt şablonunun değişkenlerini doldurur. */
+export function fillVideoPromptTemplate(
+  template: string,
+  values: { title: string; designPrompt: string; product: string; niche: string },
+): string {
+  return template
+    .replace(/\{\{title\}\}/g, values.title)
+    .replace(/\{\{designPrompt\}\}/g, values.designPrompt)
+    .replace(/\{\{userPrompt\}\}/g, values.designPrompt)
+    .replace(/\{\{product\}\}/g, values.product)
+    .replace(/\{\{niche\}\}/g, values.niche)
+    .replace(/\{\{selectedStyle\}\}/g, values.niche);
 }

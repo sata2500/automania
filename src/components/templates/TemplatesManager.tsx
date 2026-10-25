@@ -459,9 +459,9 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
                       {template.seoHints.productType}
                     </span>
                   )}
-                  {template.seoHints?.primaryNiche && (
+                  {(template.seoHints?.nicheMode === 'auto' || template.seoHints?.primaryNiche) && (
                     <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 text-[10px] font-semibold rounded-full border border-purple-200 dark:border-purple-500/30">
-                      {template.seoHints.primaryNiche}
+                      {template.seoHints?.nicheMode === 'auto' ? 'Niş: yapay zekâ seçer' : template.seoHints.primaryNiche}
                     </span>
                   )}
                   <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${

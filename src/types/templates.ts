@@ -59,6 +59,10 @@ export interface PodTemplateSeoHints {
   customNotes: string;
   /** Birincil niş (örn: "Funny Pet Quotes", "Vintage Retro") */
   primaryNiche: string;
+  /** 'auto': niş, hedef kitle ve stil her çalıştırmada yapay zekâ araştırmasıyla belirlenir */
+  nicheMode?: 'auto' | 'manual';
+  /** Otomatik modda araştırmayı yönlendiren genel çerçeve (isteğe bağlı, ör. "aile ve evcil hayvan esprileri") */
+  researchFocus?: string;
 }
 
 /** Otomasyonun Etsy'de açacağı taslak ilanın mağaza ayarları */
@@ -82,10 +86,11 @@ export type AutomationVideoStyle = 'mannequin' | 'flatlay' | 'lifestyle';
 
 /** Otomasyonun ürettiği tanıtım videosu ayarları */
 export interface AutomationVideoSettings {
-  /** Model kimliği; boşsa admin panelindeki video modeli kullanılır */
+  /** Videonun yönü: yatay (16:9) veya dikey (9:16). Video modelleri kare desteklemez. */
+  aspectRatio?: '16:9' | '9:16';
+  /** Eski kayıtlar: model artık admin panelinden okunur */
   model?: string;
   style?: AutomationVideoStyle;
-  /** Ek yönlendirme (isteğe bağlı) */
   notes?: string;
 }
 
@@ -156,6 +161,7 @@ export interface AutomationStepResult {
 
 /** Tüm otomasyon adımları */
 export interface AutomationRunSteps {
+  nicheResearch?: AutomationStepResult;
   designGeneration: AutomationStepResult;
   backgroundRemoval: AutomationStepResult;
   mockupRender: AutomationStepResult;
@@ -172,6 +178,9 @@ export interface GeneratedSeoData {
   taxonomyId: number | null;
   taxonomyProperties: Record<string, unknown>;
   keywords: string[];
+  /** Yapay zekânın mağaza bölümleri arasından seçtiği bölüm (yoksa null) */
+  shopSectionId?: string | null;
+  shopSectionTitle?: string | null;
 }
 
 /** Tam otomasyon çalıştırma kaydı */

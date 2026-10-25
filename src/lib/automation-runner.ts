@@ -26,12 +26,16 @@ import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
+import { researchNiche } from '@/lib/niche-research';
 import {
   AUTOMATION_STEP_ORDER,
   buildAutomationKeywords,
   buildDesignPrompt,
   buildVideoPrompt,
   deriveRunOutcome,
+  fillVideoPromptTemplate,
+  effectiveSeoHints,
+  type NicheResearchOutput,
   isStepDone,
   needsDarkGarmentDesign,
   nextPendingStep,
@@ -63,6 +67,9 @@ type RunRow = typeof automationRuns.$inferSelect;
 type TemplateRow = typeof podTemplates.$inferSelect;
 
 class StepSkipped extends Error {}
+
+/** Otomasyonun ürettiği tasarımların Tasarımlar sekmesindeki klasörü. */
+export const AUTOMATION_DESIGN_FOLDER = { id: 'design-folder-automation', name: 'Otomasyon Tasarımları', isCustom: true, type: 'design' as const };
 
 async function loadPromptSetting(key: string): Promise<string> {
   try {
@@ -140,6 +147,26 @@ async function persistGeneratedVideo(userId: string, runId: string, uri: string,
   return upload.url;
 }
 
+/** Etsy mağaza bölümleri (bağlantı yoksa veya alınamazsa boş liste). */
+async function loadShopSections(userId: string): Promise<Array<{ shop_section_id: number | string; title: string }>> {
+  try {
+    const token = await getValidEtsyToken(userId);
+    if (!token.success || !token.access_token || !token.shop_id) return [];
+    const res = await fetch(`https://openapi.etsy.com/v3/application/shops/${token.shop_id}/sections`, {
+      headers: {
+        'x-api-key': `${token.api_key || process.env.ETSY_API_KEY}:${token.shared_secret || process.env.ETSY_SHARED_SECRET || ''}`,
+        Authorization: `Bearer ${token.access_token}`,
+      },
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { results?: Array<{ shop_section_id: number; title: string }> };
+    return (data.results ?? []).filter((s) => s.title);
+  } catch (error) {
+    console.warn('[Automation] Shop sections could not be loaded', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 /** Havuzdan şablonun nişiyle ilgili, Etsy verisi olan anahtar kelimeler. */
 async function loadRelatedPoolKeywords(terms: string[]): Promise<string[]> {
   if (terms.length === 0) return [];
@@ -168,7 +195,14 @@ type StepContext = {
   deadline: number;
   /** Bu çağrıda üretilen ve bir sonraki adımın kullanacağı tasarım (yeniden indirmeyi önler) */
   designPng?: Buffer;
+  /** Çalıştırmanın adım kayıtları (niş araştırması çıktısı buradan okunur) */
+  steps?: AutomationRunSteps;
 };
+
+/** Bu çalıştırmanın tasarım/SEO ipuçları: otomatik modda niş araştırmasının sonucu kullanılır. */
+function runHints(ctx: StepContext) {
+  return effectiveSeoHints(ctx.template.seoHints, ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined);
+}
 
 type StepResult = { patch?: Partial<RunRow>; output?: Record<string, unknown>; skipped?: string; warning?: string };
 
@@ -179,11 +213,12 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
 
   // Aynı şablonun çalıştırmaları farklı bir yaratıcı yönle başlar (kopya tasarımları önler).
   const seed = Array.from(runId).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  const basePrompt = buildDesignPrompt(template.seoHints, seed);
+  const hints = runHints(ctx);
+  const basePrompt = buildDesignPrompt(hints, seed);
   const finalPrompt = systemPromptTemplate.trim()
     ? systemPromptTemplate
         .replace(/\{\{userPrompt\}\}/g, basePrompt)
-        .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '')
+        .replace(/\{\{selectedStyle\}\}/g, hints.primaryNiche || '')
     : basePrompt;
 
   const generatedImages = await generateImage(config, { prompt: finalPrompt, greenBackground: true });
@@ -201,7 +236,8 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
 
   const newDesign: DesignItem = {
     id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    name: `Auto: ${template.name}`,
+    name: `${hints.primaryNiche || template.name} · ${new Date().toLocaleDateString('tr-TR')}`,
+    folderId: AUTOMATION_DESIGN_FOLDER.id,
     src: uploadResult.url,
     width: 1024,
     height: 1024,
@@ -214,13 +250,17 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   };
 
   // Atomik ekleme: eşzamanlı çalıştırmalar birbirinin tasarımını silmez; updated_at değiştiği için
-  // açık istemciler yeni tasarımı senkronla görür.
+  // açık istemciler yeni tasarımı senkronla görür. Tasarımlar sekmesinde "Otomasyon Tasarımları"
+  // klasöründe toplanır (klasör yoksa oluşturulur).
+  const folderJson = JSON.stringify([AUTOMATION_DESIGN_FOLDER]);
   await db.insert(userWorkspaces)
-    .values({ userId, designs: [newDesign], updatedAt: new Date() })
+    .values({ userId, designs: [newDesign], folders: [AUTOMATION_DESIGN_FOLDER], updatedAt: new Date() })
     .onConflictDoUpdate({
       target: userWorkspaces.userId,
       set: {
         designs: drizzleSql`COALESCE(${userWorkspaces.designs}, '[]'::jsonb) || ${JSON.stringify([newDesign])}::jsonb`,
+        folders: drizzleSql`CASE WHEN COALESCE(${userWorkspaces.folders}, '[]'::jsonb) @> ${JSON.stringify([{ id: AUTOMATION_DESIGN_FOLDER.id }])}::jsonb
+          THEN ${userWorkspaces.folders} ELSE COALESCE(${userWorkspaces.folders}, '[]'::jsonb) || ${folderJson}::jsonb END`,
         updatedAt: new Date(),
       },
     });
@@ -229,6 +269,27 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   steps.backgroundRemoval = { ...steps.backgroundRemoval, status: 'completed', completedAt: new Date().toISOString() };
   ctx.run = { ...ctx.run, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url };
   await persist({ steps, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url });
+}
+
+async function runNicheResearch(ctx: StepContext): Promise<StepResult> {
+  const { template, userId, runId } = ctx;
+  const hints = template.seoHints;
+  if (hints?.nicheMode !== 'auto') throw new StepSkipped('Tasarım konusu şablonda belirlendi.');
+  const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
+  let categoryPath: string | null = null;
+  if (taxonomyId) {
+    const rows = await sql`SELECT path, name FROM etsy_taxonomy_cache WHERE id = ${taxonomyId} LIMIT 1`.catch(() => []);
+    categoryPath = rows[0] ? String(rows[0].path || rows[0].name) : null;
+  }
+  const result = await researchNiche({
+    userId,
+    templateId: template.id,
+    productType: hints?.productType || 'T-shirt',
+    categoryPath,
+    focus: hints?.researchFocus,
+  });
+  console.log('[Automation] Niche research', { runId, niche: result.niche, searchedWeb: result.searchedWeb });
+  return { output: { ...result } };
 }
 
 async function runMockupRender(ctx: StepContext): Promise<StepResult> {
@@ -297,18 +358,19 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
   const config = await loadAIConfig();
   const { generateVideo, isOmniVideoModel } = await import('@/lib/ai-provider');
   const videoSettings = schedule.video;
+  const hints = runHints(ctx);
+  const seo = ctx.run.generatedSeo as GeneratedSeoData | null;
 
-  let prompt: string;
-  if (videoSettings) {
-    prompt = buildVideoPrompt(videoSettings, template.seoHints);
-  } else {
-    // Eski şablonlar: admin panelindeki video prompt'u
-    const basePrompt = buildDesignPrompt(template.seoHints, 0);
-    const videoPromptTemplate = (await loadPromptSetting('ai_prompt_generate_video')) || 'Create a cinematic showcase video for a t-shirt.';
-    prompt = videoPromptTemplate
-      .replace(/\{\{userPrompt\}\}/g, basePrompt)
-      .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '');
-  }
+  // Talimat admin panelindeki video prompt'udur (boşsa gerçekçi ürün tanıtımı varsayılanı).
+  const adminTemplate = (await loadPromptSetting('ai_prompt_generate_video')).trim();
+  const prompt = adminTemplate
+    ? fillVideoPromptTemplate(adminTemplate, {
+        title: seo?.title || hints.primaryNiche || template.name,
+        designPrompt: String((ctx.steps?.designGeneration?.output as { prompt?: unknown } | undefined)?.prompt || buildDesignPrompt(hints, 0)),
+        product: hints.productType || 'T-shirt',
+        niche: hints.primaryNiche || '',
+      })
+    : buildVideoPrompt({ style: 'mannequin' }, hints);
 
   // Referans görsel: tasarımın basıldığı ilk mockup — video bu ürünü gösterir.
   const firstMockupUrl = ((ctx.run.generatedMockupUrls as string[] | null) ?? [])[0];
@@ -321,17 +383,19 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
     }
   }
 
-  const model = videoSettings?.model || config.videoModel;
+  // Model admin panelinden seçilir; otomasyon yalnızca videonun yönünü belirler.
+  const model = config.videoModel;
+  const aspectRatio = videoSettings?.aspectRatio === '9:16' ? '9:16' : '16:9';
   let generated;
   try {
-    generated = await generateVideo(config, { prompt, model, image, maxWaitMs: VIDEO_MAX_WAIT_MS });
+    generated = await generateVideo(config, { prompt, model, image, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
   } catch (error) {
     // Omni Flash: Gemini API'de GA adı, Vertex'te önizleme adı geçerli olabilir; diğeri denenir.
     const alternate = isOmniVideoModel(model) && /NOT_FOUND|404|not found|not supported/i.test(error instanceof Error ? error.message : '')
       ? (model.endsWith('-preview') ? model.replace(/-preview$/, '') : `${model}-preview`)
       : null;
     if (!alternate) throw error;
-    generated = await generateVideo(config, { prompt, model: alternate, image, maxWaitMs: VIDEO_MAX_WAIT_MS });
+    generated = await generateVideo(config, { prompt, model: alternate, image, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
   }
   const url = await persistGeneratedVideo(userId, runId, generated.uri, config.googleApiKey);
   return { patch: { generatedVideoUrl: url }, output: { source: 'ai', model, referenceImage: Boolean(image) } };
@@ -340,14 +404,18 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
 async function runSeo(ctx: StepContext): Promise<StepResult> {
   const { template, userId, run } = ctx;
   if (template.automationSchedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: SEO ve ilan adımları kapalı.');
-  const hints = template.seoHints;
+  const hints = runHints(ctx);
+  const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
   const poolKeywords = await loadRelatedPoolKeywords(topicSearchTerms(hints));
-  const keywords = buildAutomationKeywords(hints, poolKeywords);
+  // Araştırmanın önerdiği arama ifadeleri havuz kelimelerinden önce gelir.
+  const keywords = buildAutomationKeywords(hints, [...(research?.keywords ?? []), ...poolKeywords]);
   if (keywords.length === 0) throw new StepSkipped('Şablonda niş veya hedef kitle bilgisi yok; SEO üretilemedi.');
 
   const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignPrompt(hints, 0));
   const subject = detectPrimarySubject(`${hints?.primaryNiche || ''} ${designPrompt}`);
   const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
+  // Mağaza bölümü elle seçilmediyse yapay zekâ mağazadaki bölümlerden en uygununu seçer.
+  const shopSections = template.automationSchedule?.etsy?.shopSectionId ? [] : await loadShopSections(userId);
   const result = await generateListingContent(userId, {
     designDescription: designPrompt,
     keywords,
@@ -355,8 +423,10 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     userNotes: hints?.customNotes || undefined,
     primarySubject: subject?.subject || hints?.primaryNiche || undefined,
     taxonomyId,
+    shopSections: shopSections.length > 0 ? shopSections : undefined,
   });
-  const listing = result.listing as { title: string; description: string; selectedTags: string[] };
+  const listing = result.listing as { title: string; description: string; selectedTags: string[]; shop_section_id?: unknown };
+  const chosenSection = shopSections.find((s) => String(s.shop_section_id) === String(listing.shop_section_id ?? ''));
   const seo: GeneratedSeoData = {
     title: listing.title,
     description: listing.description,
@@ -364,8 +434,10 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     taxonomyId: taxonomyId ?? null,
     taxonomyProperties: {},
     keywords,
+    shopSectionId: chosenSection ? String(chosenSection.shop_section_id) : null,
+    shopSectionTitle: chosenSection?.title ?? null,
   };
-  return { patch: { generatedSeo: seo }, output: { model: result.modelUsed, tagCount: seo.tags.length } };
+  return { patch: { generatedSeo: seo }, output: { model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null } };
 }
 
 async function runListing(ctx: StepContext): Promise<StepResult> {
@@ -418,7 +490,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
     shipping_profile_id: etsy.shippingProfileId,
     readiness_state_id: etsy.readinessStateId,
     return_policy_id: etsy.returnPolicyId,
-    shop_section_id: etsy.shopSectionId,
+    shop_section_id: etsy.shopSectionId || seo.shopSectionId || undefined,
     variations,
     images: media,
   });
@@ -439,6 +511,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
 }
 
 const STEP_RUNNERS: Partial<Record<AutomationStepName, (ctx: StepContext) => Promise<StepResult>>> = {
+  nicheResearch: runNicheResearch,
   mockupRender: runMockupRender,
   videoGeneration: runVideo,
   seoGeneration: runSeo,
@@ -468,8 +541,8 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
     .returning();
   if (claimed.length === 0) return { ok: false, runId, reason: 'not_pending' };
 
-  const ctx: StepContext = { run: claimed[0], template, userId, runId, deadline: Date.now() + INVOCATION_BUDGET_MS };
   const steps = { ...(claimed[0].steps as AutomationRunSteps) };
+  const ctx: StepContext = { run: claimed[0], template, userId, runId, deadline: Date.now() + INVOCATION_BUDGET_MS, steps };
   const persist = async (patch: Partial<RunRow>) => {
     await db.update(automationRuns).set({ ...patch, updatedAt: new Date() }).where(eq(automationRuns.id, runId));
     ctx.run = { ...ctx.run, ...patch };
@@ -606,6 +679,7 @@ export async function cancelAutomationRun(runId: string, userId: string): Promis
 }
 
 const INITIAL_STEPS: AutomationRunSteps = {
+  nicheResearch: { status: 'pending' },
   designGeneration: { status: 'pending' },
   backgroundRemoval: { status: 'pending' },
   mockupRender: { status: 'pending' },

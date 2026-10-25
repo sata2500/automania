@@ -175,13 +175,18 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
                   {options.returnPolicies.map((p) => <option key={p.return_policy_id} value={String(p.return_policy_id)}>{formatReturnPolicy(p)}</option>)}
                 </select>
               </div>
-              <div>
+              {!storeOnly && <div>
                 <label className={labelClass} htmlFor="tpl-section">Mağaza bölümü</label>
                 <select id="tpl-section" className={selectClass} value={etsy.shopSectionId || ''} onChange={(e) => updateEtsy({ shopSectionId: e.target.value || undefined })}>
                   <option value="">Bölüm yok</option>
                   {options.sections.map((s) => <option key={s.shop_section_id} value={String(s.shop_section_id)}>{s.title}</option>)}
                 </select>
-              </div>
+              </div>}
+              {storeOnly && (
+                <p className="sm:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  Mağaza bölümü her ilan için, ürünün konusuna göre yapay zekâ tarafından mağazanızdaki bölümler arasından seçilir.
+                </p>
+              )}
             </div>
           )}
 

@@ -8,6 +8,7 @@ import { AUTOMATION_STEP_ORDER } from '@/lib/automation-plan';
 import { Spinner } from '@/components/common/Spinner';
 
 export const STEP_LABELS: Record<AutomationStepName, string> = {
+  nicheResearch: 'Niş araştırması',
   designGeneration: 'Tasarım üretimi',
   backgroundRemoval: 'Arka plan kaldırma',
   mockupRender: 'Mockup oluşturma',
@@ -38,6 +39,15 @@ export function getRunWarnings(run: AutomationRun): string[] {
     .filter((warning): warning is string => typeof warning === 'string' && warning.length > 0);
 }
 
+type ResearchSummary = {
+  niche?: string;
+  occasion?: string | null;
+  targetAudience?: string;
+  style?: string;
+  reasoning?: string;
+  sources?: Array<{ title: string; url: string }>;
+};
+
 function StepIcon({ status }: { status: AutomationStepResult['status'] }) {
   if (status === 'completed') return <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" aria-label="Tamamlandı" />;
   if (status === 'failed') return <XCircle className="w-4 h-4 text-red-500 shrink-0" aria-label="Başarısız" />;
@@ -54,6 +64,7 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
   isCancelling?: boolean;
 }) {
   const seo = run.generatedSeo as GeneratedSeoData | null;
+  const research = run.steps?.nicheResearch?.output as ResearchSummary | undefined;
   const listingUrl = getRunListingUrl(run);
   const warnings = getRunWarnings(run);
   const isActive = run.status === 'pending' || run.status === 'running';
@@ -99,6 +110,33 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
             </div>
           )}
 
+          {/* Niş araştırması: seçilen konu ve nedeni */}
+          {research?.niche && (
+            <section aria-label="Niş araştırması" className="rounded-xl border border-violet-200 dark:border-violet-500/30 bg-violet-50 dark:bg-violet-500/10 p-3 space-y-1.5">
+              <h3 className="text-xs font-bold text-violet-800 dark:text-violet-300">
+                Seçilen niş: {research.niche}{research.occasion ? ` · ${research.occasion}` : ''}
+              </h3>
+              {(research.targetAudience || research.style) && (
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  {research.targetAudience && <>Hedef kitle: <strong>{research.targetAudience}</strong></>}
+                  {research.targetAudience && research.style && ' · '}
+                  {research.style && <>Stil: <strong>{research.style}</strong></>}
+                </p>
+              )}
+              {research.reasoning && <p className="text-[11px] text-slate-600 dark:text-slate-300">{research.reasoning}</p>}
+              {(research.sources?.length ?? 0) > 0 && (
+                <details className="text-[11px] text-slate-600 dark:text-slate-300">
+                  <summary className="cursor-pointer font-semibold">Web kaynakları ({research.sources!.length})</summary>
+                  <ul className="mt-1 space-y-0.5 list-disc pl-4">
+                    {research.sources!.map((source) => (
+                      <li key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer" className="underline break-all">{source.title || source.url}</a></li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </section>
+          )}
+
           {/* Çıktılar */}
           {(run.generatedDesignUrl || (run.generatedMockupUrls?.length ?? 0) > 0) && (
             <section aria-label="Üretilen görseller" className="space-y-2">
@@ -125,6 +163,7 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
             <section aria-label="SEO metni" className="space-y-1.5">
               <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">SEO metni</h3>
               <p className="text-sm font-semibold text-slate-900 dark:text-white">{seo.title}</p>
+              {seo.shopSectionTitle && <p className="text-[11px] text-slate-500 dark:text-slate-400">Mağaza bölümü: <strong>{seo.shopSectionTitle}</strong></p>}
               <div className="flex flex-wrap gap-1">
                 {(seo.tags ?? []).map((tag) => (
                   <span key={tag} className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300">{tag}</span>

@@ -11,11 +11,11 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Layers, Package, Palette, Rocket, Save, Store, Video, X,
+  AlertTriangle, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Layers, Package, Palette, PenLine, Rocket, Save, Sparkles, Store, Video, X,
 } from 'lucide-react';
 import type { EtsyVariationTemplate, MockupFolder, MockupItem } from '@/types/pod';
 import type {
-  AutomationVideoStyle, PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
+  PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
 } from '@/types/templates';
 import { buildFolderMockupConfig, variationConfigFromRows } from '@/lib/folder-template';
 import { saveTemplate } from '@/lib/templates-client';
@@ -24,6 +24,7 @@ import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
 import { ScheduleSection } from './sections/ScheduleSection';
 import { DEFAULT_ETSY_LISTING_SETTINGS, EtsyListingSection, getEtsyListingSettingsErrors } from './sections/EtsyListingSection';
+import { CategoryPicker, type TaxonomyOption } from './sections/CategoryPicker';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 const STEPS: { label: string; icon: React.ElementType }[] = [
@@ -34,19 +35,11 @@ const STEPS: { label: string; icon: React.ElementType }[] = [
   { label: 'Etsy', icon: Store },
 ];
 
-/** Video modeli seçenekleri: Omni Flash gerçekçi ürün çekimi, Veo daha sinematik. */
-export const VIDEO_MODEL_CHOICES = [
-  { id: 'gemini-omni-1.1-flash', label: 'Gemini Omni Flash', desc: 'Gerçekçi ürün tanıtımı (önerilen)' },
-  { id: 'veo-3.1-fast-generate-001', label: 'Veo 3.1 Fast', desc: 'Daha sinematik görüntü' },
-] as const;
-
-const VIDEO_STYLES: { id: AutomationVideoStyle; label: string; desc: string }[] = [
-  { id: 'mannequin', label: 'Cansız manken', desc: 'Görünmez manken üzerinde, farklı açılardan' },
-  { id: 'flatlay', label: 'Düz zemin', desc: 'Masa üstünde yakın çekim' },
-  { id: 'lifestyle', label: 'Model üzerinde', desc: 'Günlük ortamda giyilmiş' },
+/** Video modelleri (Veo, Omni Flash) yalnızca yatay ve dikey üretir; kare desteklenmez. */
+const VIDEO_ASPECTS = [
+  { id: '16:9' as const, label: 'Yatay', desc: '16:9 — Etsy ilan galerisi için' },
+  { id: '9:16' as const, label: 'Dikey', desc: '9:16 — Reels / Shorts / TikTok için' },
 ];
-
-type TaxonomyOption = { id: number; name: string; path: string | null };
 
 const DEFAULT_SCHEDULE: PodTemplateAutomationSchedule = {
   enabled: true,
@@ -57,7 +50,7 @@ const DEFAULT_SCHEDULE: PodTemplateAutomationSchedule = {
   publishMode: 'draft',
   createListing: true,
   generateVideo: true,
-  video: { model: VIDEO_MODEL_CHOICES[0].id, style: 'mannequin' },
+  video: { aspectRatio: '16:9' },
   etsy: DEFAULT_ETSY_LISTING_SETTINGS,
 };
 
@@ -104,7 +97,11 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
   const [variationSourceId, setVariationSourceId] = useState<string>(template?.variationConfig?.sourceTemplateId ?? '');
   const [fixedPrice, setFixedPrice] = useState<number>(savedEtsy.price);
 
-  // Tasarım
+  // Tasarım: yeni otomasyonlarda konu yapay zekâ araştırmasıyla belirlenir.
+  const [nicheMode, setNicheMode] = useState<'auto' | 'manual'>(
+    template?.seoHints?.nicheMode ?? (template?.seoHints?.primaryNiche ? 'manual' : 'auto'),
+  );
+  const [researchFocus, setResearchFocus] = useState(template?.seoHints?.researchFocus ?? '');
   const [niche, setNiche] = useState(template?.seoHints?.primaryNiche ?? '');
   const [audience, setAudience] = useState(template?.seoHints?.targetAudience ?? '');
   const [notes, setNotes] = useState(template?.seoHints?.customNotes ?? '');
@@ -115,7 +112,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
     ...template?.automationSchedule,
     createListing: true,
     publishMode: 'draft',
-    video: { ...DEFAULT_SCHEDULE.video, ...template?.automationSchedule?.video },
+    video: { aspectRatio: template?.automationSchedule?.video?.aspectRatio ?? '16:9' },
     etsy: savedEtsy,
   }));
   const video = schedule.video ?? {};
@@ -167,7 +164,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
       if (!variationSourceId && !(fixedPrice >= 0.2)) errors.push('Varyasyon şablonu seçin veya en az 0,20 fiyat girin.');
       return errors;
     }
-    if (s === 1 && !niche.trim()) return ['Tasarım konusunu yazın.'];
+    if (s === 1 && nicheMode === 'manual' && !niche.trim()) return ['Tasarım konusunu yazın veya konuyu yapay zekâya bırakın.'];
     return [];
   };
   const currentErrors = stepErrors(step);
@@ -183,16 +180,19 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
       mockupConfig: { ...buildFolderMockupConfig(folderId, mockups), fabricType: 'all' },
       variationConfig,
       seoHints: {
-        primaryNiche: niche.trim(),
-        targetAudience: audience.trim(),
-        customNotes: notes.trim(),
+        primaryNiche: nicheMode === 'manual' ? niche.trim() : '',
+        targetAudience: nicheMode === 'manual' ? audience.trim() : '',
+        customNotes: nicheMode === 'manual' ? notes.trim() : '',
         productType: productTypeFromCategory(category?.name),
+        nicheMode,
+        researchFocus: nicheMode === 'auto' ? researchFocus.trim() : '',
       },
       automationSchedule: {
         ...schedule,
         createListing: true,
         publishMode: 'draft',
-        etsy: { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy, taxonomyId, price: variationSummary?.min || fixedPrice },
+        // Mağaza bölümü her ilan için yapay zekâ tarafından seçilir.
+        etsy: { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy, shopSectionId: undefined, taxonomyId, price: variationSummary?.min || fixedPrice },
       },
       isActive: template?.isActive ?? true,
     };
@@ -284,6 +284,11 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
         <div className="flex-1 overflow-y-auto px-5 py-2 space-y-5">
           {step === 0 && (
             <>
+              <div>
+                <label className={labelClass} htmlFor="aw-name">Otomasyon adı</label>
+                <input id="aw-name" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder={folder?.name || 'Ör. Erkek tişört — kedi temalı'} />
+              </div>
+
               {!fixedFolderId && (
                 <div>
                   <label className={labelClass} htmlFor="aw-folder">Mockup klasörü</label>
@@ -327,10 +332,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 {categories === null ? (
                   <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Kategoriler yükleniyor…</div>
                 ) : categories.length > 0 ? (
-                  <select id="aw-category" className={inputClass} value={categories.some((c) => c.id === taxonomyId) ? String(taxonomyId) : ''} onChange={(e) => setTaxonomyId(Number(e.target.value))}>
-                    <option value="">Kategori seçin…</option>
-                    {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.path || c.name}</option>)}
-                  </select>
+                  <CategoryPicker id="aw-category" categories={categories} value={taxonomyId} onChange={setTaxonomyId} />
                 ) : (
                   <>
                     <input id="aw-category" type="number" min={1} className={inputClass} value={taxonomyId || ''} onChange={(e) => setTaxonomyId(Number(e.target.value) || 0)} placeholder="Kategori kimliği (ör. 482 T-shirt)" />
@@ -363,28 +365,59 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 )}
               </div>
 
-              <div>
-                <label className={labelClass} htmlFor="aw-name">Otomasyon adı</label>
-                <input id="aw-name" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder={folder?.name || 'Ör. Erkek tişört — kedi temalı'} />
-              </div>
             </>
           )}
 
           {step === 1 && (
             <>
-              <div>
-                <label className={labelClass} htmlFor="aw-niche">Tasarım konusu / niş</label>
-                <input id="aw-niche" className={inputClass} value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Ör. funny cat mom quotes, retro camping, teacher appreciation" />
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Her çalıştırmada bu konuda yeni ve farklı bir tasarım üretilir; başlık, açıklama ve 13 etiket de bu konuya göre yazılır.</p>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="aw-audience">Hedef kitle (isteğe bağlı)</label>
-                <input id="aw-audience" className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Ör. cat moms, dog lovers, nurses" />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="aw-notes">Stil ve ek istekler (isteğe bağlı)</label>
-                <textarea id="aw-notes" rows={3} className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ör. vintage distressed look, en fazla 3 renk, metin İngilizce" />
-              </div>
+              <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <legend className={labelClass}>Tasarım konusu</legend>
+                {([
+                  { id: 'auto' as const, icon: Sparkles, label: 'Yapay zekâ belirlesin', desc: 'Her çalıştırmada trendleri araştırıp konuyu, kitleyi ve stili kendisi seçer (önerilen)' },
+                  { id: 'manual' as const, icon: PenLine, label: 'Konuyu ben belirleyeyim', desc: 'Her çalıştırma yazdığınız konuda yeni bir tasarım üretir' },
+                ]).map(({ id, icon: Icon, label, desc }) => (
+                  <button key={id} type="button" onClick={() => setNicheMode(id)} aria-pressed={nicheMode === id}
+                    className={`text-left p-3 rounded-xl border-2 transition-colors ${nicheMode === id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-white"><Icon className="w-4 h-4 text-purple-500" />{label}</span>
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{desc}</span>
+                  </button>
+                ))}
+              </fieldset>
+
+              {nicheMode === 'auto' ? (
+                <>
+                  <div className="rounded-2xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                    <p className="font-bold text-violet-800 dark:text-violet-300">Yapay zekâ her çalıştırmada şunlara bakar:</p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li>Önümüzdeki 6-10 haftadaki ABD özel günleri (ör. Cadılar Bayramı, Şükran Günü, Noel)</li>
+                      <li>Mağazanızda en çok favorilenen ve görüntülenen ürünler</li>
+                      <li>Kelime havuzundaki Etsy arama verileri ve rekabet</li>
+                      <li>Web araması açıksa güncel trendler, Pinterest ve Google Trends sinyalleri</li>
+                      <li>Bu otomasyonun son nişleri (aynı konuyu tekrarlamaz)</li>
+                    </ul>
+                    <p>Seçtiği niş ve nedeni her çalıştırmanın &quot;Ayrıntılar&quot; ekranında görünür. Web araması ve araştırma modeli admin panelinden yönetilir.</p>
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="aw-focus">Genel yön (isteğe bağlı)</label>
+                    <input id="aw-focus" className={inputClass} value={researchFocus} onChange={(e) => setResearchFocus(e.target.value)} placeholder="Ör. aile ve evcil hayvan esprileri, retro tarzlar — boş bırakılırsa tamamen serbest" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className={labelClass} htmlFor="aw-niche">Tasarım konusu / niş</label>
+                    <input id="aw-niche" className={inputClass} value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Ör. funny cat mom quotes, retro camping, teacher appreciation" />
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="aw-audience">Hedef kitle (isteğe bağlı)</label>
+                    <input id="aw-audience" className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Ör. cat moms, dog lovers, nurses" />
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="aw-notes">Stil ve ek istekler (isteğe bağlı)</label>
+                    <textarea id="aw-notes" rows={3} className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ör. vintage distressed look, en fazla 3 renk" />
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -401,33 +434,20 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
               {schedule.generateVideo && (
                 <>
                   <fieldset>
-                    <legend className={labelClass}>Video modeli</legend>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {VIDEO_MODEL_CHOICES.map((choice) => (
-                        <button key={choice.id} type="button" onClick={() => updateVideo({ model: choice.id })} aria-pressed={video.model === choice.id}
-                          className={`text-left p-3 rounded-xl border-2 transition-colors ${video.model === choice.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                          <span className="block text-sm font-bold text-slate-900 dark:text-white">{choice.label}</span>
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{choice.desc}</span>
+                    <legend className={labelClass}>Video yönü</legend>
+                    <div className="grid grid-cols-2 gap-2">
+                      {VIDEO_ASPECTS.map((aspect) => (
+                        <button key={aspect.id} type="button" onClick={() => updateVideo({ aspectRatio: aspect.id })} aria-pressed={(video.aspectRatio ?? '16:9') === aspect.id}
+                          className={`text-left p-3 rounded-xl border-2 transition-colors ${(video.aspectRatio ?? '16:9') === aspect.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <span className="block text-sm font-bold text-slate-900 dark:text-white">{aspect.label}</span>
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{aspect.desc}</span>
                         </button>
                       ))}
                     </div>
                   </fieldset>
-                  <fieldset>
-                    <legend className={labelClass}>Çekim tarzı</legend>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {VIDEO_STYLES.map((style) => (
-                        <button key={style.id} type="button" onClick={() => updateVideo({ style: style.id })} aria-pressed={(video.style ?? 'mannequin') === style.id}
-                          className={`text-left p-3 rounded-xl border-2 transition-colors ${(video.style ?? 'mannequin') === style.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
-                          <span className="block text-sm font-bold text-slate-900 dark:text-white">{style.label}</span>
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{style.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <div>
-                    <label className={labelClass} htmlFor="aw-video-notes">Video için ek yönlendirme (isteğe bağlı)</label>
-                    <input id="aw-video-notes" className={inputClass} value={video.notes ?? ''} onChange={(e) => updateVideo({ notes: e.target.value })} placeholder="Ör. açık gri stüdyo zemini, yavaş kamera hareketi" />
-                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Video modeli ve video talimatı (prompt) admin panelinden yönetilir; tasarımın basıldığı mockup görseli videoya referans olarak verilir. Video modelleri kare formatı desteklemez.
+                  </p>
                 </>
               )}
             </>
@@ -443,8 +463,8 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <p>Klasör: <strong>{folder?.name ?? '—'}</strong> · {counts.print} mockup&apos;a basılır</p>
                 <p>Kategori: <strong>{category?.path || category?.name || (taxonomyId > 0 ? `#${taxonomyId}` : '—')}</strong></p>
                 <p>Varyasyon: <strong>{variationSource ? `${variationSource.name} (${variationSummary?.count ?? 0})` : `Tek fiyat $${fixedPrice}`}</strong></p>
-                <p>Konu: <strong>{niche || '—'}</strong></p>
-                <p>Video: <strong>{schedule.generateVideo ? `${VIDEO_MODEL_CHOICES.find((c) => c.id === video.model)?.label ?? video.model} · ${VIDEO_STYLES.find((s) => s.id === (video.style ?? 'mannequin'))?.label}` : 'Yok'}</strong></p>
+                <p>Konu: <strong>{nicheMode === 'auto' ? `Yapay zekâ belirler${researchFocus.trim() ? ` (${researchFocus.trim()})` : ''}` : niche || '—'}</strong></p>
+                <p>Video: <strong>{schedule.generateVideo ? (video.aspectRatio === '9:16' ? 'Dikey' : 'Yatay') : 'Yok'}</strong> · Mağaza bölümü: <strong>yapay zekâ seçer</strong></p>
                 <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>Etsy taslak ilanı</strong></p>
                 {etsyWarnings.length > 0 && (
                   <p className="text-amber-700 dark:text-amber-400 flex gap-1 pt-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Mağaza ayarları eksik: tasarım ve mockup&apos;lar üretilir, ilan adımı atlanır.</p>

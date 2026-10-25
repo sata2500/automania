@@ -152,6 +152,20 @@ export const PROMPT_VARIABLES_DESIGN_GEN: PromptVariable[] = [
 
 export const PROMPT_VARIABLES_VIDEO_GEN: PromptVariable[] = [
   {
+    tag: '{{product}}',
+    label: 'Ürün Tipi',
+    desc: 'Otomasyonun ürün tipi (ör. T-shirt). Videoya tasarımın basıldığı mockup görseli de eklenir.',
+    icon: '👕',
+    badgeColor: 'border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60',
+  },
+  {
+    tag: '{{niche}}',
+    label: 'Niş',
+    desc: 'Tasarımın konusu (otomatik araştırmada bulunan veya şablonda yazılan).',
+    icon: '🎯',
+    badgeColor: 'border-amber-200 bg-amber-50/80 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60',
+  },
+  {
     tag: '{{title}}',
     label: 'Ürün Başlığı',
     desc: 'Oluşturulan ürünün başlığı.',
@@ -323,6 +337,8 @@ export const AdminAiSettingsSection: React.FC = () => {
   const [geminiModelReasoning, setGeminiModelReasoning] = useState('');
   const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
   const [geminiModelVideo, setGeminiModelVideo] = useState('');
+  const [researchWebSearch, setResearchWebSearch] = useState(true);
+  const [researchModel, setResearchModel] = useState('');
   // Aktif Google bağlantısının (API anahtarı veya Vertex AI) Google'dan çekilen güncel model listesi
   const [googleModels, setGoogleModels] = useState<GoogleModelInfo[] | null>(null);
   const [googleModelsInfo, setGoogleModelsInfo] = useState<{ mode?: string; error?: string }>({});
@@ -445,6 +461,8 @@ export const AdminAiSettingsSection: React.FC = () => {
             if (data.settings.gemini_model_reasoning) setGeminiModelReasoning(data.settings.gemini_model_reasoning);
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
             if (data.settings.gemini_model_video) setGeminiModelVideo(normalizeVideoModel(data.settings.gemini_model_video));
+            setResearchWebSearch(data.settings.ai_research_web_search !== 'false');
+            if (data.settings.ai_research_model) setResearchModel(data.settings.ai_research_model);
             
             if (data.settings.openrouter_model_video) setModelVideo(data.settings.openrouter_model_video);
             
@@ -527,6 +545,8 @@ export const AdminAiSettingsSection: React.FC = () => {
       if (geminiModelReasoning) settingsToSave.gemini_model_reasoning = geminiModelReasoning;
       if (geminiModelGeneration) settingsToSave.gemini_model_generation = geminiModelGeneration;
       if (geminiModelVideo) settingsToSave.gemini_model_video = geminiModelVideo;
+      settingsToSave.ai_research_web_search = researchWebSearch ? 'true' : 'false';
+      settingsToSave.ai_research_model = researchModel;
       if (modelVideo) settingsToSave.openrouter_model_video = modelVideo;
 
       if (promptAnalyzeDesign !== undefined) settingsToSave.ai_prompt_analyze_design = promptAnalyzeDesign;
@@ -1209,6 +1229,40 @@ export const AdminAiSettingsSection: React.FC = () => {
                         Bu Modeli Test Et
                       </button>
                     )}
+                  </div>
+                </div>
+
+                {/* Otomasyonun niş araştırması */}
+                <div className="mt-4 p-4 bg-violet-50/50 dark:bg-violet-950/30 rounded-2xl border border-violet-100 dark:border-violet-900/50 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Search className="w-4 h-4 text-violet-500" />
+                        Otomasyon Niş Araştırması
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        &quot;Konuyu yapay zekâ belirlesin&quot; seçili otomasyonlar her çalıştırmada takvimi, mağaza performansınızı ve Etsy kelime verilerini inceleyip niş seçer.
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 shrink-0 text-[11px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-violet-600" checked={researchWebSearch} onChange={(e) => setResearchWebSearch(e.target.checked)} />
+                      Web araması
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Web araması açıkken model Google Search ile güncel trendleri, Pinterest ve Google Trends sinyallerini de tarar (Google araması ücretlendirmesi uygulanabilir).
+                  </p>
+                  <div>
+                    <label htmlFor="research-model" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Araştırma modeli</label>
+                    <select
+                      id="research-model"
+                      value={researchModel}
+                      onChange={(e) => setResearchModel(e.target.value)}
+                      className="w-full p-2.5 bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-800 rounded-xl text-xs font-bold"
+                    >
+                      <option value="">Metin analiz modeliyle aynı ({geminiModelReasoning || 'varsayılan'})</option>
+                      {googleModels && <GoogleModelOptions models={googleModels} category="text" current={researchModel} />}
+                    </select>
                   </div>
                 </div>
                 </div>

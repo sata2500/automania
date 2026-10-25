@@ -39,6 +39,8 @@ export const seoHintsSchema = z.object({
   targetAudience: shortText(500).default(''),
   customNotes: shortText(4000).default(''),
   primaryNiche: shortText(200).default(''),
+  nicheMode: z.enum(['auto', 'manual']).optional(),
+  researchFocus: shortText(500).optional(),
 });
 
 const optionalEtsyId = z.string().trim().max(32).regex(/^\d*$/, 'Geçersiz Etsy kimliği.').optional();
@@ -73,6 +75,7 @@ export const automationScheduleSchema = z.object({
   createListing: z.boolean().default(false),
   etsy: etsyListingSettingsSchema.optional(),
   video: z.object({
+    aspectRatio: z.enum(['16:9', '9:16']).optional(),
     model: z.string().trim().max(100).regex(/^[a-z0-9.\-]*$/, 'Geçersiz video modeli.').optional(),
     style: z.enum(['mannequin', 'flatlay', 'lifestyle']).optional(),
     notes: z.string().max(500).optional(),

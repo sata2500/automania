@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight, Eraser } from 'lucide-react';
+import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight, Eraser, Download } from 'lucide-react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 
 interface DesignItemMenuProps {
@@ -15,6 +15,24 @@ interface DesignItemMenuProps {
   onRecolor?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDelete: (id: string) => void;
+}
+
+/** Tasarım dosyasını orijinal hâliyle indirir (saydam PNG korunur). */
+async function downloadDesign(design: DesignItem) {
+  const fileName = `${design.name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'tasarim'}.png`;
+  try {
+    const res = await fetch(design.src);
+    if (!res.ok) throw new Error(String(res.status));
+    const url = URL.createObjectURL(await res.blob());
+    const link = Object.assign(document.createElement('a'), { href: url, download: fileName });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } catch {
+    // Doğrudan indirilemezse dosya yeni sekmede açılır (uzun basıp kaydetmek için).
+    window.open(design.src, '_blank', 'noopener');
+  }
 }
 
 export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
@@ -75,6 +93,18 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
       >
         <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
         <span>{design.analysis ? 'Analiz Sonucunu Gör' : 'Yapay Zeka ile Analiz Et'}</span>
+      </button>
+
+      {/* Download (orijinal çözünürlükte, baskı merkezine iletmek için) */}
+      <button
+        onClick={() => {
+          onClose();
+          void downloadDesign(design);
+        }}
+        className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
+      >
+        <Download className="w-4 h-4 text-emerald-500 shrink-0" />
+        <span>İndir (PNG)</span>
       </button>
 
       {/* Crop */}

@@ -85,6 +85,13 @@ const generateListing = vi.hoisted(() => vi.fn(async () => ({
   modelUsed: 'test-model',
 })));
 vi.mock('@/lib/listing-generator', () => ({ generateListingContent: generateListing }));
+const research = vi.hoisted(() => vi.fn(async () => ({
+  niche: 'retro camping dad', targetAudience: 'outdoorsy dads', style: 'vintage distressed', designBrief: 'Retro sunset over a tent.',
+  occasion: "Father's Day", keywords: ['camping dad shirt'], reasoning: 'Babalar günü yaklaşıyor.', sources: [], searchedWeb: true, model: 'm',
+})));
+vi.mock('@/lib/niche-research', () => ({ researchNiche: research }));
+// Etsy mağaza bölümleri ağ isteği yapılmadan boş döner.
+vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
 
 import { executeAutomationRun } from './automation-runner';
 
@@ -206,7 +213,7 @@ describe('cancellation', () => {
 
 describe('folder automation', () => {
   it('prints the light-ink variant on dark garments and sends the first mockup to the video model', async () => {
-    state.template = baseTemplate({ createListing: false, generateVideo: true, video: { model: 'gemini-omni-1.1-flash', style: 'mannequin' } });
+    state.template = baseTemplate({ createListing: false, generateVideo: true, video: { aspectRatio: '9:16' } });
     (state.template as Record<string, unknown>).mockupConfig = { folderId: 'f1', printAreaMockupIds: [], staticMockupIds: [], videoMockupIds: [], fabricType: 'all', multiPrintAreaSupport: false };
     state.mockups = [
       { id: 'w', name: 'White', src: '/api/r2/user-u1-w.png', folderId: 'f1', apparelType: 'light', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], width: 10, height: 10 },
@@ -220,10 +227,39 @@ describe('folder automation', () => {
     expect(recolor).toHaveBeenCalledTimes(1);
     const designs = vi.mocked(renderDesignOnMockup).mock.calls.map((call) => String(call[1]));
     expect(designs).toEqual(['png', 'dark-ink']);
-    const [, options] = vi.mocked(generateVideo).mock.calls[0] as unknown as [unknown, { model: string; image?: { mimeType: string }; prompt: string }];
-    expect(options.model).toBe('gemini-omni-1.1-flash');
+    const [, options] = vi.mocked(generateVideo).mock.calls[0] as unknown as [unknown, { model: string; aspectRatio: string; image?: { mimeType: string }; prompt: string }];
+    expect(options.model).toBe('veo-admin'); // model admin panelinden
+    expect(options.aspectRatio).toBe('9:16');
     expect(options.image?.mimeType).toBe('image/jpeg');
     expect(options.prompt).toMatch(/mannequin/);
     expect((state.run?.steps as Record<string, { status: string }>).videoGeneration.status).toBe('completed');
+  });
+});
+
+describe('automatic niche research', () => {
+  it('researches the niche first and feeds it to the design and SEO steps', async () => {
+    state.template = baseTemplate();
+    (state.template as Record<string, unknown>).seoHints = { productType: 'T-shirt', targetAudience: '', customNotes: '', primaryNiche: '', nicheMode: 'auto' };
+    state.run = { ...state.run!, steps: { nicheResearch: { status: 'pending' }, ...pendingSteps() } };
+    const { generateImage } = await import('@/lib/ai-provider');
+
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+
+    expect(research).toHaveBeenCalledTimes(1);
+    const steps = state.run?.steps as Record<string, { status: string; output?: { niche?: string } }>;
+    expect(steps.nicheResearch.status).toBe('completed');
+    expect(steps.nicheResearch.output?.niche).toBe('retro camping dad');
+    const [, imageOptions] = vi.mocked(generateImage).mock.calls[0] as unknown as [unknown, { prompt: string }];
+    expect(imageOptions.prompt).toMatch(/retro camping dad/);
+    expect(imageOptions.prompt).toMatch(/vintage distressed/);
+    const [, listingInput] = generateListing.mock.calls[0] as unknown as [string, { keywords: string[] }];
+    expect(listingInput.keywords).toContain('camping dad shirt');
+  });
+
+  it('skips research for templates with a manual niche', async () => {
+    state.run = { ...state.run!, steps: { nicheResearch: { status: 'pending' }, ...pendingSteps() } };
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    expect(research).not.toHaveBeenCalled();
+    expect((state.run?.steps as Record<string, { status: string }>).nicheResearch.status).toBe('skipped');
   });
 });

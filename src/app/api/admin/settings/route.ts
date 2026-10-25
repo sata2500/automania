@@ -28,6 +28,8 @@ const ALLOWED_SETTING_KEYS = new Set([
   'ai_prompt_generate_listing',
   'ai_prompt_generate_design',
   'ai_prompt_generate_video',
+  'ai_research_web_search',
+  'ai_research_model',
 ]);
 
 const MAX_SETTING_VALUE_LENGTH = 100_000;
