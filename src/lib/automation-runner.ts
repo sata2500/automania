@@ -262,7 +262,7 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
 
   // Bazı modeller görselin etrafına koyu bir çerçeve ekler; yeşil kaldırılınca tasarımın etrafında kutu kalmasın.
   const unframed = await cropDarkFrame(Buffer.from(generatedImages[0].data, 'base64'));
-  const { pngBuffer: rawPng } = await removeGreenBackground(unframed, { threshold: 80, feather: 40 });
+  const { pngBuffer: rawPng } = await removeGreenBackground(unframed);
   // Tasarımın etrafındaki saydam boşluk kırpılır; aksi halde tasarım baskı alanında küçük kalır.
   const pngBuffer = await trimTransparentMargin(rawPng);
   if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');

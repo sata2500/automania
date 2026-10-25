@@ -2,7 +2,7 @@
  * POST /api/designs/remove-bg
  * =============================
  * Chroma key algoritmasıyla arka planı kaldırır.
- * Body: { imageData?: base64, imageUrl?: string, mimeType?, threshold?, feather?, keyColor? }
+ * Body: { imageData?: base64, imageUrl?: string, mimeType?, keyColor? } — keyColor verilmezse perde rengi kenarlardan ölçülür.
  * Response: { pngBase64, bgRemovedUrl?, removedRatio, processingTimeMs, quality }
  */
 
@@ -36,11 +36,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { imageData, imageUrl, threshold, feather, keyColor } = body as {
+    const { imageData, imageUrl, keyColor } = body as {
       imageData?: unknown; // base64 (data URL veya ham)
       imageUrl?: unknown;  // Kullanıcının kendi depolama URL'si
-      threshold?: unknown;
-      feather?: unknown;
       keyColor?: { r?: unknown; g?: unknown; b?: unknown };
     };
 
@@ -58,13 +56,13 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await removeGreenBackground(input, {
-      threshold: clampNumber(threshold, 0, 441, 80),
-      feather: clampNumber(feather, 0, 200, 40),
-      keyColor: {
-        r: clampNumber(keyColor?.r, 0, 255, 0),
-        g: clampNumber(keyColor?.g, 0, 255, 255),
-        b: clampNumber(keyColor?.b, 0, 255, 0),
-      },
+      keyColor: keyColor && typeof keyColor === 'object'
+        ? {
+            r: clampNumber(keyColor.r, 0, 255, 0),
+            g: clampNumber(keyColor.g, 0, 255, 255),
+            b: clampNumber(keyColor.b, 0, 255, 0),
+          }
+        : undefined,
     });
 
     const quality = evaluateChromaKeyQuality(result);
