@@ -1190,7 +1190,8 @@ export const AdminAiSettingsSection: React.FC = () => {
                         {googleModels ? (
                           <GoogleModelOptions models={googleModels} category="video" current={geminiModelVideo} />
                         ) : (
-                        <optgroup label="Google Veo Video Modelleri (T2V)">
+                        <optgroup label="Google Video Modelleri">
+                          <option value="gemini-omni-1.1-flash">Gemini Omni Flash (Gerçekçi)</option>
                           <option value="veo-3.1-fast-generate-001">Google Veo 3.1 Fast (Hız Odaklı)</option>
                           <option value="veo-3.1-generate-001">Google Veo 3.1 (Yüksek Kalite)</option>
                           <option value="veo-3.1-lite-generate-001">Google Veo 3.1 Lite (Ekonomik)</option>

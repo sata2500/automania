@@ -54,7 +54,7 @@ export const MockupFolderMenu: React.FC<MockupFolderMenuProps> = ({
             className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left"
           >
             <Workflow className="w-3.5 h-3.5 text-purple-500" />
-            <span>Otomasyon Şablonu</span>
+            <span>Otomasyon</span>
           </button>
           <div className="h-px bg-slate-100 dark:bg-slate-700 my-1" />
         </>

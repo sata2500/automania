@@ -39,7 +39,7 @@ const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'seo', 'listings
 type GeneratorView = 'manual' | 'templates';
 const GENERATOR_VIEWS: { key: GeneratorView; label: string; icon: React.ElementType }[] = [
   { key: 'manual', label: 'Manuel Üretim', icon: Sparkles },
-  { key: 'templates', label: 'Otomasyon Şablonları', icon: LayoutTemplate },
+  { key: 'templates', label: 'Otomasyonlar', icon: LayoutTemplate },
 ];
 
 

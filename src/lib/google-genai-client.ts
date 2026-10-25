@@ -81,6 +81,8 @@ export function isMediaModel(model: string | undefined): boolean {
 /** Modelin çağrılacağı Vertex bölgesi: Veo her zaman us-central1, Imagen "global" seçiliyse us-central1. */
 export function resolveVertexLocation(location: string, model: string | undefined): string {
   if (model?.startsWith('veo')) return VERTEX_MEDIA_FALLBACK_LOCATION;
+  // Gemini Omni Flash (video) Vertex'te "global" uç noktada sunulur.
+  if (model?.startsWith('gemini-omni')) return 'global';
   if (location === 'global' && isMediaModel(model)) return VERTEX_MEDIA_FALLBACK_LOCATION;
   return location;
 }
@@ -114,10 +116,13 @@ async function fetchModelList(client: GoogleGenAI): Promise<RawModel[]> {
   return raw;
 }
 
-/** Liste yanıtında olmayan bilinen Veo modellerini tek tek sorgular; erişilebilir olanları döner. */
-async function probeKnownVeoModels(client: GoogleGenAI, exclude: Set<string>): Promise<RawModel[]> {
+/** Gemini Omni Flash (video) model kimlikleri: Gemini API'de GA adı, Vertex'te önizleme adı. */
+export const KNOWN_OMNI_MODELS = ['gemini-omni-1.1-flash', 'gemini-omni-1.1-flash-preview'] as const;
+
+/** Liste yanıtında olmayan bilinen video modellerini tek tek sorgular; erişilebilir olanları döner. */
+async function probeKnownVideoModels(client: GoogleGenAI, ids: readonly string[], exclude: Set<string>): Promise<RawModel[]> {
   const results = await Promise.allSettled(
-    KNOWN_VEO_MODELS.filter((id) => !exclude.has(id)).map(async (id) => {
+    ids.filter((id) => !exclude.has(id)).map(async (id) => {
       const model = await client.models.get({ model: id });
       return { name: model.name || id, displayName: model.displayName, description: model.description };
     }),
@@ -128,7 +133,7 @@ async function probeKnownVeoModels(client: GoogleGenAI, exclude: Set<string>): P
 /**
  * Bağlantının erişebildiği güncel modelleri Google'dan çeker ve gruplara ayırır.
  * Vertex AI'da Imagen/Veo seçili bölgede (ör. "global") listelenmediği için bu modeller
- * bölgesel uç noktadan ayrıca çekilir; Veo listede yoksa bilinen sürümler doğrudan sorgulanır.
+ * bölgesel uç noktadan ayrıca çekilir; Veo/Omni listede yoksa bilinen sürümler doğrudan sorgulanır.
  */
 export async function listGoogleModels(connection: GoogleConnection): Promise<GoogleModelInfo[]> {
   const raw = await fetchModelList(createGoogleClient(connection));
@@ -143,7 +148,12 @@ export async function listGoogleModels(connection: GoogleConnection): Promise<Go
       }
     }
     const listed = new Set(categorizeGoogleModels(raw).filter((m) => m.category === 'video').map((m) => m.id));
-    raw.push(...(await probeKnownVeoModels(mediaClient, listed)));
+    const omniClient = createGoogleClient(connection, { location: 'global' });
+    const [veo, omni] = await Promise.all([
+      probeKnownVideoModels(mediaClient, KNOWN_VEO_MODELS, listed),
+      probeKnownVideoModels(omniClient, KNOWN_OMNI_MODELS, listed),
+    ]);
+    raw.push(...veo, ...omni);
   }
   return categorizeGoogleModels(raw);
 }

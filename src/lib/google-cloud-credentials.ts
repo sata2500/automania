@@ -77,7 +77,7 @@ export function normalizeVideoModel(model: string): string {
 export type GoogleModelCategory = 'text' | 'image' | 'video';
 export type GoogleModelInfo = { id: string; displayName: string; category: GoogleModelCategory; description?: string };
 
-const EXCLUDED_MODEL_PATTERN = /(embedding|embed|gecko|chirp|tts|audio|live|computer-use|aqa|codey|code-|text-bison|chat-bison|-tuning|robotics|native-audio|transcribe|omni)/i;
+const EXCLUDED_MODEL_PATTERN = /(embedding|embed|gecko|chirp|tts|audio|live|computer-use|aqa|codey|code-|text-bison|chat-bison|-tuning|robotics|native-audio|transcribe)/i;
 
 /**
  * Google'ın döndürdüğü model listesini uygulamanın kullandığı üç gruba ayırır:
@@ -91,7 +91,7 @@ export function categorizeGoogleModels(models: Array<{ name?: string; displayNam
     const id = String(model.name || '').split('/').pop()?.split('@')[0]?.trim();
     if (!id || seen.has(id) || EXCLUDED_MODEL_PATTERN.test(id)) continue;
     let category: GoogleModelCategory | null = null;
-    if (id.startsWith('veo')) category = 'video';
+    if (id.startsWith('veo') || id.startsWith('gemini-omni')) category = 'video';
     else if (id.startsWith('imagen') || (id.startsWith('gemini') && id.includes('image'))) category = 'image';
     else if (id.startsWith('gemini') || id.startsWith('gemma')) category = 'text';
     if (!category) continue;

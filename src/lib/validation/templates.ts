@@ -30,6 +30,8 @@ export const variationConfigSchema = z.object({
   sizes: z.array(shortText(100)).max(100).default([]),
   colors: z.array(shortText(100)).max(100).default([]),
   basePrice: z.number().min(0).max(100_000).optional(),
+  sourceTemplateId: z.string().max(255).optional(),
+  sourceTemplateName: z.string().max(255).optional(),
 });
 
 export const seoHintsSchema = z.object({
@@ -70,6 +72,11 @@ export const automationScheduleSchema = z.object({
   // Eski şablonlar (alan yok) önceki davranışı korur: ilan açılmaz.
   createListing: z.boolean().default(false),
   etsy: etsyListingSettingsSchema.optional(),
+  video: z.object({
+    model: z.string().trim().max(100).regex(/^[a-z0-9.\-]*$/, 'Geçersiz video modeli.').optional(),
+    style: z.enum(['mannequin', 'flatlay', 'lifestyle']).optional(),
+    notes: z.string().max(500).optional(),
+  }).optional(),
 });
 
 export const templateInputSchema = z.object({

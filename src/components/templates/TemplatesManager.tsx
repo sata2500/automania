@@ -18,15 +18,15 @@ import {
   Film,
   Palette,
 } from 'lucide-react';
-import { AutomationRun, AutomationStepName, PodTemplate, PodTemplateInput } from '@/types/templates';
+import { AutomationRun, AutomationStepName, PodTemplate } from '@/types/templates';
 import { MockupFolder, MockupItem } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
-import { TemplateBuilderModal } from './TemplateBuilderModal';
+import { AutomationWizard } from './AutomationWizard';
+import { buildFolderMockupConfig } from '@/lib/folder-template';
 import { computeNextRunAt, parseScheduledHours } from '@/lib/automation-schedule';
 import { RunDetailsDialog, STEP_LABELS, getRunListingUrl, getRunWarnings } from './RunDetailsDialog';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { Spinner } from '@/components/common/Spinner';
-import { saveTemplate } from '@/lib/templates-client';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
@@ -235,29 +235,23 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
     }
   };
 
-  // Şablon kaydet (oluştur / güncelle)
-  const handleSaveTemplate = async (data: PodTemplateInput, id?: string) => {
-    try {
-      const saved = await saveTemplate(data, id);
-      if (id) {
-        setTemplates(prev => prev.map(t => t.id === id ? saved : t));
-        toast.success('Şablon güncellendi!');
-      } else {
-        setTemplates(prev => [saved, ...prev]);
-        toast.success('Yeni şablon oluşturuldu!');
-      }
-      setIsBuilderOpen(false);
-      setEditingTemplate(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Kaydetme başarısız.');
-    }
+  // Sihirbaz kaydettikten sonra (ve "şimdi dene" ile başlatılan çalıştırma için) liste yenilenir.
+  const handleTemplateSaved = (saved: PodTemplate) => {
+    setTemplates(prev => prev.some(t => t.id === saved.id) ? prev.map(t => t.id === saved.id ? saved : t) : [saved, ...prev]);
+    setIsBuilderOpen(false);
+    setEditingTemplate(null);
+    void loadTemplates();
   };
 
   // Mockup sayılarını hesapla
+  // Klasöre bağlı otomasyonlar klasörün güncel içeriğini kullanır; sayılar da oradan hesaplanır.
   const getMockupCounts = (template: PodTemplate) => {
-    const print = template.mockupConfig?.printAreaMockupIds?.length ?? 0;
-    const staticM = template.mockupConfig?.staticMockupIds?.length ?? 0;
-    const video = template.mockupConfig?.videoMockupIds?.length ?? 0;
+    const config = template.mockupConfig?.folderId
+      ? buildFolderMockupConfig(template.mockupConfig.folderId, mockups)
+      : template.mockupConfig;
+    const print = config?.printAreaMockupIds?.length ?? 0;
+    const staticM = config?.staticMockupIds?.length ?? 0;
+    const video = config?.videoMockupIds?.length ?? 0;
     return { print, staticM, video, total: print + staticM };
   };
 
@@ -301,7 +295,7 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
             <LayoutTemplate className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Otomasyon Şablonları</h2>
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">Otomasyonlar</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Tasarım, mockup, SEO metni ve Etsy taslağını zamanlanmış olarak otomatik üretin.
             </p>
@@ -312,7 +306,7 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
           className="btn btn-primary shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Yeni Şablon
+          Yeni Otomasyon
         </button>
       </div>
 
@@ -372,9 +366,9 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
             <LayoutTemplate className="w-8 h-8 text-amber-500" />
           </div>
           <div className="text-center">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Henüz şablon yok</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Henüz otomasyon yok</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-              İlk şablonunuzu oluşturun. Mockupları, varyasyonları ve SEO ayarlarını bir kere yapılandırın — sistem otomatik olarak Etsy listingleri üretsin.
+              Bir mockup klasörü seçin, kategori, varyasyon ve tasarım konusunu belirleyin — sistem belirlediğiniz saatlerde tasarımı, mockup&apos;ları, videoyu ve Etsy taslak ilanını kendisi hazırlasın.
             </p>
           </div>
           <button
@@ -382,7 +376,7 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            İlk Şablonu Oluştur
+            İlk Otomasyonu Kur
           </button>
         </div>
       ) : (
@@ -648,10 +642,11 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
 
       {/* Şablon Oluşturucu Modal */}
       {isBuilderOpen && (
-        <TemplateBuilderModal
+        <AutomationWizard
+          folders={folders ?? []}
           mockups={mockups}
           template={editingTemplate}
-          onSave={handleSaveTemplate}
+          onSaved={handleTemplateSaved}
           onClose={() => { setIsBuilderOpen(false); setEditingTemplate(null); }}
         />
       )}

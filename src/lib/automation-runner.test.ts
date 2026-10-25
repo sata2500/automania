@@ -54,10 +54,13 @@ vi.mock('@/lib/db', () => {
 });
 
 vi.mock('@/lib/ai-provider', () => ({
-  loadAIConfig: vi.fn(async () => ({ googleApiKey: 'k' })),
+  loadAIConfig: vi.fn(async () => ({ googleApiKey: 'k', videoModel: 'veo-admin' })),
   generateImage: vi.fn(async () => [{ data: 'aGVsbG8=' }]),
   generateVideo: vi.fn(async () => ({ uri: 'data:video/mp4;base64,AAAA', mimeType: 'video/mp4' })),
+  isOmniVideoModel: (m: string) => m.startsWith('gemini-omni'),
 }));
+const recolor = vi.hoisted(() => vi.fn(async () => ({ pngBuffer: Buffer.from('dark-ink') })));
+vi.mock('@/lib/recolor', () => ({ recolorDesign: recolor }));
 vi.mock('@/lib/chroma-key', () => ({ removeGreenBackground: vi.fn(async () => ({ pngBuffer: Buffer.from('png') })) }));
 vi.mock('@/lib/r2', () => ({
   isR2Configured: () => true,
@@ -198,5 +201,29 @@ describe('cancellation', () => {
     const outcome = await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
     expect(outcome).toMatchObject({ ok: false, reason: 'cancelled' });
     expect(state.run?.status).toBe('cancelled');
+  });
+});
+
+describe('folder automation', () => {
+  it('prints the light-ink variant on dark garments and sends the first mockup to the video model', async () => {
+    state.template = baseTemplate({ createListing: false, generateVideo: true, video: { model: 'gemini-omni-1.1-flash', style: 'mannequin' } });
+    (state.template as Record<string, unknown>).mockupConfig = { folderId: 'f1', printAreaMockupIds: [], staticMockupIds: [], videoMockupIds: [], fabricType: 'all', multiPrintAreaSupport: false };
+    state.mockups = [
+      { id: 'w', name: 'White', src: '/api/r2/user-u1-w.png', folderId: 'f1', apparelType: 'light', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], width: 10, height: 10 },
+      { id: 'b', name: 'Black', src: '/api/r2/user-u1-b.png', folderId: 'f1', apparelType: 'dark', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], width: 10, height: 10 },
+    ];
+    const { renderDesignOnMockup } = await import('@/lib/backend-render');
+    const { generateVideo } = await import('@/lib/ai-provider');
+
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+
+    expect(recolor).toHaveBeenCalledTimes(1);
+    const designs = vi.mocked(renderDesignOnMockup).mock.calls.map((call) => String(call[1]));
+    expect(designs).toEqual(['png', 'dark-ink']);
+    const [, options] = vi.mocked(generateVideo).mock.calls[0] as unknown as [unknown, { model: string; image?: { mimeType: string }; prompt: string }];
+    expect(options.model).toBe('gemini-omni-1.1-flash');
+    expect(options.image?.mimeType).toBe('image/jpeg');
+    expect(options.prompt).toMatch(/mannequin/);
+    expect((state.run?.steps as Record<string, { status: string }>).videoGeneration.status).toBe('completed');
   });
 });

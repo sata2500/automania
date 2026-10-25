@@ -4,7 +4,14 @@
  * kullanır; ayrı tutuldukları için birim testleriyle doğrulanır.
  */
 import type { MockupItem } from '@/types/pod';
-import type { AutomationRunSteps, AutomationStepName, PodTemplateMockupConfig, PodTemplateSeoHints } from '@/types/templates';
+import type {
+  AutomationRunSteps,
+  AutomationStepName,
+  AutomationVideoSettings,
+  PodTemplateMockupConfig,
+  PodTemplateSeoHints,
+} from '@/types/templates';
+import { buildFolderMockupConfig } from '@/lib/folder-template';
 import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
 
 export const AUTOMATION_STEP_ORDER: AutomationStepName[] = [
@@ -50,7 +57,12 @@ function matchesFabric(mockup: MockupItem, fabricType: PodTemplateMockupConfig['
  * - Statik mockup'lar (beden tablosu vb.) olduğu gibi eklenir.
  * - Toplam fotoğraf sayısı Etsy sınırına (20) indirilir; ilk video mockup'ı ayrıca döner.
  */
-export function selectAutomationMockups(mockups: MockupItem[], config: Partial<PodTemplateMockupConfig> | null | undefined) {
+export function selectAutomationMockups(mockups: MockupItem[], templateConfig: Partial<PodTemplateMockupConfig> | null | undefined) {
+  // Klasöre bağlı şablonlar her çalıştırmada klasörün güncel içeriğini kullanır
+  // (klasöre eklenen/çıkarılan mockup'lar şablonu yeniden kaydetmeden geçerli olur).
+  const config = templateConfig?.folderId
+    ? { ...buildFolderMockupConfig(templateConfig.folderId, mockups), fabricType: templateConfig.fabricType ?? 'all' }
+    : templateConfig;
   const byId = new Map(mockups.map((m) => [m.id, m]));
   const pick = (ids: string[] | undefined) => (ids ?? []).map((id) => byId.get(id)).filter((m): m is MockupItem => Boolean(m));
 
@@ -137,4 +149,41 @@ export function topicSearchTerms(hints: Partial<PodTemplateSeoHints> | null | un
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 3 && !stop.has(w));
   return Array.from(new Set(words)).slice(0, 5);
+}
+
+/** Kumaş rengi koyu olan mockup'lar için tasarımın açık tonlu sürümü kullanılır. */
+export function needsDarkGarmentDesign(mockup: Pick<MockupItem, 'apparelType'>): boolean {
+  return mockup.apparelType === 'dark';
+}
+
+const VIDEO_STYLE_PROMPTS: Record<NonNullable<AutomationVideoSettings['style']>, string> = {
+  mannequin:
+    'Realistic e-commerce product video. The exact {{product}} from the reference image is displayed on an invisible (ghost) mannequin in a bright, clean photo studio. ' +
+    'The camera slowly orbits to show the garment from the front, three-quarter and side angles, then gently pushes in on the printed design. ' +
+    'Soft natural lighting, subtle fabric movement, photorealistic.',
+  flatlay:
+    'Realistic e-commerce product video. The exact {{product}} from the reference image lies flat on a styled tabletop. ' +
+    'Slow top-down camera push-in and gentle parallax, soft daylight, subtle fabric texture detail on the printed design, photorealistic.',
+  lifestyle:
+    'Realistic lifestyle product video. An adult model wears the exact {{product}} from the reference image in a bright, casual everyday setting. ' +
+    'Natural movement, medium shots that keep the printed design clearly visible, soft daylight, photorealistic.',
+};
+
+/**
+ * Tanıtım videosu prompt'u: seçilen çekim tarzı + ürünün aynı kalması gereken kurallar (+ isteğe bağlı not).
+ * Referans görsel (tasarımın basıldığı mockup) ile birlikte gönderilir.
+ */
+export function buildVideoPrompt(
+  video: AutomationVideoSettings | undefined,
+  hints: Partial<PodTemplateSeoHints> | null | undefined,
+): string {
+  const product = hints?.productType?.trim().toLowerCase() || 't-shirt';
+  const base = VIDEO_STYLE_PROMPTS[video?.style ?? 'mannequin'].replace(/\{\{product\}\}/g, product);
+  const notes = video?.notes?.trim();
+  return [
+    base,
+    'Keep the garment color, the printed artwork and its placement exactly as in the reference image; do not change, add or distort any text or graphics.',
+    'No captions, no watermarks, no logos, no on-screen text.',
+    notes ? `Additional direction: ${notes}` : '',
+  ].filter(Boolean).join(' ');
 }

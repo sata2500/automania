@@ -44,6 +44,9 @@ export interface PodTemplateVariationConfig {
   colors: string[];
   /** Temel fiyat (varyasyon satırları bu fiyattan türetilir) */
   basePrice?: number;
+  /** Etsy SEO sekmesinde kaydedilen varyasyon şablonu: çalıştırmada güncel hali kullanılır (satırlar yedektir) */
+  sourceTemplateId?: string;
+  sourceTemplateName?: string;
 }
 
 /** SEO ipuçları ve ürün notları */
@@ -74,6 +77,18 @@ export interface PodTemplateEtsyListingSettings {
   whenMade: string;
 }
 
+/** Tanıtım videosunun çekim tarzı */
+export type AutomationVideoStyle = 'mannequin' | 'flatlay' | 'lifestyle';
+
+/** Otomasyonun ürettiği tanıtım videosu ayarları */
+export interface AutomationVideoSettings {
+  /** Model kimliği; boşsa admin panelindeki video modeli kullanılır */
+  model?: string;
+  style?: AutomationVideoStyle;
+  /** Ek yönlendirme (isteğe bağlı) */
+  notes?: string;
+}
+
 /** Otomasyon zamanlama konfigürasyonu */
 export interface PodTemplateAutomationSchedule {
   /** Otomasyon aktif mi? */
@@ -94,6 +109,8 @@ export interface PodTemplateAutomationSchedule {
   createListing?: boolean;
   /** Etsy taslak ilan ayarları */
   etsy?: PodTemplateEtsyListingSettings;
+  /** Tanıtım videosu ayarları (generateVideo açıkken) */
+  video?: AutomationVideoSettings;
 }
 
 // ─── Şablon Ana Tipi ─────────────────────────────────────────────────────────

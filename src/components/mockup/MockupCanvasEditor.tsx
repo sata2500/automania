@@ -97,7 +97,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     onConfirm: () => {},
   });
 
-  // Klasörün otomasyon şablonu (Toplu Üretim › Otomasyon Şablonları ile aynı kayıt)
+  // Klasörün otomasyon şablonu (Toplu Üretim › Otomasyonlar ile aynı kayıt)
   const [templatePanelFolder, setTemplatePanelFolder] = useState<MockupFolder | null>(null);
   const closeTemplatePanel = useCallback(() => setTemplatePanelFolder(null), []);
 
@@ -594,6 +594,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       {user && templatePanelFolder && (
         <FolderTemplateDialog
           folder={templatePanelFolder}
+          folders={mockupFolders}
           mockups={mockups}
           onClose={closeTemplatePanel}
         />

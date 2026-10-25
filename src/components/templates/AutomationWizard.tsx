@@ -1,0 +1,487 @@
+'use client';
+
+/**
+ * Otomasyon kurulum sihirbazı — bir mockup klasörü için "kur ve unut" akışı.
+ *
+ * Akış (her çalıştırmada): AI tasarım → arka plan kaldırma → klasördeki mockup'lara basma (koyu kumaşa açık
+ * tonlu sürüm) → isteğe bağlı tanıtım videosu (mockup görselinden) → SEO metni → Etsy taslak ilanı.
+ *
+ * Kullanıcı yalnızca beş kısa adımı doldurur: Ürün (klasör, kategori, varyasyon), Tasarım (konu), Video,
+ * Zaman ve Etsy mağaza ayarları. Mockup'lar ve varyasyonlar her çalıştırmada güncel hâlleriyle okunur.
+ */
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle, Check, ChevronLeft, ChevronRight, Clapperboard, Clock, Layers, Package, Palette, Rocket, Save, Store, Video, X,
+} from 'lucide-react';
+import type { EtsyVariationTemplate, MockupFolder, MockupItem } from '@/types/pod';
+import type {
+  AutomationVideoStyle, PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
+} from '@/types/templates';
+import { buildFolderMockupConfig, variationConfigFromRows } from '@/lib/folder-template';
+import { saveTemplate } from '@/lib/templates-client';
+import { useToast } from '@/components/common/ToastContext';
+import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
+import { ScheduleSection } from './sections/ScheduleSection';
+import { DEFAULT_ETSY_LISTING_SETTINGS, EtsyListingSection, getEtsyListingSettingsErrors } from './sections/EtsyListingSection';
+
+type Step = 0 | 1 | 2 | 3 | 4;
+const STEPS: { label: string; icon: React.ElementType }[] = [
+  { label: 'Ürün', icon: Package },
+  { label: 'Tasarım', icon: Palette },
+  { label: 'Video', icon: Clapperboard },
+  { label: 'Zaman', icon: Clock },
+  { label: 'Etsy', icon: Store },
+];
+
+/** Video modeli seçenekleri: Omni Flash gerçekçi ürün çekimi, Veo daha sinematik. */
+export const VIDEO_MODEL_CHOICES = [
+  { id: 'gemini-omni-1.1-flash', label: 'Gemini Omni Flash', desc: 'Gerçekçi ürün tanıtımı (önerilen)' },
+  { id: 'veo-3.1-fast-generate-001', label: 'Veo 3.1 Fast', desc: 'Daha sinematik görüntü' },
+] as const;
+
+const VIDEO_STYLES: { id: AutomationVideoStyle; label: string; desc: string }[] = [
+  { id: 'mannequin', label: 'Cansız manken', desc: 'Görünmez manken üzerinde, farklı açılardan' },
+  { id: 'flatlay', label: 'Düz zemin', desc: 'Masa üstünde yakın çekim' },
+  { id: 'lifestyle', label: 'Model üzerinde', desc: 'Günlük ortamda giyilmiş' },
+];
+
+type TaxonomyOption = { id: number; name: string; path: string | null };
+
+const DEFAULT_SCHEDULE: PodTemplateAutomationSchedule = {
+  enabled: true,
+  cronExpression: '0 10 * * *',
+  timezone: 'Europe/Istanbul',
+  nextRunAt: null,
+  listingsPerRun: 1,
+  publishMode: 'draft',
+  createListing: true,
+  generateVideo: true,
+  video: { model: VIDEO_MODEL_CHOICES[0].id, style: 'mannequin' },
+  etsy: DEFAULT_ETSY_LISTING_SETTINGS,
+};
+
+const inputClass = 'w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/40';
+const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
+
+/** Mockup'ın otomasyonda nasıl kullanılacağı. */
+function mockupKind(m: MockupItem): 'video' | 'static' | 'print' | 'unset' {
+  if (m.isVideo) return 'video';
+  if (m.hasPrintArea === false) return 'static';
+  return (m.printAreas?.length ?? 0) > 0 ? 'print' : 'unset';
+}
+
+/** Kategori adından ürün tipi (SEO ve video prompt'u için): "T-shirts" → "T-shirt". */
+function productTypeFromCategory(name: string | undefined): string {
+  const clean = (name || '').trim();
+  return clean.endsWith('s') && !clean.endsWith('ss') ? clean.slice(0, -1) : clean || 'T-shirt';
+}
+
+interface AutomationWizardProps {
+  folders: MockupFolder[];
+  mockups: MockupItem[];
+  /** Düzenlenen şablon (yoksa yeni) */
+  template: PodTemplate | null;
+  /** Klasör menüsünden açıldıysa klasör sabittir */
+  folderId?: string;
+  onSaved: (template: PodTemplate) => void;
+  onClose: () => void;
+}
+
+export function AutomationWizard({ folders, mockups, template, folderId: fixedFolderId, onSaved, onClose }: AutomationWizardProps) {
+  const toast = useToast();
+  const [step, setStep] = useState<Step>(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const mockupFolders = useMemo(() => folders.filter((f) => f.type !== 'design'), [folders]);
+  const [folderId, setFolderId] = useState(fixedFolderId ?? template?.mockupConfig?.folderId ?? '');
+  const folder = mockupFolders.find((f) => f.id === folderId);
+  const [name, setName] = useState(template?.name ?? folder?.name ?? '');
+
+  // Ürün
+  const savedEtsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...template?.automationSchedule?.etsy };
+  const [taxonomyId, setTaxonomyId] = useState<number>(savedEtsy.taxonomyId);
+  const [variationSourceId, setVariationSourceId] = useState<string>(template?.variationConfig?.sourceTemplateId ?? '');
+  const [fixedPrice, setFixedPrice] = useState<number>(savedEtsy.price);
+
+  // Tasarım
+  const [niche, setNiche] = useState(template?.seoHints?.primaryNiche ?? '');
+  const [audience, setAudience] = useState(template?.seoHints?.targetAudience ?? '');
+  const [notes, setNotes] = useState(template?.seoHints?.customNotes ?? '');
+
+  // Video + zaman + Etsy (tek zamanlama nesnesinde)
+  const [schedule, setSchedule] = useState<PodTemplateAutomationSchedule>(() => ({
+    ...DEFAULT_SCHEDULE,
+    ...template?.automationSchedule,
+    createListing: true,
+    publishMode: 'draft',
+    video: { ...DEFAULT_SCHEDULE.video, ...template?.automationSchedule?.video },
+    etsy: savedEtsy,
+  }));
+  const video = schedule.video ?? {};
+  const updateVideo = (patch: Partial<NonNullable<PodTemplateAutomationSchedule['video']>>) =>
+    setSchedule((prev) => ({ ...prev, video: { ...prev.video, ...patch } }));
+
+  // Seçenek listeleri
+  const [categories, setCategories] = useState<TaxonomyOption[] | null>(null);
+  const [variationTemplates, setVariationTemplates] = useState<EtsyVariationTemplate[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/etsy/taxonomy').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!cancelled) setCategories(Array.isArray(d?.categories) ? d.categories : []);
+    }).catch(() => { if (!cancelled) setCategories([]); });
+    fetch('/api/workspace/variation-templates').then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!cancelled) setVariationTemplates(Array.isArray(d?.templates) ? d.templates : []);
+    }).catch(() => { if (!cancelled) setVariationTemplates([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const folderMockups = useMemo(() => mockups.filter((m) => m.folderId === folderId), [mockups, folderId]);
+  const counts = useMemo(() => {
+    const c = { print: 0, static: 0, video: 0, unset: 0 };
+    for (const m of folderMockups) c[mockupKind(m)]++;
+    return c;
+  }, [folderMockups]);
+  const category = categories?.find((c) => c.id === taxonomyId);
+  const variationSource = variationTemplates?.find((t) => t.id === variationSourceId);
+  const variationSummary = useMemo(() => {
+    const rows = variationSource?.variations ?? [];
+    if (rows.length === 0) return null;
+    const prices = rows.map((r) => Number(r.price)).filter((p) => p > 0);
+    return {
+      count: rows.length,
+      sizes: new Set(rows.map((r) => r.size)).size,
+      colors: new Set(rows.map((r) => r.color)).size,
+      min: prices.length ? Math.min(...prices) : 0,
+      max: prices.length ? Math.max(...prices) : 0,
+    };
+  }, [variationSource]);
+
+  // Adım doğrulamaları (Etsy mağaza ayarları eksikse kayıt engellenmez; ilan adımı nedenini yazarak atlanır).
+  const stepErrors = (s: Step): string[] => {
+    if (s === 0) {
+      const errors: string[] = [];
+      if (!folderId) errors.push('Bir mockup klasörü seçin.');
+      else if (counts.print === 0) errors.push('Klasörde baskı alanı ayarlanmış en az bir mockup olmalı.');
+      if (!(taxonomyId > 0)) errors.push('Etsy kategorisini seçin.');
+      if (!variationSourceId && !(fixedPrice >= 0.2)) errors.push('Varyasyon şablonu seçin veya en az 0,20 fiyat girin.');
+      return errors;
+    }
+    if (s === 1 && !niche.trim()) return ['Tasarım konusunu yazın.'];
+    return [];
+  };
+  const currentErrors = stepErrors(step);
+  const blockingErrors = ([0, 1] as Step[]).flatMap(stepErrors);
+  const etsyWarnings = getEtsyListingSettingsErrors(schedule);
+
+  const buildInput = (): PodTemplateInput => {
+    const variationConfig: PodTemplateVariationConfig = variationSource?.variations?.length
+      ? { ...variationConfigFromRows(variationSource.variations), sourceTemplateId: variationSource.id, sourceTemplateName: variationSource.name }
+      : { rows: [], sizes: [], colors: [] };
+    return {
+      name: name.trim() || folder?.name || 'Otomasyon',
+      mockupConfig: { ...buildFolderMockupConfig(folderId, mockups), fabricType: 'all' },
+      variationConfig,
+      seoHints: {
+        primaryNiche: niche.trim(),
+        targetAudience: audience.trim(),
+        customNotes: notes.trim(),
+        productType: productTypeFromCategory(category?.name),
+      },
+      automationSchedule: {
+        ...schedule,
+        createListing: true,
+        publishMode: 'draft',
+        etsy: { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy, taxonomyId, price: variationSummary?.min || fixedPrice },
+      },
+      isActive: template?.isActive ?? true,
+    };
+  };
+
+  const handleSave = async (runNow: boolean) => {
+    if (blockingErrors.length > 0) {
+      toast.error(blockingErrors[0]);
+      setStep(stepErrors(0).length > 0 ? 0 : 1);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const saved = await saveTemplate(buildInput(), template?.id);
+      if (runNow) {
+        const res = await fetch('/api/automation/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId: saved.id, triggerType: 'manual' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok || res.status === 409) toast.info('Otomasyon kaydedildi ve ilk çalıştırma başlatıldı. İlerlemeyi Toplu Üretim › Otomasyonlar\'nda izleyebilirsiniz.');
+        else toast.warning(`Otomasyon kaydedildi ancak çalıştırılamadı: ${data.error || 'bilinmeyen hata'}`);
+      } else {
+        toast.success(template ? 'Otomasyon güncellendi.' : 'Otomasyon oluşturuldu.');
+      }
+      onSaved(saved);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Otomasyon kaydedilemedi.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isLast = step === 4;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-6">
+      <DialogPanel
+        aria-labelledby="automation-wizard-title"
+        onClose={onClose}
+        className="w-full sm:max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col max-h-[92dvh]"
+      >
+        {/* Başlık */}
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shrink-0 shadow">
+              <Rocket className="w-5 h-5 text-white" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 id="automation-wizard-title" className="text-base font-bold text-slate-900 dark:text-white truncate">
+                {template ? 'Otomasyonu Düzenle' : 'Otomasyon Kur'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{folder ? `Klasör: ${folder.name}` : 'Bir mockup klasörü için otomatik ürün üretimi'}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Kapat" className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Adımlar */}
+        <nav aria-label="Kurulum adımları" className="px-5 pb-3">
+          <ol className="grid grid-cols-5 gap-1">
+            {STEPS.map(({ label, icon: Icon }, index) => {
+              const s = index as Step;
+              const active = s === step;
+              const done = s < step && stepErrors(s).length === 0;
+              return (
+                <li key={label}>
+                  <button
+                    type="button"
+                    onClick={() => setStep(s)}
+                    aria-current={active ? 'step' : undefined}
+                    className={`w-full flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-semibold transition-colors ${
+                      active ? 'bg-purple-600 text-white shadow' : done ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {done ? <Check className="w-4 h-4" aria-hidden="true" /> : <Icon className="w-4 h-4" aria-hidden="true" />}
+                    {label}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        {/* İçerik */}
+        <div className="flex-1 overflow-y-auto px-5 py-2 space-y-5">
+          {step === 0 && (
+            <>
+              {!fixedFolderId && (
+                <div>
+                  <label className={labelClass} htmlFor="aw-folder">Mockup klasörü</label>
+                  <select id="aw-folder" className={inputClass} value={folderId} onChange={(e) => {
+                    setFolderId(e.target.value);
+                    const next = mockupFolders.find((f) => f.id === e.target.value);
+                    if (next && !name.trim()) setName(next.name);
+                  }}>
+                    <option value="">Klasör seçin…</option>
+                    {mockupFolders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {folderId && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 mb-2"><Layers className="w-3.5 h-3.5 text-purple-500" /> Klasördeki mockup&apos;lar</p>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {folderMockups.slice(0, 12).map((m) => (
+                      <div key={m.id} className={`relative w-12 h-12 shrink-0 rounded-lg overflow-hidden border ${mockupKind(m) === 'unset' ? 'border-amber-400' : 'border-slate-200 dark:border-slate-700'}`} title={m.name}>
+                        {m.isVideo
+                          ? <div className="w-full h-full flex items-center justify-center bg-slate-800"><Video className="w-4 h-4 text-white" /></div>
+                          : <img src={m.src} alt={m.name} loading="lazy" className="w-full h-full object-cover" />}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    Tasarım basılacak: <strong className="text-slate-700 dark:text-slate-200">{counts.print}</strong>
+                    {counts.static > 0 && <> · Olduğu gibi eklenecek (tablo): <strong className="text-slate-700 dark:text-slate-200">{counts.static}</strong></>}
+                    {counts.video > 0 && <> · Video: <strong className="text-slate-700 dark:text-slate-200">{counts.video}</strong></>}
+                  </p>
+                  {counts.unset > 0 && (
+                    <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{counts.unset} mockup&apos;ta baskı alanı ayarlanmamış; bunlar atlanır.</p>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Her çalıştırmada klasörün güncel içeriği kullanılır; koyu renkli tişörtlere tasarımın açık tonlu sürümü otomatik basılır.</p>
+                </div>
+              )}
+
+              <div>
+                <label className={labelClass} htmlFor="aw-category">Etsy kategorisi</label>
+                {categories === null ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Kategoriler yükleniyor…</div>
+                ) : categories.length > 0 ? (
+                  <select id="aw-category" className={inputClass} value={categories.some((c) => c.id === taxonomyId) ? String(taxonomyId) : ''} onChange={(e) => setTaxonomyId(Number(e.target.value))}>
+                    <option value="">Kategori seçin…</option>
+                    {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.path || c.name}</option>)}
+                  </select>
+                ) : (
+                  <>
+                    <input id="aw-category" type="number" min={1} className={inputClass} value={taxonomyId || ''} onChange={(e) => setTaxonomyId(Number(e.target.value) || 0)} placeholder="Kategori kimliği (ör. 482 T-shirt)" />
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Admin panelinde (Etsy Kategorileri) kategori etkinleştirilirse burada listeden seçilir.</p>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className={labelClass} htmlFor="aw-variation">Varyasyonlar (ürün, renk, fiyat)</label>
+                {variationTemplates === null ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Varyasyon şablonları yükleniyor…</div>
+                ) : (
+                  <select id="aw-variation" className={inputClass} value={variationSourceId} onChange={(e) => setVariationSourceId(e.target.value)}>
+                    <option value="">Varyasyon yok (tek fiyat)</option>
+                    {variationTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.variations?.length ?? 0} varyasyon)</option>)}
+                  </select>
+                )}
+                {variationSummary ? (
+                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    {variationSummary.count} varyasyon · {variationSummary.sizes} beden/ürün · {variationSummary.colors} renk · ${variationSummary.min.toFixed(2)}–${variationSummary.max.toFixed(2)}.
+                    {' '}Etsy SEO sekmesinde bu şablonda yaptığınız fiyat değişiklikleri sonraki çalıştırmalarda otomatik kullanılır.
+                  </p>
+                ) : !variationSourceId && (
+                  <div className="mt-2">
+                    <label className={labelClass} htmlFor="aw-price">Fiyat (USD)</label>
+                    <input id="aw-price" type="number" min={0.2} step={0.01} className={inputClass} value={fixedPrice} onChange={(e) => setFixedPrice(Number(e.target.value) || 0)} />
+                    {variationTemplates?.length === 0 && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Varyasyon şablonları Etsy SEO sekmesindeki varyasyon tablosundan kaydedilir.</p>}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className={labelClass} htmlFor="aw-name">Otomasyon adı</label>
+                <input id="aw-name" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder={folder?.name || 'Ör. Erkek tişört — kedi temalı'} />
+              </div>
+            </>
+          )}
+
+          {step === 1 && (
+            <>
+              <div>
+                <label className={labelClass} htmlFor="aw-niche">Tasarım konusu / niş</label>
+                <input id="aw-niche" className={inputClass} value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Ör. funny cat mom quotes, retro camping, teacher appreciation" />
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Her çalıştırmada bu konuda yeni ve farklı bir tasarım üretilir; başlık, açıklama ve 13 etiket de bu konuya göre yazılır.</p>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="aw-audience">Hedef kitle (isteğe bağlı)</label>
+                <input id="aw-audience" className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Ör. cat moms, dog lovers, nurses" />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="aw-notes">Stil ve ek istekler (isteğe bağlı)</label>
+                <textarea id="aw-notes" rows={3} className={inputClass} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ör. vintage distressed look, en fazla 3 renk, metin İngilizce" />
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <label className="flex items-start gap-3 p-3.5 rounded-2xl border-2 border-slate-200 dark:border-slate-700 cursor-pointer has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50 dark:has-[:checked]:bg-purple-500/10">
+                <input type="checkbox" className="mt-0.5 w-4 h-4 accent-purple-600" checked={schedule.generateVideo === true} onChange={(e) => setSchedule((prev) => ({ ...prev, generateVideo: e.target.checked }))} />
+                <span className="text-sm">
+                  <span className="font-bold text-slate-900 dark:text-white">Tanıtım videosu üret</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">Tasarımın basıldığı mockup görselinden 8 saniyelik gerçekçi bir video üretilir ve ilana eklenir. Ek maliyet ve birkaç dakika süre ekler.</span>
+                </span>
+              </label>
+
+              {schedule.generateVideo && (
+                <>
+                  <fieldset>
+                    <legend className={labelClass}>Video modeli</legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {VIDEO_MODEL_CHOICES.map((choice) => (
+                        <button key={choice.id} type="button" onClick={() => updateVideo({ model: choice.id })} aria-pressed={video.model === choice.id}
+                          className={`text-left p-3 rounded-xl border-2 transition-colors ${video.model === choice.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <span className="block text-sm font-bold text-slate-900 dark:text-white">{choice.label}</span>
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{choice.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend className={labelClass}>Çekim tarzı</legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {VIDEO_STYLES.map((style) => (
+                        <button key={style.id} type="button" onClick={() => updateVideo({ style: style.id })} aria-pressed={(video.style ?? 'mannequin') === style.id}
+                          className={`text-left p-3 rounded-xl border-2 transition-colors ${(video.style ?? 'mannequin') === style.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <span className="block text-sm font-bold text-slate-900 dark:text-white">{style.label}</span>
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{style.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div>
+                    <label className={labelClass} htmlFor="aw-video-notes">Video için ek yönlendirme (isteğe bağlı)</label>
+                    <input id="aw-video-notes" className={inputClass} value={video.notes ?? ''} onChange={(e) => updateVideo({ notes: e.target.value })} placeholder="Ör. açık gri stüdyo zemini, yavaş kamera hareketi" />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {step === 3 && <ScheduleSection schedule={schedule} onChange={setSchedule} />}
+
+          {step === 4 && (
+            <>
+              <EtsyListingSection schedule={schedule} onChange={setSchedule} variant="store" />
+              <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-bold text-slate-800 dark:text-slate-100">Özet</p>
+                <p>Klasör: <strong>{folder?.name ?? '—'}</strong> · {counts.print} mockup&apos;a basılır</p>
+                <p>Kategori: <strong>{category?.path || category?.name || (taxonomyId > 0 ? `#${taxonomyId}` : '—')}</strong></p>
+                <p>Varyasyon: <strong>{variationSource ? `${variationSource.name} (${variationSummary?.count ?? 0})` : `Tek fiyat $${fixedPrice}`}</strong></p>
+                <p>Konu: <strong>{niche || '—'}</strong></p>
+                <p>Video: <strong>{schedule.generateVideo ? `${VIDEO_MODEL_CHOICES.find((c) => c.id === video.model)?.label ?? video.model} · ${VIDEO_STYLES.find((s) => s.id === (video.style ?? 'mannequin'))?.label}` : 'Yok'}</strong></p>
+                <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>Etsy taslak ilanı</strong></p>
+                {etsyWarnings.length > 0 && (
+                  <p className="text-amber-700 dark:text-amber-400 flex gap-1 pt-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Mağaza ayarları eksik: tasarım ve mockup&apos;lar üretilir, ilan adımı atlanır.</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {currentErrors.length > 0 && (
+            <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 list-disc pl-5" role="status">
+              {currentErrors.map((e) => <li key={e}>{e}</li>)}
+            </ul>
+          )}
+        </div>
+
+        {/* Alt gezinme */}
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800">
+          <button type="button" onClick={() => setStep((s) => Math.max(0, s - 1) as Step)} disabled={step === 0}
+            className="btn btn-secondary disabled:opacity-40">
+            <ChevronLeft className="w-4 h-4" /> Geri
+          </button>
+          {isLast ? (
+            <div className="flex gap-2 ml-auto">
+              <button type="button" onClick={() => handleSave(false)} disabled={isSaving} className="btn btn-secondary">
+                {isSaving ? <Spinner className="w-4 h-4" /> : <Save className="w-4 h-4" />} Kaydet
+              </button>
+              <button type="button" onClick={() => handleSave(true)} disabled={isSaving} className="btn btn-primary">
+                <Rocket className="w-4 h-4" /> Kaydet ve şimdi dene
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setStep((s) => Math.min(4, s + 1) as Step)} disabled={currentErrors.length > 0} className="btn btn-primary ml-auto disabled:opacity-50">
+              İleri <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </DialogPanel>
+    </div>
+  );
+}

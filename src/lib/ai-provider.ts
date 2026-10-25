@@ -53,6 +53,10 @@ export interface GenerateImageOptions {
 
 export interface GenerateVideoOptions {
   prompt: string;
+  /** Model kimliği (veo-… veya gemini-omni-…); yoksa admin ayarı */
+  model?: string;
+  /** Referans görsel (image-to-video): video bu ürünü gösterir */
+  image?: { data: Buffer; mimeType: 'image/jpeg' | 'image/png' };
   /** Saniye (5 veya 8) */
   durationSeconds?: 5 | 8;
   aspectRatio?: '9:16' | '16:9' | '1:1';
@@ -242,41 +246,52 @@ export async function generateImage(
   return generateImageGoogle(config, options);
 }
 
-// ─── Video Üretimi (Veo 3.1) ─────────────────────────────────────────────────
+// ─── Video Üretimi (Veo 3.1 / Gemini Omni Flash) ─────────────────────────────
+
+/** Gemini Omni Flash modelleri `interactions` API'si ile, Veo modelleri `generateVideos` ile çalışır. */
+export function isOmniVideoModel(model: string | undefined): boolean {
+  return Boolean(model?.startsWith('gemini-omni'));
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Google Veo 3.1 ile video üretir.
- * Asenkron polling pattern — uzun sürebilir (30–180 sn).
+ * Video üretir. Model `options.model` ile seçilebilir (yoksa admin ayarı). Referans görsel verilirse
+ * (ör. tasarımın basıldığı mockup) video o ürünü gösterir (image-to-video).
+ * Asenkron: üretim sürerken 10 sn aralıklarla durum sorgulanır.
  */
 export async function generateVideo(
   config: AIProviderConfig,
   options: GenerateVideoOptions
 ): Promise<GeneratedVideo> {
-  const client = getGoogleClient(config, config.videoModel);
+  const model = options.model || config.videoModel;
+  if (isOmniVideoModel(model)) return generateVideoOmni(config, model, options);
+  return generateVideoVeo(config, model, options);
+}
 
-  // Video üretimi başlat
+async function generateVideoVeo(config: AIProviderConfig, model: string, options: GenerateVideoOptions): Promise<GeneratedVideo> {
+  const client = getGoogleClient(config, model);
+
+  // Veo 3.x yalnızca 16:9 ve 9:16 destekler.
   let operation = await client.models.generateVideos({
-    model: config.videoModel,
+    model,
     prompt: options.prompt,
+    ...(options.image ? { image: { imageBytes: options.image.data.toString('base64'), mimeType: options.image.mimeType } } : {}),
     config: {
-      aspectRatio: options.aspectRatio ?? '1:1',
+      aspectRatio: options.aspectRatio ?? '16:9',
       resolution: options.resolution ?? '720p',
       durationSeconds: options.durationSeconds ?? 8,
     },
   });
 
-  // Polling (maksimum 5 dakika)
-  const maxAttempts = Math.max(1, Math.floor((options.maxWaitMs ?? 300_000) / 10_000));
-  let attempts = 0;
-
-  while (!operation.done && attempts < maxAttempts) {
-    await new Promise(r => setTimeout(r, 10_000)); // 10sn bekle
+  const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
+  while (!operation.done && Date.now() < deadline) {
+    await sleep(10_000);
     operation = await client.operations.getVideosOperation({ operation });
-    attempts++;
   }
 
   if (!operation.done) {
-    throw new Error(`Video üretimi zaman aşımına uğradı (${Math.round((maxAttempts * 10) / 60)} dakika).`);
+    throw new Error(`Video üretimi zaman aşımına uğradı (${Math.round((options.maxWaitMs ?? 300_000) / 60_000)} dakika).`);
   }
 
   if (operation.error) {
@@ -285,7 +300,7 @@ export async function generateVideo(
 
   const generatedVideo = operation.response?.generatedVideos?.[0];
   if (!generatedVideo?.video) {
-    throw new Error('Video üretimi başarısız: Yanıt boş.');
+    throw new Error('Video üretimi başarısız: Yanıt boş (içerik filtresine takılmış olabilir).');
   }
 
   const mimeType = generatedVideo.video.mimeType ?? 'video/mp4';
@@ -296,4 +311,53 @@ export async function generateVideo(
   }
 
   return { uri, mimeType };
+}
+
+type OmniVideoContent = { data?: string; uri?: string; mime_type?: string };
+type OmniInteraction = { id?: string; status?: string; output_video?: OmniVideoContent; error?: unknown };
+
+async function generateVideoOmni(config: AIProviderConfig, model: string, options: GenerateVideoOptions): Promise<GeneratedVideo> {
+  const client = getGoogleClient(config, model);
+  const input = options.image
+    ? [
+        { type: 'image', data: options.image.data.toString('base64'), mime_type: options.image.mimeType },
+        { type: 'text', text: options.prompt },
+      ]
+    : options.prompt;
+
+  // Arka planda çalıştırılır; sonuç durum sorgulanarak alınır (sunucu fonksiyonu süre sınırına takılmaz).
+  let interaction = await (client.interactions.create as unknown as (params: Record<string, unknown>) => Promise<OmniInteraction>)({
+    model,
+    input,
+    response_format: {
+      type: 'video',
+      aspect_ratio: options.aspectRatio === '9:16' ? '9:16' : '16:9',
+      resolution: options.resolution ?? '720p',
+    },
+    ...(options.image ? { generation_config: { video_config: { task: 'image_to_video' } } } : {}),
+    background: true,
+    store: true,
+  });
+
+  const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
+  while (!interaction.output_video && interaction.id && !isFinalInteraction(interaction.status) && Date.now() < deadline) {
+    await sleep(10_000);
+    interaction = await (client.interactions.get as unknown as (id: string) => Promise<OmniInteraction>)(interaction.id);
+  }
+
+  const video = interaction.output_video;
+  if (!video) {
+    if (!isFinalInteraction(interaction.status)) {
+      throw new Error(`Video üretimi zaman aşımına uğradı (${Math.round((options.maxWaitMs ?? 300_000) / 60_000)} dakika).`);
+    }
+    throw new Error(`Omni Flash video üretemedi (${interaction.status ?? 'bilinmeyen durum'}${interaction.error ? `: ${JSON.stringify(interaction.error).slice(0, 200)}` : ''}).`);
+  }
+  const mimeType = video.mime_type || 'video/mp4';
+  const uri = video.data ? `data:${mimeType};base64,${video.data}` : video.uri;
+  if (!uri) throw new Error('Video üretimi başarısız: Yanıtta video yok.');
+  return { uri, mimeType };
+}
+
+function isFinalInteraction(status: string | undefined): boolean {
+  return Boolean(status && status !== 'in_progress' && status !== 'queued');
 }

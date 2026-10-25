@@ -3,7 +3,9 @@ import type { MockupItem } from '@/types/pod';
 import {
   buildAutomationKeywords,
   buildDesignPrompt,
+  buildVideoPrompt,
   deriveRunOutcome,
+  needsDarkGarmentDesign,
   nextPendingStep,
   selectAutomationMockups,
   topicSearchTerms,
@@ -79,5 +81,35 @@ describe('run progress', () => {
     expect(nextPendingStep({ designGeneration: { status: 'completed' }, backgroundRemoval: { status: 'completed' } })).toBe('mockupRender');
     expect(deriveRunOutcome({ videoGeneration: { status: 'failed', error: 'veo' } }).status).toBe('completed');
     expect(deriveRunOutcome({ listingCreation: { status: 'failed', error: 'Etsy reddetti' } })).toEqual({ status: 'failed', errorMessage: 'Etsy reddetti' });
+  });
+});
+
+describe('folder-linked templates and video prompt', () => {
+  const folderMockups = [
+    { id: 'w', name: 'White', src: '/w.png', folderId: 'f1', apparelType: 'light', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], opacity: 1, width: 10, height: 10 },
+    { id: 'b', name: 'Black', src: '/b.png', folderId: 'f1', apparelType: 'dark', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], opacity: 1, width: 10, height: 10 },
+    { id: 'chart', name: 'Chart', src: '/c.png', folderId: 'f1', apparelType: 'any', printAreas: [], hasPrintArea: false, opacity: 1, width: 10, height: 10 },
+    { id: 'other', name: 'Other', src: '/o.png', folderId: 'f2', apparelType: 'light', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], opacity: 1, width: 10, height: 10 },
+  ] as MockupItem[];
+
+  it('uses the current folder contents instead of the saved id snapshot', () => {
+    const plan = selectAutomationMockups(folderMockups, { folderId: 'f1', printAreaMockupIds: ['stale'], staticMockupIds: [], videoMockupIds: [], fabricType: 'all', multiPrintAreaSupport: false });
+    expect(plan.render.map((m) => m.id)).toEqual(['w', 'b']);
+    expect(plan.statics.map((m) => m.id)).toEqual(['chart']);
+  });
+
+  it('marks dark garments for the light-ink design variant', () => {
+    expect(needsDarkGarmentDesign({ apparelType: 'dark' })).toBe(true);
+    expect(needsDarkGarmentDesign({ apparelType: 'light' })).toBe(false);
+    expect(needsDarkGarmentDesign({ apparelType: 'any' })).toBe(false);
+  });
+
+  it('builds a product-faithful video prompt for the chosen style', () => {
+    const prompt = buildVideoPrompt({ style: 'mannequin', notes: 'grey studio' }, { productType: 'T-shirt' });
+    expect(prompt).toMatch(/mannequin/);
+    expect(prompt).toMatch(/t-shirt/);
+    expect(prompt).toMatch(/exactly as in the reference image/);
+    expect(prompt).toMatch(/grey studio/);
+    expect(buildVideoPrompt({ style: 'flatlay' }, null)).toMatch(/lies flat/);
   });
 });

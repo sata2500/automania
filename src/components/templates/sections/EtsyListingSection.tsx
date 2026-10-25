@@ -15,6 +15,8 @@ import { Spinner } from '@/components/common/Spinner';
 interface EtsyListingSectionProps {
   schedule: PodTemplateAutomationSchedule;
   onChange: (schedule: PodTemplateAutomationSchedule) => void;
+  /** 'store': yalnızca mağaza ayarları (kargo, hazırlık, iade, bölüm) — kategori ve fiyat başka adımda seçilir */
+  variant?: 'full' | 'store';
 }
 
 export const DEFAULT_ETSY_LISTING_SETTINGS: PodTemplateEtsyListingSettings = {
@@ -56,11 +58,12 @@ export function getEtsyListingSettingsErrors(schedule: PodTemplateAutomationSche
 const selectClass = 'w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/40 text-slate-800 dark:text-slate-100';
 const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
 
-export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionProps) {
+export function EtsyListingSection({ schedule, onChange, variant = 'full' }: EtsyListingSectionProps) {
+  const storeOnly = variant === 'store';
   const [options, setOptions] = useState<StoreOptions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<TaxonomyOption[]>([]);
-  const createListing = schedule.createListing === true;
+  const createListing = storeOnly || schedule.createListing === true;
   const etsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy };
 
   const updateEtsy = (updates: Partial<PodTemplateEtsyListingSettings>) => {
@@ -113,7 +116,7 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
   return (
     <div className="space-y-5">
       {/* Ne yapılacak? */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {!storeOnly && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className={`flex items-start gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${createListing ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-500/60' : 'border-slate-200 dark:border-slate-700'}`}>
           <input
             type="checkbox"
@@ -138,7 +141,7 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
             <span className="block mt-0.5 text-slate-500 dark:text-slate-400">Google Veo ile 8 saniyelik video üretilir ve ilana eklenir. Ek maliyet ve birkaç dakika süre ekler.</span>
           </span>
         </label>
-      </div>
+      </div>}
 
       {createListing && (
         <>
@@ -182,7 +185,7 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {!storeOnly && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelClass} htmlFor="tpl-taxonomy">Etsy kategorisi</label>
               {categories.length > 0 && (
@@ -232,7 +235,7 @@ export function EtsyListingSection({ schedule, onChange }: EtsyListingSectionPro
                 onChange={(e) => updateEtsy({ price: Number(e.target.value) || 0 })}
               />
             </div>
-          </div>
+          </div>}
 
           <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300">
             <Store className="w-4 h-4 shrink-0 text-amber-500" />

@@ -30,13 +30,16 @@ import {
   AUTOMATION_STEP_ORDER,
   buildAutomationKeywords,
   buildDesignPrompt,
+  buildVideoPrompt,
   deriveRunOutcome,
   isStepDone,
+  needsDarkGarmentDesign,
   nextPendingStep,
   selectAutomationMockups,
   topicSearchTerms,
 } from '@/lib/automation-plan';
-import type { DesignItem, MockupItem } from '@/types/pod';
+import type { DesignItem, EtsyVariationRow, MockupItem } from '@/types/pod';
+import { variationConfigFromRows } from '@/lib/folder-template';
 import type { AutomationRunSteps, AutomationStepName, GeneratedSeoData } from '@/types/templates';
 
 export type AutomationRunInput = {
@@ -76,6 +79,27 @@ async function loadWorkspaceMockups(userId: string): Promise<MockupItem[]> {
     .from(userWorkspaces)
     .where(eq(userWorkspaces.userId, userId));
   return (workspace?.mockups as MockupItem[] | undefined) ?? [];
+}
+
+/**
+ * Şablon, Etsy SEO sekmesindeki bir varyasyon şablonuna bağlıysa onun güncel satırları kullanılır
+ * (fiyat güncellemeleri şablonu yeniden kaydetmeden geçerli olur); bulunamazsa kayıtlı kopya.
+ */
+async function resolveVariationRows(userId: string, config: TemplateRow['variationConfig']): Promise<NonNullable<TemplateRow['variationConfig']>['rows']> {
+  const fallback = config?.rows ?? [];
+  if (!config?.sourceTemplateId) return fallback;
+  try {
+    const [workspace] = await db
+      .select({ templates: userWorkspaces.etsyVariationTemplates })
+      .from(userWorkspaces)
+      .where(eq(userWorkspaces.userId, userId));
+    const source = ((workspace?.templates as Array<{ id: string; variations?: EtsyVariationRow[] }> | null) ?? [])
+      .find((t) => t.id === config.sourceTemplateId);
+    return source?.variations?.length ? variationConfigFromRows(source.variations).rows : fallback;
+  } catch (error) {
+    console.warn('[Automation] Variation template lookup failed; using saved rows.', error instanceof Error ? error.message : error);
+    return fallback;
+  }
 }
 
 async function jpegForListing(buffer: Buffer): Promise<Buffer> {
@@ -203,13 +227,29 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
   }
 
   const { renderDesignOnMockup } = await import('@/lib/backend-render');
+  // Koyu kumaşlarda (siyah, lacivert…) tasarımın açık tonlu sürümü basılır; bir kez üretilir.
+  let darkGarmentDesign: Buffer | null = null;
+  const designFor = async (mockup: MockupItem): Promise<Buffer> => {
+    if (!needsDarkGarmentDesign(mockup)) return design;
+    if (!darkGarmentDesign) {
+      try {
+        const { recolorDesign } = await import('@/lib/recolor');
+        darkGarmentDesign = (await recolorDesign(design, 'dark_garment')).pngBuffer;
+      } catch (error) {
+        console.warn('[Automation] Dark garment recolor failed; using original design.', error instanceof Error ? error.message : error);
+        darkGarmentDesign = design;
+      }
+    }
+    return darkGarmentDesign;
+  };
   const urls: string[] = [];
   const failures: string[] = [];
   for (const [index, mockup] of plan.render.entries()) {
     try {
       let composite = await loadImageForUser(userId, mockup.src);
+      const mockupDesign = await designFor(mockup);
       // Birden fazla baskı alanı varsa tasarım hepsine yerleştirilir.
-      for (const area of mockup.printAreas) composite = await renderDesignOnMockup(composite, design, area);
+      for (const area of mockup.printAreas) composite = await renderDesignOnMockup(composite, mockupDesign, area);
       const jpeg = await jpegForListing(composite);
       const upload = await uploadToR2(jpeg, createOwnedUploadName(userId, `auto-mockup-${runId}-${index + 1}`, 'image/jpeg'), 'image/jpeg');
       urls.push(upload.url);
@@ -240,15 +280,46 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
   }
 
   const config = await loadAIConfig();
-  const { generateVideo } = await import('@/lib/ai-provider');
-  const basePrompt = buildDesignPrompt(template.seoHints, 0);
-  const videoPromptTemplate = (await loadPromptSetting('ai_prompt_generate_video')) || 'Create a cinematic showcase video for a t-shirt.';
-  const finalVideoPrompt = videoPromptTemplate
-    .replace(/\{\{userPrompt\}\}/g, basePrompt)
-    .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '');
-  const generated = await generateVideo(config, { prompt: finalVideoPrompt, maxWaitMs: VIDEO_MAX_WAIT_MS });
+  const { generateVideo, isOmniVideoModel } = await import('@/lib/ai-provider');
+  const videoSettings = schedule.video;
+
+  let prompt: string;
+  if (videoSettings) {
+    prompt = buildVideoPrompt(videoSettings, template.seoHints);
+  } else {
+    // Eski şablonlar: admin panelindeki video prompt'u
+    const basePrompt = buildDesignPrompt(template.seoHints, 0);
+    const videoPromptTemplate = (await loadPromptSetting('ai_prompt_generate_video')) || 'Create a cinematic showcase video for a t-shirt.';
+    prompt = videoPromptTemplate
+      .replace(/\{\{userPrompt\}\}/g, basePrompt)
+      .replace(/\{\{selectedStyle\}\}/g, template.seoHints?.primaryNiche || '');
+  }
+
+  // Referans görsel: tasarımın basıldığı ilk mockup — video bu ürünü gösterir.
+  const firstMockupUrl = ((ctx.run.generatedMockupUrls as string[] | null) ?? [])[0];
+  let image: { data: Buffer; mimeType: 'image/jpeg' } | undefined;
+  if (firstMockupUrl) {
+    try {
+      image = { data: await jpegForListing(await loadImageForUser(userId, firstMockupUrl)), mimeType: 'image/jpeg' };
+    } catch (error) {
+      console.warn('[Automation] Reference image for video could not be loaded', error instanceof Error ? error.message : error);
+    }
+  }
+
+  const model = videoSettings?.model || config.videoModel;
+  let generated;
+  try {
+    generated = await generateVideo(config, { prompt, model, image, maxWaitMs: VIDEO_MAX_WAIT_MS });
+  } catch (error) {
+    // Omni Flash: Gemini API'de GA adı, Vertex'te önizleme adı geçerli olabilir; diğeri denenir.
+    const alternate = isOmniVideoModel(model) && /NOT_FOUND|404|not found/i.test(error instanceof Error ? error.message : '')
+      ? (model.endsWith('-preview') ? model.replace(/-preview$/, '') : `${model}-preview`)
+      : null;
+    if (!alternate) throw error;
+    generated = await generateVideo(config, { prompt, model: alternate, image, maxWaitMs: VIDEO_MAX_WAIT_MS });
+  }
   const url = await persistGeneratedVideo(userId, runId, generated.uri, config.googleApiKey);
-  return { patch: { generatedVideoUrl: url }, output: { source: 'ai' } };
+  return { patch: { generatedVideoUrl: url }, output: { source: 'ai', model, referenceImage: Boolean(image) } };
 }
 
 async function runSeo(ctx: StepContext): Promise<StepResult> {
@@ -308,7 +379,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   const photos = ((run.generatedMockupUrls as string[] | null) ?? []).map((url) => ({ url, isVideo: false }));
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
   const media = run.generatedVideoUrl ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
-  const variations = (template.variationConfig?.rows ?? [])
+  const variations = (await resolveVariationRows(userId, template.variationConfig))
     .filter((row) => row.enabled !== false)
     .map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: true }));
 
