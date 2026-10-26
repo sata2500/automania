@@ -19,6 +19,7 @@
 import type { GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
 import { DEFAULT_VIDEO_MODEL, normalizeVideoModel } from '@/lib/google-cloud-credentials';
+import { isRetryableAiError, withAiRetry } from '@/lib/ai-retry';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -150,11 +151,11 @@ async function generateImageGoogle(
 
   // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
   if (config.imageModel.startsWith('imagen')) {
-    const result = await client.models.generateImages({
+    const result = await withAiRetry(() => client.models.generateImages({
       model: config.imageModel,
       prompt: options.prompt,
       config: { numberOfImages: options.numberOfImages ?? 1, aspectRatio },
-    });
+    }), { label: 'image generation' });
     const imagenImages: GeneratedImage[] = (result.generatedImages ?? [])
       .map((item) => item.image)
       .filter((image): image is NonNullable<typeof image> & { imageBytes: string } => Boolean(image?.imageBytes))
@@ -173,13 +174,14 @@ async function generateImageGoogle(
       imageConfig: { aspectRatio, ...(imageSize ? { imageSize } : {}) },
     },
   });
+  // Kapasite hatalarında (429/503) bekleyip yeniden denenir.
   let response;
   try {
-    response = await request('2K');
+    response = await withAiRetry(() => request('2K'), { label: 'image generation' });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!/image_?size|imageConfig|INVALID_ARGUMENT|not supported/i.test(message)) throw error;
-    response = await request();
+    if (isRetryableAiError(error) || !/image_?size|imageConfig|INVALID_ARGUMENT|not supported/i.test(message)) throw error;
+    response = await withAiRetry(() => request(), { label: 'image generation' });
   }
 
   const images: GeneratedImage[] = [];
@@ -277,7 +279,7 @@ async function generateVideoVeo(config: AIProviderConfig, model: string, options
   const client = getGoogleClient(config, model);
 
   // Veo 3.x yalnızca 16:9 ve 9:16 destekler.
-  let operation = await client.models.generateVideos({
+  let operation = await withAiRetry(() => client.models.generateVideos({
     model,
     prompt: options.prompt,
     ...(options.image ? { image: { imageBytes: options.image.data.toString('base64'), mimeType: options.image.mimeType } } : {}),
@@ -286,7 +288,7 @@ async function generateVideoVeo(config: AIProviderConfig, model: string, options
       resolution: options.resolution ?? '720p',
       durationSeconds: options.durationSeconds ?? 8,
     },
-  });
+  }), { label: 'video generation' });
 
   const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
   while (!operation.done && Date.now() < deadline) {
@@ -334,7 +336,8 @@ async function generateVideoOmni(config: AIProviderConfig, requestedModel: strin
     : options.prompt;
 
   // Arka planda çalıştırılır; sonuç durum sorgulanarak alınır (sunucu fonksiyonu süre sınırına takılmaz).
-  let interaction = await (client.interactions.create as unknown as (params: Record<string, unknown>) => Promise<OmniInteraction>)({
+  const createInteraction = client.interactions.create as unknown as (params: Record<string, unknown>) => Promise<OmniInteraction>;
+  let interaction = await withAiRetry(() => createInteraction.call(client.interactions, {
     model,
     input,
     response_format: {
@@ -345,7 +348,7 @@ async function generateVideoOmni(config: AIProviderConfig, requestedModel: strin
     ...(options.image ? { generation_config: { video_config: { task: 'image_to_video' } } } : {}),
     background: true,
     store: true,
-  });
+  }), { label: 'video generation' });
 
   const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
   while (!interaction.output_video && interaction.id && !isFinalInteraction(interaction.status) && Date.now() < deadline) {

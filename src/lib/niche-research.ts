@@ -12,6 +12,7 @@
  */
 import { sql } from '@/lib/db';
 import { loadSettings } from '@/lib/app-settings';
+import { withAiRetry } from '@/lib/ai-retry';
 import { DEFAULT_NICHE_RESEARCH_PROMPT } from '@/lib/default-prompts';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
@@ -242,12 +243,12 @@ export async function researchNiche(input: {
   }, await loadPrompt('ai_prompt_niche_research'));
 
   const client = createGoogleClient(connection, { model });
-  const response = await client.models.generateContent({
+  const response = await withAiRetry(() => client.models.generateContent({
     model,
     contents: prompt,
     // Google Search aracı yapılandırılmış JSON yanıt moduyla birlikte kullanılamaz; JSON metinden ayrıştırılır.
     config: { temperature: 0.9, ...(webSearch ? { tools: [{ googleSearch: {} }] } : {}) },
-  });
+  }), { label: 'niche research' });
   const text = response.text ?? '';
   const parsed = parseResearchResponse(text);
   if (!parsed) throw new Error('Niş araştırması geçerli bir sonuç döndürmedi.');

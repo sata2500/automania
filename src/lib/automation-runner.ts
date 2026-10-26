@@ -27,6 +27,7 @@ import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
+import { describeAiError } from '@/lib/ai-retry';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
 import {
@@ -565,8 +566,8 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
         await persist({ ...(result.patch ?? {}), steps });
       } catch (error) {
         const skipped = error instanceof StepSkipped;
-        const message = error instanceof Error ? error.message : 'Bilinmeyen hata';
-        if (!skipped) console.error(`[Automation] Step ${step} failed`, { runId, message });
+        const message = skipped ? (error as Error).message : describeAiError(error);
+        if (!skipped) console.error(`[Automation] Step ${step} failed`, { runId, message, raw: error instanceof Error ? error.message : error });
         steps[step] = { ...steps[step], status: skipped ? 'skipped' : 'failed', completedAt: new Date().toISOString(), error: message.slice(0, 500) };
         await persist({ steps });
         // Görsel üretilemezse sonraki adımların anlamı yok.
@@ -599,7 +600,7 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
     return outcome.status === 'completed' ? { ok: true, runId } : { ok: false, runId, reason: 'failed', error: outcome.errorMessage ?? undefined };
   } catch (error) {
     console.error('[Automation] Run failed:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = describeAiError(error);
     for (const name of AUTOMATION_STEP_ORDER) {
       if (steps[name]?.status === 'running') steps[name] = { ...steps[name], status: 'failed', completedAt: new Date().toISOString(), error: message.slice(0, 500) };
     }

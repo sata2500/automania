@@ -1,5 +1,6 @@
 import sql from '@/lib/db';
 import { fillPrompt } from '@/lib/prompt-registry';
+import { withAiRetry } from '@/lib/ai-retry';
 import { loadPrompt } from '@/lib/prompt-settings';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
@@ -266,7 +267,7 @@ export async function generateListingContent(userId: string, input: GenerateList
     let lastErr: unknown = null;
     for (const m of candidates) {
       try {
-        const res = await ai.models.generateContent({
+        const res = await withAiRetry(() => ai.models.generateContent({
           model: m,
           contents: prompt,
           config: {
@@ -274,7 +275,7 @@ export async function generateListingContent(userId: string, input: GenerateList
             maxOutputTokens: 8192,
             temperature: 0.7,
           }
-        });
+        }), { label: 'listing generation', delaysMs: [4_000, 10_000] });
         const txt = res.text?.trim();
         if (txt) {
           content = txt;
