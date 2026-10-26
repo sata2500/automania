@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+import { fetchTaxonomyProperties } from '@/lib/etsy-taxonomy-properties';
 
 export async function GET(req: Request) {
   try {
@@ -23,21 +24,16 @@ export async function GET(req: Request) {
 
     const { access_token: etsy_access_token, api_key: etsyApiKey, shared_secret: etsySharedSecret } = tokenRes;
 
-    const propertiesRes = await fetch(`https://openapi.etsy.com/v3/application/seller-taxonomy/nodes/${taxonomy_id}/properties`, {
-      method: 'GET',
-      headers: {
-        'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
-        'Authorization': `Bearer ${etsy_access_token}`
-      }
-    });
-
-    if (!propertiesRes.ok) {
-      const errText = await propertiesRes.text();
-      return NextResponse.json({ success: false, error: `Etsy Taxonomy Properties API Error: ${errText}` }, { status: 400 });
+    if (!etsyApiKey || !etsy_access_token) {
+      return NextResponse.json({ success: false, error: 'Etsy API anahtarı bulunamadı.' }, { status: 400 });
     }
-
-    const data = await propertiesRes.json();
-    return NextResponse.json({ success: true, properties: data.results || [] });
+    let properties;
+    try {
+      properties = await fetchTaxonomyProperties({ apiKey: etsyApiKey, sharedSecret: etsySharedSecret, accessToken: etsy_access_token }, Number(taxonomy_id));
+    } catch (error) {
+      return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Etsy kategori özellikleri alınamadı.' }, { status: 400 });
+    }
+    return NextResponse.json({ success: true, properties });
   } catch (error: unknown) {
     console.error('Etsy Taxonomy Properties Fetch Error:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ success: false, error: 'Etsy taxonomy özellikleri alınamadı.' }, { status: 500 });

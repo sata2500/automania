@@ -27,6 +27,7 @@ import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
+import { fetchTaxonomyProperties, selectableTaxonomyProperties, validateTaxonomyPropertyValues, type EtsyTaxonomyProperty } from '@/lib/etsy-taxonomy-properties';
 import { describeAiError } from '@/lib/ai-retry';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
@@ -488,6 +489,8 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
   // Mağaza bölümü elle seçilmediyse yapay zekâ mağazadaki bölümlerden en uygununu seçer.
   const shopSections = template.automationSchedule?.etsy?.shopSectionId ? [] : await loadShopSections(userId);
+  // Kategori özellikleri (kol boyu, yaka, vesile, grafik…) Etsy'den çekilir; yapay zekâ tasarıma göre seçer.
+  const { properties: taxonomyProperties, error: propertiesError } = await loadCategoryProperties(userId, taxonomyId);
   const result = await generateListingContent(userId, {
     designDescription: designPrompt,
     keywords,
@@ -498,21 +501,49 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     garments: garmentsLabel(hints?.garments),
     taxonomyId,
     shopSections: shopSections.length > 0 ? shopSections : undefined,
+    taxonomyProperties: taxonomyProperties.length > 0 ? taxonomyProperties : undefined,
   });
-  const listing = result.listing as { title: string; description: string; selectedTags: string[]; shop_section_id?: unknown };
+  const listing = result.listing as {
+    title: string; description: string; selectedTags: string[]; shop_section_id?: unknown;
+    taxonomy_properties_values?: unknown; materials?: unknown; styles?: unknown;
+  };
   const chosenSection = shopSections.find((s) => String(s.shop_section_id) === String(listing.shop_section_id ?? ''));
   const seo: GeneratedSeoData = {
     title: listing.title,
     description: listing.description,
     tags: listing.selectedTags,
     taxonomyId: taxonomyId ?? null,
-    taxonomyProperties: {},
+    taxonomyProperties: validateTaxonomyPropertyValues(listing.taxonomy_properties_values, taxonomyProperties),
     keywords,
     shopSectionId: chosenSection ? String(chosenSection.shop_section_id) : null,
     shopSectionTitle: chosenSection?.title ?? null,
+    materials: stringList(listing.materials, 5),
+    styles: stringList(listing.styles, 2),
   };
-  return { patch: { generatedSeo: seo }, output: { model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null } };
+  const propertyCount = Object.keys(seo.taxonomyProperties).length;
+  return {
+    patch: { generatedSeo: seo },
+    output: { model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount },
+    warning: propertiesError ? `Kategori özellikleri alınamadı, bu alanlar boş kaldı: ${propertiesError}` : undefined,
+  };
 }
+
+/** Otomasyonun kategorisindeki, yapay zekânın doldurabileceği Etsy özellikleri (hata olursa boş + neden). */
+async function loadCategoryProperties(userId: string, taxonomyId: number | undefined): Promise<{ properties: EtsyTaxonomyProperty[]; error?: string }> {
+  if (!taxonomyId) return { properties: [] };
+  try {
+    const token = await getValidEtsyToken(userId);
+    const apiKey = token.api_key || process.env.ETSY_API_KEY;
+    if (!token.success || !token.access_token || !apiKey) return { properties: [], error: token.error || 'Etsy bağlantısı yok.' };
+    const all = await fetchTaxonomyProperties({ apiKey, sharedSecret: token.shared_secret || process.env.ETSY_SHARED_SECRET, accessToken: token.access_token }, taxonomyId);
+    return { properties: selectableTaxonomyProperties(all) };
+  } catch (error) {
+    return { properties: [], error: error instanceof Error ? error.message : 'bilinmeyen hata' };
+  }
+}
+
+const stringList = (value: unknown, max: number): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim()).slice(0, max) : [];
 
 async function runListing(ctx: StepContext): Promise<StepResult> {
   const { template, userId, run, runId } = ctx;
@@ -565,6 +596,9 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
     readiness_state_id: etsy.readinessStateId,
     return_policy_id: etsy.returnPolicyId,
     shop_section_id: etsy.shopSectionId || seo.shopSectionId || undefined,
+    taxonomy_properties_values: seo.taxonomyProperties ?? {},
+    materials: seo.materials ?? [],
+    styles: seo.styles ?? [],
     variations,
     images: media,
   });

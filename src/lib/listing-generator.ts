@@ -315,7 +315,9 @@ export async function generateListingContent(userId: string, input: GenerateList
   const sanitizedTitleObj = sanitizeTrademarkText(parsedResult.title);
   parsedResult.title = sanitizedTitleObj.cleanText;
 
-  const sanitizedDescObj = sanitizeTrademarkText(parsedResult.description);
+  // Ürün modelleri (ör. Comfort Colors 1717) satıcının kendi bilgisi: açıklamada adıyla kalır.
+  const garmentNames = typeof garments === 'string' ? garments.split(';').map((g) => g.trim()).filter(Boolean) : [];
+  const sanitizedDescObj = sanitizeTrademarkText(parsedResult.description, { allowedNames: garmentNames });
   parsedResult.description = sanitizedDescObj.cleanText;
 
   const { cleanTags, violationsFound } = sanitizeEtsyTags(parsedResult.selectedTags);

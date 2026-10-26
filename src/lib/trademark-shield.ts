@@ -168,12 +168,19 @@ export function filterSafeKeywords(keywords: string[]): { safe: string[]; remove
 /**
  * Sanitize text (Title, Description, or Tags) by removing or replacing trademarked words
  */
-export function sanitizeTrademarkText(text: string): { cleanText: string; violations: string[] } {
+export function sanitizeTrademarkText(
+  text: string,
+  options: { allowedNames?: string[] } = {},
+): { cleanText: string; violations: string[] } {
   if (!text) return { cleanText: '', violations: [] };
   let sanitized = text;
   const violations: string[] = [];
+  // Satıcının kendi girdiği ürün modeli adları (ör. "Comfort Colors 1717") açıklamada korunur.
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const allowed = (options.allowedNames ?? []).map(normalize).filter(Boolean);
 
   for (const compiled of COMPILED_TRADEMARKS) {
+    if (allowed.some((name) => name.includes(normalize(compiled.entry.term)))) continue;
     if (!compiled.test.test(sanitized) || !hasRequiredContext(compiled, sanitized)) continue;
     violations.push(compiled.entry.term);
     const replacement = compiled.entry.safeAlternative ?? '';

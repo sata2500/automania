@@ -82,7 +82,7 @@ RULES:
    - styles: up to 2 style names (e.g. "Boho & Hippie", "Minimalist").
    - shop_section_id: the ID of the best matching shop section below, or null if none fits:
    {{shopSections}}
-   - taxonomy_properties_values: value_ids for the properties below that clearly fit the design; omit the rest. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
+   - taxonomy_properties_values: Etsy category attributes buyers filter by (e.g. sleeve length, neckline, clothing style, occasion, holiday, graphic, material features). Fill every property below that genuinely applies to this product and design, choosing only value_ids from its list (one value unless the property allows several); omit properties that do not apply. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
    {{taxonomyProperties}}
 
 Return ONLY a valid JSON object in this format, with no markdown and no explanation:

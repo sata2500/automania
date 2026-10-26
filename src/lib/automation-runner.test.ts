@@ -81,10 +81,21 @@ const createDraft = vi.hoisted(() => vi.fn(async () => ({
 })));
 vi.mock('@/lib/etsy-listing-service', () => ({ createEtsyDraftListing: createDraft }));
 const generateListing = vi.hoisted(() => vi.fn(async () => ({
-  listing: { title: 'Funny Cat Mom Shirt', description: 'Great shirt.', selectedTags: ['cat mom', 'funny cat'] },
+  listing: {
+    title: 'Funny Cat Mom Shirt', description: 'Great shirt.', selectedTags: ['cat mom', 'funny cat'],
+    taxonomy_properties_values: [{ property_id: 1, value_ids: [10, 11] }, { property_id: 999, value_ids: [1] }],
+    materials: ['Cotton'], styles: ['Minimalist'],
+  },
   modelUsed: 'test-model',
 })));
 vi.mock('@/lib/listing-generator', () => ({ generateListingContent: generateListing }));
+vi.mock('@/lib/etsy-taxonomy-properties', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/etsy-taxonomy-properties')>()),
+  fetchTaxonomyProperties: vi.fn(async () => [
+    { property_id: 1, name: 'Sleeve length', possible_values: [{ value_id: 10, name: 'Short sleeve' }, { value_id: 11, name: 'Long sleeve' }] },
+    { property_id: 200, name: 'Primary color', possible_values: [{ value_id: 1, name: 'Black' }] },
+  ]),
+}));
 const research = vi.hoisted(() => vi.fn(async () => ({
   niche: 'retro camping dad', targetAudience: 'outdoorsy dads', style: 'vintage distressed', designBrief: 'Retro sunset over a tent.',
   occasion: "Father's Day", keywords: ['camping dad shirt'], reasoning: 'Babalar günü yaklaşıyor.', sources: [], searchedWeb: true, model: 'm',
@@ -137,6 +148,12 @@ describe('executeAutomationRun', () => {
     expect(outcome).toEqual({ ok: true, runId: 'run1' });
     expect(state.run?.status).toBe('completed');
     expect(state.run?.etsyListingId).toBe('777');
+    // Kategori özellikleri: yapay zekânın seçimi doğrulanıp (bilinmeyen/renk atılır) taslağa yazılır.
+    const draftInput = (createDraft.mock.calls[0] as unknown as [unknown, unknown, Record<string, unknown>])[2];
+    expect(draftInput.taxonomy_properties_values).toEqual({ '1': [10] });
+    expect(draftInput.materials).toEqual(['Cotton']);
+    const listingInput = (generateListing.mock.calls[0] as unknown as [unknown, { taxonomyProperties?: Array<{ property_id: number }> }])[1];
+    expect(listingInput.taxonomyProperties?.map((p) => p.property_id)).toEqual([1]);
     const steps = state.run?.steps as Record<string, { status: string }>;
     expect(steps.mockupRender.status).toBe('completed');
     expect(steps.videoGeneration.status).toBe('skipped'); // video istenmedi

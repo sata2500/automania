@@ -193,6 +193,9 @@ export interface GeneratedSeoData {
   /** Yapay zekânın mağaza bölümleri arasından seçtiği bölüm (yoksa null) */
   shopSectionId?: string | null;
   shopSectionTitle?: string | null;
+  /** Yapay zekânın seçtiği Etsy malzemeleri ve stilleri */
+  materials?: string[];
+  styles?: string[];
 }
 
 /** Tam otomasyon çalıştırma kaydı */
