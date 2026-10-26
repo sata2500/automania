@@ -31,9 +31,11 @@ describe('prompt registry', () => {
 });
 
 describe('design prompt rules', () => {
-  it('limits text elements and requires a year with EST.', async () => {
-    const { DEFAULT_GENERATE_DESIGN_PROMPT: prompt } = await import('./default-prompts');
-    expect(prompt).toMatch(/at most three text elements/);
-    expect(prompt).toMatch(/"EST\." or similar founding phrases only together with a year/);
+  it('asks for a clean hierarchy and meaningful text', async () => {
+    const { DEFAULT_GENERATE_DESIGN_PROMPT: design, DEFAULT_GENERATE_LISTING_PROMPT: listing } = await import('./default-prompts');
+    expect(design).toMatch(/clear visual hierarchy/);
+    expect(design).toMatch(/an "EST\." needs a year/);
+    expect(listing).toMatch(/copying each name exactly as written/);
+    expect(listing).toMatch(/the same word may appear in at most 4 tags/);
   });
 });

@@ -39,9 +39,8 @@ DESIGN RULES:
 - Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
 - One clear focal subject with strong contrast, readable from a distance.
 - Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
-- Any text must be in English, spelled correctly, short and meaningful, in bold readable typography that matches the style. No placeholder, filler or gibberish text.
-- Keep the layout simple enough to read on a shirt from a few meters away: at most three text elements (for example a headline, a subline and one short tagline), with no small text badges, labels, captions or arrows.
-- Use "EST." or similar founding phrases only together with a year (for example "EST. 2026"); otherwise leave them out.
+- Any text must be in English, spelled correctly and meaningful, in readable typography that matches the style. No placeholder, filler or gibberish text (for example, an "EST." needs a year).
+- Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text, badges and small details are welcome when they strengthen the idea, not as clutter.
 - No trademarks, brand names, logos, celebrities or copyrighted characters.
 
 CANVAS AND BACKGROUND (required for automatic background removal):
@@ -72,10 +71,10 @@ TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
 
 RULES:
 1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
-2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags (garment model names may appear only in the description).
-3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Spread them across: subject + product, the message or quote on the design, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags. The only exception: the garment model names from GARMENT OPTIONS appear in the description.
+3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Cover different searches instead of repeating one word: the same word may appear in at most 4 tags. Spread them across: subject + product, the message or quote on the design, related roles and synonyms, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases. Every tag must describe this exact design.
 4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
-5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. Describe the GARMENT OPTIONS as the available choices (a short line for each). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications or delivery times.
+5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. List the GARMENT OPTIONS as the available choices, copying each name exactly as written (do not rename, shorten, translate or reinterpret it, and do not guess its fit, size range or material). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications, size ranges or delivery times.
 6. ETSY FIELDS:
    - taxonomy_id: always {{taxonomyId}}.
    - who_made: "i_did". when_made: "made_to_order". is_supply: false.
