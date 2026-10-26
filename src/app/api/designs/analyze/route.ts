@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
+import { requireModel } from '@/lib/ai-models';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -134,24 +135,8 @@ export async function POST(request: Request) {
       }
     }
     
-    // Vision model belirleme
-    let visionModel = 'google/gemini-2.0-flash-001';
-    try {
-          if (workspaceRows[0]?.openrouter_model && workspaceRows[0].openrouter_model.startsWith('{')) {
-        const parsed = JSON.parse(workspaceRows[0].openrouter_model);
-        if (parsed.vision) {
-          visionModel = parsed.vision;
-        }
-      }
-    } catch {}
-    
-    if (activeAiProvider === 'gemini') {
-      visionModel = dbGeminiVisionModel || 'gemini-3.8-flash';
-    } else {
-      if (dbVisionModel) {
-        visionModel = dbVisionModel;
-      }
-    }
+    // Model yalnızca admin panelindeki seçimdir (yedek model yok).
+    const visionModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiVisionModel : dbVisionModel, 'vision');
 
     // Etsy Taxonomy aktif kategorilerini al
     // Talimat admin panelindeki "Tasarım görsel analizi" prompt'udur (boşsa varsayılanı).
@@ -172,12 +157,7 @@ export async function POST(request: Request) {
 
     if (activeAiProvider === 'gemini') {
       const ai = createGoogleClient(googleConnection!);
-      const candidates = Array.from(new Set([
-        visionModel,
-        'gemini-3.8-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash-lite'
-      ]));
+      const candidates = [visionModel] // Yalnızca admin panelinde seçilen model;
 
       let lastErr: unknown = null;
       for (const m of candidates) {

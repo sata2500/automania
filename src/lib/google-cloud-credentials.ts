@@ -64,8 +64,6 @@ export function isValidVertexLocation(value: unknown): value is string {
   return typeof value === 'string' && VERTEX_LOCATIONS.some((loc) => loc.id === value);
 }
 
-export const DEFAULT_VIDEO_MODEL = 'veo-3.1-fast-generate-001';
-
 /**
  * Veo 3.1 önizleme kimlikleri (…-generate-preview) Google tarafından kapatıldı;
  * kayıtlı eski ayarlar aynı modelin genel kullanıma açık (GA) sürümüne yönlendirilir.

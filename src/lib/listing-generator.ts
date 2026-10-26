@@ -1,6 +1,7 @@
 import sql from '@/lib/db';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { withAiRetry } from '@/lib/ai-retry';
+import { ModelNotConfiguredError, requireModel } from '@/lib/ai-models';
 import { loadPrompt } from '@/lib/prompt-settings';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
@@ -97,14 +98,6 @@ export async function generateListingContent(userId: string, input: GenerateList
   // Seasonality Context & Current Active Shopping Wave
   const currentSeason = getCurrentSeasonInfo();
 
-  // Query Workspace settings for SEO Copywriter AI Model
-  const rows = await sql`
-    SELECT openrouter_model 
-    FROM user_workspaces
-    WHERE user_id = ${userId}
-    LIMIT 1
-  `;
-
   // Get API Key and Models from app_settings or env
   const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning']);
   
@@ -128,27 +121,12 @@ export async function generateListingContent(userId: string, input: GenerateList
     throw new ListingGenerationError('Sistem API anahtarı (Admin) yapılandırılmamış.', 500);
   }
   
-  // Parse SEO Copywriter Model fallback
-  let seoModel = 'google/gemma-4-26b-a4b-it:free';
+  // Model yalnızca admin panelindeki seçimdir (yedek model yok).
+  let seoModel: string;
   try {
-    if (rows.length > 0 && rows[0].openrouter_model) {
-      const raw = rows[0].openrouter_model.trim();
-      if (raw.startsWith('{')) {
-        const parsed = JSON.parse(raw);
-        seoModel = parsed.reasoning || parsed.text || parsed.seo || parsed.vision || seoModel;
-      } else if (raw.length > 0) {
-        seoModel = raw;
-      }
-    }
-  } catch {}
-
-  // Override with global setting if present
-  if (activeAiProvider === 'gemini') {
-    seoModel = dbGeminiReasoningModel || 'gemini-3.8-flash';
-  } else {
-    if (dbReasoningModel) {
-      seoModel = dbReasoningModel;
-    }
+    seoModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiReasoningModel : dbReasoningModel, 'reasoning');
+  } catch (error) {
+    throw new ListingGenerationError(error instanceof ModelNotConfiguredError ? error.message : 'Model seçilemedi.', 400);
   }
 
   // Talimat admin panelindeki "İlan metni üretimi" prompt'udur (boşsa varsayılanı).
@@ -257,12 +235,7 @@ export async function generateListingContent(userId: string, input: GenerateList
 
   if (activeAiProvider === 'gemini') {
     const ai = createGoogleClient(googleConnection!);
-    const candidates = Array.from(new Set([
-      seoModel,
-      'gemini-3.8-flash',
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite'
-    ]));
+    const candidates = [seoModel] // Yalnızca admin panelinde seçilen model;
 
     let lastErr: unknown = null;
     for (const m of candidates) {
@@ -279,7 +252,6 @@ export async function generateListingContent(userId: string, input: GenerateList
         const txt = res.text?.trim();
         if (txt) {
           content = txt;
-          seoModel = m;
           break;
         }
       } catch (err: unknown) {

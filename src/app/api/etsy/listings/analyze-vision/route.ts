@@ -9,6 +9,7 @@ import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage } from '@/lib/media-source';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
+import { requireModel } from '@/lib/ai-models';
 
 export const maxDuration = 60;
 
@@ -71,9 +72,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Admin panelinde Vision AI anahtarı yapılandırılmamış.' }, { status: 500 });
     }
 
-    const visionModel = activeAiProvider === 'gemini'
-      ? (dbGeminiVisionModel || 'gemini-3.8-flash')
-      : (dbVisionModel || 'google/gemini-2.0-flash-001');
+    // Model yalnızca admin panelindeki seçimdir (yedek model yok).
+    const visionModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiVisionModel : dbVisionModel, 'vision');
 
     // 2. Fetch target listings from DB
     const listings = await sql`
@@ -124,12 +124,7 @@ export async function POST(req: Request) {
             geminiMimeType = 'image/jpeg';
           }
 
-          const candidates = Array.from(new Set([
-            visionModel,
-            'gemini-3.8-flash',
-            'gemini-3.6-flash',
-            'gemini-3.5-flash-lite'
-          ]));
+          const candidates = [visionModel] // Yalnızca admin panelinde seçilen model;
 
           for (const m of candidates) {
             try {

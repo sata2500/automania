@@ -18,8 +18,9 @@
 
 import type { GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
-import { DEFAULT_VIDEO_MODEL, normalizeVideoModel } from '@/lib/google-cloud-credentials';
+import { normalizeVideoModel } from '@/lib/google-cloud-credentials';
 import { isRetryableAiError, withAiRetry } from '@/lib/ai-retry';
+import { requireModel } from '@/lib/ai-models';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -103,13 +104,9 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
   const googleApiKey = settings['gemini_api_key'] ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
   const openRouterApiKey = settings['openrouter_api_key'] ?? process.env.OPENROUTER_API_KEY ?? '';
   
-  const imageModel = provider === 'openrouter' 
-    ? (settings['openrouter_model_generation'] ?? process.env.AI_IMAGE_MODEL ?? 'gemini-3.1-flash-image')
-    : (settings['gemini_model_generation'] ?? process.env.AI_IMAGE_MODEL ?? 'gemini-3.1-flash-image');
-
-  const textModel = provider === 'openrouter'
-    ? (settings['openrouter_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash')
-    : (settings['gemini_model_reasoning'] ?? process.env.AI_TEXT_MODEL ?? 'gemini-3.8-flash');
+  // Modeller yalnızca admin panelindeki seçimlerdir; seçilmemişse kullanılırken açık bir hata verilir.
+  const imageModel = (provider === 'openrouter' ? settings['openrouter_model_generation'] : settings['gemini_model_generation']) ?? '';
+  const textModel = (provider === 'openrouter' ? settings['openrouter_model_reasoning'] : settings['gemini_model_reasoning']) ?? '';
 
   const googleConnection = resolveGoogleConnection(settings);
 
@@ -120,8 +117,8 @@ export async function loadAIConfig(): Promise<AIProviderConfig> {
     openRouterApiKey,
     imageModel,
     textModel,
-    // Video her zaman Google Veo ile üretilir; bu yüzden yalnızca Gemini video modeli ayarı geçerlidir.
-    videoModel: normalizeVideoModel(settings['gemini_model_video'] || process.env.AI_VIDEO_MODEL || DEFAULT_VIDEO_MODEL),
+    // Video her zaman Google (Veo / Omni) ile üretilir; bu yüzden yalnızca Gemini video modeli ayarı geçerlidir.
+    videoModel: settings['gemini_model_video'] ? normalizeVideoModel(settings['gemini_model_video']) : '',
   };
 }
 
@@ -246,6 +243,7 @@ export async function generateImage(
   config: AIProviderConfig,
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
+  requireModel(config.imageModel, 'generation');
   if (config.provider === 'openrouter' && config.openRouterApiKey) {
     return generateImageOpenRouter(config, options);
   }
@@ -270,7 +268,7 @@ export async function generateVideo(
   config: AIProviderConfig,
   options: GenerateVideoOptions
 ): Promise<GeneratedVideo> {
-  const model = options.model || config.videoModel;
+  const model = requireModel(options.model || config.videoModel, 'video');
   if (isOmniVideoModel(model)) return generateVideoOmni(config, model, options);
   return generateVideoVeo(config, model, options);
 }

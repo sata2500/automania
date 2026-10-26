@@ -106,7 +106,8 @@ export async function POST(req: Request) {
       if (!connection) {
         return NextResponse.json({ success: false, error: 'Google bağlantısı yapılandırılmamış (Gemini API anahtarı veya Google Cloud hizmet hesabı ekleyin).' }, { status: 500 });
       }
-      const modelId = typeof body.model === 'string' ? body.model : 'gemini-3.8-flash';
+      const modelId = typeof body.model === 'string' ? body.model.trim() : '';
+      if (!modelId) return NextResponse.json({ success: false, error: 'Test edilecek model seçilmemiş.' }, { status: 400 });
       const ai = createGoogleClient(connection, { model: modelId });
       const role = body.role;
 

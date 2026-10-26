@@ -7,6 +7,7 @@ import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-cli
 import { sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
+import { requireModel } from '@/lib/ai-models';
 import { loadSettingRows } from '@/lib/app-settings';
 
 export const maxDuration = 60;
@@ -68,9 +69,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Admin panelinde SEO AI anahtarı yapılandırılmamış.' }, { status: 500 });
     }
 
-    const seoModel = activeAiProvider === 'gemini'
-      ? (dbGeminiReasoningModel || 'gemini-3.8-flash')
-      : (dbReasoningModel || 'google/gemma-4-26b-a4b-it:free');
+    // Model yalnızca admin panelindeki seçimdir (yedek model yok).
+    const seoModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiReasoningModel : dbReasoningModel, 'reasoning');
 
     // 2. Fetch top high-opportunity keywords from keyword pool
     const topPoolKeywords = await sql`
@@ -120,12 +120,7 @@ export async function POST(req: Request) {
 
         if (activeAiProvider === 'gemini') {
           const ai = createGoogleClient(googleConnection!);
-          const candidates = Array.from(new Set([
-            seoModel,
-            'gemini-3.8-flash',
-            'gemini-3.6-flash',
-            'gemini-3.5-flash-lite'
-          ]));
+          const candidates = [seoModel] // Yalnızca admin panelinde seçilen model;
 
           for (const m of candidates) {
             try {

@@ -13,6 +13,7 @@
 import { sql } from '@/lib/db';
 import { loadSettings } from '@/lib/app-settings';
 import { withAiRetry } from '@/lib/ai-retry';
+import { requireModel } from '@/lib/ai-models';
 import { DEFAULT_NICHE_RESEARCH_PROMPT } from '@/lib/default-prompts';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
@@ -223,7 +224,8 @@ export async function researchNiche(input: {
 
   const settings = await loadSettings(['ai_research_web_search', 'ai_research_model', 'gemini_model_reasoning']).catch(() => ({} as Record<string, string>));
   const webSearch = settings.ai_research_web_search !== 'false';
-  const model = settings.ai_research_model || settings.gemini_model_reasoning || 'gemini-2.5-flash';
+  // Araştırma modeli admin panelinde ayrıca seçilebilir; seçilmemişse SEO metin modeli kullanılır (yedek model yok).
+  const model = requireModel(settings.ai_research_model || settings.gemini_model_reasoning, 'reasoning');
   const today = input.now ?? new Date();
 
   const [topListings, poolKeywords, recentNiches] = await Promise.all([
