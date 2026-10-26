@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MockupItem } from '@/types/pod';
 import {
   buildAutomationKeywords,
-  buildDesignPrompt,
+  buildDesignConcept,
   fillVideoPromptTemplate,
   deriveRunOutcome,
   needsDarkGarmentDesign,
@@ -59,18 +59,9 @@ describe('selectAutomationMockups', () => {
 describe('design prompt and keywords', () => {
   const hints = { primaryNiche: 'Funny Cat', targetAudience: 'cat moms', productType: 'T-Shirt', customNotes: 'no violence' };
 
-  it('keeps niche and audience when notes are present', () => {
-    const prompt = buildDesignPrompt(hints, 3);
-    expect(prompt).toContain('Funny Cat');
-    expect(prompt).toContain('cat moms');
-    expect(prompt).toContain('no violence');
-    expect(buildDesignPrompt(hints, 4)).not.toBe(prompt);
-  });
-
-  it('fills the admin concept template and picks a creative direction from the admin list', () => {
-    const prompt = buildDesignPrompt(hints, 1, '{{niche}} / {{audience}} / {{creativeDirection}} / {{notes}}', 'retro\nminimal\n');
-    expect(prompt).toBe('Funny Cat / cat moms / minimal / no violence');
-    expect(buildDesignPrompt({}, 0, '{{productType}} for {{audience}}, notes: {{notes}}', '')).toBe('apparel for a broad Etsy audience, notes: none');
+  it('builds the design concept data from niche, audience, product and notes', () => {
+    expect(buildDesignConcept(hints)).toBe('Niche: Funny Cat\nTarget audience: cat moms\nProduct: T-Shirt\nNotes: no violence');
+    expect(buildDesignConcept({})).toBe('Niche: a trending gift theme\nTarget audience: a broad Etsy audience\nProduct: apparel\nNotes: none');
   });
 
   it('builds unique keyword candidates including pool keywords', () => {

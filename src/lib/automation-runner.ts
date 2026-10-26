@@ -14,7 +14,7 @@ import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
 import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeChromaBackground } from '@/lib/chroma-key';
-import { KEY_COLORS, pickKeyBackground } from '@/lib/key-background';
+import { KEY_COLORS, keyColorPromptValues, pickKeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
@@ -28,11 +28,11 @@ import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
 import { fillPrompt } from '@/lib/prompt-registry';
-import { loadPrompt, loadPrompts } from '@/lib/prompt-settings';
+import { loadPrompt } from '@/lib/prompt-settings';
 import {
   AUTOMATION_STEP_ORDER,
   buildAutomationKeywords,
-  buildDesignPrompt,
+  buildDesignConcept,
   deriveRunOutcome,
   fillVideoPromptTemplate,
   effectiveSeoHints,
@@ -188,20 +188,17 @@ type StepResult = { patch?: Partial<RunRow>; output?: Record<string, unknown>; s
 async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persist: (patch: Partial<RunRow>) => Promise<void>) {
   const { template, userId, runId } = ctx;
   const config = await loadAIConfig();
-  const prompts = await loadPrompts(['ai_prompt_generate_design', 'ai_prompt_automation_design', 'ai_prompt_creative_directions']);
-
-  // Aynı şablonun çalıştırmaları farklı bir yaratıcı yönle başlar (kopya tasarımları önler).
-  const seed = Array.from(runId).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   const hints = runHints(ctx);
-  const basePrompt = buildDesignPrompt(hints, seed, prompts.ai_prompt_automation_design, prompts.ai_prompt_creative_directions);
-  const finalPrompt = fillPrompt(prompts.ai_prompt_generate_design, {
-    userPrompt: basePrompt,
-    selectedStyle: hints.primaryNiche || 'not specified',
-  });
-
+  const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
+  const basePrompt = buildDesignConcept(hints);
   // Perde rengi konuya göre seçilir: yeşil ağırlıklı konularda (Noel, orman…) magenta, tasarımın yeşilleri korunur.
-  const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${finalPrompt}`);
-  const generatedImages = await generateImage(config, { prompt: finalPrompt, keyBackground });
+  const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${basePrompt}`);
+  const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
+    concept: basePrompt,
+    style: research?.style?.trim() || 'not specified',
+    ...keyColorPromptValues(keyBackground),
+  });
+  const generatedImages = await generateImage(config, { prompt: finalPrompt });
   if (!generatedImages || generatedImages.length === 0) throw new Error('AI tasarımı üretemedi.');
 
   steps.designGeneration = { ...steps.designGeneration, status: 'completed', completedAt: new Date().toISOString(), output: { prompt: basePrompt } };
@@ -390,7 +387,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const keywords = buildAutomationKeywords(hints, [...(research?.keywords ?? []), ...poolKeywords]);
   if (keywords.length === 0) throw new StepSkipped('Şablonda niş veya hedef kitle bilgisi yok; SEO üretilemedi.');
 
-  const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignPrompt(hints, 0, await loadPrompt('ai_prompt_automation_design'), await loadPrompt('ai_prompt_creative_directions')));
+  const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignConcept(hints));
   const subject = detectPrimarySubject(`${hints?.primaryNiche || ''} ${designPrompt}`);
   const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
   // Mağaza bölümü elle seçilmediyse yapay zekâ mağazadaki bölümlerden en uygununu seçer.

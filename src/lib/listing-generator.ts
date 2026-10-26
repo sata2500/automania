@@ -1,6 +1,6 @@
 import sql from '@/lib/db';
-import { fillPrompt, seasonSection } from '@/lib/prompt-registry';
-import { loadPrompts } from '@/lib/prompt-settings';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt } from '@/lib/prompt-settings';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
@@ -150,8 +150,8 @@ export async function generateListingContent(userId: string, input: GenerateList
     }
   }
 
-  // Talimatlar admin panelindeki "İlan metni üretimi" ve "Sezon rehberi" prompt'larıdır (boşsa varsayılanları).
-  const prompts = await loadPrompts(['ai_prompt_generate_listing', 'ai_prompt_seasonality']);
+  // Talimat admin panelindeki "İlan metni üretimi" prompt'udur (boşsa varsayılanı).
+  const listingPrompt = await loadPrompt('ai_prompt_generate_listing');
 
   // Extract input keyword strings & apply Trademark Safety Shield
   const rawInputKeywords: string[] = keywords
@@ -241,7 +241,6 @@ export async function generateListingContent(userId: string, input: GenerateList
     primaryAesthetic: primaryAesthetic || 'Extracted from design concept',
     productType: productType || 'Not specified',
     userNotes: userNotes || 'None provided',
-    seasonalityContext: seasonSection(prompts.ai_prompt_seasonality, currentSeason.seasonKey) || 'None',
     keywords: formattedKeywords || 'None provided',
     coOccurringTags: formattedCoOccurring,
     taxonomyId: String(taxonomyId || 482),
@@ -251,7 +250,7 @@ export async function generateListingContent(userId: string, input: GenerateList
     ).join('\n   ') : 'None'
   };
 
-  const prompt = fillPrompt(prompts.ai_prompt_generate_listing, dynamicValues);
+  const prompt = fillPrompt(listingPrompt, dynamicValues);
 
   let content = '';
 

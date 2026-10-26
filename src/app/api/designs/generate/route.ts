@@ -2,14 +2,14 @@
  * POST /api/designs/generate
  * ============================
  * Gemini ile görsel üretir.
- * Body: { prompt, folderId?, greenBackground?, numberOfImages? }
+ * Body: { prompt, selectedStyle?, numberOfImages? }
  * Response: { images: [{ id, data, mimeType }] }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
-import { pickKeyBackground } from '@/lib/key-background';
+import { keyColorPromptValues, pickKeyBackground } from '@/lib/key-background';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -32,12 +32,10 @@ export async function POST(req: NextRequest) {
     const {
       prompt,
       selectedStyle = '',
-      greenBackground = true,
       numberOfImages = 1,
     } = body as {
       prompt: string;
       selectedStyle?: string;
-      greenBackground?: boolean;
       numberOfImages?: number;
     };
 
@@ -72,17 +70,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Admin panelindeki "Tasarım üretimi" talimatı (boşsa varsayılan) kullanıcının konseptiyle doldurulur.
-    const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
-      userPrompt: prompt,
-      selectedStyle: typeof selectedStyle === 'string' && selectedStyle.trim() ? selectedStyle : 'not specified',
-    });
-
     // Perde rengi konuya göre seçilir (yeşil ağırlıklı konularda magenta); kaldırma adımı rengi kenarlardan ölçer.
-    const keyBackground = greenBackground ? pickKeyBackground(finalPrompt) : undefined;
+    const style = typeof selectedStyle === 'string' && selectedStyle.trim() ? selectedStyle.trim() : 'not specified';
+    const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
+      concept: prompt.trim(),
+      style,
+      ...keyColorPromptValues(pickKeyBackground(`${prompt} ${style}`)),
+    });
 
     // Birden fazla görsel için paralel istek
     const requests = Array.from({ length: count }, () =>
-      generateImage(config, { prompt: finalPrompt, keyBackground })
+      generateImage(config, { prompt: finalPrompt })
     );
 
     const results = await Promise.allSettled(requests);

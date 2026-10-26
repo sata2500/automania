@@ -7,7 +7,8 @@ import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-cli
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage } from '@/lib/media-source';
-import { loadPrompt } from '@/lib/prompt-settings';
+import { fillPrompt } from '@/lib/prompt-registry';
+import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
 
 export const maxDuration = 60;
 
@@ -44,8 +45,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Tek istekte en fazla 10 listing analiz edilebilir.' }, { status: 400 });
     }
 
-    // Talimat admin panelindeki "Etsy ilan görseli analizi" prompt'udur (boşsa varsayılanı).
-    const visionPrompt = await loadPrompt('ai_prompt_analyze_listing_image');
+    // Talimat admin panelindeki "Görsel analizi" prompt'udur (boşsa varsayılanı); tasarım analiziyle ortaktır.
+    const visionPrompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint: await loadTaxonomyHint() });
 
     // 1. Fetch AI Model Settings from app_settings
     const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision']);

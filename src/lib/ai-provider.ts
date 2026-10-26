@@ -19,9 +19,6 @@
 import type { GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
 import { DEFAULT_VIDEO_MODEL, normalizeVideoModel } from '@/lib/google-cloud-credentials';
-import { keyColorPromptValues, type KeyBackground } from '@/lib/key-background';
-import { fillPrompt } from '@/lib/prompt-registry';
-import { loadPrompt } from '@/lib/prompt-settings';
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
 
@@ -46,8 +43,6 @@ export interface AIProviderConfig {
 
 export interface GenerateImageOptions {
   prompt: string;
-  /** Arka planı düz perde rengi yap (sonradan saydamlaştırmak için). Bkz. `pickKeyBackground`. */
-  keyBackground?: KeyBackground;
   /** Kare (1024x1024) veya özel oran */
   aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
   /** 1–4 adet görsel */
@@ -141,13 +136,6 @@ function getGoogleClient(config: AIProviderConfig, model?: string): GoogleGenAI 
 
 // ─── Görsel Üretimi ──────────────────────────────────────────────────────────
 
-/** Perde arka planı isteniyorsa admin panelindeki "Tasarım tuvali ve arka plan" talimatını ekler. */
-async function withCanvasPrompt(options: GenerateImageOptions): Promise<string> {
-  if (!options.keyBackground) return options.prompt;
-  const canvas = fillPrompt(await loadPrompt('ai_prompt_design_canvas'), keyColorPromptValues(options.keyBackground));
-  return `${options.prompt}\n\n${canvas}`;
-}
-
 /**
  * Google Gemini ile görsel üretir.
  * Model: gemini-3.1-flash-image (Imagen 4 devre dışı, 17 Ağustos 2026)
@@ -158,14 +146,13 @@ async function generateImageGoogle(
 ): Promise<GeneratedImage[]> {
   const client = getGoogleClient(config, config.imageModel);
 
-  const promptWithBg = await withCanvasPrompt(options);
   const aspectRatio = options.aspectRatio ?? '1:1';
 
   // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
   if (config.imageModel.startsWith('imagen')) {
     const result = await client.models.generateImages({
       model: config.imageModel,
-      prompt: promptWithBg,
+      prompt: options.prompt,
       config: { numberOfImages: options.numberOfImages ?? 1, aspectRatio },
     });
     const imagenImages: GeneratedImage[] = (result.generatedImages ?? [])
@@ -180,7 +167,7 @@ async function generateImageGoogle(
   // kenar kalitesi için; desteklemeyen modelde (yalnız 1K) istek boyut olmadan tekrarlanır.
   const request = (imageSize?: string) => client.models.generateContent({
     model: config.imageModel,
-    contents: promptWithBg,
+    contents: options.prompt,
     config: {
       responseModalities: ['image'],
       imageConfig: { aspectRatio, ...(imageSize ? { imageSize } : {}) },
@@ -222,7 +209,6 @@ async function generateImageOpenRouter(
   config: AIProviderConfig,
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
-  const promptWithBg = await withCanvasPrompt(options);
 
   const res = await fetch('https://openrouter.ai/api/v1/images', {
     method: 'POST',
@@ -232,7 +218,7 @@ async function generateImageOpenRouter(
     },
     body: JSON.stringify({
       model: config.imageModel,
-      prompt: promptWithBg,
+      prompt: options.prompt,
       n: options.numberOfImages ?? 1,
       size: options.aspectRatio === '16:9' ? '1344x768' : '1024x1024',
       response_format: 'b64_json',

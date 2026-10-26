@@ -8,7 +8,7 @@ describe('formatAllPrompts', () => {
     values.ai_prompt_generate_video = 'Custom video';
     const text = formatAllPrompts(values);
     expect(text.match(/^=== /gm)).toHaveLength(PROMPT_DEFINITIONS.length);
-    expect(text).toMatch(/=== 1\. Tasarım görsel analizi \(ai_prompt_analyze_design\) — Varsayılan ===/);
+    expect(text).toMatch(/=== 1\. Görsel analizi \(ai_prompt_analyze_design\) — Varsayılan ===/);
     expect(text).toMatch(/\(ai_prompt_generate_video\) — Düzenlendi ===\nCustom video/);
   });
 });

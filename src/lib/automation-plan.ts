@@ -12,8 +12,7 @@ import type {
 } from '@/types/templates';
 import { buildFolderMockupConfig } from '@/lib/folder-template';
 import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
-import { DEFAULT_AUTOMATION_DESIGN_PROMPT, DEFAULT_CREATIVE_DIRECTIONS } from '@/lib/default-prompts';
-import { fillPrompt, parseLines } from '@/lib/prompt-registry';
+import { fillPrompt } from '@/lib/prompt-registry';
 
 // Video SEO metninden sonra üretilir: admin video prompt'u ürün başlığını ({{title}}) kullanabilir.
 export const AUTOMATION_STEP_ORDER: AutomationStepName[] = [
@@ -83,25 +82,16 @@ export function selectAutomationMockups(mockups: MockupItem[], templateConfig: P
 }
 
 /**
- * Otomasyonun tasarım konsepti: admin panelindeki "Otomasyon tasarım konsepti" talimatı niş, hedef kitle,
- * ürün tipi ve notlarla doldurulur. Aynı otomasyonun art arda tasarımları kopya olmasın diye her
- * çalıştırmada "Yaratıcı yönler" listesinden farklı bir yön seçilir.
+ * Otomasyonun tasarım konsepti: "Tasarım üretimi" talimatındaki {{concept}} değişkenine yazılan veri
+ * (niş, hedef kitle, ürün tipi, notlar). Talimat metni admin panelindedir; burada yalnızca veri toplanır.
  */
-export function buildDesignPrompt(
-  hints: Partial<PodTemplateSeoHints> | null | undefined,
-  variantSeed: number,
-  template: string = DEFAULT_AUTOMATION_DESIGN_PROMPT,
-  creativeDirections: string = DEFAULT_CREATIVE_DIRECTIONS,
-): string {
-  const directions = parseLines(creativeDirections);
-  const direction = directions.length > 0 ? directions[Math.abs(Math.floor(variantSeed)) % directions.length]! : 'none';
-  return fillPrompt(template, {
-    productType: hints?.productType?.trim() || 'apparel',
-    niche: hints?.primaryNiche?.trim() || 'a trending gift theme',
-    audience: hints?.targetAudience?.trim() || 'a broad Etsy audience',
-    creativeDirection: direction,
-    notes: hints?.customNotes?.trim() || 'none',
-  }).trim();
+export function buildDesignConcept(hints: Partial<PodTemplateSeoHints> | null | undefined): string {
+  return [
+    `Niche: ${hints?.primaryNiche?.trim() || 'a trending gift theme'}`,
+    `Target audience: ${hints?.targetAudience?.trim() || 'a broad Etsy audience'}`,
+    `Product: ${hints?.productType?.trim() || 'apparel'}`,
+    `Notes: ${hints?.customNotes?.trim() || 'none'}`,
+  ].join('\n');
 }
 
 /**

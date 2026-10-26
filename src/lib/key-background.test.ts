@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { keyColorPromptValues, pickKeyBackground } from './key-background';
 import { fillPrompt } from './prompt-registry';
-import { DEFAULT_DESIGN_CANVAS_PROMPT } from './default-prompts';
+import { DEFAULT_GENERATE_DESIGN_PROMPT } from './default-prompts';
 
 describe('pickKeyBackground', () => {
   it('uses magenta for green-heavy themes and green otherwise', () => {
@@ -14,13 +14,13 @@ describe('pickKeyBackground', () => {
   });
 });
 
-describe('design canvas prompt', () => {
-  it('fills the chosen screen color into the admin canvas prompt', () => {
-    const green = fillPrompt(DEFAULT_DESIGN_CANVAS_PROMPT, keyColorPromptValues('green'));
+describe('design prompt screen color', () => {
+  it('fills the chosen screen color into the design prompt', () => {
+    const green = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', ...keyColorPromptValues('green') });
     expect(green).toMatch(/centered horizontally and vertically/);
     expect(green).toMatch(/pure chroma-key green \(#00FF00\)/);
-    const magenta = fillPrompt(DEFAULT_DESIGN_CANVAS_PROMPT, keyColorPromptValues('magenta'));
-    expect(magenta).toMatch(/do not use pure magenta/);
+    const magenta = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', ...keyColorPromptValues('magenta') });
+    expect(magenta).toMatch(/Do not use pure magenta/);
     expect(magenta).not.toMatch(/\{\{/);
   });
 });

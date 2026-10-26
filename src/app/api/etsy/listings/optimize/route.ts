@@ -5,7 +5,6 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
 import { sanitizeEtsyTags } from '@/lib/trademark-shield';
-import { getCurrentSeasonInfo } from '@/lib/seasonality';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
 import { loadSettingRows } from '@/lib/app-settings';
@@ -73,10 +72,7 @@ export async function POST(req: Request) {
       ? (dbGeminiReasoningModel || 'gemini-3.8-flash')
       : (dbReasoningModel || 'google/gemma-4-26b-a4b-it:free');
 
-    // 2. Seasonality & Shopping Wave Context
-    const currentSeason = getCurrentSeasonInfo();
-
-    // 3. Fetch top high-opportunity keywords from keyword pool
+    // 2. Fetch top high-opportunity keywords from keyword pool
     const topPoolKeywords = await sql`
       SELECT keyword, opportunity_score, total_listings, bestseller_count 
       FROM keyword_pool 
@@ -86,7 +82,7 @@ export async function POST(req: Request) {
     `;
     const poolKeywordsList = topPoolKeywords.map(k => k.keyword).join(', ');
 
-    // 4. Fetch target listings from DB
+    // 3. Fetch target listings from DB
     const listings = await sql`
       SELECT * FROM user_etsy_listings 
       WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})
@@ -106,11 +102,10 @@ export async function POST(req: Request) {
 
       // Talimat admin panelindeki "Mevcut ilanı SEO optimizasyonu" prompt'udur; kod yalnızca verileri doldurur.
       const prompt = fillPrompt(optimizePrompt, {
-        seasonName: currentSeason.seasonName || 'Standard Shopping Season',
-        seasonKeywords: (currentSeason.activeThemes || []).join(', ') || 'none',
         poolKeywords: poolKeywordsList || 'none',
         title: item.title || 'Untitled',
         tags: currentTags.join(', '),
+        description: typeof item.description === 'string' && item.description.trim() ? item.description.trim().slice(0, 4000) : 'none',
         price: `${item.price} ${item.currency_code}`,
         productType: vision.productType || 'not analyzed',
         primarySubject: vision.primarySubject || 'not analyzed',

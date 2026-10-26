@@ -92,7 +92,6 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: prompt.trim(),
-          greenBackground: true,
           numberOfImages: count,
         }),
       });

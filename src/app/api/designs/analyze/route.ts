@@ -1,10 +1,8 @@
 import { filterSafeKeywords } from '@/lib/trademark-shield';
 import { NextResponse } from 'next/server';
-import sql, { db } from '@/lib/db';
-import { etsyTaxonomyCache } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import sql from '@/lib/db';
 import { fillPrompt } from '@/lib/prompt-registry';
-import { loadPrompt } from '@/lib/prompt-settings';
+import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
 import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { getAuthoritativeSession } from '@/lib/auth-server';
@@ -156,13 +154,8 @@ export async function POST(request: Request) {
     }
 
     // Etsy Taxonomy aktif kategorilerini al
-    const activeCategories = await db.select().from(etsyTaxonomyCache).where(eq(etsyTaxonomyCache.isActive, true));
-    const taxonomyHint = activeCategories.length > 0
-      ? activeCategories.map(c => `- ID: ${c.id} (${c.name}, ${c.path})`).join('\n')
-      : '- ID: 482 (T-shirts)\n- ID: 2202 (Sweatshirts)';
-
     // Talimat admin panelindeki "Tasarım görsel analizi" prompt'udur (boşsa varsayılanı).
-    const prompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint });
+    const prompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint: await loadTaxonomyHint() });
 
     const { buffer, mimeType } = resolvedImage;
     const base64Data = buffer.toString('base64');
