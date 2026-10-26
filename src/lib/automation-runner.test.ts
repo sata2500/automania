@@ -212,7 +212,7 @@ describe('cancellation', () => {
 });
 
 describe('folder automation', () => {
-  it('prints the light-ink variant on dark garments and sends the first mockup to the video model', async () => {
+  it('prints the light-ink variant on dark garments and sends the design and first mockup as video references', async () => {
     state.template = baseTemplate({ createListing: false, generateVideo: true, video: { aspectRatio: '9:16' } });
     (state.template as Record<string, unknown>).mockupConfig = { folderId: 'f1', printAreaMockupIds: [], staticMockupIds: [], videoMockupIds: [], fabricType: 'all', multiPrintAreaSupport: false };
     state.mockups = [
@@ -227,12 +227,71 @@ describe('folder automation', () => {
     expect(recolor).toHaveBeenCalledTimes(1);
     const designs = vi.mocked(renderDesignOnMockup).mock.calls.map((call) => String(call[1]));
     expect(designs).toEqual(['png', 'dark-ink']);
-    const [, options] = vi.mocked(generateVideo).mock.calls[0] as unknown as [unknown, { model: string; aspectRatio: string; image?: { mimeType: string }; prompt: string }];
+    const [, options] = vi.mocked(generateVideo).mock.calls[0] as unknown as [unknown, { model: string; aspectRatio: string; referenceImages?: Array<{ mimeType: string }>; prompt: string }];
     expect(options.model).toBe('veo-admin'); // model admin panelinden
     expect(options.aspectRatio).toBe('9:16');
-    expect(options.image?.mimeType).toBe('image/jpeg');
+    // Tasarım ve ilk mockup referans olarak verilir (ilk kare olarak değil).
+    expect(options.referenceImages?.map((r) => r.mimeType)).toEqual(['image/jpeg', 'image/jpeg']);
     expect(options.prompt).toMatch(/mannequin/);
     expect((state.run?.steps as Record<string, { status: string }>).videoGeneration.status).toBe('completed');
+  });
+});
+
+describe('fabric variants', () => {
+  const folderSetup = (seoHints: Record<string, unknown>) => {
+    state.template = baseTemplate({ createListing: false });
+    const t = state.template as Record<string, unknown>;
+    t.mockupConfig = { folderId: 'f1', printAreaMockupIds: [], staticMockupIds: [], videoMockupIds: [], fabricType: 'all', multiPrintAreaSupport: false };
+    t.seoHints = { ...(t.seoHints as object), ...seoHints };
+    state.mockups = [
+      { id: 'w', name: 'White', src: '/api/r2/user-u1-w.png', folderId: 'f1', apparelType: 'light', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], width: 10, height: 10 },
+      { id: 'b', name: 'Black', src: '/api/r2/user-u1-b.png', folderId: 'f1', apparelType: 'dark', printAreas: [{ id: 'a', x: 1, y: 1, width: 10, height: 10 }], width: 10, height: 10 },
+    ];
+  };
+
+  it('redraws the design for dark garments with the image model and prints that version on dark mockups', async () => {
+    folderSetup({ designFabric: 'light', fabricVariant: true, audienceGroup: 'men' });
+    const { removeChromaBackground } = await import('@/lib/chroma-key');
+    vi.mocked(removeChromaBackground)
+      .mockResolvedValueOnce({ pngBuffer: Buffer.from('png'), width: 2048, height: 2048 } as never)
+      .mockResolvedValueOnce({ pngBuffer: Buffer.from('ai-dark'), width: 2048, height: 2048 } as never);
+    const { generateImage } = await import('@/lib/ai-provider');
+    const { renderDesignOnMockup } = await import('@/lib/backend-render');
+
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+
+    const calls = vi.mocked(generateImage).mock.calls as unknown as Array<[unknown, { prompt: string; image?: unknown }]>;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1].prompt).toMatch(/men's apparel/);
+    expect(calls[1]![1].image).toBeDefined();
+    expect(calls[1]![1].prompt).toMatch(/dark-colored garments/);
+    expect(recolor).not.toHaveBeenCalled();
+    expect(vi.mocked(renderDesignOnMockup).mock.calls.map((call) => String(call[1]))).toEqual(['png', 'ai-dark']);
+  });
+
+  it('falls back to automatic recolor with a warning when the variant cannot be drawn', async () => {
+    folderSetup({ designFabric: 'light', fabricVariant: true });
+    const { generateImage } = await import('@/lib/ai-provider');
+    vi.mocked(generateImage).mockResolvedValueOnce([{ data: 'aGVsbG8=' }] as never).mockRejectedValueOnce(new Error('edit not supported'));
+
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+
+    expect(recolor).toHaveBeenCalledWith(expect.anything(), 'dark_garment');
+    const output = (state.run?.steps as Record<string, { output?: { warning?: string } }>).backgroundRemoval.output;
+    expect(output?.warning).toMatch(/Koyu kumaş versiyonu üretilemedi/);
+    expect(state.run?.status).toBe('completed');
+  });
+
+  it('uses one design everywhere when it is made for both fabrics', async () => {
+    folderSetup({ designFabric: 'universal', fabricVariant: true });
+    const { generateImage } = await import('@/lib/ai-provider');
+    const { renderDesignOnMockup } = await import('@/lib/backend-render');
+
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+
+    expect(vi.mocked(generateImage)).toHaveBeenCalledTimes(1);
+    expect(recolor).not.toHaveBeenCalled();
+    expect(vi.mocked(renderDesignOnMockup).mock.calls.map((call) => String(call[1]))).toEqual(['png', 'png']);
   });
 });
 

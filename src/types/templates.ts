@@ -63,7 +63,19 @@ export interface PodTemplateSeoHints {
   nicheMode?: 'auto' | 'manual';
   /** Otomatik modda araştırmayı yönlendiren genel çerçeve (isteğe bağlı, ör. "aile ve evcil hayvan esprileri") */
   researchFocus?: string;
+  /** Klasördeki ürünlerin kitlesi: tasarım, niş araştırması ve ilan metni buna göre hazırlanır */
+  audienceGroup?: AudienceGroup;
+  /** İlandaki ürün modelleri (ör. "Comfort Colors 1717"); ilki ilk görseldeki/videodaki üründür */
+  garments?: string[];
+  /** Ana tasarımın hangi kumaş rengi için hazırlanacağı */
+  designFabric?: DesignFabric;
+  /** Klasörde diğer kumaş renginde mockup varsa o kumaş için yapay zekâ ile ayrı bir versiyon üretilsin mi */
+  fabricVariant?: boolean;
 }
+
+export type AudienceGroup = 'men' | 'women' | 'unisex' | 'kids' | 'baby';
+/** 'universal': hem açık hem koyu kumaşta iyi duran tek tasarım; 'light'/'dark': o kumaş rengi için */
+export type DesignFabric = 'universal' | 'light' | 'dark';
 
 /** Otomasyonun Etsy'de açacağı taslak ilanın mağaza ayarları */
 export interface PodTemplateEtsyListingSettings {

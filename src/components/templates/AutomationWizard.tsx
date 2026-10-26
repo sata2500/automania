@@ -3,8 +3,8 @@
 /**
  * Otomasyon kurulum sihirbazı — bir mockup klasörü için "kur ve unut" akışı.
  *
- * Akış (her çalıştırmada): AI tasarım → arka plan kaldırma → klasördeki mockup'lara basma (koyu kumaşa açık
- * tonlu sürüm) → isteğe bağlı tanıtım videosu (mockup görselinden) → SEO metni → Etsy taslak ilanı.
+ * Akış (her çalıştırmada): AI tasarım (+ isteğe bağlı diğer kumaş versiyonu) → arka plan kaldırma → klasördeki
+ * mockup'lara basma → isteğe bağlı tanıtım videosu (mockup görselinden) → SEO metni → Etsy taslak ilanı.
  *
  * Kullanıcı yalnızca beş kısa adımı doldurur: Ürün (klasör, kategori, varyasyon), Tasarım (konu), Video,
  * Zaman ve Etsy mağaza ayarları. Mockup'lar ve varyasyonlar her çalıştırmada güncel hâlleriyle okunur.
@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 import type { EtsyVariationTemplate, MockupFolder, MockupItem } from '@/types/pod';
 import type {
-  PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
+  AudienceGroup, DesignFabric, PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
 } from '@/types/templates';
+import { inferAudienceGroup } from '@/lib/automation-plan';
 import { buildFolderMockupConfig, variationConfigFromRows } from '@/lib/folder-template';
 import { saveTemplate } from '@/lib/templates-client';
 import { useToast } from '@/components/common/ToastContext';
@@ -39,6 +40,20 @@ const STEPS: { label: string; icon: React.ElementType }[] = [
 const VIDEO_ASPECTS = [
   { id: '16:9' as const, label: 'Yatay', desc: '16:9 — Etsy ilan galerisi için' },
   { id: '9:16' as const, label: 'Dikey', desc: '9:16 — Reels / Shorts / TikTok için' },
+];
+
+const AUDIENCE_OPTIONS: { id: AudienceGroup; label: string }[] = [
+  { id: 'men', label: 'Erkek' },
+  { id: 'women', label: 'Kadın' },
+  { id: 'unisex', label: 'Unisex' },
+  { id: 'kids', label: 'Çocuk' },
+  { id: 'baby', label: 'Bebek' },
+];
+
+const FABRIC_OPTIONS: { id: DesignFabric; label: string; desc: string }[] = [
+  { id: 'light', label: 'Açık renkli kumaş', desc: 'Beyaz, krem, açık gri tişörtler için koyu mürekkepli tasarım' },
+  { id: 'dark', label: 'Koyu renkli kumaş', desc: 'Siyah, lacivert, antrasit tişörtler için açık mürekkepli tasarım' },
+  { id: 'universal', label: 'Her ikisi', desc: 'Tek tasarım; hem açık hem koyu kumaşta iyi duracak renklerle' },
 ];
 
 const DEFAULT_SCHEDULE: PodTemplateAutomationSchedule = {
@@ -105,6 +120,13 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
   const [niche, setNiche] = useState(template?.seoHints?.primaryNiche ?? '');
   const [audience, setAudience] = useState(template?.seoHints?.targetAudience ?? '');
   const [notes, setNotes] = useState(template?.seoHints?.customNotes ?? '');
+  // Kitle, ürün modelleri ve kumaş: tasarım, video ve ilan metni bunlara göre hazırlanır.
+  const [audienceGroup, setAudienceGroup] = useState<AudienceGroup | undefined>(
+    template?.seoHints?.audienceGroup ?? inferAudienceGroup(folder?.name),
+  );
+  const [garmentsText, setGarmentsText] = useState((template?.seoHints?.garments ?? []).join('\n'));
+  const [designFabric, setDesignFabric] = useState<DesignFabric>(template?.seoHints?.designFabric ?? 'light');
+  const [fabricVariant, setFabricVariant] = useState(template?.seoHints?.fabricVariant ?? true);
 
   // Video + zaman + Etsy (tek zamanlama nesnesinde)
   const [schedule, setSchedule] = useState<PodTemplateAutomationSchedule>(() => ({
@@ -186,6 +208,10 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
         productType: productTypeFromCategory(category?.name),
         nicheMode,
         researchFocus: nicheMode === 'auto' ? researchFocus.trim() : '',
+        audienceGroup,
+        garments: garmentsText.split('\n').map((g) => g.trim()).filter(Boolean).slice(0, 10),
+        designFabric,
+        fabricVariant: designFabric !== 'universal' && fabricVariant,
       },
       automationSchedule: {
         ...schedule,
@@ -296,6 +322,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                     setFolderId(e.target.value);
                     const next = mockupFolders.find((f) => f.id === e.target.value);
                     if (next && !name.trim()) setName(next.name);
+                    if (next && !audienceGroup) setAudienceGroup(inferAudienceGroup(next.name));
                   }}>
                     <option value="">Klasör seçin…</option>
                     {mockupFolders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -323,9 +350,28 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                   {counts.unset > 0 && (
                     <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{counts.unset} mockup&apos;ta baskı alanı ayarlanmamış; bunlar atlanır.</p>
                   )}
-                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Her çalıştırmada klasörün güncel içeriği kullanılır; koyu renkli tişörtlere tasarımın açık tonlu sürümü otomatik basılır.</p>
+                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Her çalıştırmada klasörün güncel içeriği kullanılır. Açık/koyu kumaş versiyonu Tasarım adımında ayarlanır.</p>
                 </div>
               )}
+
+              <fieldset>
+                <legend className={labelClass}>Hedef kitle</legend>
+                <div className="flex flex-wrap gap-1.5">
+                  {AUDIENCE_OPTIONS.map((option) => (
+                    <button key={option.id} type="button" onClick={() => setAudienceGroup(audienceGroup === option.id ? undefined : option.id)} aria-pressed={audienceGroup === option.id}
+                      className={`px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-colors ${audienceGroup === option.id ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Tasarım, niş araştırması ve ilan metni bu kitleye göre hazırlanır.</p>
+              </fieldset>
+
+              <div>
+                <label className={labelClass} htmlFor="aw-garments">Ürün modelleri (isteğe bağlı)</label>
+                <textarea id="aw-garments" rows={3} className={inputClass} value={garmentsText} onChange={(e) => setGarmentsText(e.target.value)} placeholder={'Comfort Colors 1717\nBella+Canvas 3001\nPrintnest Yogurt'} />
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Her satıra bir model. İlk satır ilk görseldeki üründür ve videoda kullanılır; hepsi ilan açıklamasında seçenek olarak yazılır (başlık ve etiketlerde marka kullanılmaz).</p>
+              </div>
 
               <div>
                 <label className={labelClass} htmlFor="aw-category">Etsy kategorisi</label>
@@ -384,6 +430,28 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 ))}
               </fieldset>
 
+              <fieldset>
+                <legend className={labelClass}>Tasarım hangi kumaş rengi için?</legend>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {FABRIC_OPTIONS.map((option) => (
+                    <button key={option.id} type="button" onClick={() => setDesignFabric(option.id)} aria-pressed={designFabric === option.id}
+                      className={`text-left p-3 rounded-xl border-2 transition-colors ${designFabric === option.id ? 'border-purple-500 bg-purple-50 dark:bg-purple-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                      <span className="block text-sm font-bold text-slate-900 dark:text-white">{option.label}</span>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{option.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                {designFabric !== 'universal' && (
+                  <label className="mt-2 flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5 w-4 h-4 accent-purple-600" checked={fabricVariant} onChange={(e) => setFabricVariant(e.target.checked)} />
+                    <span>
+                      <strong>{designFabric === 'light' ? 'Koyu' : 'Açık'} kumaş için yapay zekâ ile ayrı versiyon üret</strong>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">Klasörde {designFabric === 'light' ? 'koyu' : 'açık'} renkli mockup varsa tasarım o kumaşa uygun renklerle yeniden çizilir ve o mockup&apos;lara basılır (bir görsel üretimi daha). Kapalıysa otomatik renk dönüşümü kullanılır.</span>
+                    </span>
+                  </label>
+                )}
+              </fieldset>
+
               {nicheMode === 'auto' ? (
                 <>
                   <div className="rounded-2xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
@@ -427,7 +495,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <input type="checkbox" className="mt-0.5 w-4 h-4 accent-purple-600" checked={schedule.generateVideo === true} onChange={(e) => setSchedule((prev) => ({ ...prev, generateVideo: e.target.checked }))} />
                 <span className="text-sm">
                   <span className="font-bold text-slate-900 dark:text-white">Tanıtım videosu üret</span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">Tasarımın basıldığı mockup görselinden 8 saniyelik gerçekçi bir video üretilir ve ilana eklenir. Ek maliyet ve birkaç dakika süre ekler.</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">Tasarım ve basıldığı mockup referans alınarak kısa (Omni Flash 5 sn, Veo 8 sn), gerçekçi bir video üretilir ve ilana eklenir. Ek maliyet ve birkaç dakika süre ekler.</span>
                 </span>
               </label>
 
@@ -463,6 +531,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <p>Klasör: <strong>{folder?.name ?? '—'}</strong> · {counts.print} mockup&apos;a basılır</p>
                 <p>Kategori: <strong>{category?.path || category?.name || (taxonomyId > 0 ? `#${taxonomyId}` : '—')}</strong></p>
                 <p>Varyasyon: <strong>{variationSource ? `${variationSource.name} (${variationSummary?.count ?? 0})` : `Tek fiyat $${fixedPrice}`}</strong></p>
+                <p>Kitle: <strong>{AUDIENCE_OPTIONS.find((o) => o.id === audienceGroup)?.label ?? 'Belirtilmedi'}</strong> · Kumaş: <strong>{FABRIC_OPTIONS.find((o) => o.id === designFabric)?.label}{designFabric !== 'universal' && fabricVariant ? ' + diğer kumaş versiyonu' : ''}</strong></p>
                 <p>Konu: <strong>{nicheMode === 'auto' ? `Yapay zekâ belirler${researchFocus.trim() ? ` (${researchFocus.trim()})` : ''}` : niche || '—'}</strong></p>
                 <p>Video: <strong>{schedule.generateVideo ? (video.aspectRatio === '9:16' ? 'Dikey' : 'Yatay') : 'Yok'}</strong> · Mağaza bölümü: <strong>yapay zekâ seçer</strong></p>
                 <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>Etsy taslak ilanı</strong></p>

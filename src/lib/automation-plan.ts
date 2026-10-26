@@ -4,6 +4,7 @@
  * kullanır; ayrı tutuldukları için birim testleriyle doğrulanır.
  */
 import type { MockupItem } from '@/types/pod';
+import type { AudienceGroup, DesignFabric } from '@/types/templates';
 import type {
   AutomationRunSteps,
   AutomationStepName,
@@ -134,17 +135,64 @@ export function topicSearchTerms(hints: Partial<PodTemplateSeoHints> | null | un
   return Array.from(new Set(words)).slice(0, 5);
 }
 
-/** Kumaş rengi koyu olan mockup'lar için tasarımın açık tonlu sürümü kullanılır. */
-export function needsDarkGarmentDesign(mockup: Pick<MockupItem, 'apparelType'>): boolean {
-  return mockup.apparelType === 'dark';
+/**
+ * Mockup'a hangi tasarım basılır: ana tasarım (null) ya da diğer kumaş rengi için versiyon ('light'/'dark').
+ * Ana tasarım bir kumaş rengi için hazırlandıysa karşı renkteki mockup'lara o renge uygun versiyon basılır;
+ * "her ikisi" seçiliyse her yerde aynı tasarım kullanılır. Eski otomasyonlar (ayar yok) açık kumaş sayılır.
+ */
+export function variantFabricFor(
+  mockup: Pick<MockupItem, 'apparelType'>,
+  designFabric: DesignFabric | undefined,
+): 'light' | 'dark' | null {
+  const base = designFabric ?? 'light';
+  if (base === 'universal' || mockup.apparelType === 'any') return null;
+  return mockup.apparelType !== base ? mockup.apparelType : null;
+}
+
+/** Yapay zekâ talimatlarındaki {{fabric}} değeri (veri). */
+export function fabricLabel(fabric: DesignFabric | undefined): string {
+  if (fabric === 'dark') return 'dark-colored garments (black, navy, charcoal)';
+  if (fabric === 'universal') return 'both light and dark garments';
+  return 'light-colored garments (white, cream, light heather)';
+}
+
+const AUDIENCE_LABELS: Record<AudienceGroup, string> = {
+  men: "men's apparel",
+  women: "women's apparel",
+  unisex: 'unisex apparel for adults',
+  kids: "kids' apparel",
+  baby: 'baby and toddler apparel',
+};
+
+/** Yapay zekâ talimatlarındaki {{audienceGroup}} değeri (veri). */
+export function audienceGroupLabel(group: AudienceGroup | undefined): string {
+  return group ? AUDIENCE_LABELS[group] : 'not specified';
+}
+
+/** Klasör adından kitle tahmini (sihirbazda varsayılan seçim için): "Erkek tişört" → men. */
+export function inferAudienceGroup(folderName: string | undefined): AudienceGroup | undefined {
+  const name = (folderName ?? '').toLocaleLowerCase('tr');
+  if (/bebek|baby|infant|toddler|onesie|body/.test(name)) return 'baby';
+  if (/çocuk|cocuk|kid|youth|child/.test(name)) return 'kids';
+  if (/kadın|kadin|bayan|women|woman|female|ladies/.test(name)) return 'women';
+  if (/erkek|\bmen\b|\bman\b|male/.test(name)) return 'men';
+  if (/unisex/.test(name)) return 'unisex';
+  return undefined;
+}
+
+/** Yapay zekâ talimatlarındaki {{garments}} değeri (veri). */
+export function garmentsLabel(garments: string[] | undefined): string {
+  const list = (garments ?? []).map((g) => g.trim()).filter(Boolean);
+  return list.length > 0 ? list.join('; ') : 'not specified';
 }
 
 /** Admin panelindeki "Video üretimi" talimatının değişkenlerini doldurur. */
 export function fillVideoPromptTemplate(
   template: string,
-  values: { title: string; designPrompt: string; product: string; niche: string },
+  values: { title: string; designPrompt: string; product: string; niche: string; garment?: string },
 ): string {
   return fillPrompt(template, {
+    garment: values.garment ?? '',
     title: values.title,
     designPrompt: values.designPrompt,
     userPrompt: values.designPrompt,
@@ -172,6 +220,7 @@ export function effectiveSeoHints(
   research: NicheResearchOutput | null | undefined,
 ): PodTemplateSeoHints {
   const base: PodTemplateSeoHints = {
+    ...hints,
     productType: hints?.productType ?? '',
     targetAudience: hints?.targetAudience ?? '',
     customNotes: hints?.customNotes ?? '',

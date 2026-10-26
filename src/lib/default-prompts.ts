@@ -32,10 +32,13 @@ CONCEPT:
 {{concept}}
 
 STYLE: {{style}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+PRINT FABRIC: {{fabric}}
 
 DESIGN RULES:
 - Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
 - One clear focal subject with strong contrast, readable from a distance.
+- Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
 - Any text must be in English, spelled correctly, short and meaningful, in bold readable typography that matches the style. No placeholder, filler or gibberish text.
 - No trademarks, brand names, logos, celebrities or copyrighted characters.
 
@@ -55,6 +58,8 @@ DESIGN DESCRIPTION:
 MAIN SUBJECT: {{primarySubject}}
 AESTHETIC / STYLE: {{primaryAesthetic}}
 PRODUCT TYPE: {{productType}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+GARMENT OPTIONS THE BUYER CAN CHOOSE: {{garments}}
 SHOP NOTES (product details from the shop owner): {{userNotes}}
 
 CANDIDATE KEYWORDS WITH ETSY METRICS (prefer high opportunity scores and phrases that fit in 20 characters):
@@ -65,10 +70,10 @@ TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
 
 RULES:
 1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
-2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags (garment model names may appear only in the description).
 3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Spread them across: subject + product, the message or quote on the design, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases.
 4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
-5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. State product facts only if they appear in SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications or delivery times.
+5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. Describe the GARMENT OPTIONS as the available choices (a short line for each). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications or delivery times.
 6. ETSY FIELDS:
    - taxonomy_id: always {{taxonomyId}}.
    - who_made: "i_did". when_made: "made_to_order". is_supply: false.
@@ -138,6 +143,7 @@ export const DEFAULT_NICHE_RESEARCH_PROMPT = `You are a senior Etsy print-on-dem
 Today is {{today}}. Pick ONE design niche for a new {{productType}} listing that is most likely to sell on Etsy.
 Etsy buyers search for seasonal products 6-10 weeks before the date, so favor occasions inside that window; evergreen niches are fine when nothing seasonal fits.
 Etsy category: {{category}}
+Who wears these garments (the design must suit them): {{audienceGroup}}
 The shop owner's general direction (stay within it; "none" means no restriction): {{focus}}
 
 Upcoming US occasions:
@@ -160,6 +166,17 @@ Respond with ONLY a JSON object (no markdown) with these fields:
  "designBrief": "1-2 sentences describing the artwork and any short English text on it", "occasion": "occasion name or null",
  "keywords": ["5-10 Etsy search phrases buyers would type"], "reasoning": "2-3 sentences in Turkish explaining why this niche now"}`;
 
-export const DEFAULT_GENERATE_VIDEO_PROMPT = `Ultra-realistic product video of the exact {{product}} from the reference image, worn by a mannequin in a bright, clean photo studio. Show the mannequin from several angles (front, three-quarter and side) with slow, smooth camera movement, ending on a close-up of the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
-The printed design must stay exactly identical to the reference image: same artwork, colors, placement and size. All text on the design must stay exactly as in the reference image, spelled correctly and fully legible. Do not add, remove or distort any text or graphics, because this video advertises a real product for sale.
+export const DEFAULT_GENERATE_VIDEO_PROMPT = `Ultra-realistic product video of the exact {{garment}} {{product}} from the reference images, worn by a mannequin in a bright, clean photo studio. Show the mannequin from several angles (front, three-quarter and side) with slow, smooth camera movement, ending on a close-up of the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
+The printed design must stay exactly identical to the reference images: same artwork, colors, placement and size. All text on the design must stay exactly as in the reference images, spelled correctly and fully legible. Do not add, remove or distort any text or graphics, because this video advertises a real product for sale.
 No captions, watermarks, logos or on-screen text.`;
+
+export const DEFAULT_DESIGN_VARIANT_PROMPT = `Redraw this exact t-shirt graphic as a version for {{fabric}}.
+
+Keep everything identical: composition, subject, characters, layout, proportions, all text and its spelling. Change only the ink colors so the design stands out clearly on {{fabric}}: light and bright inks for dark garments (avoid large black or very dark areas), dark and saturated inks for light garments. Keep the color harmony of the original.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas, the graphic centered with equal empty margins, same size as in the original.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, shadow, border or frame. Do not use {{keyColorName}} or similar shades in the design.
+- Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
+
+Output only the image.`;

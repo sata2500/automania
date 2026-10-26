@@ -37,6 +37,7 @@ export type ResearchContext = {
   productType: string;
   categoryPath?: string | null;
   focus?: string;
+  audienceGroup?: string;
   upcomingEvents: Array<{ name: string; date: string; daysAway: number }>;
   topListings: Array<{ title: string; favorites: number; views: number; tags: string[] }>;
   poolKeywords: Array<{ keyword: string; score: number | null; listings: number | null }>;
@@ -113,6 +114,7 @@ export function buildResearchPrompt(ctx: ResearchContext, template: string = DEF
     productType: ctx.productType,
     category: ctx.categoryPath?.trim() || 'not specified',
     focus: ctx.focus?.trim() || 'none',
+    audienceGroup: ctx.audienceGroup?.trim() || 'not specified',
     upcomingEvents: list(ctx.upcomingEvents.slice(0, 8).map((e) => `- ${e.name}: ${e.date} (in ${e.daysAway} days)`)),
     topListings: list(ctx.topListings.slice(0, 8).map((l) => `- "${l.title}" (${l.favorites} favorites, ${l.views} views; tags: ${l.tags.slice(0, 6).join(', ')})`)),
     poolKeywords: list(ctx.poolKeywords.slice(0, 15).map((k) => `- "${k.keyword}"${k.score !== null ? ` score ${k.score}/100` : ''}${k.listings ? `, ${k.listings} competing listings` : ''}`)),
@@ -217,6 +219,7 @@ export async function researchNiche(input: {
   productType: string;
   categoryPath?: string | null;
   focus?: string;
+  audienceGroup?: string;
   now?: Date;
 }): Promise<NicheResearchResult> {
   const connection = await loadGoogleConnection();
@@ -238,6 +241,7 @@ export async function researchNiche(input: {
     productType: input.productType || 'T-shirt',
     categoryPath: input.categoryPath,
     focus: input.focus,
+    audienceGroup: input.audienceGroup,
     upcomingEvents: upcomingUsEvents(today),
     topListings,
     poolKeywords,

@@ -8,6 +8,7 @@
  */
 import {
   DEFAULT_ANALYZE_DESIGN_PROMPT,
+  DEFAULT_DESIGN_VARIANT_PROMPT,
   DEFAULT_GENERATE_DESIGN_PROMPT,
   DEFAULT_GENERATE_LISTING_PROMPT,
   DEFAULT_GENERATE_VIDEO_PROMPT,
@@ -20,14 +21,19 @@ import {
   LEGACY_ANALYZE_LISTING_IMAGE,
   LEGACY_GENERATE_DESIGN_V1,
   LEGACY_GENERATE_DESIGN_V2,
+  LEGACY_GENERATE_DESIGN_V3,
   LEGACY_GENERATE_LISTING,
+  LEGACY_GENERATE_LISTING_V2,
   LEGACY_GENERATE_VIDEO,
+  LEGACY_GENERATE_VIDEO_V2,
+  LEGACY_NICHE_RESEARCH_V1,
   LEGACY_OPTIMIZE_LISTING,
 } from '@/lib/legacy-prompts';
 
 export type PromptKey =
   | 'ai_prompt_analyze_design'
   | 'ai_prompt_generate_design'
+  | 'ai_prompt_design_variant'
   | 'ai_prompt_generate_listing'
   | 'ai_prompt_optimize_listing'
   | 'ai_prompt_niche_research'
@@ -81,10 +87,24 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'Tasarım üretimi',
     description: 'Görsel modeline giden tasarım talimatı (Tasarımlar › AI ile üret ve otomasyon): tasarım kuralları, kare ve ortalı kompozisyon, düz perde arka plan. Perde rengi konuya göre seçilir (yeşil ağırlıklı konularda magenta, diğerlerinde yeşil) ve sonradan otomatik kaldırılır.',
     defaultValue: DEFAULT_GENERATE_DESIGN_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_DESIGN_V1, LEGACY_GENERATE_DESIGN_V2],
+    legacyDefaults: [LEGACY_GENERATE_DESIGN_V1, LEGACY_GENERATE_DESIGN_V2, LEGACY_GENERATE_DESIGN_V3],
     variables: [
       v('concept', 'Konsept', 'Elle üretimde kullanıcının yazdığı açıklama; otomasyonda niş, hedef kitle, ürün ve notlar (araştırmanın tasarım özeti dahil).', '📝'),
       v('style', 'Stil', 'Elle üretimde seçilen stil; otomasyonda niş araştırmasının önerdiği stil (yoksa "not specified").', '✨'),
+      v('audienceGroup', 'Kitle', 'Otomasyonun hedef kitlesi (ör. "men\'s t-shirt"; elle üretimde "not specified").', '👥'),
+      v('fabric', 'Kumaş', 'Tasarımın basılacağı kumaş rengi: açık, koyu veya ikisi de (otomasyon ayarından).', '🧵'),
+      v('keyColorName', 'Perde rengi adı', '"pure chroma-key green" veya "pure magenta".', '🎨'),
+      v('keyColorHex', 'Perde rengi kodu', '#00FF00 veya #FF00FF.', '#️⃣'),
+    ],
+  },
+  {
+    key: 'ai_prompt_design_variant',
+    group: 'design',
+    title: 'Diğer kumaş versiyonu',
+    description: 'Otomasyonda "Diğer kumaş rengi için ayrı versiyon" açıksa ana tasarım görsel modeline gönderilir ve diğer kumaş rengine uygun renklerle yeniden çizilir; o renkteki mockup\'larda bu versiyon kullanılır.',
+    defaultValue: DEFAULT_DESIGN_VARIANT_PROMPT,
+    variables: [
+      v('fabric', 'Hedef kumaş', 'Versiyonun basılacağı kumaş rengi (ör. "dark-colored garments (black, navy, charcoal)").', '🧵'),
       v('keyColorName', 'Perde rengi adı', '"pure chroma-key green" veya "pure magenta".', '🎨'),
       v('keyColorHex', 'Perde rengi kodu', '#00FF00 veya #FF00FF.', '#️⃣'),
     ],
@@ -95,8 +115,10 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'İlan metni üretimi',
     description: 'Yeni ilan için başlık, 13 etiket, açıklama, kategori nitelikleri ve mağaza bölümünü üretir (SEO stüdyosu ve otomasyon). JSON alan adlarını değiştirmeyin.',
     defaultValue: DEFAULT_GENERATE_LISTING_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_LISTING],
+    legacyDefaults: [LEGACY_GENERATE_LISTING, LEGACY_GENERATE_LISTING_V2],
     variables: [
+      v('audienceGroup', 'Kitle', 'Otomasyonun hedef kitlesi (ör. "men\'s t-shirt").', '👥'),
+      v('garments', 'Ürün modelleri', 'Otomasyonda yazılan ürün modelleri (ör. Comfort Colors 1717, Bella+Canvas 3001).', '👕'),
       v('designDescription', 'Tasarım açıklaması', 'Görsel analizinden veya otomasyonun tasarım konseptinden gelen açıklama.', '📝'),
       v('primarySubject', 'Ana konu', 'Tasarımın ana konusu (alakasız kelimeleri elemek için).', '🎯'),
       v('primaryAesthetic', 'Stil & estetik', 'Tasarımın görsel stili.', '✨'),
@@ -136,7 +158,9 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'Niş araştırması',
     description: 'Otomasyonda "Konuyu yapay zekâ belirlesin" seçiliyse her çalıştırmada tasarım nişini seçer. Web araması admin ayarından açılır. JSON alan adlarını değiştirmeyin.',
     defaultValue: DEFAULT_NICHE_RESEARCH_PROMPT,
+    legacyDefaults: [LEGACY_NICHE_RESEARCH_V1],
     variables: [
+      v('audienceGroup', 'Kitle', 'Otomasyonun hedef kitlesi (ör. "women\'s t-shirt").', '👥'),
       v('today', 'Bugün', 'Bugünün tarihi (YYYY-AA-GG).', '📅'),
       v('productType', 'Ürün tipi', 'Otomasyonun ürün tipi.', '👕'),
       v('category', 'Etsy kategorisi', 'Otomasyonun Etsy kategori yolu (yoksa "not specified").', '🗂️'),
@@ -151,10 +175,11 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     key: 'ai_prompt_generate_video',
     group: 'video',
     title: 'Video üretimi',
-    description: 'Otomasyonda tanıtım videosu üretilirken modele giden talimat. Tasarımın basıldığı ilk mockup görseli referans olarak eklenir.',
+    description: 'Otomasyonda tanıtım videosu üretilirken modele giden talimat. Tasarımın kendisi ve basıldığı ilk mockup referans olarak eklenir (video bu görsellerle başlamaz). Omni Flash 5 sn, Veo 8 sn (referans modu) üretir; Vertex AI\'da Veo sessiz üretilir.',
     defaultValue: DEFAULT_GENERATE_VIDEO_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_VIDEO],
+    legacyDefaults: [LEGACY_GENERATE_VIDEO, LEGACY_GENERATE_VIDEO_V2],
     variables: [
+      v('garment', 'Ürün modeli', 'Otomasyondaki ilk ürün modeli (ilk görseldeki ürün, ör. Comfort Colors 1717).', '🏷️'),
       v('product', 'Ürün tipi', 'Otomasyonun ürün tipi (ör. t-shirt).', '👕'),
       v('niche', 'Niş', 'Tasarımın konusu.', '🎯'),
       v('title', 'Ürün başlığı', 'Üretilen ilan başlığı.', '🏷️'),

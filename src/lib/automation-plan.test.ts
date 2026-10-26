@@ -5,7 +5,8 @@ import {
   buildDesignConcept,
   fillVideoPromptTemplate,
   deriveRunOutcome,
-  needsDarkGarmentDesign,
+  inferAudienceGroup,
+  variantFabricFor,
   nextPendingStep,
   selectAutomationMockups,
   topicSearchTerms,
@@ -97,15 +98,27 @@ describe('folder-linked templates and video prompt', () => {
   });
 
   it('marks dark garments for the light-ink design variant', () => {
-    expect(needsDarkGarmentDesign({ apparelType: 'dark' })).toBe(true);
-    expect(needsDarkGarmentDesign({ apparelType: 'light' })).toBe(false);
-    expect(needsDarkGarmentDesign({ apparelType: 'any' })).toBe(false);
+    // Eski otomasyonlar (ayar yok) açık kumaş için sayılır: koyu mockup'lara versiyon basılır.
+    expect(variantFabricFor({ apparelType: 'dark' }, undefined)).toBe('dark');
+    expect(variantFabricFor({ apparelType: 'light' }, undefined)).toBeNull();
+    expect(variantFabricFor({ apparelType: 'any' }, 'light')).toBeNull();
+    expect(variantFabricFor({ apparelType: 'light' }, 'dark')).toBe('light');
+    expect(variantFabricFor({ apparelType: 'dark' }, 'universal')).toBeNull();
+  });
+
+  it('guesses the audience from the mockup folder name', () => {
+    expect(inferAudienceGroup('Erkek Tişört')).toBe('men');
+    expect(inferAudienceGroup("Women's tees")).toBe('women');
+    expect(inferAudienceGroup('Bebek body')).toBe('baby');
+    expect(inferAudienceGroup('Çocuk')).toBe('kids');
+    expect(inferAudienceGroup('Unisex Comfort Colors')).toBe('unisex');
+    expect(inferAudienceGroup('Yeni klasör')).toBeUndefined();
   });
 
   it('fills the admin video prompt; the default keeps the product faithful', () => {
-    const prompt = fillVideoPromptTemplate(DEFAULT_GENERATE_VIDEO_PROMPT, { title: 'Cat Tee', designPrompt: 'cat', product: 't-shirt', niche: 'cats' });
-    expect(prompt).toMatch(/exact t-shirt from the reference image/);
-    expect(prompt).toMatch(/exactly as in the reference image/);
+    const prompt = fillVideoPromptTemplate(DEFAULT_GENERATE_VIDEO_PROMPT, { title: 'Cat Tee', designPrompt: 'cat', product: 't-shirt', niche: 'cats', garment: 'Comfort Colors 1717' });
+    expect(prompt).toMatch(/exact Comfort Colors 1717 t-shirt from the reference images/);
+    expect(prompt).toMatch(/exactly as in the reference images/);
     expect(fillVideoPromptTemplate('{{title}} | {{niche}} | {{userPrompt}}', { title: 'Cat Tee', designPrompt: 'cat', product: 't-shirt', niche: 'cats' })).toBe('Cat Tee | cats | cat');
   });
 });

@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { keyColorPromptValues, pickKeyBackground } from '@/lib/key-background';
+import { fabricLabel } from '@/lib/automation-plan';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { loadPrompt } from '@/lib/prompt-settings';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -75,6 +76,8 @@ export async function POST(req: NextRequest) {
     const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
       concept: prompt.trim(),
       style,
+      audienceGroup: 'not specified',
+      fabric: fabricLabel('universal'),
       ...keyColorPromptValues(pickKeyBackground(`${prompt} ${style}`)),
     });
 

@@ -14,7 +14,7 @@ import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
 import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeChromaBackground } from '@/lib/chroma-key';
-import { KEY_COLORS, keyColorPromptValues, pickKeyBackground } from '@/lib/key-background';
+import { KEY_COLORS, keyColorPromptValues, pickKeyBackground, type KeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
@@ -39,7 +39,10 @@ import {
   effectiveSeoHints,
   type NicheResearchOutput,
   isStepDone,
-  needsDarkGarmentDesign,
+  audienceGroupLabel,
+  fabricLabel,
+  garmentsLabel,
+  variantFabricFor,
   nextPendingStep,
   selectAutomationMockups,
   topicSearchTerms,
@@ -175,6 +178,8 @@ type StepContext = {
   deadline: number;
   /** Bu çağrıda üretilen ve bir sonraki adımın kullanacağı tasarım (yeniden indirmeyi önler) */
   designPng?: Buffer;
+  /** Diğer kumaş rengi için yapay zekâ versiyonu (bu çalıştırmada üretildiyse) */
+  variantPng?: Buffer;
   /** Çalıştırmanın adım kayıtları (niş araştırması çıktısı buradan okunur) */
   steps?: AutomationRunSteps;
 };
@@ -197,6 +202,8 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
     concept: basePrompt,
     style: research?.style?.trim() || 'not specified',
+    audienceGroup: audienceGroupLabel(hints.audienceGroup),
+    fabric: fabricLabel(hints.designFabric),
     ...keyColorPromptValues(keyBackground),
   });
   const generatedImages = await generateImage(config, { prompt: finalPrompt });
@@ -230,25 +237,98 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
   };
 
   // Atomik ekleme: eşzamanlı çalıştırmalar birbirinin tasarımını silmez; updated_at değiştiği için
-  // açık istemciler yeni tasarımı senkronla görür. Tasarımlar sekmesinde "Otomasyon Tasarımları"
-  // klasöründe toplanır (klasör yoksa oluşturulur).
+  // açık istemciler yeni tasarımı senkronla görür.
+  await addAutomationDesign(userId, newDesign);
+
+  // Diğer kumaş rengi için yapay zekâ versiyonu (ayar açıksa ve klasörde o renkte mockup varsa).
+  const variant = await createFabricVariant(ctx, config, {
+    rawImage: Buffer.from(generatedImages[0].data, 'base64'),
+    mimeType: generatedImages[0].mimeType,
+    keyBackground,
+    designName: newDesign.name,
+  });
+
+  ctx.designPng = pngBuffer;
+  steps.backgroundRemoval = {
+    ...steps.backgroundRemoval,
+    status: 'completed',
+    completedAt: new Date().toISOString(),
+    ...(variant ? {
+      output: {
+        variantFabric: variant.fabric,
+        variantUrl: variant.url,
+        ...(variant.error ? { warning: `${variant.fabric === 'dark' ? 'Koyu' : 'Açık'} kumaş versiyonu üretilemedi; otomatik renk dönüşümü kullanıldı. ${variant.error}` } : {}),
+      },
+    } : {}),
+  };
+  ctx.run = { ...ctx.run, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url };
+  await persist({ steps, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url });
+}
+
+/** Tasarımı Tasarımlar sekmesindeki "Otomasyon Tasarımları" klasörüne atomik olarak ekler. */
+async function addAutomationDesign(userId: string, design: DesignItem) {
   const folderJson = JSON.stringify([AUTOMATION_DESIGN_FOLDER]);
   await db.insert(userWorkspaces)
-    .values({ userId, designs: [newDesign], folders: [AUTOMATION_DESIGN_FOLDER], updatedAt: new Date() })
+    .values({ userId, designs: [design], folders: [AUTOMATION_DESIGN_FOLDER], updatedAt: new Date() })
     .onConflictDoUpdate({
       target: userWorkspaces.userId,
       set: {
-        designs: drizzleSql`COALESCE(${userWorkspaces.designs}, '[]'::jsonb) || ${JSON.stringify([newDesign])}::jsonb`,
+        designs: drizzleSql`COALESCE(${userWorkspaces.designs}, '[]'::jsonb) || ${JSON.stringify([design])}::jsonb`,
         folders: drizzleSql`CASE WHEN COALESCE(${userWorkspaces.folders}, '[]'::jsonb) @> ${JSON.stringify([{ id: AUTOMATION_DESIGN_FOLDER.id }])}::jsonb
           THEN ${userWorkspaces.folders} ELSE COALESCE(${userWorkspaces.folders}, '[]'::jsonb) || ${folderJson}::jsonb END`,
         updatedAt: new Date(),
       },
     });
+}
 
-  ctx.designPng = pngBuffer;
-  steps.backgroundRemoval = { ...steps.backgroundRemoval, status: 'completed', completedAt: new Date().toISOString() };
-  ctx.run = { ...ctx.run, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url };
-  await persist({ steps, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url });
+/**
+ * Ana tasarımı görsel modeline verip diğer kumaş rengi için yeniden çizdirir ("Diğer kumaş versiyonu"
+ * talimatı). Ayar kapalıysa, ana tasarım her iki kumaşa uygunsa veya klasörde o renkte mockup yoksa
+ * üretilmez (null). Başarısız olursa otomasyon durmaz: o mockup'larda otomatik renk dönüşümü kullanılır.
+ */
+async function createFabricVariant(
+  ctx: StepContext,
+  config: Awaited<ReturnType<typeof loadAIConfig>>,
+  input: { rawImage: Buffer; mimeType: string; keyBackground: KeyBackground; designName: string },
+): Promise<{ fabric: 'light' | 'dark'; url: string | null; error?: string } | null> {
+  const hints = runHints(ctx);
+  const base = hints.designFabric ?? 'light';
+  if (!hints.fabricVariant || base === 'universal') return null;
+  const target = base === 'light' ? 'dark' : 'light';
+  const mockups = await loadWorkspaceMockups(ctx.userId);
+  const plan = selectAutomationMockups(mockups, ctx.template.mockupConfig);
+  if (!plan.render.some((m) => variantFabricFor(m, base) === target)) return null;
+
+  try {
+    const prompt = fillPrompt(await loadPrompt('ai_prompt_design_variant'), {
+      fabric: fabricLabel(target),
+      ...keyColorPromptValues(input.keyBackground),
+    });
+    const images = await generateImage(config, { prompt, image: { data: input.rawImage, mimeType: input.mimeType } });
+    if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
+    const { pngBuffer, width, height } = await removeChromaBackground(Buffer.from(images[0].data, 'base64'), { keyColor: KEY_COLORS[input.keyBackground] });
+    const upload = await uploadToR2(pngBuffer, createOwnedUploadName(ctx.userId, `auto-design-${ctx.runId}-${target}`, 'image/png'), 'image/png');
+    await addAutomationDesign(ctx.userId, {
+      id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `${input.designName} · ${target === 'dark' ? 'koyu kumaş' : 'açık kumaş'}`,
+      folderId: AUTOMATION_DESIGN_FOLDER.id,
+      src: upload.url,
+      width,
+      height,
+      targetApparel: target,
+      isProductionActive: false,
+      createdAt: Date.now(),
+      tags: [],
+      generatedByAI: true,
+      promptUsed: prompt,
+    });
+    ctx.variantPng = pngBuffer;
+    return { fabric: target, url: upload.url };
+  } catch (error) {
+    const message = describeAiError(error);
+    console.warn('[Automation] Fabric variant failed; automatic recolor will be used.', { runId: ctx.runId, message });
+    return { fabric: target, url: null, error: message.slice(0, 300) };
+  }
 }
 
 async function runNicheResearch(ctx: StepContext): Promise<StepResult> {
@@ -267,6 +347,7 @@ async function runNicheResearch(ctx: StepContext): Promise<StepResult> {
     productType: hints?.productType || 'T-shirt',
     categoryPath,
     focus: hints?.researchFocus,
+    audienceGroup: audienceGroupLabel(hints?.audienceGroup),
   });
   console.log('[Automation] Niche research', { runId, niche: result.niche, searchedWeb: result.searchedWeb });
   return { output: { ...result } };
@@ -283,20 +364,31 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
   }
 
   const { renderDesignOnMockup } = await import('@/lib/backend-render');
-  // Koyu kumaşlarda (siyah, lacivert…) tasarımın açık tonlu sürümü basılır; bir kez üretilir.
-  let darkGarmentDesign: Buffer | null = null;
+  // Ana tasarım bir kumaş rengi için hazırlandıysa karşı renkteki mockup'lara o renge uygun versiyon basılır:
+  // yapay zekâ versiyonu varsa o, yoksa otomatik renk dönüşümü (bir kez üretilir).
+  const hints = runHints(ctx);
+  const variantInfo = ctx.steps?.backgroundRemoval?.output as { variantUrl?: string | null } | undefined;
+  let variantDesign: Buffer | null = ctx.variantPng ?? null;
   const designFor = async (mockup: MockupItem): Promise<Buffer> => {
-    if (!needsDarkGarmentDesign(mockup)) return design;
-    if (!darkGarmentDesign) {
+    const target = variantFabricFor(mockup, hints.designFabric);
+    if (!target) return design;
+    if (!variantDesign && variantInfo?.variantUrl) {
       try {
-        const { recolorDesign } = await import('@/lib/recolor');
-        darkGarmentDesign = (await recolorDesign(design, 'dark_garment')).pngBuffer;
+        variantDesign = await loadImageForUser(userId, variantInfo.variantUrl);
       } catch (error) {
-        console.warn('[Automation] Dark garment recolor failed; using original design.', error instanceof Error ? error.message : error);
-        darkGarmentDesign = design;
+        console.warn('[Automation] Fabric variant could not be loaded; using automatic recolor.', error instanceof Error ? error.message : error);
       }
     }
-    return darkGarmentDesign;
+    if (!variantDesign) {
+      try {
+        const { recolorDesign } = await import('@/lib/recolor');
+        variantDesign = (await recolorDesign(design, target === 'dark' ? 'dark_garment' : 'light_garment')).pngBuffer;
+      } catch (error) {
+        console.warn('[Automation] Garment recolor failed; using original design.', error instanceof Error ? error.message : error);
+        variantDesign = design;
+      }
+    }
+    return variantDesign;
   };
   const urls: string[] = [];
   const failures: string[] = [];
@@ -347,14 +439,17 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
     designPrompt: String((ctx.steps?.designGeneration?.output as { prompt?: unknown } | undefined)?.prompt || hints.primaryNiche || template.name),
     product: hints.productType?.trim().toLowerCase() || 't-shirt',
     niche: hints.primaryNiche || 'not specified',
+    garment: hints.garments?.find((g) => g.trim())?.trim() || '',
   });
 
-  // Referans görsel: tasarımın basıldığı ilk mockup — video bu ürünü gösterir.
+  // Referans görseller: tasarımın kendisi ve tasarımın basıldığı ilk mockup. Video bu ürünü gösterir
+  // ama görselle başlamaz (ilk kare olarak kullanılmaz).
+  const referenceImages: Array<{ data: Buffer; mimeType: 'image/jpeg' }> = [];
   const firstMockupUrl = ((ctx.run.generatedMockupUrls as string[] | null) ?? [])[0];
-  let image: { data: Buffer; mimeType: 'image/jpeg' } | undefined;
-  if (firstMockupUrl) {
+  for (const url of [ctx.run.generatedDesignUrl, firstMockupUrl]) {
+    if (!url) continue;
     try {
-      image = { data: await jpegForListing(await loadImageForUser(userId, firstMockupUrl)), mimeType: 'image/jpeg' };
+      referenceImages.push({ data: await jpegForListing(await loadImageForUser(userId, url)), mimeType: 'image/jpeg' });
     } catch (error) {
       console.warn('[Automation] Reference image for video could not be loaded', error instanceof Error ? error.message : error);
     }
@@ -365,17 +460,17 @@ async function runVideo(ctx: StepContext): Promise<StepResult> {
   const aspectRatio = videoSettings?.aspectRatio === '9:16' ? '9:16' : '16:9';
   let generated;
   try {
-    generated = await generateVideo(config, { prompt, model, image, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
+    generated = await generateVideo(config, { prompt, model, referenceImages, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
   } catch (error) {
     // Omni Flash: Gemini API'de GA adı, Vertex'te önizleme adı geçerli olabilir; diğeri denenir.
     const alternate = isOmniVideoModel(model) && /NOT_FOUND|404|not found|not supported/i.test(error instanceof Error ? error.message : '')
       ? (model.endsWith('-preview') ? model.replace(/-preview$/, '') : `${model}-preview`)
       : null;
     if (!alternate) throw error;
-    generated = await generateVideo(config, { prompt, model: alternate, image, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
+    generated = await generateVideo(config, { prompt, model: alternate, referenceImages, aspectRatio, maxWaitMs: VIDEO_MAX_WAIT_MS });
   }
   const url = await persistGeneratedVideo(userId, runId, generated.uri, config.googleApiKey);
-  return { patch: { generatedVideoUrl: url }, output: { source: 'ai', model, referenceImage: Boolean(image) } };
+  return { patch: { generatedVideoUrl: url }, output: { source: 'ai', model, referenceImages: referenceImages.length } };
 }
 
 async function runSeo(ctx: StepContext): Promise<StepResult> {
@@ -399,6 +494,8 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     productType: hints?.productType || undefined,
     userNotes: hints?.customNotes || undefined,
     primarySubject: subject?.subject || hints?.primaryNiche || undefined,
+    audienceGroup: audienceGroupLabel(hints?.audienceGroup),
+    garments: garmentsLabel(hints?.garments),
     taxonomyId,
     shopSections: shopSections.length > 0 ? shopSections : undefined,
   });

@@ -16,7 +16,7 @@
  *  - Google Veo 3.1: client.models.generate_videos()  (Sadece Google)
  */
 
-import type { GoogleGenAI } from '@google/genai';
+import { VideoGenerationReferenceType, type GoogleGenAI } from '@google/genai';
 import { createGoogleClient, resolveGoogleConnection, type GoogleConnection } from '@/lib/google-genai-client';
 import { normalizeVideoModel } from '@/lib/google-cloud-credentials';
 import { isRetryableAiError, withAiRetry } from '@/lib/ai-retry';
@@ -49,16 +49,19 @@ export interface GenerateImageOptions {
   aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
   /** 1–4 adet görsel */
   numberOfImages?: number;
+  /** Düzenlenecek görsel (ör. tasarımın diğer kumaş versiyonu); yalnızca Gemini görsel modelleri */
+  image?: { data: Buffer; mimeType: string };
 }
 
 export interface GenerateVideoOptions {
   prompt: string;
   /** Model kimliği (veo-… veya gemini-omni-…); yoksa admin ayarı */
   model?: string;
-  /** Referans görsel (image-to-video): video bu ürünü gösterir */
-  image?: { data: Buffer; mimeType: 'image/jpeg' | 'image/png' };
-  /** Saniye (5 veya 8) */
-  durationSeconds?: 5 | 8;
+  /**
+   * Referans görseller (ör. tasarım ve tasarımın basıldığı mockup): video bu ürünü gösterir ama
+   * görselle başlamaz (ilk kare olarak kullanılmaz).
+   */
+  referenceImages?: Array<{ data: Buffer; mimeType: 'image/jpeg' | 'image/png' }>;
   aspectRatio?: '9:16' | '16:9' | '1:1';
   resolution?: '720p' | '1080p';
   /** En fazla bekleme süresi (ms). Varsayılan 5 dakika; sunucu fonksiyonu süre sınırı için kısaltılabilir. */
@@ -148,6 +151,7 @@ async function generateImageGoogle(
 
   // Imagen modelleri ayrı bir uç nokta (generateImages) kullanır.
   if (config.imageModel.startsWith('imagen')) {
+    if (options.image) throw new Error('Seçili görsel modeli (Imagen) görsel düzenlemeyi desteklemiyor.');
     const result = await withAiRetry(() => client.models.generateImages({
       model: config.imageModel,
       prompt: options.prompt,
@@ -163,9 +167,12 @@ async function generateImageGoogle(
 
   // Oran açıkça verilmezse model yatay görsel üretip tasarımı bir kenara yerleştirebiliyor. 2K, baskı ve
   // kenar kalitesi için; desteklemeyen modelde (yalnız 1K) istek boyut olmadan tekrarlanır.
+  const contents = options.image
+    ? [{ role: 'user', parts: [{ inlineData: { mimeType: options.image.mimeType, data: options.image.data.toString('base64') } }, { text: options.prompt }] }]
+    : options.prompt;
   const request = (imageSize?: string) => client.models.generateContent({
     model: config.imageModel,
-    contents: options.prompt,
+    contents,
     config: {
       responseModalities: ['image'],
       imageConfig: { aspectRatio, ...(imageSize ? { imageSize } : {}) },
@@ -208,6 +215,7 @@ async function generateImageOpenRouter(
   config: AIProviderConfig,
   options: GenerateImageOptions
 ): Promise<GeneratedImage[]> {
+  if (options.image) throw new Error('OpenRouter görsel uç noktası görsel düzenlemeyi desteklemiyor.');
 
   const res = await fetch('https://openrouter.ai/api/v1/images', {
     method: 'POST',
@@ -276,17 +284,33 @@ export async function generateVideo(
 async function generateVideoVeo(config: AIProviderConfig, model: string, options: GenerateVideoOptions): Promise<GeneratedVideo> {
   const client = getGoogleClient(config, model);
 
-  // Veo 3.x yalnızca 16:9 ve 9:16 destekler.
-  let operation = await withAiRetry(() => client.models.generateVideos({
+  // Veo 3.x yalnızca 16:9 ve 9:16 ve 4/6/8 sn destekler; ses kapalı (Etsy videoları sessiz oynatılır).
+  // Referans görseller "asset" olarak verilir (ilk kare değil); Veo bu modda 8 sn ister. Model referansı
+  // desteklemiyorsa ilk mockup ilk kare olarak verilip 6 sn üretilir.
+  const refs = options.referenceImages ?? [];
+  const request = (withReferences: boolean) => client.models.generateVideos({
     model,
     prompt: options.prompt,
-    ...(options.image ? { image: { imageBytes: options.image.data.toString('base64'), mimeType: options.image.mimeType } } : {}),
+    ...(!withReferences && refs[0] ? { image: { imageBytes: refs[refs.length - 1]!.data.toString('base64'), mimeType: refs[refs.length - 1]!.mimeType } } : {}),
     config: {
       aspectRatio: options.aspectRatio ?? '16:9',
       resolution: options.resolution ?? '720p',
-      durationSeconds: options.durationSeconds ?? 8,
+      durationSeconds: withReferences ? 8 : 6,
+      // Ses kapatma yalnızca Vertex AI'da destekleniyor (Gemini API anahtarıyla bu alan hata verir).
+      ...(config.googleConnection?.mode === 'vertex' ? { generateAudio: false } : {}),
+      ...(withReferences
+        ? { referenceImages: refs.slice(0, 3).map((ref) => ({ image: { imageBytes: ref.data.toString('base64'), mimeType: ref.mimeType }, referenceType: VideoGenerationReferenceType.ASSET })) }
+        : {}),
     },
-  }), { label: 'video generation' });
+  });
+  let operation;
+  try {
+    operation = await withAiRetry(() => request(refs.length > 0), { label: 'video generation' });
+  } catch (error) {
+    if (refs.length === 0 || isRetryableAiError(error) || !/INVALID_ARGUMENT|not supported|reference/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    console.warn('[AI] Veo reference images not supported by this model; using the first mockup as the starting frame.');
+    operation = await withAiRetry(() => request(false), { label: 'video generation' });
+  }
 
   const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
   while (!operation.done && Date.now() < deadline) {
@@ -317,6 +341,9 @@ async function generateVideoVeo(config: AIProviderConfig, model: string, options
   return { uri, mimeType };
 }
 
+/** Omni Flash 3-10 sn üretir; tanıtım videosu için 5 sn yeterli (maliyet ve süre). */
+const OMNI_DURATION = '5s';
+
 type OmniVideoContent = { data?: string; uri?: string; mime_type?: string };
 type OmniInteraction = { id?: string; status?: string; output_video?: OmniVideoContent; error?: unknown };
 
@@ -326,27 +353,39 @@ async function generateVideoOmni(config: AIProviderConfig, requestedModel: strin
     ? `${requestedModel}-preview`
     : requestedModel;
   const client = getGoogleClient(config, model);
-  const input = options.image
+  // Görseller referans olarak verilir (reference_to_video): video ürünü gösterir ama görselle başlamaz.
+  const refs = options.referenceImages ?? [];
+  const input = refs.length > 0
     ? [
-        { type: 'image', data: options.image.data.toString('base64'), mime_type: options.image.mimeType },
+        ...refs.map((ref) => ({ type: 'image', data: ref.data.toString('base64'), mime_type: ref.mimeType })),
         { type: 'text', text: options.prompt },
       ]
     : options.prompt;
 
   // Arka planda çalıştırılır; sonuç durum sorgulanarak alınır (sunucu fonksiyonu süre sınırına takılmaz).
+  // Süre 5 sn (maliyet ve süre için); model süre alanını kabul etmezse varsayılan süreyle tekrar denenir.
   const createInteraction = client.interactions.create as unknown as (params: Record<string, unknown>) => Promise<OmniInteraction>;
-  let interaction = await withAiRetry(() => createInteraction.call(client.interactions, {
+  const request = (duration?: string) => createInteraction.call(client.interactions, {
     model,
     input,
     response_format: {
       type: 'video',
       aspect_ratio: options.aspectRatio === '9:16' ? '9:16' : '16:9',
       resolution: options.resolution ?? '720p',
+      ...(duration ? { duration } : {}),
     },
-    ...(options.image ? { generation_config: { video_config: { task: 'image_to_video' } } } : {}),
+    ...(refs.length > 0 ? { generation_config: { video_config: { task: 'reference_to_video' } } } : {}),
     background: true,
     store: true,
-  }), { label: 'video generation' });
+  });
+  let interaction: OmniInteraction;
+  try {
+    interaction = await withAiRetry(() => request(OMNI_DURATION), { label: 'video generation' });
+  } catch (error) {
+    if (isRetryableAiError(error) || !/INVALID_ARGUMENT|duration/i.test(error instanceof Error ? error.message : String(error))) throw error;
+    console.warn('[AI] Omni rejected the duration field; using the model default length.', error instanceof Error ? error.message : error);
+    interaction = await withAiRetry(() => request(), { label: 'video generation' });
+  }
 
   const deadline = Date.now() + (options.maxWaitMs ?? 300_000);
   while (!interaction.output_video && interaction.id && !isFinalInteraction(interaction.status) && Date.now() < deadline) {

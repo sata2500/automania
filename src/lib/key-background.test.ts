@@ -16,10 +16,10 @@ describe('pickKeyBackground', () => {
 
 describe('design prompt screen color', () => {
   it('fills the chosen screen color into the design prompt', () => {
-    const green = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', ...keyColorPromptValues('green') });
+    const green = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', audienceGroup: 'unisex', fabric: 'both', ...keyColorPromptValues('green') });
     expect(green).toMatch(/centered horizontally and vertically/);
     expect(green).toMatch(/pure chroma-key green \(#00FF00\)/);
-    const magenta = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', ...keyColorPromptValues('magenta') });
+    const magenta = fillPrompt(DEFAULT_GENERATE_DESIGN_PROMPT, { concept: 'cats', style: 'retro', audienceGroup: 'unisex', fabric: 'both', ...keyColorPromptValues('magenta') });
     expect(magenta).toMatch(/Do not use pure magenta/);
     expect(magenta).not.toMatch(/\{\{/);
   });

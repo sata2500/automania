@@ -41,6 +41,10 @@ export const seoHintsSchema = z.object({
   primaryNiche: shortText(200).default(''),
   nicheMode: z.enum(['auto', 'manual']).optional(),
   researchFocus: shortText(500).optional(),
+  audienceGroup: z.enum(['men', 'women', 'unisex', 'kids', 'baby']).optional(),
+  garments: z.array(shortText(120)).max(10).optional(),
+  designFabric: z.enum(['universal', 'light', 'dark']).optional(),
+  fabricVariant: z.boolean().optional(),
 });
 
 const optionalEtsyId = z.string().trim().max(32).regex(/^\d*$/, 'Geçersiz Etsy kimliği.').optional();

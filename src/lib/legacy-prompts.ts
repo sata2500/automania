@@ -229,3 +229,106 @@ Return ONLY valid JSON (no markdown backticks, no wrapping text):
 export const LEGACY_GENERATE_VIDEO = `Realistic e-commerce product video. The exact {{product}} from the reference image is displayed on an invisible (ghost) mannequin in a bright, clean photo studio. The camera slowly orbits to show the garment from the front, three-quarter and side angles, then gently pushes in on the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
 Keep the garment color, the printed artwork and its placement exactly as in the reference image; do not change, add or distort any text or graphics.
 No captions, no watermarks, no logos, no on-screen text.`;
+
+export const LEGACY_GENERATE_DESIGN_V3 = `Create a print-ready t-shirt graphic for an Etsy print-on-demand shop.
+
+CONCEPT:
+{{concept}}
+
+STYLE: {{style}}
+
+DESIGN RULES:
+- Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
+- One clear focal subject with strong contrast, readable from a distance.
+- Any text must be in English, spelled correctly, short and meaningful, in bold readable typography that matches the style. No placeholder, filler or gibberish text.
+- No trademarks, brand names, logos, celebrities or copyrighted characters.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas with one single standalone graphic, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, noise, shadow, vignette, border or frame.
+- Do not use {{keyColorName}} or similar shades anywhere in the design. Draw green elements in dark forest green, olive or teal instead of bright green, and pink or purple elements in burgundy, coral or soft lavender instead of magenta.
+- Crisp, clean outer edges with a solid outline. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.
+
+Output only the image.`;
+
+export const LEGACY_GENERATE_LISTING_V2 = `You are an expert Etsy SEO copywriter for a US print-on-demand apparel shop. Write the listing for this design.
+
+DESIGN DESCRIPTION:
+{{designDescription}}
+
+MAIN SUBJECT: {{primarySubject}}
+AESTHETIC / STYLE: {{primaryAesthetic}}
+PRODUCT TYPE: {{productType}}
+SHOP NOTES (product details from the shop owner): {{userNotes}}
+
+CANDIDATE KEYWORDS WITH ETSY METRICS (prefer high opportunity scores and phrases that fit in 20 characters):
+{{keywords}}
+
+TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
+{{coOccurringTags}}
+
+RULES:
+1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases.
+3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Spread them across: subject + product, the message or quote on the design, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases.
+4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
+5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. State product facts only if they appear in SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications or delivery times.
+6. ETSY FIELDS:
+   - taxonomy_id: always {{taxonomyId}}.
+   - who_made: "i_did". when_made: "made_to_order". is_supply: false.
+   - materials: up to 5 simple names from this list, only if they match the product: Cotton, Polyester, Ceramic, Glass, Wood, Metal, Paper, Canvas. No percentages or special characters.
+   - styles: up to 2 style names (e.g. "Boho & Hippie", "Minimalist").
+   - shop_section_id: the ID of the best matching shop section below, or null if none fits:
+   {{shopSections}}
+   - taxonomy_properties_values: value_ids for the properties below that clearly fit the design; omit the rest. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
+   {{taxonomyProperties}}
+
+Return ONLY a valid JSON object in this format, with no markdown and no explanation:
+{
+  "title": "SEO title, at most 140 characters",
+  "description": "Structured Etsy description",
+  "selectedTags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
+  "suggestedBasePrice": 24.99,
+  "detectedSubject": "main subject",
+  "detectedAesthetic": "main aesthetic",
+  "taxonomy_id": {{taxonomyId}},
+  "who_made": "i_did",
+  "when_made": "made_to_order",
+  "materials": ["Cotton"],
+  "styles": ["Minimalist"],
+  "is_supply": false,
+  "shop_section_id": null,
+  "taxonomy_properties_values": [
+    { "property_id": 0, "value_ids": [0] }
+  ]
+}`;
+
+export const LEGACY_NICHE_RESEARCH_V1 = `You are a senior Etsy print-on-demand market researcher for the US market.
+Today is {{today}}. Pick ONE design niche for a new {{productType}} listing that is most likely to sell on Etsy.
+Etsy buyers search for seasonal products 6-10 weeks before the date, so favor occasions inside that window; evergreen niches are fine when nothing seasonal fits.
+Etsy category: {{category}}
+The shop owner's general direction (stay within it; "none" means no restriction): {{focus}}
+
+Upcoming US occasions:
+{{upcomingEvents}}
+
+The shop's best performing listings (favorites/views) — learn which themes and styles resonate, but do not copy them:
+{{topListings}}
+
+Etsy keyword data from our research pool (higher score = better opportunity):
+{{poolKeywords}}
+
+Niches already used recently by this automation — choose something clearly different:
+{{recentNiches}}
+
+If a Google Search tool is available, use it to check what is trending right now for this window: Etsy trending searches, Pinterest trends/Pinterest Predicts, Google Trends, social media and pop culture moments. Prefer niches with rising demand and reasonable competition.
+
+Rules: no trademarks, brand names, celebrities, sports teams, copyrighted characters or quotes from movies/songs. All design text must be in English.
+Respond with ONLY a JSON object (no markdown) with these fields:
+{"niche": "short niche phrase in English", "targetAudience": "who buys it", "style": "visual style (e.g. retro distressed, cute kawaii, minimalist line art)",
+ "designBrief": "1-2 sentences describing the artwork and any short English text on it", "occasion": "occasion name or null",
+ "keywords": ["5-10 Etsy search phrases buyers would type"], "reasoning": "2-3 sentences in Turkish explaining why this niche now"}`;
+
+export const LEGACY_GENERATE_VIDEO_V2 = `Ultra-realistic product video of the exact {{product}} from the reference image, worn by a mannequin in a bright, clean photo studio. Show the mannequin from several angles (front, three-quarter and side) with slow, smooth camera movement, ending on a close-up of the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
+The printed design must stay exactly identical to the reference image: same artwork, colors, placement and size. All text on the design must stay exactly as in the reference image, spelled correctly and fully legible. Do not add, remove or distort any text or graphics, because this video advertises a real product for sale.
+No captions, watermarks, logos or on-screen text.`;

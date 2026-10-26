@@ -32,6 +32,10 @@ export type GenerateListingInput = {
   shopSections?: unknown;
   taxonomyId?: number | string;
   taxonomyProperties?: unknown;
+  /** Otomasyonun kitlesi (ör. "men's apparel") */
+  audienceGroup?: string;
+  /** Alıcının seçebileceği ürün modelleri (ör. "Comfort Colors 1717; Bella+Canvas 3001") */
+  garments?: string;
 };
 
 /**
@@ -90,7 +94,7 @@ type TaxonomyProperty = {
 };
 
 export async function generateListingContent(userId: string, input: GenerateListingInput) {
-  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties } = input;
+  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments } = input;
   if (!Array.isArray(keywords) || keywords.length === 0) {
     throw new ListingGenerationError('İçerik oluşturmak için en az bir kelime gereklidir.', 400);
   }
@@ -224,6 +228,8 @@ export async function generateListingContent(userId: string, input: GenerateList
     coOccurringTags: formattedCoOccurring,
     taxonomyId: String(taxonomyId || 482),
     shopSections: shopSections && Array.isArray(shopSections) ? (shopSections as ShopSection[]).map((s) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
+    audienceGroup: typeof audienceGroup === 'string' && audienceGroup.trim() ? audienceGroup.trim() : 'not specified',
+    garments: typeof garments === 'string' && garments.trim() ? garments.trim() : 'not specified',
     taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? (taxonomyProperties as TaxonomyProperty[]).map((p) => 
       `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${(p.possible_values || []).map((v) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
     ).join('\n   ') : 'None'
