@@ -14,7 +14,7 @@ export const STEP_LABELS: Record<AutomationStepName, string> = {
   mockupRender: 'Mockup oluşturma',
   videoGeneration: 'Video',
   seoGeneration: 'SEO metni',
-  listingCreation: 'Etsy taslak ilanı',
+  listingCreation: 'Etsy ilanı',
 };
 
 const STATUS_LABELS: Record<AutomationRun['status'], string> = {
@@ -25,10 +25,20 @@ const STATUS_LABELS: Record<AutomationRun['status'], string> = {
   cancelled: 'İptal edildi',
 };
 
+const REVIEW_LABELS: Record<string, string> = {
+  awaiting: 'Hazır İlanlar\'da incelemenizi bekliyor',
+  scheduled: 'Onaylandı, yayın zamanı bekleniyor',
+  publishing: 'Etsy\'de yayınlanıyor',
+  published: 'Etsy\'de yayında',
+  rejected: 'Reddedildi',
+  failed: 'Yayınlanamadı; Hazır İlanlar\'dan yeniden deneyin',
+};
+
 /** Etsy taslağının bağlantısı (ilan adımı çıktısından veya kimlikten). */
 export function getRunListingUrl(run: AutomationRun): string | null {
-  const output = run.steps?.listingCreation?.output as { listingUrl?: unknown } | undefined;
+  const output = run.steps?.listingCreation?.output as { listingUrl?: unknown; review?: { listingUrl?: unknown } } | undefined;
   if (typeof output?.listingUrl === 'string') return output.listingUrl;
+  if (typeof output?.review?.listingUrl === 'string') return output.review.listingUrl;
   return run.etsyListingId ? `https://www.etsy.com/your/shops/me/listing-editor/edit/${run.etsyListingId}` : null;
 }
 
@@ -94,6 +104,9 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
                   <StepIcon status={step.status} />
                   <div className="min-w-0">
                     <span className="font-semibold text-slate-800 dark:text-slate-100">{STEP_LABELS[name]}</span>
+                    {name === 'listingCreation' && (step.output as { review?: { status?: string } } | undefined)?.review && (
+                      <p className="mt-0.5 text-indigo-600 dark:text-indigo-300">{REVIEW_LABELS[(step.output as { review: { status: string } }).review.status] ?? 'Hazır İlanlar\'da'}</p>
+                    )}
                     {step.error && <p className={`mt-0.5 break-words ${step.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>{step.error}</p>}
                   </div>
                 </li>
@@ -185,7 +198,7 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
           )}
           {listingUrl && (
             <a href={listingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold">
-              <ExternalLink className="w-3.5 h-3.5" /> Etsy taslağını aç
+              <ExternalLink className="w-3.5 h-3.5" /> Etsy ilanını aç
             </a>
           )}
         </div>

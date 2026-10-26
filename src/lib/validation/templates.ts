@@ -82,6 +82,7 @@ export const automationScheduleSchema = z.object({
   nextRunAt: z.string().max(64).nullable().default(null),
   listingsPerRun: z.number().int().min(1).max(5).default(1),
   publishMode: z.enum(['draft', 'active']).default('draft'),
+  listingMode: z.enum(['review', 'draft']).optional(),
   generateVideo: z.boolean().default(false),
   // Eski şablonlar (alan yok) önceki davranışı korur: ilan açılmaz.
   createListing: z.boolean().default(false),

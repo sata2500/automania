@@ -4,6 +4,7 @@
  * Saatte bir çağrılan zamanlayıcı uç noktası (Vercel Cron veya harici zamanlayıcı).
  * - Uzun süredir ilerlemeyen çalıştırmaları 'failed' olarak kapatır.
  * - Yarıda kalmış (süre bütçesi dolmuş) çalıştırmaları sürdürür.
+ * - Hazır İlanlar'da zamanı gelmiş onaylı ilanları Etsy'de yayına alır.
  * - Zamanı gelmiş aktif şablonlar için çalıştırma oluşturur; son 3 saatte kaçırılan bir saat varsa telafi eder.
  * `Authorization: Bearer <CRON_SECRET>` gerektirir; CRON_SECRET yoksa kapalıdır.
  */
@@ -13,6 +14,7 @@ import { db } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
 import { isValidCronAuthorization } from '@/lib/internal-auth';
 import { clampListingsPerRun, latestDueSlot } from '@/lib/automation-schedule';
+import { publishDueReviewItems } from '@/lib/listing-review';
 import { createAutomationRun, dispatchAutomationRun, failStaleAutomationRuns, findResumableRuns } from '@/lib/automation-runner';
 
 export const maxDuration = 300;
@@ -88,6 +90,14 @@ export async function GET(req: NextRequest) {
       await Promise.allSettled(toDispatch.map((run) => dispatchAutomationRun(run, origin)));
     });
   }
+  // Zamanlanmış ilan yayınları yanıt döndükten sonra, süre bütçesi içinde sırayla yapılır.
+  after(async () => {
+    const result = await publishDueReviewItems().catch((error: unknown) => {
+      console.error('[Cron] Scheduled listing publish failed', error);
+      return null;
+    });
+    if (result && (result.published.length || result.failed.length || result.staleReset)) console.log('[Cron] Scheduled listings', result);
+  });
 
   return NextResponse.json({
     success: true,

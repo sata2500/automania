@@ -141,6 +141,9 @@ function getGoogleClient(config: AIProviderConfig, model?: string): GoogleGenAI 
  * Google Gemini ile görsel üretir.
  * Model: gemini-3.1-flash-image (Imagen 4 devre dışı, 17 Ağustos 2026)
  */
+/** Denenecek görsel çözünürlükleri, yüksekten düşüğe. */
+const IMAGE_SIZES = ['4K', '2K'];
+
 async function generateImageGoogle(
   config: AIProviderConfig,
   options: GenerateImageOptions
@@ -165,8 +168,8 @@ async function generateImageGoogle(
     return imagenImages;
   }
 
-  // Oran açıkça verilmezse model yatay görsel üretip tasarımı bir kenara yerleştirebiliyor. 2K, baskı ve
-  // kenar kalitesi için; desteklemeyen modelde (yalnız 1K) istek boyut olmadan tekrarlanır.
+  // Oran açıkça verilmezse model yatay görsel üretip tasarımı bir kenara yerleştirebiliyor. Baskı ve kenar
+  // kalitesi için desteklenen en yüksek çözünürlük istenir: 4K, desteklemeyen modelde 2K, o da yoksa boyutsuz.
   const contents = options.image
     ? [{ role: 'user', parts: [{ inlineData: { mimeType: options.image.mimeType, data: options.image.data.toString('base64') } }, { text: options.prompt }] }]
     : options.prompt;
@@ -178,15 +181,20 @@ async function generateImageGoogle(
       imageConfig: { aspectRatio, ...(imageSize ? { imageSize } : {}) },
     },
   });
-  // Kapasite hatalarında (429/503) bekleyip yeniden denenir.
+  // Kapasite hatalarında (429/503) bekleyip yeniden denenir; boyut reddedilirse bir alt boyuta inilir.
   let response;
-  try {
-    response = await withAiRetry(() => request('2K'), { label: 'image generation' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (isRetryableAiError(error) || !/image_?size|imageConfig|INVALID_ARGUMENT|not supported/i.test(message)) throw error;
-    response = await withAiRetry(() => request(), { label: 'image generation' });
+  const sizes: Array<string | undefined> = [...IMAGE_SIZES, undefined];
+  for (const [index, size] of sizes.entries()) {
+    try {
+      response = await withAiRetry(() => request(size), { label: 'image generation' });
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isLast = index === sizes.length - 1;
+      if (isLast || isRetryableAiError(error) || !/image_?size|imageConfig|INVALID_ARGUMENT|not supported/i.test(message)) throw error;
+    }
   }
+  if (!response) throw new Error('Google görsel üretimi başarısız: Yanıt boş.');
 
   const images: GeneratedImage[] = [];
   for (const candidate of response.candidates ?? []) {

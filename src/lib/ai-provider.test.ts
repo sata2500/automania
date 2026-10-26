@@ -77,4 +77,14 @@ describe('generateImage', () => {
     expect(params.contents[0].parts[0].inlineData.data).toBe(Buffer.from('img').toString('base64'));
     expect(params.config.imageConfig.aspectRatio).toBe('1:1');
   });
+
+  it('asks for 4K and steps down to 2K, then no size, when the model rejects it', async () => {
+    client.models.generateContent
+      .mockRejectedValueOnce(new Error('400 INVALID_ARGUMENT: imageSize 4K is not supported'))
+      .mockRejectedValueOnce(new Error('400 INVALID_ARGUMENT: imageSize 2K is not supported'))
+      .mockResolvedValue({ candidates: [{ content: { parts: [{ inlineData: { data: 'x', mimeType: 'image/png' } }] } }] });
+    await generateImage(config('api_key'), { prompt: 'design' });
+    const sizes = client.models.generateContent.mock.calls.map((call) => call[0].config.imageConfig.imageSize);
+    expect(sizes).toEqual(['4K', '2K', undefined]);
+  });
 });

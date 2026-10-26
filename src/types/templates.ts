@@ -135,6 +135,11 @@ export interface PodTemplateAutomationSchedule {
   generateVideo?: boolean;
   /** SEO metni üretilip Etsy'de taslak ilan açılsın mı? Kapalı/yoksa "kuru çalıştırma": yalnızca görseller üretilir. */
   createListing?: boolean;
+  /**
+   * İlan nasıl gönderilsin: 'review' (varsayılan) ilanı Hazır İlanlar'da incelemeye bekletir, onaylanınca
+   * (hemen veya zamanlanmış olarak) Etsy'de yayına alınır; 'draft' doğrudan Etsy'de taslak açar.
+   */
+  listingMode?: 'review' | 'draft';
   /** Etsy taslak ilan ayarları */
   etsy?: PodTemplateEtsyListingSettings;
   /** Tanıtım videosu ayarları (generateVideo açıkken) */
@@ -209,6 +214,24 @@ export interface GeneratedSeoData {
   styles?: string[];
   /** İlan fotoğraflarının alt metinleri (sırayla) */
   imageAltTexts?: string[];
+}
+
+/** Hazır İlanlar (inceleme kuyruğu) durumu */
+export type ListingReviewStatus = 'awaiting' | 'scheduled' | 'publishing' | 'published' | 'rejected' | 'failed';
+
+/** İnceleme kuyruğundaki ilanın durumu; ilan adımının çıktısında (`steps.listingCreation.output.review`) tutulur. */
+export interface ListingReviewState {
+  status: ListingReviewStatus;
+  /** Zamanlanmış yayın anı (ISO) */
+  scheduledAt?: string | null;
+  publishedAt?: string | null;
+  listingUrl?: string | null;
+  error?: string | null;
+  /** İlana eklenecek fotoğraflar, sıralı (yoksa üretilen tüm fotoğraflar) */
+  photos?: string[];
+  /** Video ilana eklensin mi (varsayılan: evet) */
+  includeVideo?: boolean;
+  updatedAt: string;
 }
 
 /** Tam otomasyon çalıştırma kaydı */

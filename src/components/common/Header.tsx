@@ -14,11 +14,12 @@ import {
   User,
   ShoppingBag,
   Lock,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from './UserAuthContext';
 
-export type TabKey = 'mockups' | 'designs' | 'generator' | 'seo' | 'listings';
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'review' | 'seo' | 'listings';
 
 interface HeaderProps {
   activeTab: TabKey;
@@ -32,13 +33,14 @@ const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.Elemen
   { key: 'mockups',   label: "1. Mockup'lar",      shortLabel: "Mockup'lar",   icon: ImageIcon   },
   { key: 'designs',   label: '2. Tasarımlar',      shortLabel: 'Tasarımlar',   icon: Palette     },
   { key: 'generator', label: '3. Toplu Üretim',    shortLabel: 'Toplu Üretim', icon: Sparkles    },
-  { key: 'seo',       label: '4. Etsy SEO',        shortLabel: 'SEO',          icon: Tag         },
-  { key: 'listings',  label: '5. Etsy İlanlarım',  shortLabel: 'İlanlarım',    icon: ShoppingBag },
+  { key: 'review',    label: '4. Hazır İlanlar',   shortLabel: 'Hazır',        icon: ClipboardCheck },
+  { key: 'seo',       label: '5. Etsy SEO',        shortLabel: 'SEO',          icon: Tag         },
+  { key: 'listings',  label: '6. Etsy İlanlarım',  shortLabel: 'İlanlarım',    icon: ShoppingBag },
 ];
 
 
 /** Misafirlere gösterilen ama giriş gerektiren adımlar (tıklayınca giriş penceresi açılır). */
-const LOCKED_FOR_GUESTS = new Set<TabKey>(['seo', 'listings']);
+const LOCKED_FOR_GUESTS = new Set<TabKey>(['review', 'seo', 'listings']);
 
 const THEME_LABELS: Record<string, string> = {
   system: 'Sistem',

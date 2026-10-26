@@ -23,7 +23,7 @@ import { writeAuditLog } from '@/lib/audit-log';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { validateWhoMade } from '@/lib/etsy-preflight';
-import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
+import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
 import { generateListingContent } from '@/lib/listing-generator';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
@@ -50,7 +50,7 @@ import {
 } from '@/lib/automation-plan';
 import type { DesignItem, EtsyVariationRow, MockupItem } from '@/types/pod';
 import { variationConfigFromRows } from '@/lib/folder-template';
-import type { AutomationRunSteps, AutomationStepName, GeneratedSeoData } from '@/types/templates';
+import type { AutomationRunSteps, AutomationStepName, GeneratedSeoData, ListingReviewState } from '@/types/templates';
 
 export type AutomationRunInput = {
   runId: string;
@@ -69,8 +69,8 @@ const VIDEO_MIN_REMAINING_MS = 260_000;
 const VIDEO_MAX_WAIT_MS = 230_000;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-type RunRow = typeof automationRuns.$inferSelect;
-type TemplateRow = typeof podTemplates.$inferSelect;
+export type RunRow = typeof automationRuns.$inferSelect;
+export type TemplateRow = typeof podTemplates.$inferSelect;
 
 class StepSkipped extends Error {}
 
@@ -287,6 +287,8 @@ async function addAutomationDesign(userId: string, design: DesignItem) {
  * talimatı). Ayar kapalıysa, ana tasarım her iki kumaşa uygunsa veya klasörde o renkte mockup yoksa
  * üretilmez (null). Başarısız olursa otomasyon durmaz: o mockup'larda otomatik renk dönüşümü kullanılır.
  */
+const MAX_INLINE_IMAGE_BYTES = 12 * 1024 * 1024;
+
 async function createFabricVariant(
   ctx: StepContext,
   config: Awaited<ReturnType<typeof loadAIConfig>>,
@@ -305,7 +307,11 @@ async function createFabricVariant(
       fabric: fabricLabel(target),
       ...keyColorPromptValues(input.keyBackground),
     });
-    const images = await generateImage(config, { prompt, image: { data: input.rawImage, mimeType: input.mimeType } });
+    // Gemini satır içi görsel sınırı (~20 MB) aşılmasın: çok büyük 4K çıktılar 2K'ya küçültülüp gönderilir.
+    const source = input.rawImage.byteLength > MAX_INLINE_IMAGE_BYTES
+      ? { data: await (await import('sharp')).default(input.rawImage).resize(2048, 2048, { fit: 'inside' }).png().toBuffer(), mimeType: 'image/png' }
+      : { data: input.rawImage, mimeType: input.mimeType };
+    const images = await generateImage(config, { prompt, image: source });
     if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
     const { pngBuffer, width, height } = await removeChromaBackground(Buffer.from(images[0].data, 'base64'), { keyColor: KEY_COLORS[input.keyBackground] });
     const upload = await uploadToR2(pngBuffer, createOwnedUploadName(ctx.userId, `auto-design-${ctx.runId}-${target}`, 'image/png'), 'image/png');
@@ -560,16 +566,14 @@ async function loadCategoryProperties(userId: string, taxonomyId: number | undef
 const stringList = (value: unknown, max: number): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim()).slice(0, max) : [];
 
-async function runListing(ctx: StepContext): Promise<StepResult> {
-  const { template, userId, run, runId } = ctx;
-  const schedule = template.automationSchedule;
-  if (schedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: Etsy ilanı oluşturulmadı.');
-  // Idempotency: aynı çalıştırma ikinci bir ilan açmaz.
-  if (run.etsyListingId) return { output: { listingId: run.etsyListingId, reused: true } };
-
+/**
+ * İlanın Etsy'ye gönderilecek alanları. Otomasyonun doğrudan taslağı ve Hazır İlanlar'dan yayın aynı veriyi
+ * kullanır; incelemede yapılan fotoğraf seçimi (`review.photos`, `review.includeVideo`) burada uygulanır.
+ */
+export async function buildListingRequest(userId: string, template: TemplateRow, run: RunRow, review?: ListingReviewState | null) {
   const seo = run.generatedSeo as GeneratedSeoData | null;
   if (!seo?.title) throw new StepSkipped('SEO metni olmadığı için ilan açılmadı.');
-  const etsy = schedule.etsy;
+  const etsy = template.automationSchedule?.etsy;
   if (!etsy?.shippingProfileId || !etsy.readinessStateId) {
     throw new StepSkipped('Şablonda kargo profili veya hazırlık süresi seçilmemiş; "Etsy İlanı" adımından seçin.');
   }
@@ -583,21 +587,25 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   const tags = sanitizeEtsyTags(seo.tags);
   if (tags.length === 0) throw new Error('Geçerli etiket üretilemedi.');
 
-  const photos = ((run.generatedMockupUrls as string[] | null) ?? []).map((url, i) => ({ url, isVideo: false, altText: seo.imageAltTexts?.[i] || undefined }));
+  // Alt metinler üretilen fotoğrafların sırasına göredir; incelemede sıra değişse de adresle eşleşir.
+  const allPhotos = (run.generatedMockupUrls as string[] | null) ?? [];
+  const selected = review?.photos ? review.photos.filter((url) => allPhotos.includes(url)) : allPhotos;
+  const photos = selected.map((url) => ({ url, isVideo: false, altText: seo.imageAltTexts?.[allPhotos.indexOf(url)] || undefined }));
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
-  const media = run.generatedVideoUrl ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
+  const media = run.generatedVideoUrl && review?.includeVideo !== false ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
   // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
   const variationRows = await resolveVariationRows(userId, template.variationConfig);
   const variations = variationRows.some((row) => row.enabled !== false)
     ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: row.enabled !== false }))
     : [];
 
-  const draft = await createEtsyDraftListing(userId, {
+  const credentials = {
     etsyAccessToken: tokenRes.access_token,
     etsyShopId: tokenRes.shop_id,
     etsyApiKey: tokenRes.api_key || process.env.ETSY_API_KEY,
     etsySharedSecret: tokenRes.shared_secret || process.env.ETSY_SHARED_SECRET,
-  }, {
+  };
+  const input: EtsyDraftListingInput = {
     title: seo.title,
     description: seo.description,
     validTags: tags,
@@ -624,7 +632,32 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
     item_dimensions_unit: etsy.itemDimensionsUnit,
     variations,
     images: media,
-  });
+  };
+  return { credentials, input };
+}
+
+async function runListing(ctx: StepContext): Promise<StepResult> {
+  const { template, userId, run, runId } = ctx;
+  const schedule = template.automationSchedule;
+  if (schedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: Etsy ilanı oluşturulmadı.');
+  // Idempotency: aynı çalıştırma ikinci bir ilan açmaz.
+  if (run.etsyListingId) return { output: { listingId: run.etsyListingId, reused: true } };
+
+  // İnceleme modu (varsayılan): ilan Etsy'ye gönderilmez, Hazır İlanlar'da onay bekler.
+  if ((schedule.listingMode ?? 'review') === 'review') {
+    if (!(run.generatedSeo as GeneratedSeoData | null)?.title) throw new StepSkipped('SEO metni olmadığı için ilan hazırlanmadı.');
+    const etsy = schedule.etsy;
+    const review: ListingReviewState = { status: 'awaiting', updatedAt: new Date().toISOString() };
+    return {
+      output: { review },
+      warning: !etsy?.shippingProfileId || !etsy.readinessStateId
+        ? 'Kargo profili veya hazırlık süresi seçilmemiş; yayınlamadan önce otomasyonun "Etsy İlanı" adımından seçin.'
+        : undefined,
+    };
+  }
+
+  const { credentials, input } = await buildListingRequest(userId, template, run);
+  const draft = await createEtsyDraftListing(userId, credentials, input);
 
   const blocking = draft.uploadErrors.filter((e) => !e.startsWith('Bilgi:'));
   await writeAuditLog({

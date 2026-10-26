@@ -128,6 +128,7 @@ const baseTemplate = (schedule: Record<string, unknown> = {}) => ({
   automationSchedule: {
     enabled: false, cronExpression: '0 9 * * *', timezone: 'UTC', nextRunAt: null, listingsPerRun: 1, publishMode: 'draft',
     createListing: true,
+    listingMode: 'draft',
     etsy: {
       shippingProfileId: '11', readinessStateId: '22', taxonomyId: 482, price: 24.99, whoMade: 'i_did', whenMade: 'made_to_order',
       productionPartnerIds: ['5'], shouldAutoRenew: true, itemWeight: 6, itemWeightUnit: 'oz',
@@ -175,6 +176,16 @@ describe('executeAutomationRun', () => {
     expect(input.images.map((m) => m.url)).toEqual(['/api/r2/user-u1-auto-mockup-run1-1', '/api/r2/user-u1-chart.png']);
     expect(input.variations).toHaveLength(1);
     expect(input.shipping_profile_id).toBe('11');
+  });
+
+  it('review mode keeps the listing in the review queue instead of sending it to Etsy', async () => {
+    state.template = baseTemplate({ listingMode: 'review' });
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    expect(createDraft).not.toHaveBeenCalled();
+    const listing = (state.run?.steps as Record<string, { status: string; output?: { review?: { status: string } } }>).listingCreation;
+    expect(listing.status).toBe('completed');
+    expect(listing.output?.review?.status).toBe('awaiting');
+    expect(state.run?.status).toBe('completed');
   });
 
   it('does not open a second listing when a resumed run already has one', async () => {

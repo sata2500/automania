@@ -525,6 +525,24 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
 
           {step === 4 && (
             <>
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Hazırlanan ilan ne olsun?</legend>
+                {([
+                  { id: 'review', title: 'Önce incelemeye al (önerilir)', desc: 'İlan Hazır İlanlar sekmesinde bekler; düzenleyip onayladığınızda hemen veya seçtiğiniz zamanda Etsy\'de yayına alınır.' },
+                  { id: 'draft', title: 'Doğrudan Etsy taslağı', desc: 'İlan her çalıştırmada Etsy\'de taslak olarak açılır.' },
+                ] as const).map((option) => {
+                  const active = (schedule.listingMode ?? 'review') === option.id;
+                  return (
+                    <label key={option.id} className={`flex items-start gap-3 p-3 rounded-2xl border-2 cursor-pointer transition-all ${active ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500/60' : 'border-slate-200 dark:border-slate-700'}`}>
+                      <input type="radio" name="listing-mode" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={active} onChange={() => setSchedule({ ...schedule, listingMode: option.id })} />
+                      <span className="text-xs">
+                        <span className="font-bold text-slate-800 dark:text-slate-100">{option.title}</span>
+                        <span className="block mt-0.5 text-slate-500 dark:text-slate-400">{option.desc}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </fieldset>
               <EtsyListingSection schedule={schedule} onChange={setSchedule} variant="store" />
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
                 <p className="font-bold text-slate-800 dark:text-slate-100">Özet</p>
@@ -534,7 +552,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <p>Kitle: <strong>{AUDIENCE_OPTIONS.find((o) => o.id === audienceGroup)?.label ?? 'Belirtilmedi'}</strong> · Kumaş: <strong>{FABRIC_OPTIONS.find((o) => o.id === designFabric)?.label}{designFabric !== 'universal' && fabricVariant ? ' + diğer kumaş versiyonu' : ''}</strong></p>
                 <p>Konu: <strong>{nicheMode === 'auto' ? `Yapay zekâ belirler${researchFocus.trim() ? ` (${researchFocus.trim()})` : ''}` : niche || '—'}</strong></p>
                 <p>Video: <strong>{schedule.generateVideo ? (video.aspectRatio === '9:16' ? 'Dikey' : 'Yatay') : 'Yok'}</strong> · Mağaza bölümü: <strong>yapay zekâ seçer</strong></p>
-                <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>Etsy taslak ilanı</strong></p>
+                <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>{(schedule.listingMode ?? 'review') === 'review' ? 'Hazır İlanlar\'da incelemeye alınır' : 'Etsy taslak ilanı'}</strong></p>
                 {etsyWarnings.length > 0 && (
                   <p className="text-amber-700 dark:text-amber-400 flex gap-1 pt-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Mağaza ayarları eksik: tasarım ve mockup&apos;lar üretilir, ilan adımı atlanır.</p>
                 )}
