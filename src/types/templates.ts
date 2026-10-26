@@ -91,6 +91,17 @@ export interface PodTemplateEtsyListingSettings {
   price: number;
   whoMade: 'i_did' | 'someone_else' | 'collective';
   whenMade: string;
+  /** Üretim ortakları (baskı firması); Etsy baskı hizmetiyle üretilen ürünlerde ister */
+  productionPartnerIds?: string[];
+  /** Süresi dolunca ilan otomatik yenilensin mi (Etsy yenileme ücreti alır) */
+  shouldAutoRenew?: boolean;
+  /** Paketli ürün ağırlığı ve ölçüleri (hesaplanan kargo ve alıcı bilgisi için) */
+  itemWeight?: number;
+  itemWeightUnit?: 'oz' | 'lb' | 'g' | 'kg';
+  itemLength?: number;
+  itemWidth?: number;
+  itemHeight?: number;
+  itemDimensionsUnit?: 'in' | 'cm';
 }
 
 /** Tanıtım videosunun çekim tarzı */
@@ -196,6 +207,8 @@ export interface GeneratedSeoData {
   /** Yapay zekânın seçtiği Etsy malzemeleri ve stilleri */
   materials?: string[];
   styles?: string[];
+  /** İlan fotoğraflarının alt metinleri (sırayla) */
+  imageAltTexts?: string[];
 }
 
 /** Tam otomasyon çalıştırma kaydı */

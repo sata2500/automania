@@ -85,6 +85,7 @@ const generateListing = vi.hoisted(() => vi.fn(async () => ({
     title: 'Funny Cat Mom Shirt', description: 'Great shirt.', selectedTags: ['cat mom', 'funny cat'],
     taxonomy_properties_values: [{ property_id: 1, value_ids: [10, 11] }, { property_id: 999, value_ids: [1] }],
     materials: ['Cotton'], styles: ['Minimalist'],
+    image_alt_texts: ['Black tee with a funny cat print', 'Size chart'],
   },
   modelUsed: 'test-model',
 })));
@@ -127,7 +128,10 @@ const baseTemplate = (schedule: Record<string, unknown> = {}) => ({
   automationSchedule: {
     enabled: false, cronExpression: '0 9 * * *', timezone: 'UTC', nextRunAt: null, listingsPerRun: 1, publishMode: 'draft',
     createListing: true,
-    etsy: { shippingProfileId: '11', readinessStateId: '22', taxonomyId: 482, price: 24.99, whoMade: 'i_did', whenMade: 'made_to_order' },
+    etsy: {
+      shippingProfileId: '11', readinessStateId: '22', taxonomyId: 482, price: 24.99, whoMade: 'i_did', whenMade: 'made_to_order',
+      productionPartnerIds: ['5'], shouldAutoRenew: true, itemWeight: 6, itemWeightUnit: 'oz',
+    },
     ...schedule,
   },
 });
@@ -152,6 +156,13 @@ describe('executeAutomationRun', () => {
     const draftInput = (createDraft.mock.calls[0] as unknown as [unknown, unknown, Record<string, unknown>])[2];
     expect(draftInput.taxonomy_properties_values).toEqual({ '1': [10] });
     expect(draftInput.materials).toEqual(['Cotton']);
+    // Mağaza ayarları ve yapay zekânın fotoğraf alt metinleri ilana aktarılır.
+    expect(draftInput).toMatchObject({ production_partner_id: ['5'], should_auto_renew: true, item_weight: 6, item_weight_unit: 'oz' });
+    expect((draftInput.images as Array<{ altText?: string }>).map((i) => i.altText)).toEqual(['Black tee with a funny cat print', 'Size chart']);
+    const listingImages = (generateListing.mock.calls[0] as unknown as [unknown, { images?: string[] }])[1].images;
+    expect(listingImages).toHaveLength(2);
+    expect(listingImages?.[0]).toContain('mockup with the design');
+    expect(listingImages?.[1]).toContain('static info image');
     const listingInput = (generateListing.mock.calls[0] as unknown as [unknown, { taxonomyProperties?: Array<{ property_id: number }> }])[1];
     expect(listingInput.taxonomyProperties?.map((p) => p.property_id)).toEqual([1]);
     const steps = state.run?.steps as Record<string, { status: string }>;

@@ -64,8 +64,18 @@ export type EtsyDraftListingInput = {
   sku?: string;
   taxonomy_properties_values?: Record<string, unknown>;
   variations?: EtsyVariationInput[];
-  images?: Array<string | { url?: string; isVideo?: boolean }>;
+  images?: Array<string | { url?: string; isVideo?: boolean; altText?: string }>;
+  /** Paketli ürün ağırlığı ve ölçüleri; birimi olmayan değer gönderilmez */
+  item_weight?: number;
+  item_weight_unit?: 'oz' | 'lb' | 'g' | 'kg';
+  item_length?: number;
+  item_width?: number;
+  item_height?: number;
+  item_dimensions_unit?: 'in' | 'cm';
 };
+
+/** Etsy görsel alt metni sınırı (Etsy arayüzü 250 karakterde keser). */
+const ALT_TEXT_MAX = 250;
 
 export type EtsyDraftListingResult = {
   listingId: number;
@@ -288,6 +298,20 @@ export async function createEtsyDraftListing(
   if (readiness_state_id) createBody.set('readiness_state_id', String(Number(readiness_state_id)));
   if (shop_section_id) createBody.set('shop_section_id', String(Number(shop_section_id)));
   if (return_policy_id) createBody.set('return_policy_id', String(Number(return_policy_id)));
+  const positive = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined);
+  const weight = positive(input.item_weight);
+  if (weight && input.item_weight_unit) {
+    createBody.set('item_weight', String(weight));
+    createBody.set('item_weight_unit', input.item_weight_unit);
+  }
+  const dimensions = [positive(input.item_length), positive(input.item_width), positive(input.item_height)];
+  // Etsy ölçüleri birlikte ister: üçü ve birimi yoksa hiçbiri gönderilmez.
+  if (input.item_dimensions_unit && dimensions.every(Boolean)) {
+    createBody.set('item_length', String(dimensions[0]));
+    createBody.set('item_width', String(dimensions[1]));
+    createBody.set('item_height', String(dimensions[2]));
+    createBody.set('item_dimensions_unit', input.item_dimensions_unit);
+  }
 
   // Call Official Etsy API v3 createDraftListing endpoint.
   const createRes = await etsyFetch(`https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings`, {
@@ -387,6 +411,7 @@ export async function createEtsyDraftListing(
   // Separate images and videos — videos go to /videos endpoint, images to /images endpoint
   const imageItems: string[] = [];
   const videoItems: string[] = [];
+  const altTexts = new Map<number, string>();
 
   if (listingId && Array.isArray(images) && images.length > 0) {
     for (const item of images) {
@@ -403,6 +428,8 @@ export async function createEtsyDraftListing(
           videoItems.push(item.url);
         } else {
           imageItems.push(item.url);
+          const alt = item.altText?.replace(/\s+/g, ' ').trim().slice(0, ALT_TEXT_MAX).trim();
+          if (alt) altTexts.set(imageItems.length, alt);
         }
       }
     }
@@ -427,6 +454,8 @@ export async function createEtsyDraftListing(
           const formData = new FormData();
           formData.append('image', blob, `mockup-${listingId}-${rank}.${ext}`);
           formData.append('rank', String(rank));
+          const altText = altTexts.get(rank);
+          if (altText) formData.append('alt_text', altText);
 
           const postImage = () => etsyFetch(
             `https://openapi.etsy.com/v3/application/shops/${etsyShopId}/listings/${listingId}/images`,

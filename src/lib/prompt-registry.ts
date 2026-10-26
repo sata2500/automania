@@ -28,6 +28,7 @@ import {
   LEGACY_GENERATE_LISTING_V2,
   LEGACY_GENERATE_LISTING_V3,
   LEGACY_GENERATE_LISTING_V4,
+  LEGACY_GENERATE_LISTING_V5,
   LEGACY_GENERATE_VIDEO,
   LEGACY_GENERATE_VIDEO_V2,
   LEGACY_NICHE_RESEARCH_V1,
@@ -117,9 +118,9 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     key: 'ai_prompt_generate_listing',
     group: 'listing',
     title: 'İlan metni üretimi',
-    description: 'Yeni ilan için başlık, 13 etiket, açıklama, kategori nitelikleri ve mağaza bölümünü üretir (SEO stüdyosu ve otomasyon). JSON alan adlarını değiştirmeyin.',
+    description: 'Yeni ilan için başlık, 13 etiket, açıklama, kategori nitelikleri, mağaza bölümü ve fotoğraf alt metinlerini üretir (SEO stüdyosu ve otomasyon). JSON alan adlarını değiştirmeyin.',
     defaultValue: DEFAULT_GENERATE_LISTING_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_LISTING, LEGACY_GENERATE_LISTING_V2, LEGACY_GENERATE_LISTING_V3, LEGACY_GENERATE_LISTING_V4],
+    legacyDefaults: [LEGACY_GENERATE_LISTING, LEGACY_GENERATE_LISTING_V2, LEGACY_GENERATE_LISTING_V3, LEGACY_GENERATE_LISTING_V4, LEGACY_GENERATE_LISTING_V5],
     variables: [
       v('audienceGroup', 'Kitle', 'Otomasyonun hedef kitlesi (ör. "men\'s t-shirt").', '👥'),
       v('garments', 'Ürün modelleri', 'Otomasyonda yazılan ürün modelleri (ör. Comfort Colors 1717, Bella+Canvas 3001).', '👕'),
@@ -133,6 +134,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
       v('taxonomyId', 'Kategori ID', 'Seçilen Etsy kategori numarası.', '🆔'),
       v('shopSections', 'Mağaza bölümleri', 'Bağlı mağazanın bölüm listesi.', '🏪'),
       v('taxonomyProperties', 'Kategori özellikleri', 'Etsy\'den çekilen kategori özellikleri (kol boyu, yaka, vesile, tatil, grafik…) ve geçerli değerleri; beden ve renk hariç.', '⚙️'),
+      v('images', 'İlan fotoğrafları', 'İlana eklenecek fotoğrafların sıralı listesi (mockup adı ve türü); yapay zekâ her biri için alt metin yazar. Liste yoksa "None".', '🖼️'),
     ],
   },
   {

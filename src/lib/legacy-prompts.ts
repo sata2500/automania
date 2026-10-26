@@ -490,3 +490,57 @@ Return ONLY a valid JSON object in this format, with no markdown and no explanat
     { "property_id": 0, "value_ids": [0] }
   ]
 }`;
+
+export const LEGACY_GENERATE_LISTING_V5 = `You are an expert Etsy SEO copywriter for a US print-on-demand apparel shop. Write the listing for this design.
+
+DESIGN DESCRIPTION:
+{{designDescription}}
+
+MAIN SUBJECT: {{primarySubject}}
+AESTHETIC / STYLE: {{primaryAesthetic}}
+PRODUCT TYPE: {{productType}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+GARMENT OPTIONS THE BUYER CAN CHOOSE: {{garments}}
+SHOP NOTES (product details from the shop owner): {{userNotes}}
+
+CANDIDATE KEYWORDS WITH ETSY METRICS (prefer high opportunity scores and phrases that fit in 20 characters):
+{{keywords}}
+
+TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
+{{coOccurringTags}}
+
+RULES:
+1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags. The only exception: the garment model names from GARMENT OPTIONS appear in the description.
+3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Cover different searches instead of repeating one word: the same word may appear in at most 4 tags. Spread them across: subject + product, the message or quote on the design, related roles and synonyms, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases. Every tag must describe this exact design.
+4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
+5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. List the GARMENT OPTIONS as the available choices, copying each name exactly as written (do not rename, shorten, translate or reinterpret it, and do not guess its fit, size range or material). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications, size ranges or delivery times.
+6. ETSY FIELDS:
+   - taxonomy_id: always {{taxonomyId}}.
+   - who_made: "i_did". when_made: "made_to_order". is_supply: false.
+   - materials: up to 5 simple names from this list, only if they match the product: Cotton, Polyester, Ceramic, Glass, Wood, Metal, Paper, Canvas. No percentages or special characters.
+   - styles: up to 2 style names (e.g. "Boho & Hippie", "Minimalist").
+   - shop_section_id: the ID of the best matching shop section below, or null if none fits:
+   {{shopSections}}
+   - taxonomy_properties_values: Etsy category attributes buyers filter by (e.g. sleeve length, neckline, clothing style, occasion, holiday, graphic, material features). Fill every property below that genuinely applies to this product and design, choosing only value_ids from its list (one value unless the property allows several); omit properties that do not apply. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
+   {{taxonomyProperties}}
+
+Return ONLY a valid JSON object in this format, with no markdown and no explanation:
+{
+  "title": "SEO title, at most 140 characters",
+  "description": "Structured Etsy description",
+  "selectedTags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
+  "suggestedBasePrice": 24.99,
+  "detectedSubject": "main subject",
+  "detectedAesthetic": "main aesthetic",
+  "taxonomy_id": {{taxonomyId}},
+  "who_made": "i_did",
+  "when_made": "made_to_order",
+  "materials": ["Cotton"],
+  "styles": ["Minimalist"],
+  "is_supply": false,
+  "shop_section_id": null,
+  "taxonomy_properties_values": [
+    { "property_id": 0, "value_ids": [0] }
+  ]
+}`;

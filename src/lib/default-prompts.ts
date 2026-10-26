@@ -84,6 +84,8 @@ RULES:
    {{shopSections}}
    - taxonomy_properties_values: Etsy category attributes buyers filter by (e.g. sleeve length, neckline, clothing style, occasion, holiday, graphic, material features). Fill every property below that genuinely applies to this product and design, choosing only value_ids from its list (one value unless the property allows several); omit properties that do not apply. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
    {{taxonomyProperties}}
+7. IMAGE ALT TEXT: one alt text per listing photo below, in the same order. Describe what the photo actually shows for a shopper who cannot see it (the garment, its color if known, the design's subject and any text on it; for a size chart or info image, say so). Plain English, at most 250 characters, no keyword stuffing, no brand names.
+   {{images}}
 
 Return ONLY a valid JSON object in this format, with no markdown and no explanation:
 {
@@ -102,7 +104,8 @@ Return ONLY a valid JSON object in this format, with no markdown and no explanat
   "shop_section_id": null,
   "taxonomy_properties_values": [
     { "property_id": 0, "value_ids": [0] }
-  ]
+  ],
+  "image_alt_texts": ["alt text for photo 1", "alt text for photo 2"]
 }`;
 
 export const DEFAULT_OPTIMIZE_LISTING_PROMPT = `You are an expert Etsy SEO copywriter. Improve this existing Etsy listing's title, tags and description to rank higher in Etsy search and convert more visitors, while staying true to the product.

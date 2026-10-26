@@ -41,7 +41,10 @@ type StoreOptions = {
   readinessStates: EtsyReadinessState[];
   returnPolicies: EtsyReturnPolicy[];
   sections: EtsyShopSection[];
+  partners: ProductionPartner[];
 };
+
+type ProductionPartner = { production_partner_id: number; partner_name: string; location?: string };
 
 /** Şablonun Etsy ayarlarında ilan açmayı engelleyen eksikleri döner. */
 export function getEtsyListingSettingsErrors(schedule: PodTemplateAutomationSchedule): string[] {
@@ -77,12 +80,13 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
         const res = await fetch('/api/etsy/shipping-profiles');
         const data = await res.json();
         if (!data.connected) {
-          if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [] });
+          if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [], partners: [] });
           return;
         }
-        const [policies, sections] = await Promise.all([
+        const [policies, sections, partners] = await Promise.all([
           fetch('/api/etsy/return-policies').then((r) => r.json()).catch(() => ({})),
           fetch('/api/etsy/shop-sections').then((r) => r.json()).catch(() => ({})),
+          fetch('/api/etsy/production-partners').then((r) => r.json()).catch(() => ({})),
         ]);
         if (cancelled) return;
         setOptions({
@@ -91,9 +95,10 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
           readinessStates: data.readinessStates || [],
           returnPolicies: policies.returnPolicies || [],
           sections: sections.sections || [],
+          partners: partners.partners || [],
         });
       } catch {
-        if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [] });
+        if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [], partners: [] });
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -108,6 +113,13 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  const partnerIds = etsy.productionPartnerIds ?? [];
+  const togglePartner = (id: string, checked: boolean) => {
+    const next = checked ? [...partnerIds, id] : partnerIds.filter((p) => p !== id);
+    updateEtsy({ productionPartnerIds: next.length > 0 ? next : undefined });
+  };
+  const numberOrUndefined = (value: string) => (Number(value) > 0 ? Number(value) : undefined);
 
   const isKnownCategory = categories.some((c) => c.id === etsy.taxonomyId);
 
@@ -182,6 +194,52 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
                   {options.sections.map((s) => <option key={s.shop_section_id} value={String(s.shop_section_id)}>{s.title}</option>)}
                 </select>
               </div>}
+              <div className="sm:col-span-2">
+                <span className={labelClass}>Üretim ortağı (baskı firması)</span>
+                {options.partners.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Mağazanızda tanımlı üretim ortağı yok. Baskı hizmeti kullanıyorsanız Etsy&apos;de Mağaza Yöneticisi › Ayarlar › Üretim ortakları bölümünden ekleyin; Etsy baskı hizmetiyle üretilen ürünlerde bunu ister.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {options.partners.map((p) => {
+                      const id = String(p.production_partner_id);
+                      return (
+                        <label key={id} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
+                          <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={partnerIds.includes(id)} onChange={(e) => togglePartner(id, e.target.checked)} />
+                          {p.partner_name}{p.location ? ` (${p.location})` : ''}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div>
+                <span className={labelClass}>Paketli ağırlık (isteğe bağlı)</span>
+                <div className="flex gap-1.5">
+                  <input type="number" min={0} step={0.1} aria-label="Ağırlık" className={selectClass} value={etsy.itemWeight ?? ''}
+                    onChange={(e) => updateEtsy({ itemWeight: numberOrUndefined(e.target.value), itemWeightUnit: etsy.itemWeightUnit ?? 'oz' })} />
+                  <select aria-label="Ağırlık birimi" className={`${selectClass} w-20 shrink-0`} value={etsy.itemWeightUnit ?? 'oz'} onChange={(e) => updateEtsy({ itemWeightUnit: e.target.value as PodTemplateEtsyListingSettings['itemWeightUnit'] })}>
+                    {['oz', 'lb', 'g', 'kg'].map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <span className={labelClass}>Paket ölçüleri U × G × Y (isteğe bağlı)</span>
+                <div className="flex gap-1.5">
+                  {(['itemLength', 'itemWidth', 'itemHeight'] as const).map((field, i) => (
+                    <input key={field} type="number" min={0} step={0.1} aria-label={['Uzunluk', 'Genişlik', 'Yükseklik'][i]} className={selectClass} value={etsy[field] ?? ''}
+                      onChange={(e) => updateEtsy({ [field]: numberOrUndefined(e.target.value), itemDimensionsUnit: etsy.itemDimensionsUnit ?? 'in' })} />
+                  ))}
+                  <select aria-label="Ölçü birimi" className={`${selectClass} w-20 shrink-0`} value={etsy.itemDimensionsUnit ?? 'in'} onChange={(e) => updateEtsy({ itemDimensionsUnit: e.target.value as PodTemplateEtsyListingSettings['itemDimensionsUnit'] })}>
+                    {['in', 'cm'].map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label className="sm:col-span-2 flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" className="mt-0.5 w-4 h-4 accent-amber-500" checked={etsy.shouldAutoRenew === true} onChange={(e) => updateEtsy({ shouldAutoRenew: e.target.checked })} />
+                <span><strong>Otomatik yenile</strong> — ilan 4 ay sonra süresi dolunca Etsy yeniler (her yenileme 0,20 $ ücretlidir).</span>
+              </label>
               {storeOnly && (
                 <p className="sm:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
                   Mağaza bölümü her ilan için, ürünün konusuna göre yapay zekâ tarafından mağazanızdaki bölümler arasından seçilir.

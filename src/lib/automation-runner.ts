@@ -392,6 +392,8 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
     return variantDesign;
   };
   const urls: string[] = [];
+  // Her fotoğrafın kısa tanımı (SEO adımında alt metin yazılırken kullanılır), `urls` ile aynı sırada.
+  const photos: string[] = [];
   const failures: string[] = [];
   for (const [index, mockup] of plan.render.entries()) {
     try {
@@ -402,17 +404,19 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
       const jpeg = await jpegForListing(composite);
       const upload = await uploadToR2(jpeg, createOwnedUploadName(userId, `auto-mockup-${runId}-${index + 1}`, 'image/jpeg'), 'image/jpeg');
       urls.push(upload.url);
+      photos.push(`${mockup.apparelType} mockup with the design printed on it${mockup.name ? ` (mockup name: "${mockup.name}")` : ''}${variantFabricFor(mockup, hints.designFabric) ? ', fabric-adjusted design version' : ''}`);
     } catch (error) {
       failures.push(`${mockup.name || mockup.id}: ${error instanceof Error ? error.message : 'render hatası'}`);
     }
   }
   // Statik görseller (beden tablosu vb.) render edilmeden, kendi adresleriyle eklenir.
   urls.push(...plan.statics.map((m) => m.src));
+  photos.push(...plan.statics.map((m) => `static info image without the design${m.name ? ` (name: "${m.name}", e.g. size chart or color chart)` : ' (e.g. size chart or color chart)'}`));
 
   if (urls.length === 0) throw new Error(`Hiçbir mockup üretilemedi. ${failures.join('; ')}`);
   return {
     patch: { generatedMockupUrls: urls },
-    output: { rendered: urls.length - plan.statics.length, static: plan.statics.length, videoMockup: plan.video?.id ?? null },
+    output: { rendered: urls.length - plan.statics.length, static: plan.statics.length, videoMockup: plan.video?.id ?? null, photos },
     warning: failures.length > 0 ? `${failures.length} mockup üretilemedi: ${failures.join('; ')}` : undefined,
   };
 }
@@ -491,6 +495,10 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const shopSections = template.automationSchedule?.etsy?.shopSectionId ? [] : await loadShopSections(userId);
   // Kategori özellikleri (kol boyu, yaka, vesile, grafik…) Etsy'den çekilir; yapay zekâ tasarıma göre seçer.
   const { properties: taxonomyProperties, error: propertiesError } = await loadCategoryProperties(userId, taxonomyId);
+  // Fotoğraf alt metinleri için mockup adımının fotoğraf tanımları (eski çalıştırmalarda yalnızca sıra).
+  const photoUrls = (run.generatedMockupUrls as string[] | null) ?? [];
+  const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
+  const images = photoUrls.map((_, i) => photoLabels[i] ?? 'listing photo of the product');
   const result = await generateListingContent(userId, {
     designDescription: designPrompt,
     keywords,
@@ -502,10 +510,11 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     taxonomyId,
     shopSections: shopSections.length > 0 ? shopSections : undefined,
     taxonomyProperties: taxonomyProperties.length > 0 ? taxonomyProperties : undefined,
+    images,
   });
   const listing = result.listing as {
     title: string; description: string; selectedTags: string[]; shop_section_id?: unknown;
-    taxonomy_properties_values?: unknown; materials?: unknown; styles?: unknown;
+    taxonomy_properties_values?: unknown; materials?: unknown; styles?: unknown; image_alt_texts?: unknown;
   };
   const chosenSection = shopSections.find((s) => String(s.shop_section_id) === String(listing.shop_section_id ?? ''));
   const seo: GeneratedSeoData = {
@@ -519,11 +528,17 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     shopSectionTitle: chosenSection?.title ?? null,
     materials: stringList(listing.materials, 5),
     styles: stringList(listing.styles, 2),
+    imageAltTexts: Array.isArray(listing.image_alt_texts)
+      ? listing.image_alt_texts.slice(0, images.length).map((alt) => (typeof alt === 'string' ? alt.trim() : ''))
+      : [],
   };
   const propertyCount = Object.keys(seo.taxonomyProperties).length;
   return {
     patch: { generatedSeo: seo },
-    output: { model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount },
+    output: {
+      model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount,
+      altTexts: seo.imageAltTexts?.filter(Boolean).length ?? 0,
+    },
     warning: propertiesError ? `Kategori özellikleri alınamadı, bu alanlar boş kaldı: ${propertiesError}` : undefined,
   };
 }
@@ -568,7 +583,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   const tags = sanitizeEtsyTags(seo.tags);
   if (tags.length === 0) throw new Error('Geçerli etiket üretilemedi.');
 
-  const photos = ((run.generatedMockupUrls as string[] | null) ?? []).map((url) => ({ url, isVideo: false }));
+  const photos = ((run.generatedMockupUrls as string[] | null) ?? []).map((url, i) => ({ url, isVideo: false, altText: seo.imageAltTexts?.[i] || undefined }));
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
   const media = run.generatedVideoUrl ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
   // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
@@ -599,6 +614,14 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
     taxonomy_properties_values: seo.taxonomyProperties ?? {},
     materials: seo.materials ?? [],
     styles: seo.styles ?? [],
+    production_partner_id: etsy.productionPartnerIds ?? [],
+    should_auto_renew: etsy.shouldAutoRenew === true,
+    item_weight: etsy.itemWeight,
+    item_weight_unit: etsy.itemWeightUnit,
+    item_length: etsy.itemLength,
+    item_width: etsy.itemWidth,
+    item_height: etsy.itemHeight,
+    item_dimensions_unit: etsy.itemDimensionsUnit,
     variations,
     images: media,
   });

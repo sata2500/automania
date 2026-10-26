@@ -36,6 +36,8 @@ export type GenerateListingInput = {
   audienceGroup?: string;
   /** Alıcının seçebileceği ürün modelleri (ör. "Comfort Colors 1717; Bella+Canvas 3001") */
   garments?: string;
+  /** İlan fotoğraflarının sıralı tanımları (alt metin yazılması için) */
+  images?: string[];
 };
 
 /**
@@ -94,7 +96,7 @@ type TaxonomyProperty = {
 };
 
 export async function generateListingContent(userId: string, input: GenerateListingInput) {
-  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments } = input;
+  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments, images } = input;
   if (!Array.isArray(keywords) || keywords.length === 0) {
     throw new ListingGenerationError('İçerik oluşturmak için en az bir kelime gereklidir.', 400);
   }
@@ -230,6 +232,7 @@ export async function generateListingContent(userId: string, input: GenerateList
     shopSections: shopSections && Array.isArray(shopSections) ? (shopSections as ShopSection[]).map((s) => `- ID: ${s.shop_section_id}, Title: "${s.title}"`).join('\n   ') : 'None',
     audienceGroup: typeof audienceGroup === 'string' && audienceGroup.trim() ? audienceGroup.trim() : 'not specified',
     garments: typeof garments === 'string' && garments.trim() ? garments.trim() : 'not specified',
+    images: images && images.length > 0 ? images.map((label, i) => `- Photo ${i + 1}: ${label}`).join('\n   ') : 'None',
     taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? (taxonomyProperties as TaxonomyProperty[]).map((p) => 
       `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${(p.possible_values || []).map((v) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
     ).join('\n   ') : 'None'
@@ -321,6 +324,13 @@ export async function generateListingContent(userId: string, input: GenerateList
   parsedResult.description = sanitizedDescObj.cleanText;
 
   const { cleanTags, violationsFound } = sanitizeEtsyTags(parsedResult.selectedTags);
+
+  // Alt metinler fotoğraf sırasıyla eşleşir; marka adı içeren kısımlar temizlenir.
+  if (Array.isArray(parsedResult.image_alt_texts)) {
+    parsedResult.image_alt_texts = parsedResult.image_alt_texts
+      .slice(0, images?.length ?? 0)
+      .map((alt: unknown) => (typeof alt === 'string' ? sanitizeTrademarkText(alt, { allowedNames: garmentNames }).cleanText.slice(0, 250) : ''));
+  }
 
   // 2. Post-Processing Anti-Contamination Filter (Hard Code Safety Net)
   //    Kelime sınırıyla eşleşir ("vacation tee" kedi sayılmaz). Aktif sezonun bayram temaları

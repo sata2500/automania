@@ -58,6 +58,14 @@ export const etsyListingSettingsSchema = z.object({
   price: z.number().min(0.2).max(50_000).default(24.99),
   whoMade: z.enum(['i_did', 'someone_else', 'collective']).default('i_did'),
   whenMade: z.string().max(32).default('made_to_order'),
+  productionPartnerIds: z.array(z.string().trim().regex(/^\d+$/, 'Geçersiz üretim ortağı.')).max(10).optional(),
+  shouldAutoRenew: z.boolean().optional(),
+  itemWeight: z.number().positive().max(100_000).optional(),
+  itemWeightUnit: z.enum(['oz', 'lb', 'g', 'kg']).optional(),
+  itemLength: z.number().positive().max(10_000).optional(),
+  itemWidth: z.number().positive().max(10_000).optional(),
+  itemHeight: z.number().positive().max(10_000).optional(),
+  itemDimensionsUnit: z.enum(['in', 'cm']).optional(),
 });
 
 export const automationScheduleSchema = z.object({
