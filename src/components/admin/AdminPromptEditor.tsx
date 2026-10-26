@@ -5,7 +5,7 @@
  * Her talimat burada görünür ve düzenlenir; boş bırakılan alanda varsayılan metin kullanılır.
  */
 import React, { useState } from 'react';
-import { Info, Plus, RotateCcw, Tag } from 'lucide-react';
+import { ClipboardCopy, Info, Plus, RotateCcw, Tag } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import {
   PROMPT_DEFINITIONS,
@@ -128,11 +128,49 @@ function PromptCard({ definition, index, value, onChange }: {
   );
 }
 
+/** Tüm talimatları başlık, anahtar ve durumla tek metin olarak döner (gözden geçirmek için paylaşılır). */
+export function formatAllPrompts(values: Record<PromptKey, string>): string {
+  return PROMPT_DEFINITIONS.map((definition, i) => {
+    const value = values[definition.key] ?? '';
+    const status = value.trim() === definition.defaultValue.trim() ? 'Varsayılan' : 'Düzenlendi';
+    return `=== ${i + 1}. ${definition.title} (${definition.key}) — ${status} ===\n${value.trim() || '(boş: varsayılan kullanılır)'}`;
+  }).join('\n\n');
+}
+
+/** Panoya kopyalar; Clipboard API yoksa (eski/mobil tarayıcı) gizli metin alanı ile kopyalar. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Aşağıdaki yönteme düş.
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  const ok = document.execCommand('copy');
+  area.remove();
+  return ok;
+}
+
 export function AdminPromptEditor({ values, onChange }: {
   values: Record<PromptKey, string>;
   onChange: (key: PromptKey, value: string) => void;
 }) {
+  const toast = useToast();
   const [group, setGroup] = useState<PromptGroup | 'all'>('all');
+
+  const copyAll = async () => {
+    const ok = await copyText(formatAllPrompts(values));
+    if (ok) toast.success(`${PROMPT_DEFINITIONS.length} talimat panoya kopyalandı. Kaydedilmemiş değişiklikler de dahildir.`);
+    else toast.error('Kopyalanamadı. Tarayıcı panoya erişime izin vermedi.');
+  };
   const visible = PROMPT_DEFINITIONS
     .map((definition, i) => ({ definition, index: i + 1 }))
     .filter(({ definition }) => group === 'all' || definition.group === group);
@@ -148,6 +186,13 @@ export function AdminPromptEditor({ values, onChange }: {
           <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
           <span>Yapay zekâya giden talimatların tamamı buradadır; sistem başka bir talimat eklemez, yalnızca değişkenleri veriyle doldurur.</span>
         </div>
+        <button
+          type="button"
+          onClick={copyAll}
+          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <ClipboardCopy className="w-3.5 h-3.5" /> Tüm promptları kopyala
+        </button>
         <div role="tablist" aria-label="Prompt grupları" className="flex flex-wrap items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-stretch sm:self-auto max-w-full">
           <button type="button" role="tab" aria-selected={group === 'all'} onClick={() => setGroup('all')} className={tabClass(group === 'all')}>Tümü</button>
           {PROMPT_GROUPS.map((g) => (
