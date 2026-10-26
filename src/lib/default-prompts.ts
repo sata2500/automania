@@ -40,6 +40,8 @@ DESIGN RULES:
 - One clear focal subject with strong contrast, readable from a distance.
 - Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
 - Any text must be in English, spelled correctly, short and meaningful, in bold readable typography that matches the style. No placeholder, filler or gibberish text.
+- Keep the layout simple enough to read on a shirt from a few meters away: at most three text elements (for example a headline, a subline and one short tagline), with no small text badges, labels, captions or arrows.
+- Use "EST." or similar founding phrases only together with a year (for example "EST. 2026"); otherwise leave them out.
 - No trademarks, brand names, logos, celebrities or copyrighted characters.
 
 CANVAS AND BACKGROUND (required for automatic background removal):

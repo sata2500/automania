@@ -332,3 +332,27 @@ Respond with ONLY a JSON object (no markdown) with these fields:
 export const LEGACY_GENERATE_VIDEO_V2 = `Ultra-realistic product video of the exact {{product}} from the reference image, worn by a mannequin in a bright, clean photo studio. Show the mannequin from several angles (front, three-quarter and side) with slow, smooth camera movement, ending on a close-up of the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
 The printed design must stay exactly identical to the reference image: same artwork, colors, placement and size. All text on the design must stay exactly as in the reference image, spelled correctly and fully legible. Do not add, remove or distort any text or graphics, because this video advertises a real product for sale.
 No captions, watermarks, logos or on-screen text.`;
+
+export const LEGACY_GENERATE_DESIGN_V4 = `Create a print-ready t-shirt graphic for an Etsy print-on-demand shop.
+
+CONCEPT:
+{{concept}}
+
+STYLE: {{style}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+PRINT FABRIC: {{fabric}}
+
+DESIGN RULES:
+- Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
+- One clear focal subject with strong contrast, readable from a distance.
+- Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
+- Any text must be in English, spelled correctly, short and meaningful, in bold readable typography that matches the style. No placeholder, filler or gibberish text.
+- No trademarks, brand names, logos, celebrities or copyrighted characters.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas with one single standalone graphic, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, noise, shadow, vignette, border or frame.
+- Do not use {{keyColorName}} or similar shades anywhere in the design. Draw green elements in dark forest green, olive or teal instead of bright green, and pink or purple elements in burgundy, coral or soft lavender instead of magenta.
+- Crisp, clean outer edges with a solid outline. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.
+
+Output only the image.`;

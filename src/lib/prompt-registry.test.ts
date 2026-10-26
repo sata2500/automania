@@ -29,3 +29,11 @@ describe('prompt registry', () => {
     expect(fillPrompt('{{a}} and {{a}} but {{b}}', { a: 'x' })).toBe('x and x but {{b}}');
   });
 });
+
+describe('design prompt rules', () => {
+  it('limits text elements and requires a year with EST.', async () => {
+    const { DEFAULT_GENERATE_DESIGN_PROMPT: prompt } = await import('./default-prompts');
+    expect(prompt).toMatch(/at most three text elements/);
+    expect(prompt).toMatch(/"EST\." or similar founding phrases only together with a year/);
+  });
+});
