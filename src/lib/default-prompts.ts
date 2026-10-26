@@ -40,7 +40,8 @@ DESIGN RULES:
 - One clear focal subject with strong contrast, readable from a distance.
 - Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
 - Any text must be in English, spelled correctly and meaningful, in readable typography that matches the style. No placeholder, filler or gibberish text (for example, an "EST." needs a year).
-- Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text, badges and small details are welcome when they strengthen the idea, not as clutter.
+- Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text and small details are welcome when they strengthen the idea, not as clutter.
+- Full-front print: this graphic is printed large (about 11-12 inches wide) across the front of the shirt, so it must look like a bold front graphic, not a small logo. Build it around an open illustration or a strong typographic layout. Do not make the whole design a circular badge, round seal, crest, patch or emblem enclosed in a circle or shield (the kind of mark meant for a small left-chest print).
 - No trademarks, brand names, logos, celebrities or copyrighted characters.
 
 CANVAS AND BACKGROUND (required for automatic background removal):

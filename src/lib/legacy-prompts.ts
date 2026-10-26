@@ -544,3 +544,28 @@ Return ONLY a valid JSON object in this format, with no markdown and no explanat
     { "property_id": 0, "value_ids": [0] }
   ]
 }`;
+
+export const LEGACY_GENERATE_DESIGN_V6 = `Create a print-ready t-shirt graphic for an Etsy print-on-demand shop.
+
+CONCEPT:
+{{concept}}
+
+STYLE: {{style}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+PRINT FABRIC: {{fabric}}
+
+DESIGN RULES:
+- Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
+- One clear focal subject with strong contrast, readable from a distance.
+- Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
+- Any text must be in English, spelled correctly and meaningful, in readable typography that matches the style. No placeholder, filler or gibberish text (for example, an "EST." needs a year).
+- Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text, badges and small details are welcome when they strengthen the idea, not as clutter.
+- No trademarks, brand names, logos, celebrities or copyrighted characters.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas with one single standalone graphic, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, noise, shadow, vignette, border or frame.
+- Do not use {{keyColorName}} or similar shades anywhere in the design. Draw green elements in dark forest green, olive or teal instead of bright green, and pink or purple elements in burgundy, coral or soft lavender instead of magenta.
+- Crisp, clean outer edges with a solid outline. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.
+
+Output only the image.`;
