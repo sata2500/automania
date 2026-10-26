@@ -26,7 +26,7 @@ Return ONLY a valid JSON object in this exact format, with no markdown and no ex
   "taxonomyId": 482
 }`;
 
-export const DEFAULT_GENERATE_DESIGN_PROMPT = `Create a print-ready t-shirt graphic for an Etsy print-on-demand shop.
+export const DEFAULT_GENERATE_DESIGN_PROMPT = `Create the print file (artwork only) for a t-shirt graphic for an Etsy print-on-demand shop.
 
 CONCEPT:
 {{concept}}
@@ -41,10 +41,11 @@ DESIGN RULES:
 - Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
 - Any text must be in English, spelled correctly and meaningful, in readable typography that matches the style. No placeholder, filler or gibberish text (for example, an "EST." needs a year).
 - Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text and small details are welcome when they strengthen the idea, not as clutter.
-- Full-front print: this graphic is printed large (about 11-12 inches wide) across the front of the shirt, so it must look like a bold front graphic, not a small logo. Build it around an open illustration or a strong typographic layout. Do not make the whole design a circular badge, round seal, crest, patch or emblem enclosed in a circle or shield (the kind of mark meant for a small left-chest print).
+- Full-front print: the artwork will later be printed large (about 11-12 inches wide) on a shirt, so it must work as a bold front graphic, not a small logo. Build it around an open illustration or a strong typographic layout. Do not make the whole design a circular badge, round seal, crest, patch or emblem enclosed in a circle or shield (the kind of mark meant for a small left-chest print).
 - No trademarks, brand names, logos, celebrities or copyrighted characters.
 
 CANVAS AND BACKGROUND (required for automatic background removal):
+- Draw only the flat artwork itself. Never show a t-shirt, garment, collar, sleeves, hanger, person, model or product mockup; the artwork is not shown printed on anything.
 - Square canvas with one single standalone graphic, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
 - Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, noise, shadow, vignette, border or frame.
 - Do not use {{keyColorName}} or similar shades anywhere in the design. Draw green elements in dark forest green, olive or teal instead of bright green, and pink or purple elements in burgundy, coral or soft lavender instead of magenta.
@@ -180,6 +181,7 @@ export const DEFAULT_DESIGN_VARIANT_PROMPT = `Redraw this exact t-shirt graphic 
 Keep everything identical: composition, subject, characters, layout, proportions, all text and its spelling. Change only the ink colors so the design stands out clearly on {{fabric}}: light and bright inks for dark garments (avoid large black or very dark areas), dark and saturated inks for light garments. Keep the color harmony of the original.
 
 CANVAS AND BACKGROUND (required for automatic background removal):
+- Only the flat artwork itself: never show a t-shirt, garment, person or product mockup.
 - Square canvas, the graphic centered with equal empty margins, same size as in the original.
 - Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, shadow, border or frame. Do not use {{keyColorName}} or similar shades in the design.
 - Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.

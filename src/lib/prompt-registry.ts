@@ -25,6 +25,8 @@ import {
   LEGACY_GENERATE_DESIGN_V4,
   LEGACY_GENERATE_DESIGN_V5,
   LEGACY_GENERATE_DESIGN_V6,
+  LEGACY_GENERATE_DESIGN_V7,
+  LEGACY_DESIGN_VARIANT_V1,
   LEGACY_GENERATE_LISTING,
   LEGACY_GENERATE_LISTING_V2,
   LEGACY_GENERATE_LISTING_V3,
@@ -93,7 +95,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'Tasarım üretimi',
     description: 'Görsel modeline giden tasarım talimatı (Tasarımlar › AI ile üret ve otomasyon): tasarım kuralları, kare ve ortalı kompozisyon, düz perde arka plan. Perde rengi konuya göre seçilir (yeşil ağırlıklı konularda magenta, diğerlerinde yeşil) ve sonradan otomatik kaldırılır.',
     defaultValue: DEFAULT_GENERATE_DESIGN_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_DESIGN_V1, LEGACY_GENERATE_DESIGN_V2, LEGACY_GENERATE_DESIGN_V3, LEGACY_GENERATE_DESIGN_V4, LEGACY_GENERATE_DESIGN_V5, LEGACY_GENERATE_DESIGN_V6],
+    legacyDefaults: [LEGACY_GENERATE_DESIGN_V1, LEGACY_GENERATE_DESIGN_V2, LEGACY_GENERATE_DESIGN_V3, LEGACY_GENERATE_DESIGN_V4, LEGACY_GENERATE_DESIGN_V5, LEGACY_GENERATE_DESIGN_V6, LEGACY_GENERATE_DESIGN_V7],
     variables: [
       v('concept', 'Konsept', 'Elle üretimde kullanıcının yazdığı açıklama; otomasyonda niş, hedef kitle, ürün ve notlar (araştırmanın tasarım özeti dahil).', '📝'),
       v('style', 'Stil', 'Elle üretimde seçilen stil; otomasyonda niş araştırmasının önerdiği stil (yoksa "not specified").', '✨'),
@@ -109,6 +111,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'Diğer kumaş versiyonu',
     description: 'Otomasyonda "Diğer kumaş rengi için ayrı versiyon" açıksa ana tasarım görsel modeline gönderilir ve diğer kumaş rengine uygun renklerle yeniden çizilir; o renkteki mockup\'larda bu versiyon kullanılır.',
     defaultValue: DEFAULT_DESIGN_VARIANT_PROMPT,
+    legacyDefaults: [LEGACY_DESIGN_VARIANT_V1],
     variables: [
       v('fabric', 'Hedef kumaş', 'Versiyonun basılacağı kumaş rengi (ör. "dark-colored garments (black, navy, charcoal)").', '🧵'),
       v('keyColorName', 'Perde rengi adı', '"pure chroma-key green" veya "pure magenta".', '🎨'),

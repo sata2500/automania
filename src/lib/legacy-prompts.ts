@@ -569,3 +569,40 @@ CANVAS AND BACKGROUND (required for automatic background removal):
 - Crisp, clean outer edges with a solid outline. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.
 
 Output only the image.`;
+
+export const LEGACY_GENERATE_DESIGN_V7 = `Create a print-ready t-shirt graphic for an Etsy print-on-demand shop.
+
+CONCEPT:
+{{concept}}
+
+STYLE: {{style}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+PRINT FABRIC: {{fabric}}
+
+DESIGN RULES:
+- Flat, vector-style artwork suitable for DTG and screen printing. No photorealism unless the concept asks for it.
+- One clear focal subject with strong contrast, readable from a distance.
+- Choose ink colors that stand out on the print fabric: dark, saturated inks on light garments; light and bright inks on dark garments (avoid large black or very dark areas); a self-contained palette with a solid outline when the design must work on both.
+- Any text must be in English, spelled correctly and meaningful, in readable typography that matches the style. No placeholder, filler or gibberish text (for example, an "EST." needs a year).
+- Clean, balanced composition with a clear visual hierarchy: the main message and subject read at a glance on a shirt. Supporting text and small details are welcome when they strengthen the idea, not as clutter.
+- Full-front print: this graphic is printed large (about 11-12 inches wide) across the front of the shirt, so it must look like a bold front graphic, not a small logo. Build it around an open illustration or a strong typographic layout. Do not make the whole design a circular badge, round seal, crest, patch or emblem enclosed in a circle or shield (the kind of mark meant for a small left-chest print).
+- No trademarks, brand names, logos, celebrities or copyrighted characters.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas with one single standalone graphic, centered horizontally and vertically, covering about 85-90% of the canvas width with equal empty margins on all four sides. Nothing touches or is cut off by the canvas edges.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, noise, shadow, vignette, border or frame.
+- Do not use {{keyColorName}} or similar shades anywhere in the design. Draw green elements in dark forest green, olive or teal instead of bright green, and pink or purple elements in burgundy, coral or soft lavender instead of magenta.
+- Crisp, clean outer edges with a solid outline. No glow, haze, smoke, drop shadow or soft spray touching the background, and no stray specks around the design.
+
+Output only the image.`;
+
+export const LEGACY_DESIGN_VARIANT_V1 = `Redraw this exact t-shirt graphic as a version for {{fabric}}.
+
+Keep everything identical: composition, subject, characters, layout, proportions, all text and its spelling. Change only the ink colors so the design stands out clearly on {{fabric}}: light and bright inks for dark garments (avoid large black or very dark areas), dark and saturated inks for light garments. Keep the color harmony of the original.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Square canvas, the graphic centered with equal empty margins, same size as in the original.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, shadow, border or frame. Do not use {{keyColorName}} or similar shades in the design.
+- Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
+
+Output only the image.`;
