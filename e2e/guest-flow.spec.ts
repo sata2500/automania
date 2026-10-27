@@ -28,8 +28,8 @@ test('guest can load the demo workspace and render a batch', async ({ page }) =>
   await page.goto('/');
 
   await page.getByRole('button', { name: 'Örnek Taslağı Yükle' }).first().click();
-  await expect(page.getByText('3. Toplu Üretim').first()).toBeVisible();
-  await page.getByText('3. Toplu Üretim').first().click();
+  await expect(page.getByText('3. Üretim').first()).toBeVisible();
+  await page.getByText('3. Üretim').first().click();
 
   await page.getByRole('button', { name: /Toplu Görselleri Üret/ }).click();
   await expect(page.getByText(/Toplu Üretim Tamamlandı/)).toBeVisible({ timeout: 30_000 });
