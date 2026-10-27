@@ -113,14 +113,28 @@ export function recolorPixel(r: number, g: number, b: number, mode: RecolorMode)
 }
 
 /**
- * Chamfer (3-4) mesafe dönüşümü: her pikselin `isSource` piksellerine yaklaşık uzaklığı (piksel × 3).
- * Görselin dışı kaynak sayılmaz.
+ * Ham RGBA üzerinde yerinde uyarlama (test edilebilir). Yalnızca kumaşla doğrudan temas eden ve kumaşta
+ * kaybolacak tonlar değişir:
+ *  1. Kumaşta kaybolacak pikseller (eşik tarafındaki tonlar) birbirine bağlı bölgelere ayrılır.
+ *  2. Bölgenin çoğu saydamlığa (kumaşa) yakınsa — kontur, zeminsiz çizgi ve yazılar — bölge tamamen
+ *     uyarlanır.
+ *  3. Bölge büyük bir iç alan ise (tasarımın kendi zemin plakası) yalnızca kumaşa değen kenarı yumuşak
+ *     bir geçişle uyarlanır; plakanın içi ve üzerindeki yazılar olduğu gibi kalır.
+ * Saydam alanı olmayan (zemini kaldırılmamış) görselde değişiklik yapılmaz ve -1 döner; aksi halde değişen
+ * piksel sayısını döner.
  */
-function distanceTransform(width: number, height: number, isSource: (p: number) => boolean): Uint16Array {
+export function adaptToFabric(data: Uint8Array | Buffer, width: number, height: number, mode: RecolorMode): number {
   const total = width * height;
+  const radius = Math.max(3, Math.round(Math.max(width, height) * 0.006));
+
+  // Saydamlığa (kumaşa) uzaklık: iki geçişli yaklaşık öklid (chamfer 3-4) mesafe dönüşümü.
   const INF = 0xffff;
   const dist = new Uint16Array(total).fill(INF);
-  for (let p = 0; p < total; p++) if (isSource(p)) dist[p] = 0;
+  let hasTransparency = false;
+  for (let p = 0; p < total; p++) {
+    if (data[p * 4 + 3]! < 40) { dist[p] = 0; hasTransparency = true; }
+  }
+  if (!hasTransparency) return -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const p = y * width + x;
@@ -149,37 +163,7 @@ function distanceTransform(width: number, height: number, isSource: (p: number) 
       dist[p] = d;
     }
   }
-  return dist;
-}
-
-/**
- * Ham RGBA üzerinde yerinde uyarlama (test edilebilir). Yalnızca kumaşta kaybolacak ve kumaşa doğrudan
- * açılan tonlar değişir:
- *  1. Kumaşta kaybolacak pikseller (eşik tarafındaki tonlar) bulunur.
- *  2. Kumaştan (saydam alandan) başlayıp yalnızca bu piksellerin üzerinden ilerleyen bir yayılma yapılır.
- *     Arada kumaşa karşıt bir kontur varsa öğe zaten görünür; yayılma oraya geçmez (konturlu krem dallar,
- *     plaka üzerindeki yazılar korunur).
- *  3. Kalınlığa göre: ince yapılar (kontur, harf, çizgi) kumaştan belirli bir uzaklığa kadar tamamen uyarlanır
- *     — kalın bir alana veya iç çizgilere bağlı olsalar da. Kalın alanlarda (zemin plakası, şapka gibi büyük
- *     koyu bölgeler) yalnızca kumaşa değen kenarda ince, net bir kontur oluşur; içleri olduğu gibi kalır.
- * Saydam alanı olmayan (zemini kaldırılmamış) görselde değişiklik yapılmaz ve -1 döner; aksi halde değişen
- * piksel sayısını döner.
- */
-export function adaptToFabric(data: Uint8Array | Buffer, width: number, height: number, mode: RecolorMode): number {
-  const total = width * height;
-  const size = Math.max(width, height);
-  /** Bu yarı kalınlıktan kalın bölgeler "kalın alan" sayılır (harf gövdelerinden kalın); chamfer birimi. */
-  const thickHalf = Math.max(5, Math.round(size * 0.016)) * 3;
-  /** İnce yapıların kumaştan itibaren uyarlandığı uzaklık (piksel); sonrasında azalarak biter. */
-  const reach = Math.max(6, Math.round(size * 0.02));
-  const reachFade = Math.round(reach * 1.25);
-  /** Kalın alanlarda oluşan kenar konturunun kalınlığı (piksel). */
-  const stroke = Math.max(2, Math.round(size * 0.004));
-
-  const transparent = (p: number) => data[p * 4 + 3]! < 40;
-  let hasTransparency = false;
-  for (let p = 0; p < total; p++) if (transparent(p)) { hasTransparency = true; break; }
-  if (!hasTransparency) return -1;
+  const near = radius * 3; // chamfer birimi: piksel × 3
 
   // Kumaşta kaybolacak pikseller ve uyarlanmış renkleri (renk başına bir kez hesaplanır).
   const cache = new Map<number, number>();
@@ -197,41 +181,45 @@ export function adaptToFabric(data: Uint8Array | Buffer, width: number, height: 
     mapped[p] = packed;
   }
 
-  // Kalınlık: bölgenin kenarına uzaklık. Çekirdek (yarı kalınlığı eşikten büyük) ve çekirdeğe eşik kadar
-  // yakın pikseller kalın alanı oluşturur (morfolojik açma); harfler ve konturlar ince kalır.
-  const toEdge = distanceTransform(width, height, (p) => mapped[p]! < 0);
-  const toCore = distanceTransform(width, height, (p) => toEdge[p]! > thickHalf);
-  const thick = (p: number) => toCore[p]! <= thickHalf;
-
-  // Kumaştan, yalnızca kaybolacak pikseller üzerinden yayılma (adım sayısı = kumaşa yol uzunluğu). Kumaşa
-  // kontur kalınlığı kadar yakın pikseller başlangıçtır: kenar yumuşatması veya ince bir hale engel olmaz.
-  const toFabric = distanceTransform(width, height, transparent);
-  const steps = new Int32Array(total).fill(-1);
+  // Bağlı bölgeler (8 komşuluk) ve her bölgenin kumaşa yakın piksel oranı.
+  const component = new Int32Array(total).fill(-1);
+  const sizes: number[] = [];
+  const nearCounts: number[] = [];
   const queue = new Int32Array(total);
-  let head = 0, tail = 0;
-  for (let p = 0; p < total; p++) {
-    if (mapped[p]! >= 0 && toFabric[p]! <= stroke * 3) { steps[p] = 1; queue[tail++] = p; }
-  }
-  while (head < tail) {
-    const p = queue[head++]!;
-    const d = steps[p]!;
-    // Kalın alanda yalnızca kontur kalınlığı kadar, ince yapılarda erişim uzaklığına kadar ilerlenir.
-    if (d >= (thick(p) ? stroke : reachFade)) continue;
-    const x = p % width;
-    const neighbours = [x > 0 ? p - 1 : -1, x < width - 1 ? p + 1 : -1, p - width, p + width];
-    for (const q of neighbours) {
-      if (q >= 0 && q < total && mapped[q]! >= 0 && steps[q]! < 0) { steps[q] = d + 1; queue[tail++] = q; }
+  for (let start = 0; start < total; start++) {
+    if (mapped[start]! < 0 || component[start]! >= 0) continue;
+    const id = sizes.length;
+    let head = 0, tail = 0, size = 0, nearCount = 0;
+    queue[tail++] = start;
+    component[start] = id;
+    while (head < tail) {
+      const p = queue[head++]!;
+      size++;
+      if (dist[p]! <= near) nearCount++;
+      const x = p % width, y = (p - x) / width;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if ((dx === 0 && dy === 0) || nx < 0 || nx >= width) continue;
+          const q = ny * width + nx;
+          if (mapped[q]! >= 0 && component[q]! < 0) { component[q] = id; queue[tail++] = q; }
+        }
+      }
     }
+    sizes.push(size);
+    nearCounts.push(nearCount);
   }
 
   let changed = 0;
   for (let p = 0; p < total; p++) {
-    const d = steps[p]!;
-    if (d < 0) continue;
     const packed = mapped[p]!;
-    const w = thick(p)
-      ? (d <= stroke ? 1 : 0)
-      : Math.min(1, Math.max(0, (reachFade - d) / (reachFade - reach)));
+    if (packed < 0) continue;
+    const id = component[p]!;
+    const touchesFabric = nearCounts[id]! / sizes[id]! >= 0.35;
+    // İç plakalarda kenardan içeri doğru azalan geçiş (yumuşak kontur).
+    const w = touchesFabric ? 1 : Math.max(0, 1 - dist[p]! / near);
     if (w <= 0) continue;
     const i = p * 4;
     data[i] = Math.round(data[i]! + (((packed >> 16) & 255) - data[i]!) * w);
