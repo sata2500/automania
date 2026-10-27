@@ -1,41 +1,54 @@
 'use client';
 
 import React from 'react';
-import { Layers } from 'lucide-react';
-import { Spinner } from '@/components/common/Spinner';
 
-/** Marka logosu (başlıktakiyle aynı): yükleme ekranlarında kullanılır. */
-function BrandMark({ className = 'w-14 h-14' }: { className?: string }) {
+/**
+ * Marka simgesi (katmanlar + yıldız), uygulama simgesiyle aynı çizim. Yükleme ekranında, telefonun
+ * PWA açılış ekranındaki simgeyle aynı yerde ve boyutta durur; geçiş fark edilmez.
+ */
+function BrandGlyph({ className = '' }: { className?: string }) {
   return (
-    <div className={`${className} rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-xl shadow-indigo-500/30`}>
-      <Layers className="w-1/2 h-1/2 text-white" />
-    </div>
+    <svg viewBox="8 3 50 54" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="splash-top" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#8b6cf0" />
+          <stop offset="1" stopColor="#b16cf8" />
+        </linearGradient>
+      </defs>
+      <path d="M32 31 53 42.5 32 54 11 42.5Z" fill="#3b2a9e" />
+      <path d="M32 24.5 53 36 32 47.5 11 36Z" fill="#5b3fc4" />
+      <path d="M32 17 53 28.5 32 40 11 28.5Z" fill="url(#splash-top)" />
+      <path className="app-splash-sparkle" d="M50 6c.8 3.4 2.2 4.8 5.6 5.6-3.4.8-4.8 2.2-5.6 5.6-.8-3.4-2.2-4.8-5.6-5.6 3.4-.8 4.8-2.2 5.6-5.6Z" />
+    </svg>
   );
 }
 
 /**
  * Uygulama açılırken (çalışma alanı tarayıcıdan/buluttan yüklenirken) tam ekran gösterilen karşılama.
- * `visible` false olunca yumuşakça kaybolur.
+ * Tarayıcıda temaya uyar; ana ekrandan açılan uygulamada (PWA) telefonun açılış ekranının devamıdır:
+ * aynı zemin, aynı simge ve konum (bkz. globals.css `.app-splash`). `visible` false olunca yumuşakça kaybolur.
  */
 export function AppSplash({ visible }: { visible: boolean }) {
   return (
     <div
       aria-hidden={!visible}
-      className={`fixed inset-0 z-[80] flex flex-col items-center justify-center gap-5 bg-slate-50 dark:bg-slate-950 transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      className={`app-splash fixed inset-0 z-[80] transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
     >
-      <div className="relative">
-        <span className="absolute inset-0 rounded-2xl bg-indigo-500/30 blur-xl animate-pulse [animation-duration:2s]" aria-hidden="true" />
-        <div className="relative animate-in zoom-in-90 fade-in duration-500">
-          <BrandMark />
+      {/* Simge tam ortada: telefonun açılış ekranındaki simgeyle üst üste gelir. */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative w-40 h-40 flex items-center justify-center">
+          <span className="app-splash-glow absolute inset-0 rounded-full" aria-hidden="true" />
+          <BrandGlyph className="relative w-[4.75rem] h-[4.75rem]" />
         </div>
       </div>
-      <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-500 [animation-delay:120ms] [animation-fill-mode:both]">
-        <p className="text-lg font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 dark:from-white dark:via-slate-200 dark:to-indigo-300 bg-clip-text text-transparent">Automania POD</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etsy Print-on-Demand Studio</p>
+      <div className="absolute inset-x-0 top-1/2 mt-24 flex justify-center">
+        <div role="status" aria-label="Çalışma alanınız hazırlanıyor" className="app-splash-track h-1 w-28 rounded-full overflow-hidden">
+          <span className="app-splash-bar block h-full w-1/3 rounded-full" />
+        </div>
       </div>
-      <div role="status" className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-        <Spinner className="w-4 h-4 text-indigo-500" />
-        Çalışma alanınız hazırlanıyor…
+      <div className="absolute inset-x-0 bottom-[max(3rem,calc(env(safe-area-inset-bottom)+2rem))] text-center px-6">
+        <p className="app-splash-title text-xl font-semibold tracking-tight">Automania POD</p>
+        <p className="app-splash-muted text-xs mt-1">Etsy Print-on-Demand Studio</p>
       </div>
     </div>
   );
