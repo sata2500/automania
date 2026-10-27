@@ -61,6 +61,7 @@ function matchesFabric(mockup: MockupItem, fabricType: PodTemplateMockupConfig['
  * - Baskı alanlı mockup'lar kumaş filtresine göre süzülür ve tasarım yerleştirilerek render edilir.
  * - Statik mockup'lar (beden tablosu vb.) olduğu gibi eklenir.
  * - Toplam fotoğraf sayısı Etsy sınırına (20) indirilir; ilk video mockup'ı ayrıca döner.
+ * - `photos`: ikisi birlikte, mockup listesindeki sırayla (ilan fotoğraf sırası).
  */
 export function selectAutomationMockups(mockups: MockupItem[], templateConfig: Partial<PodTemplateMockupConfig> | null | undefined) {
   // Klasöre bağlı şablonlar her çalıştırmada klasörün güncel içeriğini kullanır
@@ -79,7 +80,14 @@ export function selectAutomationMockups(mockups: MockupItem[], templateConfig: P
 
   const renderLimited = render.slice(0, MAX_ETSY_PHOTOS);
   const staticLimited = statics.slice(0, Math.max(0, MAX_ETSY_PHOTOS - renderLimited.length));
-  return { render: renderLimited, statics: staticLimited, video };
+  // İlan fotoğraf sırası, mockup listesinde sürükle-bırak ile verilen sıradır: statik görseller
+  // (beden tablosu vb.) sona değil, listede konduğu yere girer.
+  const position = new Map(mockups.map((m, i) => [m.id, i]));
+  const photos = [
+    ...renderLimited.map((mockup) => ({ mockup, kind: 'render' as const })),
+    ...staticLimited.map((mockup) => ({ mockup, kind: 'static' as const })),
+  ].sort((a, b) => (position.get(a.mockup.id) ?? 0) - (position.get(b.mockup.id) ?? 0));
+  return { render: renderLimited, statics: staticLimited, photos, video };
 }
 
 /**

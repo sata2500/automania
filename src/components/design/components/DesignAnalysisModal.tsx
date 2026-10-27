@@ -225,6 +225,28 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Otomasyonun ürettiği ilan metni (varsa) */}
+          {analysisModalData.seo && (
+            <div>
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-500" />
+                <span>Hazırlanan İlan Metni</span>
+              </h4>
+              <div className="space-y-2.5 bg-slate-50 dark:bg-slate-950/50 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{analysisModalData.seo.title}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {analysisModalData.seo.tags.map((tag) => (
+                    <span key={tag} className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 text-[11px] font-medium border border-indigo-100 dark:border-indigo-900">{tag}</span>
+                  ))}
+                </div>
+                <details className="text-xs text-slate-600 dark:text-slate-400">
+                  <summary className="cursor-pointer font-semibold text-slate-700 dark:text-slate-300">Açıklamayı göster</summary>
+                  <p className="mt-2 whitespace-pre-line leading-relaxed">{analysisModalData.seo.description}</p>
+                </details>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}

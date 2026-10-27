@@ -267,6 +267,22 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
 }
 
 /** Tasarımı Tasarımlar sekmesindeki "Otomasyon Tasarımları" klasörüne atomik olarak ekler. */
+/**
+ * Otomasyon tasarımının çalışma alanındaki kaydına analiz ve ilan metnini ekler: Tasarımlar sekmesinde
+ * "Analiz Sonucunu Gör" yeniden yapay zekâ çağrısı gerekmeden açılır. Atomik güncelleme (yalnızca o tasarım).
+ */
+async function attachDesignInsights(userId: string, designId: string, patch: Pick<DesignItem, 'analysis' | 'seo'>) {
+  await sql`
+    UPDATE user_workspaces
+    SET designs = (
+      SELECT jsonb_agg(CASE WHEN elem ->> 'id' = ${designId} THEN elem || ${JSON.stringify(patch)}::jsonb ELSE elem END ORDER BY ord)
+      FROM jsonb_array_elements(designs) WITH ORDINALITY AS t(elem, ord)
+    ),
+    updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = ${userId} AND designs @> ${JSON.stringify([{ id: designId }])}::jsonb
+  `;
+}
+
 async function addAutomationDesign(userId: string, design: DesignItem) {
   const folderJson = JSON.stringify([AUTOMATION_DESIGN_FOLDER]);
   await db.insert(userWorkspaces)
@@ -401,23 +417,29 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
   // Her fotoğrafın kısa tanımı (SEO adımında alt metin yazılırken kullanılır), `urls` ile aynı sırada.
   const photos: string[] = [];
   const failures: string[] = [];
-  for (const [index, mockup] of plan.render.entries()) {
+  // Fotoğraflar mockup listesindeki sırayla eklenir; statik görseller (beden tablosu vb.) render edilmeden,
+  // kendi adresleriyle listedeki yerlerine girer.
+  let renderIndex = 0;
+  for (const { mockup, kind } of plan.photos) {
+    if (kind === 'static') {
+      urls.push(mockup.src);
+      photos.push(`static info image without the design${mockup.name ? ` (name: "${mockup.name}", e.g. size chart or color chart)` : ' (e.g. size chart or color chart)'}`);
+      continue;
+    }
+    renderIndex += 1;
     try {
       let composite = await loadImageForUser(userId, mockup.src);
       const mockupDesign = await designFor(mockup);
       // Birden fazla baskı alanı varsa tasarım hepsine yerleştirilir.
       for (const area of mockup.printAreas) composite = await renderDesignOnMockup(composite, mockupDesign, area);
       const jpeg = await jpegForListing(composite);
-      const upload = await uploadToR2(jpeg, createOwnedUploadName(userId, `auto-mockup-${runId}-${index + 1}`, 'image/jpeg'), 'image/jpeg');
+      const upload = await uploadToR2(jpeg, createOwnedUploadName(userId, `auto-mockup-${runId}-${renderIndex}`, 'image/jpeg'), 'image/jpeg');
       urls.push(upload.url);
       photos.push(`${mockup.apparelType} mockup with the design printed on it${mockup.name ? ` (mockup name: "${mockup.name}")` : ''}${variantFabricFor(mockup, hints.designFabric) ? ', fabric-adjusted design version' : ''}`);
     } catch (error) {
       failures.push(`${mockup.name || mockup.id}: ${error instanceof Error ? error.message : 'render hatası'}`);
     }
   }
-  // Statik görseller (beden tablosu vb.) render edilmeden, kendi adresleriyle eklenir.
-  urls.push(...plan.statics.map((m) => m.src));
-  photos.push(...plan.statics.map((m) => `static info image without the design${m.name ? ` (name: "${m.name}", e.g. size chart or color chart)` : ' (e.g. size chart or color chart)'}`));
 
   if (urls.length === 0) throw new Error(`Hiçbir mockup üretilemedi. ${failures.join('; ')}`);
   return {
@@ -539,6 +561,23 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
       : [],
   };
   const propertyCount = Object.keys(seo.taxonomyProperties).length;
+  if (run.generatedDesignId) {
+    const parsed = listing as typeof listing & { detectedSubject?: unknown; detectedAesthetic?: unknown };
+    await attachDesignInsights(userId, run.generatedDesignId, {
+      analysis: {
+        description: designPrompt,
+        keywords: Array.from(new Set([...keywords, ...seo.tags])).slice(0, 30),
+        analyzedAt: Date.now(),
+        primarySubject: typeof parsed.detectedSubject === 'string' ? parsed.detectedSubject : subject?.subject || hints?.primaryNiche || undefined,
+        primaryAesthetic: typeof parsed.detectedAesthetic === 'string' ? parsed.detectedAesthetic : research?.style || undefined,
+        niche: hints?.primaryNiche || research?.niche || undefined,
+        productType: hints?.productType || undefined,
+        userNotes: hints?.customNotes || research?.designBrief || undefined,
+        taxonomyId: taxonomyId ?? null,
+      },
+      seo: { title: seo.title, description: seo.description, tags: seo.tags, generatedAt: Date.now() },
+    }).catch((error: unknown) => console.warn('[Automation] Design insights could not be saved', error instanceof Error ? error.message : error));
+  }
   return {
     patch: { generatedSeo: seo },
     output: {

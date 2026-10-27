@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
 
     const input = await loadImageForUser(session.id, imageUrl, { appOrigin: req.nextUrl.origin });
     const result = await recolorDesign(input, mode);
+    if (!result.hasTransparency) {
+      return NextResponse.json({ error: 'Tasarımın arka planı saydam değil. Kumaşa uyarlamadan önce "Arka planı kaldır" ile zemini kaldırın.' }, { status: 422 });
+    }
+    // Değişecek bir şey yoksa yeni kopya oluşturulmaz.
+    if (result.changedRatio < 0.002) {
+      return NextResponse.json({ unchanged: true, message: `Bu tasarım zaten ${mode === 'dark_garment' ? 'koyu' : 'açık'} kumaşta iyi görünüyor; değiştirilecek renk bulunamadı.` });
+    }
 
     let recoloredUrl: string;
     if (isR2Configured()) {
@@ -50,6 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       recoloredUrl,
       processingTimeMs: result.processingTimeMs,
+      changedRatio: result.changedRatio,
     });
   } catch (error: unknown) {
     if (error instanceof MediaSourceError) {

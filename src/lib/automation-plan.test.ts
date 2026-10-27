@@ -45,6 +45,16 @@ describe('selectAutomationMockups', () => {
     expect(result.video?.id).toBe('vid');
   });
 
+  it('keeps the mockup list order, placing static images where the user put them', () => {
+    const ordered = [mockup('a'), mockup('chart1', { hasPrintArea: false, printAreas: [] }), mockup('b'), mockup('chart2', { hasPrintArea: false, printAreas: [] }), mockup('c')];
+    const result = selectAutomationMockups(ordered, {
+      printAreaMockupIds: ['c', 'a', 'b'],
+      staticMockupIds: ['chart2', 'chart1'],
+      fabricType: 'all',
+    });
+    expect(result.photos.map((p) => `${p.mockup.id}:${p.kind}`)).toEqual(['a:render', 'chart1:static', 'b:render', 'chart2:static', 'c:render']);
+  });
+
   it('caps photos at the Etsy limit', () => {
     const many = Array.from({ length: 25 }, (_, i) => mockup(`m${i}`));
     const result = selectAutomationMockups([...many, mockup('chart', { hasPrintArea: false, printAreas: [] })], {

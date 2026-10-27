@@ -139,7 +139,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
           <button
             onClick={() => {
               onClose();
-              onRecolor(design, 'dark_garment'); // Koyu kumaş için siyahları beyaz yap
+              onRecolor(design, 'dark_garment'); // Kumaşa değen koyu tonlar açılır
             }}
             className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
           >
@@ -149,7 +149,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
           <button
             onClick={() => {
               onClose();
-              onRecolor(design, 'light_garment'); // Açık kumaş için beyazları siyah yap
+              onRecolor(design, 'light_garment'); // Kumaşa değen açık tonlar koyulaşır
             }}
             className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
           >

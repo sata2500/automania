@@ -5,7 +5,7 @@ import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
-import { optimizeDesignImage } from '@/lib/image-optimizer';
+import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 
 // Modular Hooks
@@ -29,6 +29,15 @@ interface DesignUploaderProps {
   setFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>>;
   activeDesignFolderId: string | null;
   setActiveDesignFolderId: (id: string | null) => void;
+}
+
+function readImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('Kırpılan görsel okunamadı.'));
+    img.src = src;
+  });
 }
 
 export const DesignUploader: React.FC<DesignUploaderProps> = ({
@@ -231,8 +240,11 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   const handleCropComplete = async (croppedDataUrl: string) => {
     if (!cropTargetDesign) return;
     const oldSrc = cropTargetDesign.src;
-    const optimized = await optimizeDesignImage(croppedDataUrl, 2000);
-    const serverUrl = optimized.url || optimized.dataUrl;
+    // Tasarım baskı dosyasıdır: kırpılan bölge orijinal çözünürlükte, kayıpsız PNG olarak saklanır.
+    const [serverUrl, size] = await Promise.all([
+      uploadMediaToServer(croppedDataUrl, 'image/png'),
+      readImageDimensions(croppedDataUrl),
+    ]);
     if (oldSrc && oldSrc !== serverUrl) {
       const nextDesigns = designs.map((d) => (d.id === cropTargetDesign.id ? { ...d, src: serverUrl } : d));
       void deleteUnreferencedBlobs([oldSrc], { designs: nextDesigns });
@@ -240,12 +252,12 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     setDesigns((prev) =>
       prev.map((d) =>
         d.id === cropTargetDesign.id
-          ? { ...d, src: serverUrl, width: optimized.width, height: optimized.height }
+          ? { ...d, src: serverUrl, width: size.width, height: size.height }
           : d
       )
     );
     setCropTargetDesign(null);
-    toast.success(`Tasarım kırpıldı ve ${optimized.mimeType === 'image/webp' ? 'WebP' : optimized.mimeType} olarak optimize edildi.`);
+    toast.success(`Tasarım kırpıldı (${size.width}×${size.height}px, PNG).`);
   };
 
   // --- Remove Background Handler ---
@@ -264,7 +276,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Arka plan kaldırılamadı');
 
-      const bgSrc = data.bgRemovedUrl || `data:image/png;base64,${data.pngBase64}`;
+      // Sunucu depoya yükleyemediyse (R2 yok) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
+      const bgSrc: string = data.bgRemovedUrl || await uploadMediaToServer(`data:image/png;base64,${data.pngBase64}`, 'image/png');
 
       setDesigns((prev) =>
         prev.map((d) =>
@@ -275,7 +288,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       );
 
       toast.removeToast(toastId);
-      toast.success('Arka plan başarıyla kaldırıldı!');
+      toast.success(data.qualityMessage || 'Arka plan başarıyla kaldırıldı!');
     } catch (err) {
       toast.removeToast(toastId);
       toast.error(getErrorMessage(err) || 'Arka plan kaldırılırken hata oluştu.');
@@ -287,7 +300,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     if (!design.src) return;
     if (!requireAccount('Renk uyarlama')) return;
 
-    const actionText = mode === 'dark_garment' ? 'Açık renk versiyonu (Koyu Kumaş) oluşturuluyor...' : 'Koyu renk versiyonu (Açık Kumaş) oluşturuluyor...';
+    const actionText = mode === 'dark_garment' ? 'Koyu kumaş versiyonu hazırlanıyor…' : 'Açık kumaş versiyonu hazırlanıyor…';
     const toastId = toast.progress(actionText);
 
     try {
@@ -299,8 +312,16 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Renk dönüşümü yapılamadı');
+      if (data.unchanged) {
+        toast.removeToast(toastId);
+        toast.info(data.message);
+        return;
+      }
 
-      const recoloredUrl = data.recoloredUrl;
+      // Sunucu depoya yükleyemediyse (yerel geliştirme) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
+      const recoloredUrl: string = data.recoloredUrl.startsWith('data:')
+        ? await uploadMediaToServer(data.recoloredUrl, 'image/png')
+        : data.recoloredUrl;
 
       // Yeni bir tasarım objesi oluştur
       // Yeni kopya hedef kumaşa göre eşleşir ve üretime pasif olarak eklenir (aynı slotta iki aktif
@@ -318,7 +339,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       setDesigns((prev) => [...prev, newDesign]);
 
       toast.removeToast(toastId);
-      toast.success('Tasarım başarıyla dönüştürüldü!');
+      toast.success(`${mode === 'dark_garment' ? 'Koyu' : 'Açık'} kumaş versiyonu kütüphaneye eklendi (renklerin %${Math.max(1, Math.round((data.changedRatio ?? 0) * 100))}'i uyarlandı).`);
     } catch (err) {
       toast.removeToast(toastId);
       toast.error(getErrorMessage(err) || 'Renk dönüşümü sırasında hata oluştu.');
@@ -409,6 +430,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           isOpen={!!cropTargetDesign}
           onClose={() => setCropTargetDesign(null)}
           onCropComplete={handleCropComplete}
+          variant="design"
         />
       )}
 
@@ -446,7 +468,11 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         designFolders={designFolders}
         onDesignsAdded={(newDesigns) => {
           setDesigns((prev) => [...prev, ...newDesigns]);
-          toast.success(`${newDesigns.length} AI tasarımı kütüphaneye eklendi!`);
+          toast.success(`${newDesigns.length} AI tasarımı kütüphaneye eklendi; analiz ediliyor…`);
+          // Yeni tasarımlar hemen analiz edilir: "Analiz Sonucunu Gör" ayrıca bir adım gerektirmez.
+          void (async () => {
+            for (const design of newDesigns) await handleAnalyzeDesign(design.id, design);
+          })();
         }}
       />
     </div>

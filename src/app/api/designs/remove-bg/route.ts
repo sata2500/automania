@@ -1,14 +1,16 @@
 /**
  * POST /api/designs/remove-bg
  * =============================
- * Chroma key algoritmasıyla arka planı kaldırır.
- * Body: { imageData?: base64, imageUrl?: string, mimeType?, keyColor? } — keyColor verilmezse perde rengi kenarlardan ölçülür.
+ * Arka planı kaldırır. keyColor verilirse (yapay zekâ tasarımı) chroma key; verilmezse zemin türü görselden
+ * belirlenir (perde rengi, düz renk; fotoğraf/desen zeminde 422 ile açıklama döner).
+ * Body: { imageData?: base64, imageUrl?: string, mimeType?, keyColor? }
  * Response: { pngBase64, bgRemovedUrl?, removedRatio, processingTimeMs, quality }
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { removeChromaBackground, evaluateChromaKeyQuality } from '@/lib/chroma-key';
+import { BackgroundRemovalError, removeBackgroundAuto } from '@/lib/background-removal';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -55,35 +57,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'imageData veya imageUrl zorunludur.' }, { status: 400 });
     }
 
-    const result = await removeChromaBackground(input, {
-      keyColor: keyColor && typeof keyColor === 'object'
-        ? {
-            r: clampNumber(keyColor.r, 0, 255, 0),
-            g: clampNumber(keyColor.g, 0, 255, 255),
-            b: clampNumber(keyColor.b, 0, 255, 0),
-          }
-        : undefined,
-    });
+    // Perde rengi verildiyse (yapay zekâ ile üretilen tasarım) chroma key; verilmediyse zemin türü
+    // görselden belirlenir (perde, düz renk ya da işlenemeyecek karmaşık zemin).
+    let pngBuffer: Buffer;
+    let removedRatio: number;
+    let processingTimeMs: number;
+    let quality: ReturnType<typeof evaluateChromaKeyQuality>;
+    const startedAt = Date.now();
+    if (keyColor && typeof keyColor === 'object') {
+      const result = await removeChromaBackground(input, {
+        keyColor: {
+          r: clampNumber(keyColor.r, 0, 255, 0),
+          g: clampNumber(keyColor.g, 0, 255, 255),
+          b: clampNumber(keyColor.b, 0, 255, 0),
+        },
+      });
+      ({ pngBuffer, removedRatio, processingTimeMs } = result);
+      quality = evaluateChromaKeyQuality(result);
+    } else {
+      const result = await removeBackgroundAuto(input);
+      ({ pngBuffer, removedRatio } = result);
+      processingTimeMs = Date.now() - startedAt;
+      quality = {
+        quality: removedRatio > 0.85 ? 'warning' : 'good',
+        message: result.method === 'solid' ? 'Düz renkli zemin kaldırıldı.' : 'Perde rengi zemin kaldırıldı.',
+      };
+    }
 
-    const quality = evaluateChromaKeyQuality(result);
     let bgRemovedUrl: string | undefined;
-
     // imageUrl verildiyse ve R2 kuruluysa sonucu kullanıcının alanına yükleyip URL dönelim
     if (imageUrl && isR2Configured()) {
       const fileName = createOwnedUploadName(session.id, 'bg-removed', 'image/png');
-      const uploadResult = await uploadToR2(result.pngBuffer, fileName, 'image/png');
+      const uploadResult = await uploadToR2(pngBuffer, fileName, 'image/png');
       bgRemovedUrl = uploadResult.url;
     }
 
     return NextResponse.json({
-      pngBase64: result.pngBuffer.toString('base64'),
+      pngBase64: pngBuffer.toString('base64'),
       bgRemovedUrl,
-      removedRatio: result.removedRatio,
-      processingTimeMs: result.processingTimeMs,
+      removedRatio,
+      processingTimeMs,
       quality: quality.quality,
       qualityMessage: quality.message,
     });
   } catch (error: unknown) {
+    if (error instanceof BackgroundRemovalError) {
+      return NextResponse.json({ error: error.message, kind: error.kind }, { status: 422 });
+    }
     if (error instanceof MediaSourceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

@@ -1,19 +1,98 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+/**
+ * Görsel kırpma penceresi: görselin tamamı üzerinde sürüklenip köşelerinden boyutlandırılan kırpma çerçevesi,
+ * oran seçenekleri (serbest, 1:1, 4:5, 3:4) ve saydam kenar boşluklarını otomatik kırpma. Çıktı, seçilen
+ * bölgenin orijinal çözünürlüğündedir (küçültülmez); tasarımlar kayıpsız PNG olarak kaydedilir.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, Crop, Maximize, RotateCcw, ScanLine, X } from 'lucide-react';
 import { loadImage } from '@/lib/canvas-renderer';
-import { Crop, X, Check, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
+import { DialogPanel } from '@/components/common/DialogPanel';
+import { Spinner } from '@/components/common/Spinner';
 
 interface InteractiveCropModalProps {
   imageSrc: string;
   imageTitle: string;
   isOpen: boolean;
   onClose: () => void;
-  onCropComplete: (croppedDataUrl: string) => void;
+  onCropComplete: (croppedDataUrl: string) => void | Promise<void>;
+  /** 'design': varsayılan serbest oran, otomatik kenar kırpma ve PNG; 'photo': varsayılan 1:1 ve WebP (mockup fotoğrafları) */
+  variant?: 'design' | 'photo';
 }
 
-const OUTPUT_SIZE = 1500; // Final export resolution (px)
-const PREVIEW_SIZE = 300; // Live preview resolution (px) — fast, low GC
+type Rect = { x: number; y: number; w: number; h: number };
+type Aspect = 'free' | '1:1' | '4:5' | '3:4';
+type DragMode = 'move' | 'nw' | 'ne' | 'sw' | 'se';
+
+const ASPECTS: Array<{ id: Aspect; label: string; ratio: number | null }> = [
+  { id: 'free', label: 'Serbest', ratio: null },
+  { id: '1:1', label: '1:1', ratio: 1 },
+  { id: '4:5', label: '4:5', ratio: 4 / 5 },
+  { id: '3:4', label: '3:4', ratio: 3 / 4 },
+];
+/** Fotoğraflarda (mockup) çıktının en uzun kenarı; tasarımlar orijinal çözünürlükte kalır. */
+const PHOTO_MAX_SIDE = 3000;
+const MIN_SIZE = 16;
+/** Sunucu yükleme sınırının (10 MB) biraz altı. */
+const MAX_OUTPUT_BYTES = 9.5 * 1024 * 1024;
+
+/** Oranı koruyarak görselin içine sığan en büyük, ortalanmış dikdörtgen. */
+function fitAspect(width: number, height: number, ratio: number | null, around?: Rect): Rect {
+  if (!ratio) return around ?? { x: 0, y: 0, w: width, h: height };
+  const base = around ?? { x: 0, y: 0, w: width, h: height };
+  let w = base.w;
+  let h = w / ratio;
+  if (h > base.h) { h = base.h; w = h * ratio; }
+  // Çerçeve oranı bozmadan görsel sınırları içinde kalsın.
+  if (w > width) { w = width; h = w / ratio; }
+  if (h > height) { h = height; w = h * ratio; }
+  const cx = base.x + base.w / 2;
+  const cy = base.y + base.h / 2;
+  return clampRect({ x: cx - w / 2, y: cy - h / 2, w, h }, width, height);
+}
+
+function clampRect(rect: Rect, width: number, height: number): Rect {
+  const w = Math.min(Math.max(rect.w, MIN_SIZE), width);
+  const h = Math.min(Math.max(rect.h, MIN_SIZE), height);
+  return { x: Math.min(Math.max(rect.x, 0), width - w), y: Math.min(Math.max(rect.y, 0), height - h), w, h };
+}
+
+/** Saydam olmayan piksellerin sınırı (görsel küçültülerek hızlı taranır); tamamen opaksa null. */
+function contentBounds(img: HTMLImageElement): Rect | null {
+  const width = img.naturalWidth;
+  const height = img.naturalHeight;
+  const scale = Math.min(1, 1024 / Math.max(width, height));
+  const sw = Math.max(1, Math.round(width * scale));
+  const sh = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, sw, sh);
+  const { data } = ctx.getImageData(0, 0, sw, sh);
+  let minX = sw, minY = sh, maxX = -1, maxY = -1, transparent = 0;
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      if (data[(y * sw + x) * 4 + 3]! > 12) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      } else {
+        transparent++;
+      }
+    }
+  }
+  if (maxX < 0 || transparent === 0) return null;
+  // Küçültmede kaybolan kenar pikselleri için bir piksel pay.
+  const x0 = Math.max(0, (minX - 1) / scale);
+  const y0 = Math.max(0, (minY - 1) / scale);
+  const x1 = Math.min(width, (maxX + 2) / scale);
+  const y1 = Math.min(height, (maxY + 2) / scale);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
 
 export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
   imageSrc,
@@ -21,266 +100,248 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
   isOpen,
   onClose,
   onCropComplete,
+  variant = 'photo',
 }) => {
-  const [offsetX, setOffsetX] = useState(50); // 0% (left) to 100% (right)
-  const [offsetY, setOffsetY] = useState(50); // 0% (top) to 100% (bottom)
-  const [previewUrl, setPreviewUrl] = useState<string>('');
-  const [isWide, setIsWide] = useState(false);
-  const [isTall, setIsTall] = useState(false);
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [aspect, setAspect] = useState<Aspect>(variant === 'design' ? 'free' : '1:1');
+  const [rect, setRect] = useState<Rect | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [trimMessage, setTrimMessage] = useState<string | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ mode: DragMode; startX: number; startY: number; start: Rect } | null>(null);
+  const [displayScale, setDisplayScale] = useState(1);
 
-  // Single reusable canvas instances — no GC storm on every slider frame
-  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const loadedImgRef = useRef<HTMLImageElement | null>(null);
-
-  // Escape key handler
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  // Load image once when modal opens or src changes
-  /**
-   * Low-resolution preview render — reuses existing canvas, no new allocations.
-   * Called on every slider change (fast, ~300×300px).
-   */
-  const drawPreview = useCallback(
-    (img: HTMLImageElement, posX: number, posY: number) => {
-      const canvas = previewCanvasRef.current;
-      if (!canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-
-      const srcSize = Math.min(w, h);
-      let srcX = 0;
-      let srcY = 0;
-
-      if (w > h) {
-        srcX = ((posX / 100) * (w - h));
-      } else if (h > w) {
-        srcY = ((posY / 100) * (h - w));
-      }
-
-      ctx.clearRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
-      ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
-
-      setPreviewUrl(canvas.toDataURL('image/jpeg', 0.85));
-    },
-    []
-  );
+  const ratio = ASPECTS.find((a) => a.id === aspect)?.ratio ?? null;
 
   useEffect(() => {
     if (!isOpen || !imageSrc) return;
+    let mounted = true;
+    loadImage(imageSrc)
+      .then((loaded) => {
+        if (!mounted) return;
+        setImg(loaded);
+        setRect(fitAspect(loaded.naturalWidth, loaded.naturalHeight, variant === 'design' ? null : 1));
+      })
+      .catch(() => { if (mounted) setLoadError('Görsel yüklenemedi.'); });
+    return () => { mounted = false; };
+  }, [isOpen, imageSrc, variant]);
 
-    let isMounted = true;
-
-    // Create reusable preview canvas once
-    if (!previewCanvasRef.current) {
-      previewCanvasRef.current = document.createElement('canvas');
-      previewCanvasRef.current.width = PREVIEW_SIZE;
-      previewCanvasRef.current.height = PREVIEW_SIZE;
-    }
-
-    loadImage(imageSrc).then((img) => {
-      if (!isMounted) return;
-      loadedImgRef.current = img;
-
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      setIsWide(w > h);
-      setIsTall(h > w);
-
-      drawPreview(img, offsetX, offsetY);
-    });
-
-    return () => {
-      isMounted = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, imageSrc]);
-
-
-  // Re-render preview when sliders change (if image already loaded)
+  // Ekrandaki görsel boyutu değiştikçe (pencere/telefon döndürme) ölçek güncellenir.
   useEffect(() => {
-    if (loadedImgRef.current) {
-      drawPreview(loadedImgRef.current, offsetX, offsetY);
-    }
-  }, [offsetX, offsetY, drawPreview]);
+    const stage = stageRef.current;
+    if (!stage || !img) return;
+    const update = () => setDisplayScale(stage.clientWidth / img.naturalWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [img]);
 
-  /**
-   * High-resolution final render — only on Save click (1500×1500px, PNG).
-   */
-  const handleSave = useCallback(async () => {
-    const img = loadedImgRef.current;
+  const changeAspect = (next: Aspect) => {
+    setAspect(next);
+    if (!img || !rect) return;
+    const nextRatio = ASPECTS.find((a) => a.id === next)?.ratio ?? null;
+    setRect(fitAspect(img.naturalWidth, img.naturalHeight, nextRatio, rect));
+  };
+
+  const autoTrim = () => {
     if (!img) return;
+    const bounds = contentBounds(img);
+    if (!bounds) {
+      setTrimMessage('Görselde saydam kenar boşluğu yok; çerçeveyi elle ayarlayın.');
+      return;
+    }
+    // Tasarımın etrafında %2 pay bırakılır; oran kilitliyse içerik ortada kalacak şekilde genişletilir.
+    const pad = Math.round(Math.max(bounds.w, bounds.h) * 0.02);
+    let next: Rect = clampRect({ x: bounds.x - pad, y: bounds.y - pad, w: bounds.w + pad * 2, h: bounds.h + pad * 2 }, img.naturalWidth, img.naturalHeight);
+    if (ratio) {
+      let w = next.w, h = next.h;
+      if (w / h > ratio) h = w / ratio; else w = h * ratio;
+      next = fitAspect(img.naturalWidth, img.naturalHeight, ratio, { x: next.x + next.w / 2 - w / 2, y: next.y + next.h / 2 - h / 2, w, h });
+    }
+    setRect(next);
+    setTrimMessage(null);
+  };
 
+  const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    const mode = e.currentTarget.dataset.mode as DragMode | undefined;
+    if (!rect || !mode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { mode, startX: e.clientX, startY: e.clientY, start: rect };
+  };
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag || !img) return;
+    const dx = (e.clientX - drag.startX) / displayScale;
+    const dy = (e.clientY - drag.startY) / displayScale;
+    const W = img.naturalWidth;
+    const H = img.naturalHeight;
+    const s = drag.start;
+    if (drag.mode === 'move') {
+      setRect(clampRect({ ...s, x: s.x + dx, y: s.y + dy }, W, H));
+      return;
+    }
+    // Köşe tutamakları: karşı köşe sabit kalır.
+    const right = s.x + s.w;
+    const bottom = s.y + s.h;
+    let x0 = drag.mode.includes('w') ? Math.min(Math.max(0, s.x + dx), right - MIN_SIZE) : s.x;
+    let y0 = drag.mode.includes('n') ? Math.min(Math.max(0, s.y + dy), bottom - MIN_SIZE) : s.y;
+    let x1 = drag.mode.includes('e') ? Math.max(Math.min(W, right + dx), s.x + MIN_SIZE) : right;
+    let y1 = drag.mode.includes('s') ? Math.max(Math.min(H, bottom + dy), s.y + MIN_SIZE) : bottom;
+    if (ratio) {
+      let w = x1 - x0;
+      let h = y1 - y0;
+      if (w / h > ratio) w = h * ratio; else h = w / ratio;
+      if (drag.mode.includes('w')) x0 = x1 - w; else x1 = x0 + w;
+      if (drag.mode.includes('n')) y0 = y1 - h; else y1 = y0 + h;
+      if (x0 < 0 || y0 < 0 || x1 > W || y1 > H) return;
+    }
+    setRect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+  }, [img, displayScale, ratio]);
+
+  const onPointerUp = () => { dragRef.current = null; };
+
+  const outputSize = useMemo(() => {
+    if (!rect) return null;
+    const w = Math.round(rect.w);
+    const h = Math.round(rect.h);
+    if (variant === 'design') return { w, h };
+    const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(w, h));
+    return { w: Math.round(w * scale), h: Math.round(h * scale) };
+  }, [rect, variant]);
+
+  const handleSave = async () => {
+    if (!img || !rect || !outputSize) return;
     setIsSaving(true);
     try {
-      // Allocate full-size canvas only once, at save time
-      const outputCanvas = document.createElement('canvas');
-      outputCanvas.width = OUTPUT_SIZE;
-      outputCanvas.height = OUTPUT_SIZE;
-      const ctx = outputCanvas.getContext('2d');
-      if (!ctx) return;
-
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      const srcSize = Math.min(w, h);
-      let srcX = 0;
-      let srcY = 0;
-
-      if (w > h) {
-        srcX = ((offsetX / 100) * (w - h));
-      } else if (h > w) {
-        srcY = ((offsetY / 100) * (h - w));
+      const render = (w: number, h: number) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Tuval oluşturulamadı.');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
+        return variant === 'design' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/webp', 0.92);
+      };
+      let { w, h } = outputSize;
+      let dataUrl = render(w, h);
+      // Yükleme sınırı (10 MB) aşılırsa PNG kayıpsız kalır, çözünürlük kademeli düşürülür.
+      while (dataUrl.length * 0.75 > MAX_OUTPUT_BYTES && Math.max(w, h) > 1200) {
+        w = Math.round(w * 0.85);
+        h = Math.round(h * 0.85);
+        dataUrl = render(w, h);
       }
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-
-      const dataUrl = outputCanvas.toDataURL('image/webp', 0.92);
-      onCropComplete(dataUrl);
+      await onCropComplete(dataUrl);
       onClose();
     } finally {
       setIsSaving(false);
     }
-  }, [offsetX, offsetY, onCropComplete, onClose]);
+  };
 
   if (!isOpen) return null;
 
+  const s = displayScale;
+  const handle = 'absolute w-4 h-4 bg-white border-2 border-indigo-600 rounded-full shadow touch-none';
+
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 dark:bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="crop-modal-title"
-        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl relative"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-          <h3
-            id="crop-modal-title"
-            className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"
-          >
-            <Crop className="w-4 h-4 text-amber-500" />
-            İnteraktif Kare Kırpma Editörü — {imageTitle}
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" onClick={(e) => { if (e.target === e.currentTarget && !isSaving) onClose(); }}>
+      <DialogPanel aria-labelledby="crop-modal-title" onClose={isSaving ? undefined : onClose} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-3xl p-4 sm:p-6 space-y-4 shadow-2xl my-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="crop-modal-title" className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 min-w-0">
+            <Crop className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="truncate">Kırp — {imageTitle}</span>
           </h3>
-          <button
-            onClick={onClose}
-            aria-label="Modalı kapat"
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
+          <button type="button" onClick={onClose} disabled={isSaving} aria-label="Kapat" className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Live Preview Area */}
-        <div className="flex flex-col sm:flex-row items-center gap-6 justify-center bg-slate-100 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
-          <div className="w-64 h-64 rounded-xl bg-white dark:bg-slate-900 border border-indigo-400/50 dark:border-indigo-500/50 overflow-hidden relative shadow-xl flex items-center justify-center">
-            {previewUrl ? (
-              <img src={previewUrl} alt="Kırpma önizlemesi" className="w-full h-full object-cover" />
-            ) : (
-              <div className="text-xs text-slate-400 dark:text-slate-500">Yükleniyor...</div>
-            )}
-            <span className="absolute bottom-2 left-2 text-[10px] font-mono bg-slate-950/90 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/40">
-              1:1 Kare Çıktı ({OUTPUT_SIZE}×{OUTPUT_SIZE}px)
-            </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-label="Kırpma oranı" className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+            {ASPECTS.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                role="radio"
+                aria-checked={aspect === a.id}
+                onClick={() => changeAspect(a.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${aspect === a.id ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          {variant === 'design' && (
+            <button type="button" onClick={autoTrim} disabled={!img} className="px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-500/40 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 disabled:opacity-50">
+              <ScanLine className="w-3.5 h-3.5" /> Boşlukları otomatik kırp
+            </button>
+          )}
+          <button type="button" onClick={() => img && setRect(fitAspect(img.naturalWidth, img.naturalHeight, ratio))} disabled={!img} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 disabled:opacity-50">
+            <Maximize className="w-3.5 h-3.5" /> Tümü
+          </button>
+          <button type="button" onClick={() => img && setRect(fitAspect(img.naturalWidth, img.naturalHeight, ratio, { x: img.naturalWidth * 0.1, y: img.naturalHeight * 0.1, w: img.naturalWidth * 0.8, h: img.naturalHeight * 0.8 }))} disabled={!img} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 disabled:opacity-50">
+            <RotateCcw className="w-3.5 h-3.5" /> Sıfırla
+          </button>
+        </div>
+        {trimMessage && <p className="text-[11px] text-amber-700 dark:text-amber-400">{trimMessage}</p>}
+
+        <div className="flex justify-center rounded-2xl p-2 sm:p-3 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+          {loadError ? (
+            <p className="text-xs text-red-600 p-8">{loadError}</p>
+          ) : !img || !rect ? (
+            <div className="flex items-center gap-2 text-xs text-slate-500 p-10"><Spinner className="w-4 h-4" /> Görsel yükleniyor…</div>
+          ) : (
+            <div
+              ref={stageRef}
+              className="relative select-none touch-none checkerboard"
+              style={{ width: `min(100%, calc(60vh * ${img.naturalWidth / img.naturalHeight}))`, aspectRatio: `${img.naturalWidth} / ${img.naturalHeight}` }}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.src} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" />
+              <div
+                role="presentation"
+                className="absolute border-2 border-white outline outline-1 outline-indigo-600 cursor-move"
+                style={{ left: rect.x * s, top: rect.y * s, width: rect.w * s, height: rect.h * s, boxShadow: '0 0 0 9999px rgba(15, 23, 42, 0.55)' }}
+                data-mode="move" onPointerDown={onPointerDown}
+              >
+                {/* Üçler kuralı kılavuzu */}
+                <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
+                  {Array.from({ length: 9 }, (_, i) => <div key={i} className="border border-white/25" />)}
+                </div>
+                <span className={`${handle} -left-2 -top-2 cursor-nwse-resize`} data-mode="nw" onPointerDown={onPointerDown} />
+                <span className={`${handle} -right-2 -top-2 cursor-nesw-resize`} data-mode="ne" onPointerDown={onPointerDown} />
+                <span className={`${handle} -left-2 -bottom-2 cursor-nesw-resize`} data-mode="sw" onPointerDown={onPointerDown} />
+                <span className={`${handle} -right-2 -bottom-2 cursor-nwse-resize`} data-mode="se" onPointerDown={onPointerDown} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Çerçeveyi sürükleyin, köşelerinden boyutlandırın.
+            {outputSize && <> Çıktı: <strong className="font-mono">{outputSize.w}×{outputSize.h}px</strong> {variant === 'design' ? '(PNG, kayıpsız)' : '(WebP)'}</>}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} disabled={isSaving} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl">
+              İptal
+            </button>
+            <button type="button" onClick={() => void handleSave()} disabled={isSaving || !rect} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 disabled:opacity-60">
+              {isSaving ? <Spinner className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+              {isSaving ? 'Kaydediliyor…' : 'Kırp ve kaydet'}
+            </button>
           </div>
         </div>
-
-        {/* Offset Sliders */}
-        <div className="space-y-4 bg-slate-100 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60">
-          {isWide && (
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                <label htmlFor="crop-offset-x" className="flex items-center gap-1.5">
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-amber-500" />
-                  Yatay Hizalama (Sol &harr; Sağ):
-                </label>
-                <span className="font-mono text-amber-500 dark:text-amber-400">{Math.round(offsetX)}%</span>
-              </div>
-              <input
-                id="crop-offset-x"
-                type="range"
-                min="0"
-                max="100"
-                value={offsetX}
-                onChange={(e) => setOffsetX(Number(e.target.value))}
-                aria-label="Yatay kırpma konumu"
-                className="w-full accent-amber-400 cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
-                <span>Sol Kenar</span>
-                <span>Tam Ortala</span>
-                <span>Sağ Kenar</span>
-              </div>
-            </div>
-          )}
-
-          {isTall && (
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                <label htmlFor="crop-offset-y" className="flex items-center gap-1.5">
-                  <ArrowUpDown className="w-3.5 h-3.5 text-amber-500" />
-                  Dikey Hizalama (Yukarı &varr; Aşağı):
-                </label>
-                <span className="font-mono text-amber-500 dark:text-amber-400">{Math.round(offsetY)}%</span>
-              </div>
-              <input
-                id="crop-offset-y"
-                type="range"
-                min="0"
-                max="100"
-                value={offsetY}
-                onChange={(e) => setOffsetY(Number(e.target.value))}
-                aria-label="Dikey kırpma konumu"
-                className="w-full accent-amber-400 cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500">
-                <span>Üst Kenar</span>
-                <span>Tam Ortala</span>
-                <span>Alt Kenar</span>
-              </div>
-            </div>
-          )}
-
-          {!isWide && !isTall && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 text-center font-medium">
-              ✓ Görsel zaten tam 1:1 kare formatındadır!
-            </p>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="flex justify-end space-x-3 pt-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            İptal
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !previewUrl}
-            className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow flex items-center gap-1.5 transition-opacity"
-          >
-            <Check className="w-4 h-4" />
-            <span>{isSaving ? 'Kaydediliyor...' : 'Kırpmayı Kaydet & Uygula'}</span>
-          </button>
-        </div>
-      </div>
+      </DialogPanel>
     </div>
   );
 };

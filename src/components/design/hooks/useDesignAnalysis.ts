@@ -19,8 +19,9 @@ export function useDesignAnalysis({
   const [analysisModalData, setAnalysisModalData] = useState<DesignItem | null>(null);
 
   const handleAnalyzeDesign = useCallback(
-    async (designId: string) => {
-      const design = designs.find((d) => d.id === designId);
+    // `known`: listeye henüz yansımamış yeni bir tasarım (ör. yapay zekâ ile az önce üretilen).
+    async (designId: string, known?: DesignItem) => {
+      const design = known ?? designs.find((d) => d.id === designId);
       if (!design) return;
 
       setAnalyzingIds((prev) => [...prev, designId]);
