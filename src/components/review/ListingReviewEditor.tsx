@@ -9,7 +9,7 @@ import { ArrowDown, ArrowUp, CalendarClock, ExternalLink, Rocket, RotateCcw, Sav
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/ToastContext';
-import { formatDateTime, STATUS_BADGES, toLocalInputValue } from './format';
+import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } from './format';
 import type { ReviewItemView } from './types';
 
 type PhotoRow = { url: string; included: boolean; alt: string };
@@ -89,6 +89,14 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
     }
   };
   const action = (name: string, extra: Record<string, unknown> = {}) => call(`/api/listing-review/${item.runId}`, 'POST', { action: name, ...extra });
+
+  const scheduleFor = async (date: Date) => {
+    if (Number.isNaN(date.getTime())) throw new Error('Geçerli bir tarih seçin.');
+    if (dirty) await save();
+    await action('approve', { scheduledAt: date.toISOString() });
+    onClose();
+    return `İlan ${formatDateTime(date.toISOString())} için zamanlandı.`;
+  };
 
   const badge = STATUS_BADGES[status];
   const includedCount = photos.filter((p) => p.included).length;
@@ -208,22 +216,29 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
           <div className="sticky bottom-0 p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-b-3xl space-y-3">
             {status !== 'rejected' ? (
               <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hızlı zamanla:</span>
+                  {schedulePresets(new Date()).map((preset) => (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      disabled={Boolean(busy)}
+                      onClick={() => void run('schedule', () => scheduleFor(preset.at))}
+                      className="px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-60"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-2">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex flex-col gap-1">
-                    Yayın zamanı
+                    Özel zaman
                     <input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className={inputClass} />
                   </label>
                   <button
                     type="button"
                     disabled={Boolean(busy)}
-                    onClick={() => void run('schedule', async () => {
-                      const date = new Date(scheduleAt);
-                      if (Number.isNaN(date.getTime())) throw new Error('Geçerli bir tarih seçin.');
-                      if (dirty) await save();
-                      await action('approve', { scheduledAt: date.toISOString() });
-                      onClose();
-                      return `İlan ${formatDateTime(date.toISOString())} için zamanlandı.`;
-                    })}
+                    onClick={() => void run('schedule', () => scheduleFor(new Date(scheduleAt)))}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60"
                   >
                     {busy === 'schedule' ? <Spinner className="w-3.5 h-3.5" /> : <CalendarClock className="w-3.5 h-3.5" />} {status === 'scheduled' ? 'Zamanı güncelle' : 'Zamanla'}

@@ -103,6 +103,8 @@ export const SeoStoreParamsAccordion: React.FC = () => {
     }
   };
 
+  const whoMadeLabel = whoMade === 'someone_else' ? 'üretim ortağı' : whoMade === 'collective' ? 'kolektif' : 'kendi üretimim';
+
   const hasAiAnalyzed = Boolean(generatedTitle || generatedDescription || (selectedTags && selectedTags.length > 0) || (availableTaxonomyProperties && availableTaxonomyProperties.length > 0));
 
   const missingRequired = [
@@ -355,6 +357,20 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                   ));
                 })()}
 
+              </>
+            )}
+
+            {/* Nadiren değişen alanlar: varsayılanları çoğu POD mağazası için doğrudur ve son seçim hatırlanır. */}
+            <details className="md:col-span-2 group rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <summary className="cursor-pointer select-none list-none px-3.5 py-3 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-4 h-4 text-slate-400" />
+                  Gelişmiş ayarlar
+                  <span className="font-normal text-slate-500">({whoMadeLabel} · {whenMade === 'made_to_order' ? 'siparişe göre' : whenMade.replace('_', '–')}{sku ? ` · ${sku}` : ''})</span>
+                </span>
+                <ChevronDown className="w-4 h-4 text-slate-400 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3.5 pt-1 border-t border-slate-100 dark:border-slate-800">
                 {/* TAXONOMY ID */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
@@ -449,11 +465,8 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                     Kategori adı ve yayınlanmış ilan sırasına göre otomatik oluşturulur (Örn: TSHIRT_001).
                   </p>
                 </div>
-              </>
-            )}
-
             {/* Auto-renew switch */}
-            <div className="md:col-span-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <div className="md:col-span-2">
               <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -464,6 +477,8 @@ export const SeoStoreParamsAccordion: React.FC = () => {
                 Otomatik Yenileme (Automatic Renewal) - Kapatmanız önerilir
               </label>
             </div>
+              </div>
+            </details>
           </div>
         </div>
       )}

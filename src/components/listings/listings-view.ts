@@ -20,3 +20,19 @@ export function readSavedListingsView(): ListingsView {
   } catch {}
   return 'review';
 }
+
+const AUTO_DRAFT_KEY = 'automania_studio_auto_draft';
+
+/** Üretimden "otomatik ilan hazırla": stüdyo açılınca bu klasör için metni üretip ilanı Hazır İlanlar'a ekler. */
+export function requestStudioAutoDraft(folderId: string) {
+  try { sessionStorage.setItem(AUTO_DRAFT_KEY, folderId); } catch {}
+}
+
+/** Bekleyen otomatik ilan isteği (silinmez; işleme başlanınca clearStudioAutoDraft çağrılır). */
+export function peekStudioAutoDraft(): string | null {
+  try { return sessionStorage.getItem(AUTO_DRAFT_KEY); } catch { return null; }
+}
+
+export function clearStudioAutoDraft() {
+  try { sessionStorage.removeItem(AUTO_DRAFT_KEY); } catch {}
+}

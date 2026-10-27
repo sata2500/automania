@@ -18,6 +18,8 @@ import type {
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { selectEtsyPublishMedia, validateWhoMade } from '@/lib/etsy-preflight';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
+import { clearStudioAutoDraft, openListingsView, peekStudioAutoDraft } from '@/components/listings/listings-view';
+import { pickPreferredId, prefsFromTemplates, readStorePrefs, saveStorePrefs, type EtsyStorePrefs } from '@/lib/etsy-store-prefs';
 import { containsWord, detectPrimarySubject } from '@/lib/listing-subject';
 
 /** Bu cihazda Etsy'ye aktarılmış klasörler: aynı klasörün yanlışlıkla ikinci kez ilan olarak açılmasını önler. */
@@ -149,10 +151,12 @@ function useEtsySeoState() {
   const [coOccurringTags, setCoOccurringTags] = useState<Array<string | KeywordCandidate>>([]);
   const [taxonomyId, setTaxonomyId] = useState<number>(1081);
   // Baskı-isteğe-bağlı ürünlerde Etsy'nin beklediği beyan: tasarımı ben yaptım (+ üretim ortağı).
-  const [whoMade, setWhoMade] = useState<string>('i_did');
-  const [whenMade, setWhenMade] = useState<string>('made_to_order');
+  // Mağaza ayarları son kullanılan değerlerle başlar (bkz. etsy-store-prefs).
+  const [storePrefs, setStorePrefs] = useState<EtsyStorePrefs>(readStorePrefs);
+  const [whoMade, setWhoMade] = useState<string>(() => storePrefs.whoMade || 'i_did');
+  const [whenMade, setWhenMade] = useState<string>(() => storePrefs.whenMade || 'made_to_order');
   const [isSupply, setIsSupply] = useState<boolean>(false);
-  const [productionPartnerId, setProductionPartnerId] = useState<string>('');
+  const [productionPartnerId, setProductionPartnerId] = useState<string>(() => storePrefs.productionPartnerId || '');
   const [isCustomizable, setIsCustomizable] = useState<boolean>(false);
   const [sku, setSku] = useState<string>('');
   const [materials, setMaterials] = useState<string[]>([]);
@@ -796,12 +800,52 @@ function useEtsySeoState() {
   const [returnPolicies, setReturnPolicies] = useState<EtsyReturnPolicy[]>([]);
   const [selectedReturnPolicyId, setSelectedReturnPolicyId] = useState<string>('');
 
-  const [shouldAutoRenew, setShouldAutoRenew] = useState<boolean>(false);
+  const [shouldAutoRenew, setShouldAutoRenew] = useState<boolean>(() => storePrefs.shouldAutoRenew ?? false);
 
   const [availableTaxonomyProperties, setAvailableTaxonomyProperties] = useState<EtsyTaxonomyProperty[]>([]);
   const [selectedTaxonomyProperties, setSelectedTaxonomyProperties] = useState<Record<number, number[]>>({});
 
   const [etsyListings, setEtsyListings] = useState<StoredEtsyListing[]>([]);
+
+  const storePrefsRef = useRef(storePrefs);
+  useEffect(() => { storePrefsRef.current = storePrefs; }, [storePrefs]);
+
+  // Bu cihazda kayıt yoksa otomasyon şablonlarındaki Etsy ayarları başlangıç değeri olur.
+  useEffect(() => {
+    if (storePrefs.shippingProfileId) return;
+    let cancelled = false;
+    fetch('/api/templates')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !Array.isArray(data?.templates)) return;
+        const fromTemplates = prefsFromTemplates(data.templates);
+        if (!fromTemplates.shippingProfileId) return;
+        setStorePrefs(fromTemplates);
+        setSelectedShippingProfileId(prev => prev || fromTemplates.shippingProfileId || '');
+        setSelectedReadinessStateId(prev => prev || fromTemplates.readinessStateId || '');
+        if (fromTemplates.returnPolicyId) setSelectedReturnPolicyId(fromTemplates.returnPolicyId);
+        if (fromTemplates.whoMade) setWhoMade(fromTemplates.whoMade);
+        if (fromTemplates.whenMade) setWhenMade(fromTemplates.whenMade);
+        if (fromTemplates.productionPartnerId) setProductionPartnerId(fromTemplates.productionPartnerId);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // Yalnızca ilk açılışta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Seçilen mağaza ayarları hatırlanır; bir sonraki ilanda aynı değerlerle başlanır.
+  useEffect(() => {
+    saveStorePrefs({
+      shippingProfileId: selectedShippingProfileId,
+      readinessStateId: selectedReadinessStateId,
+      returnPolicyId: selectedReturnPolicyId,
+      shouldAutoRenew,
+      whoMade,
+      whenMade,
+      productionPartnerId,
+    });
+  }, [selectedShippingProfileId, selectedReadinessStateId, selectedReturnPolicyId, shouldAutoRenew, whoMade, whenMade, productionPartnerId]);
 
   // Etsy mağaza ayarlarını (kargo, hazırlık süresi, bölümler, iade politikaları) sekme değiştikçe yenile
   useEffect(() => {
@@ -813,12 +857,14 @@ function useEtsySeoState() {
           setEtsyConnected(true);
           if (data.profiles && data.profiles.length > 0) {
             setShippingProfiles(data.profiles);
-            // Birden fazla profil varsa kullanıcı açıkça seçmeli; yanlış kargo profiliyle ilan açılmasın.
-            if (data.profiles.length === 1) setSelectedShippingProfileId(prev => prev || data.profiles[0].shipping_profile_id.toString());
+            // Son kullanılan (ya da tek) profil seçilir; birden fazla profil varsa ve kayıt yoksa kullanıcı seçer.
+            const profileId = pickPreferredId(data.profiles as EtsyShippingProfile[], (p) => p.shipping_profile_id, storePrefsRef.current.shippingProfileId);
+            if (profileId) setSelectedShippingProfileId(prev => prev || profileId);
           }
           if (data.readinessStates && data.readinessStates.length > 0) {
             setReadinessStates(data.readinessStates);
-            if (data.readinessStates.length === 1) setSelectedReadinessStateId(prev => prev || data.readinessStates[0].readiness_state_id.toString());
+            const readinessId = pickPreferredId(data.readinessStates as EtsyReadinessState[], (r) => r.readiness_state_id, storePrefsRef.current.readinessStateId);
+            if (readinessId) setSelectedReadinessStateId(prev => prev || readinessId);
           }
           // Fetch shop sections
           fetch('/api/etsy/shop-sections')
@@ -835,7 +881,9 @@ function useEtsySeoState() {
             .then(rData => {
               if (rData.success && rData.returnPolicies && rData.returnPolicies.length > 0) {
                 setReturnPolicies(rData.returnPolicies);
-                setSelectedReturnPolicyId(prev => prev || rData.returnPolicies[0].return_policy_id.toString());
+                const policies = rData.returnPolicies as EtsyReturnPolicy[];
+                const policyId = pickPreferredId(policies, (r) => r.return_policy_id, storePrefsRef.current.returnPolicyId) || String(policies[0]!.return_policy_id);
+                setSelectedReturnPolicyId(prev => prev || policyId);
               }
             })
             .catch(() => {});
@@ -992,8 +1040,10 @@ function useEtsySeoState() {
           setBasePrice(data.listing.suggestedBasePrice);
         }
         if (data.listing.taxonomy_id) setTaxonomyId(data.listing.taxonomy_id);
-        if (data.listing.who_made) setWhoMade(data.listing.who_made);
-        if (data.listing.when_made) setWhenMade(data.listing.when_made);
+        // Kim/ne zaman üretti mağazaya ait bilgilerdir: kullanıcının kayıtlı seçimi AI önerisinden önce gelir.
+        const savedPrefs = readStorePrefs();
+        if (data.listing.who_made && !savedPrefs.whoMade) setWhoMade(data.listing.who_made);
+        if (data.listing.when_made && !savedPrefs.whenMade) setWhenMade(data.listing.when_made);
         if (data.listing.is_supply !== undefined) setIsSupply(data.listing.is_supply);
         if (data.listing.materials && Array.isArray(data.listing.materials)) setMaterials(data.listing.materials);
         if (data.listing.styles && Array.isArray(data.listing.styles)) setStyles(data.listing.styles);
@@ -1467,6 +1517,10 @@ function useEtsySeoState() {
   /** Stüdyoda hazırlanan ilanı Etsy'ye göndermeden Hazır İlanlar kuyruğuna ekler (oradan onaylanıp zamanlanır). */
   const handleSaveToReview = async (): Promise<boolean> => {
     if (isSavingToReview) return false;
+    if (!selectedShippingProfileId) {
+      toast.error('Lütfen mağaza ayarlarından bir kargo profili seçin; ilan Etsy\'de bu profille yayınlanır.');
+      return false;
+    }
     const whoMadeError = validateWhoMade({ whoMade, isSupply, whenMade });
     if (whoMadeError) {
       toast.error(whoMadeError);
@@ -1531,6 +1585,52 @@ function useEtsySeoState() {
       setIsSavingToReview(false);
     }
   };
+
+  // Üretimden "Otomatik ilan hazırla": klasör seçilir → metin üretilir → ilan Hazır İlanlar'a eklenir.
+  const [autoDraft, setAutoDraft] = useState<{ folderId: string; phase: 'select' | 'generate' | 'save' } | null>(() => {
+    const folderId = peekStudioAutoDraft();
+    return folderId ? { folderId, phase: 'select' } : null;
+  });
+  // İstek bir kez işlenir; sayfa yenilenirse tekrar çalışmaz.
+  useEffect(() => { clearStudioAutoDraft(); }, []);
+
+  useEffect(() => {
+    if (!autoDraft) return;
+    if (autoDraft.phase === 'select') {
+      if (dbGeneratedMockups.length === 0) return; // çalışma alanı henüz yüklenmedi
+      if (foldersWithMockups.some(f => f.id === autoDraft.folderId) && selectedFolderId !== autoDraft.folderId) {
+        // Bilinçli eşitleme: otomatik akış istenen klasörü seçer; tasarım efekti yeniden değerlendirir.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedFolderId(autoDraft.folderId);
+        setSelectedDesign(null);
+        return;
+      }
+      if (!selectedDesign) return; // klasörün AI analizli tasarımı seçilene kadar beklenir (aşağıdaki süre sınırı)
+      setAutoDraft({ ...autoDraft, phase: 'generate' });
+      void handleGenerateAI({ confirmed: true }).finally(() => setAutoDraft(prev => prev && { ...prev, phase: 'save' }));
+      return;
+    }
+    if (autoDraft.phase === 'save' && !isGenerating) {
+      setAutoDraft(null);
+      if (!generatedTitle.trim() || selectedTags.length === 0) {
+        toast.warning('İlan metni üretilemedi; stüdyoda kontrol edip tekrar deneyin.');
+        return;
+      }
+      void handleSaveToReview().then(saved => { if (saved) openListingsView('review'); });
+    }
+    // handleGenerateAI/handleSaveToReview her render'da yeniden oluşur; adım geçişleri yalnızca durum değişince yapılır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDraft, dbGeneratedMockups.length, foldersWithMockups, selectedFolderId, selectedDesign, isGenerating, generatedTitle, selectedTags]);
+
+  // Klasörde AI analizli tasarım yoksa otomatik akış sessizce takılı kalmasın.
+  useEffect(() => {
+    if (autoDraft?.phase !== 'select') return;
+    const timer = window.setTimeout(() => {
+      setAutoDraft(null);
+      toast.warning('Otomatik ilan hazırlanamadı: klasördeki tasarımın AI analizi bulunamadı. Tasarımlar sekmesinden analiz edip tekrar deneyin.');
+    }, 20_000);
+    return () => window.clearTimeout(timer);
+  }, [autoDraft?.phase, toast]);
 
   const contextValue = {
     activeTab, setActiveTab,
@@ -1633,6 +1733,7 @@ function useEtsySeoState() {
     handlePublishToEtsy,
     handleSaveToReview,
     isSavingToReview,
+    isAutoDrafting: autoDraft !== null,
   };
 
   return contextValue;

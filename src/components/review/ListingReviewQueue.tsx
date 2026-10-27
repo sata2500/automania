@@ -13,7 +13,7 @@ import { Spinner } from '@/components/common/Spinner';
 import type { ListingReviewStatus } from '@/types/templates';
 import { ListingReviewEditor } from './ListingReviewEditor';
 import type { ReviewItemView } from './types';
-import { formatDateTime, STATUS_BADGES, toLocalInputValue } from './format';
+import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } from './format';
 
 type Filter = 'awaiting' | 'scheduled' | 'published' | 'rejected';
 
@@ -124,7 +124,7 @@ export function ListingReviewQueue() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-indigo-500" /> Hazır İlanlar</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Otomasyonların hazırladığı ilanlar Etsy&apos;ye gönderilmeden önce burada bekler. Beğendiklerinizi düzenleyip hemen yayınlayın veya zamanlayın; beğenmediklerinizi reddedin. Zamanlanan ilanlar saatlik zamanlayıcı ile Etsy&apos;de <strong>yayına</strong> alınır.
+            Otomasyonların ve İlan Stüdyosu&apos;nun hazırladığı ilanlar Etsy&apos;ye gönderilmeden önce burada bekler. Beğendiklerinizi düzenleyip hemen yayınlayın veya zamanlayın; beğenmediklerinizi reddedin. Zamanlanan ilanlar saatlik zamanlayıcı ile Etsy&apos;de <strong>yayına</strong> alınır.
           </p>
         </div>
         <button type="button" onClick={() => void load()} className="self-start sm:self-auto px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
@@ -180,9 +180,24 @@ export function ListingReviewQueue() {
             {busy && <Spinner className="w-4 h-4" />}
           </div>
           {showSchedule && filter === 'awaiting' && selectedVisible.length > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+              {schedulePresets(new Date(), selectedVisible.length > 1).map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void bulk('schedule', { startAt: preset.at.toISOString(), intervalMinutes: preset.intervalMinutes ?? (selectedVisible.length > 1 ? interval : 0) })}
+                  className="px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-60"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {showSchedule && filter === 'awaiting' && selectedVisible.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex flex-col gap-1">
-                İlk yayın
+                Özel zaman (ilk yayın)
                 <input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs" />
               </label>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex flex-col gap-1">

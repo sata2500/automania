@@ -402,7 +402,7 @@ export function useBatchGenerator({
       } catch {}
 
       toast.success(
-        `${updatedMatches.length} görsel Etsy için kaydedildi. Sıradaki adım: Etsy SEO sekmesinde ilan metnini üretin.`
+        `${updatedMatches.length} görsel Etsy için kaydedildi. Sıradaki adım: İlanlar sekmesinde ilanı hazırlayın.`
       );
     } catch (error: unknown) {
       console.error('Save for Etsy error:', getErrorMessage(error));

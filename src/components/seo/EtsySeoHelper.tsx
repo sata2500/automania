@@ -7,7 +7,7 @@ import { VariationMatrix } from './tabs/VariationMatrix';
 import { Spinner } from '@/components/common/Spinner';
 
 const EtsySeoContent = () => {
-  const { activeTab, setActiveTab, isGenerating, handleGenerateAI, variations, regenerateConfirmOpen, setRegenerateConfirmOpen } = useEtsySeo();
+  const { activeTab, setActiveTab, isGenerating, handleGenerateAI, variations, regenerateConfirmOpen, setRegenerateConfirmOpen, isAutoDrafting } = useEtsySeo();
 
   return (
     <div className="space-y-6">
@@ -38,6 +38,13 @@ const EtsySeoContent = () => {
             {isGenerating ? 'Üretiliyor…' : 'AI ile Yeniden Üret'}
           </button>
         </div>
+
+        {isAutoDrafting && (
+          <div role="status" className="relative z-10 mt-4 flex items-center gap-2 rounded-xl border border-indigo-300/60 bg-indigo-50 dark:bg-indigo-500/10 p-3 text-xs text-indigo-900 dark:text-indigo-200">
+            <Spinner className="w-4 h-4 shrink-0" />
+            Otomatik ilan hazırlanıyor: metin üretiliyor, ardından ilan Hazır İlanlar&apos;a eklenecek…
+          </div>
+        )}
 
         {regenerateConfirmOpen && (
           <div role="alertdialog" aria-label="Yeniden üretim onayı" className="relative z-10 mt-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs text-amber-100">

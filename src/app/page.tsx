@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { AppSplash, TabSkeleton } from '@/components/common/LoadingScreens';
 import { LoadingState } from '@/components/common/Spinner';
 import { useRouter } from 'next/navigation';
-import { openListingsView, type ListingsView } from '@/components/listings/listings-view';
+import { openListingsView, requestStudioAutoDraft, type ListingsView } from '@/components/listings/listings-view';
 const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <TabSkeleton label="Editör yükleniyor" layout="editor" /> });
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <TabSkeleton label="Tasarımlar yükleniyor" layout="grid" /> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <TabSkeleton label="Üretim stüdyosu yükleniyor" layout="grid" /> });
@@ -545,6 +545,7 @@ function MainContent() {
               hasGenerated={hasGenerated}
               setHasGenerated={setHasGenerated}
               onGoToSeo={user ? () => { openListingsView('studio'); setActiveTab('listings'); } : undefined}
+              onAutoListing={user ? (folderId) => { requestStudioAutoDraft(folderId); openListingsView('studio'); setActiveTab('listings'); } : undefined}
             />
           )}
 
