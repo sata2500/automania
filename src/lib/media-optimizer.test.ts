@@ -10,11 +10,11 @@ async function designPng(size: number) {
 }
 
 describe('optimizeImageForStorage', () => {
-  it('stores designs as near-lossless WebP: smaller, alpha kept, pixels visually identical', async () => {
+  it('stores designs as lossless PNG: smaller, alpha kept, visible pixels identical', async () => {
     const png = await designPng(800);
     const result = await optimizeImageForStorage(png, 'image/png', 'design');
-    expect(result.mimeType).toBe('image/webp');
-    expect(result.buffer.byteLength).toBeLessThan(png.byteLength);
+    expect(result.mimeType).toBe('image/png');
+    expect(result.buffer.byteLength).toBeLessThanOrEqual(png.byteLength);
     expect([result.width, result.height]).toEqual([800, 800]);
     const a = await sharp(png).ensureAlpha().raw().toBuffer();
     const b = await sharp(result.buffer).ensureAlpha().raw().toBuffer();
@@ -23,7 +23,14 @@ describe('optimizeImageForStorage', () => {
       if (a[i + 3]! === 0 && b[i + 3]! === 0) continue;
       for (let c = 0; c < 4; c++) maxDiff = Math.max(maxDiff, Math.abs(a[i + c]! - b[i + c]!));
     }
-    expect(maxDiff).toBeLessThanOrEqual(8);
+    expect(maxDiff).toBe(0);
+  });
+
+  it('makes a loosely compressed PNG smaller without changing it', async () => {
+    const loose = await sharp(await designPng(800)).png({ compressionLevel: 0 }).toBuffer();
+    const result = await optimizeImageForStorage(loose, 'image/png', 'design');
+    expect(result.optimized).toBe(true);
+    expect(result.buffer.byteLength).toBeLessThan(loose.byteLength / 3);
   });
 
   it('caps very large designs at 4500 px', async () => {
@@ -33,7 +40,7 @@ describe('optimizeImageForStorage', () => {
   });
 
   it('keeps the original when re-encoding would not help', async () => {
-    // Zaten sıkıştırılmış (kayıplı WebP) görsel yeniden kodlanınca büyür: orijinal saklanır.
+    // Zaten sıkıştırılmış (kayıplı WebP) görsel PNG'ye çevrilince büyür: orijinal saklanır.
     const lossy = await sharp(await designPng(600)).webp({ quality: 50 }).toBuffer();
     const result = await optimizeImageForStorage(lossy, 'image/webp', 'design');
     expect(result.optimized).toBe(false);

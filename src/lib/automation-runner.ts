@@ -113,7 +113,7 @@ async function jpegForListing(buffer: Buffer): Promise<Buffer> {
   return sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
-/** Tasarım görselini depoya neredeyse kayıpsız WebP olarak yazar (bkz. media-optimizer). */
+/** Tasarım görselini depoya kayıpsız, en yüksek sıkıştırmalı PNG olarak yazar (bkz. media-optimizer). */
 async function storeDesignImage(userId: string, name: string, png: Buffer) {
   const stored = await optimizeImageForStorage(png, 'image/png', 'design').catch(() => null);
   const buffer = stored?.buffer ?? png;

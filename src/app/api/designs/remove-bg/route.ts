@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     let bgRemovedUrl: string | undefined;
     // imageUrl verildiyse ve R2 kuruluysa sonucu kullanıcının alanına yükleyip URL dönelim
     if (imageUrl && isR2Configured()) {
-      // Depoda neredeyse kayıpsız WebP olarak saklanır (önizleme için PNG ayrıca döner).
+      // Depoda kayıpsız, en yüksek sıkıştırmalı PNG olarak saklanır.
       const stored = await optimizeImageForStorage(pngBuffer, 'image/png', 'design');
       const fileName = createOwnedUploadName(session.id, 'bg-removed', stored.mimeType);
       const uploadResult = await uploadToR2(stored.buffer, fileName, stored.mimeType);

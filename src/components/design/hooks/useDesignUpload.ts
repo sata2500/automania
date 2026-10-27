@@ -34,7 +34,7 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
-          // Sunucuda neredeyse kayıpsız WebP (çözünürlük ve saydamlık korunur)
+          // Sunucuda kayıpsız sıkıştırılmış PNG (çözünürlük ve saydamlık korunur)
           const optimized = await optimizeDesignImage(file);
           if (optimized.mimeType === 'image/webp') webpImageCount++;
           else fallbackImageCount++;

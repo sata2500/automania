@@ -30,7 +30,7 @@ export function blobToDataUrl(blob: Blob | File): Promise<string> {
  */
 export interface UploadMediaOptions {
   requireDurable?: boolean;
-  /** Sunucuda sıkıştırma: 'design' neredeyse kayıpsız WebP (baskı dosyası), 'photo' yüksek kaliteli WebP. */
+  /** Sunucuda sıkıştırma: 'design' kayıpsız sıkıştırılmış PNG (baskı dosyası), 'photo' yüksek kaliteli WebP. */
   optimize?: 'design' | 'photo';
 }
 
@@ -290,8 +290,8 @@ export async function optimizeMockupImage(
 
 /**
  * Tasarım (baskı dosyası) yükleme. Giriş yapılmışsa dosya tarayıcıda yeniden kodlanmadan sunucuya gider,
- * sunucu neredeyse kayıpsız WebP'ye çevirir (çözünürlük korunur, en uzun kenar en fazla 4500 px).
- * Sunucu kullanılamıyorsa (misafir) tarayıcıda yüksek kaliteli WebP'ye çevrilip yerelde saklanır.
+ * sunucu kayıpsız ve en yüksek sıkıştırmalı PNG olarak saklar (çözünürlük korunur, en uzun kenar en fazla 4500 px).
+ * Sunucu kullanılamıyorsa (misafir) tarayıcıda PNG'ye çevrilip yerelde saklanır.
  */
 export async function optimizeDesignImage(
   fileOrDataUrl: File | string,
@@ -347,16 +347,9 @@ export async function optimizeDesignImage(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Yerel (misafir) yedek: yüksek kaliteli WebP, saydamlık korunur.
-  const quality = 0.95;
-  let optimizedDataUrl = canvas.toDataURL('image/webp', quality);
-  let finalMime = 'image/webp';
-
-  // Fallback to PNG if browser does not support WebP canvas export
-  if (!optimizedDataUrl.startsWith('data:image/webp')) {
-    optimizedDataUrl = canvas.toDataURL('image/png');
-    finalMime = 'image/png';
-  }
+  // Yerel (misafir) yedek: kayıpsız PNG, saydamlık korunur.
+  const optimizedDataUrl = canvas.toDataURL('image/png');
+  const finalMime = 'image/png';
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
   const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime, { optimize: 'design' });

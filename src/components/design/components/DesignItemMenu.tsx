@@ -30,7 +30,7 @@ async function toPngBlob(blob: Blob): Promise<Blob> {
 }
 
 /**
- * Tasarımı baskıya hazır PNG olarak indirir. Depoda neredeyse kayıpsız WebP olarak saklanan tasarımlar
+ * Tasarımı baskıya hazır PNG olarak indirir. Tasarımlar depoda zaten PNG'dir; eski WebP/JPEG kayıtlar
  * indirirken PNG'ye çevrilir (baskı firmaları çoğunlukla PNG ister; saydamlık korunur).
  */
 async function downloadDesign(design: DesignItem) {

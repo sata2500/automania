@@ -1,9 +1,9 @@
 /**
  * Depolamaya yazılan görsellerin sıkıştırılması (sunucu tarafı, sharp).
- *  - 'design' (baskı dosyası): neredeyse kayıpsız WebP. libwebp'nin "near-lossless" kipi yalnızca gözle
- *    ayırt edilemeyen piksel farklarına izin verir; renk alt örneklemesi (chroma subsampling) yapılmaz,
- *    saydamlık birebir korunur (ölçülen en büyük fark 2/255). Tipik olarak PNG'nin %35–45'i boyutundadır.
- *    En uzun kenar 4500 px ile sınırlı.
+ *  - 'design' (baskı dosyası): kayıpsız PNG, en yüksek sıkıştırma (zlib 9, uyarlanabilir filtre). Tamamen
+ *    saydam piksellerin görünmeyen renk değerleri sıfırlanır; görünen hiçbir piksel değişmez. Yapay zekâ ve
+ *    tasarım programı çıktıları tipik olarak üçte bir boyuta iner. Dosya doğrudan indirilip baskıda/upscale'de
+ *    kullanılabilir. En uzun kenar 4500 px ile sınırlı.
  *  - 'photo' (mockup fotoğrafı): yüksek kaliteli WebP (q90, keskin renk alt örneklemesi), en uzun kenar 3000 px.
  * Sonuç orijinalden büyükse orijinal korunur. Hareketli GIF'lere dokunulmaz.
  */
@@ -28,13 +28,29 @@ export async function optimizeImageForStorage(input: Buffer, mimeType: string, k
   }
   const max = MAX_SIDE[kind];
   const pipeline = sharp(input).rotate().resize(max, max, { fit: 'inside', withoutEnlargement: true });
-  const output = kind === 'design'
-    ? pipeline.webp({ nearLossless: true, quality: 60, alphaQuality: 100, effort: 1 })
-    : pipeline.webp({ quality: 90, smartSubsample: true, effort: 4 });
-  const { data, info } = await output.toBuffer({ resolveWithObject: true });
+
+  let data: Buffer;
+  let info: { width: number; height: number };
+  let outMime: string;
+  if (kind === 'design') {
+    const raw = await pipeline.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const pixels = raw.data;
+    // Görünmeyen (tamamen saydam) piksellerin rengi sıkıştırmayı bozmasın.
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] === 0) { pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0; }
+    }
+    const opaque = meta.hasAlpha === false;
+    const encoded = sharp(pixels, { raw: { width: raw.info.width, height: raw.info.height, channels: 4 } });
+    data = await (opaque ? encoded.removeAlpha() : encoded).png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
+    info = raw.info;
+    outMime = 'image/png';
+  } else {
+    ({ data, info } = await pipeline.webp({ quality: 90, smartSubsample: true, effort: 4 }).toBuffer({ resolveWithObject: true }));
+    outMime = 'image/webp';
+  }
   const resized = info.width !== width || info.height !== height;
   if (!resized && data.byteLength >= input.byteLength) {
     return { buffer: input, mimeType, width, height, optimized: false };
   }
-  return { buffer: data, mimeType: 'image/webp', width: info.width, height: info.height, optimized: true };
+  return { buffer: data, mimeType: outMime, width: info.width, height: info.height, optimized: true };
 }
