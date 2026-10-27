@@ -16,6 +16,7 @@ import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeChromaBackground } from '@/lib/chroma-key';
 import { KEY_COLORS, keyColorPromptValues, pickKeyBackground, type KeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
+import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
 import { loadImageForUser } from '@/lib/media-source';
@@ -108,7 +109,16 @@ async function resolveVariationRows(userId: string, config: TemplateRow['variati
 
 async function jpegForListing(buffer: Buffer): Promise<Buffer> {
   const sharp = (await import('sharp')).default;
-  return sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
+  // mozjpeg: aynı görsel kalitede ~%10-20 daha küçük dosya; Etsy JPEG bekler.
+  return sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+}
+
+/** Tasarım görselini depoya neredeyse kayıpsız WebP olarak yazar (bkz. media-optimizer). */
+async function storeDesignImage(userId: string, name: string, png: Buffer) {
+  const stored = await optimizeImageForStorage(png, 'image/png', 'design').catch(() => null);
+  const buffer = stored?.buffer ?? png;
+  const mimeType = stored?.mimeType ?? 'image/png';
+  return uploadToR2(buffer, createOwnedUploadName(userId, name, mimeType), mimeType);
 }
 
 /** Veo çıktısını (Google Files URI veya data URL) kullanıcının depolamasına kopyalar; ilan bu dosyayı kullanır. */
@@ -220,7 +230,7 @@ async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persi
     { keyColor: KEY_COLORS[keyBackground] },
   );
   if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
-  const uploadResult = await uploadToR2(pngBuffer, createOwnedUploadName(userId, `auto-design-${runId}`, 'image/png'), 'image/png');
+  const uploadResult = await storeDesignImage(userId, `auto-design-${runId}`, pngBuffer);
 
   const newDesign: DesignItem = {
     id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -330,7 +340,7 @@ async function createFabricVariant(
     const images = await generateImage(config, { prompt, image: source });
     if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
     const { pngBuffer, width, height } = await removeChromaBackground(Buffer.from(images[0].data, 'base64'), { keyColor: KEY_COLORS[input.keyBackground] });
-    const upload = await uploadToR2(pngBuffer, createOwnedUploadName(ctx.userId, `auto-design-${ctx.runId}-${target}`, 'image/png'), 'image/png');
+    const upload = await storeDesignImage(ctx.userId, `auto-design-${ctx.runId}-${target}`, pngBuffer);
     await addAutomationDesign(ctx.userId, {
       id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: `${input.designName} · ${target === 'dark' ? 'koyu kumaş' : 'açık kumaş'}`,

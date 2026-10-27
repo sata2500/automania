@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { recolorDesign } from '@/lib/recolor';
+import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -46,8 +47,9 @@ export async function POST(req: NextRequest) {
 
     let recoloredUrl: string;
     if (isR2Configured()) {
-      const fileName = createOwnedUploadName(session.id, `recolor-${mode}`, 'image/png');
-      const uploadResult = await uploadToR2(result.pngBuffer, fileName, 'image/png');
+      const stored = await optimizeImageForStorage(result.pngBuffer, 'image/png', 'design');
+      const fileName = createOwnedUploadName(session.id, `recolor-${mode}`, stored.mimeType);
+      const uploadResult = await uploadToR2(stored.buffer, fileName, stored.mimeType);
       recoloredUrl = uploadResult.url;
     } else {
       // R2 ayarlı değilse base64 dönülür (yerel geliştirme).

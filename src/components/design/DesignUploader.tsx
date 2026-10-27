@@ -242,7 +242,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     const oldSrc = cropTargetDesign.src;
     // Tasarım baskı dosyasıdır: kırpılan bölge orijinal çözünürlükte, kayıpsız PNG olarak saklanır.
     const [serverUrl, size] = await Promise.all([
-      uploadMediaToServer(croppedDataUrl, 'image/png'),
+      uploadMediaToServer(croppedDataUrl, 'image/png', { optimize: 'design' }),
       readImageDimensions(croppedDataUrl),
     ]);
     if (oldSrc && oldSrc !== serverUrl) {
@@ -257,7 +257,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       )
     );
     setCropTargetDesign(null);
-    toast.success(`Tasarım kırpıldı (${size.width}×${size.height}px, PNG).`);
+    toast.success(`Tasarım kırpıldı (${size.width}×${size.height}px).`);
   };
 
   // --- Remove Background Handler ---
@@ -277,7 +277,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       if (!response.ok) throw new Error(data.error || 'Arka plan kaldırılamadı');
 
       // Sunucu depoya yükleyemediyse (R2 yok) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
-      const bgSrc: string = data.bgRemovedUrl || await uploadMediaToServer(`data:image/png;base64,${data.pngBase64}`, 'image/png');
+      const bgSrc: string = data.bgRemovedUrl || await uploadMediaToServer(`data:image/png;base64,${data.pngBase64}`, 'image/png', { optimize: 'design' });
 
       setDesigns((prev) =>
         prev.map((d) =>
@@ -320,7 +320,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       // Sunucu depoya yükleyemediyse (yerel geliştirme) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
       const recoloredUrl: string = data.recoloredUrl.startsWith('data:')
-        ? await uploadMediaToServer(data.recoloredUrl, 'image/png')
+        ? await uploadMediaToServer(data.recoloredUrl, 'image/png', { optimize: 'design' })
         : data.recoloredUrl;
 
       // Yeni bir tasarım objesi oluştur

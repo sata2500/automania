@@ -1,53 +1,10 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
-import { isR2Configured, uploadToR2 } from '@/lib/r2';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import {
-  createOwnedUploadName,
-  detectMimeFromMagicBytes,
-  getUploadLimit,
-  isAllowedUploadMime,
-  validateUploadSize,
-} from '@/lib/upload-security';
+import { isOptimizeKind } from '@/lib/media-optimizer';
+import { getUploadLimit } from '@/lib/upload-security';
+import { persistUpload } from '@/lib/upload-store';
 
-const DATA_DIR = path.join(process.cwd(), '.data');
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-
-async function saveFileLocally(filename: string, buffer: Buffer): Promise<string> {
-  await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  const filePath = path.join(UPLOADS_DIR, path.basename(filename));
-  await fs.writeFile(filePath, buffer, { mode: 0o600 });
-  return `/api/uploads/${encodeURIComponent(path.basename(filename))}`;
-}
-
-async function persistUpload(userId: string, originalName: string, mimeType: string, buffer: Buffer) {
-  if (!isAllowedUploadMime(mimeType)) {
-    return NextResponse.json({ error: 'Desteklenmeyen dosya türü.' }, { status: 415 });
-  }
-
-  const sizeError = validateUploadSize(buffer.byteLength, mimeType);
-  if (sizeError) return NextResponse.json({ error: sizeError }, { status: 413 });
-
-  const detectedMime = detectMimeFromMagicBytes(buffer);
-  if (detectedMime !== mimeType && !(mimeType === 'video/webm' && detectedMime === null)) {
-    return NextResponse.json({ error: 'Dosya içeriği ile MIME türü eşleşmiyor.' }, { status: 415 });
-  }
-
-  const filename = createOwnedUploadName(userId, originalName, mimeType);
-
-  if (isR2Configured()) {
-    try {
-      const result = await uploadToR2(buffer, filename, mimeType);
-      return NextResponse.json({ success: true, url: result.url, storageProvider: 'r2', durable: true });
-    } catch (error) {
-      console.error('[Upload Route] R2 upload failed; using local fallback.', error instanceof Error ? error.message : 'unknown error');
-    }
-  }
-
-  const localUrl = await saveFileLocally(filename, buffer);
-  return NextResponse.json({ success: true, url: localUrl, storageProvider: 'local', durable: false });
-}
+export const maxDuration = 120;
 
 function parseBase64DataUrl(dataUrl: string): { mimeType: string; base64: string } | null {
   const match = dataUrl.match(/^data:([^;,]+);base64,([\s\S]+)$/);
@@ -74,7 +31,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: 'Dosya boyutu izin verilen sınırı aşıyor.' }, { status: 413 });
       }
       const buffer = Buffer.from(await file.arrayBuffer());
-      return await persistUpload(session.id, file.name, mimeType, buffer);
+      const optimize = formData.get('optimize');
+      return await persistUpload(session.id, file.name, mimeType, buffer, isOptimizeKind(optimize) ? optimize : undefined);
     } catch (error) {
       console.error('[Upload Route] FormData upload error:', error instanceof Error ? error.message : 'unknown error');
       return NextResponse.json({ error: 'Dosya yüklenemedi.' }, { status: 400 });
@@ -100,7 +58,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     const buffer = Buffer.from(parsed.base64, 'base64');
-    return await persistUpload(session.id, typeof body.filename === 'string' ? body.filename : 'upload', requestedMime, buffer);
+    return await persistUpload(session.id, typeof body.filename === 'string' ? body.filename : 'upload', requestedMime, buffer, isOptimizeKind(body.optimize) ? body.optimize : undefined);
   } catch (error) {
     console.error('[Upload Route] JSON upload error:', error instanceof Error ? error.message : 'unknown error');
     return NextResponse.json({ error: 'Upload işlenemedi.' }, { status: 400 });

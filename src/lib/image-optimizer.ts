@@ -30,6 +30,71 @@ export function blobToDataUrl(blob: Blob | File): Promise<string> {
  */
 export interface UploadMediaOptions {
   requireDurable?: boolean;
+  /** Sunucuda sıkıştırma: 'design' neredeyse kayıpsız WebP (baskı dosyası), 'photo' yüksek kaliteli WebP. */
+  optimize?: 'design' | 'photo';
+}
+
+/** Vercel'in tek istek sınırının (~4,5 MB) altında kalan parça boyutu; daha büyük dosyalar parçalı yüklenir. */
+const CHUNK_BYTES = 3.5 * 1024 * 1024;
+
+/** Büyük dosyayı parçalar halinde yükler (bkz. /api/upload/chunk ve /complete). */
+type UploadInfo = { url: string; durable: boolean; size?: number; mimeType?: string; width?: number; height?: number };
+
+async function uploadInChunks(file: File, options: UploadMediaOptions): Promise<UploadInfo | null> {
+  const uploadId = crypto.randomUUID();
+  const total = Math.ceil(file.size / CHUNK_BYTES);
+  for (let index = 0; index < total; index++) {
+    const part = file.slice(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES);
+    let res: Response | null = null;
+    // Mobil bağlantı kopmalarına karşı her parça bir kez yeniden denenir.
+    for (let attempt = 0; attempt < 2 && !res?.ok; attempt++) {
+      res = await fetch(`/api/upload/chunk?uploadId=${uploadId}&index=${index}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: part,
+      }).catch(() => null);
+    }
+    if (!res?.ok) return null;
+  }
+  const res = await fetch('/api/upload/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploadId, total, filename: file.name, mimeType: file.type, optimize: options.optimize }),
+  });
+  if (!res.ok) return null;
+  return readUploadInfo(await res.json());
+}
+
+function readUploadInfo(json: Record<string, unknown>): UploadInfo | null {
+  if (typeof json.url !== 'string') return null;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  return {
+    url: json.url,
+    durable: json.durable === true,
+    size: num(json.size),
+    mimeType: typeof json.mimeType === 'string' ? json.mimeType : undefined,
+    width: num(json.width),
+    height: num(json.height),
+  };
+}
+
+/**
+ * Dosyayı olduğu gibi (tarayıcıda yeniden kodlamadan) kalıcı depoya yükler, sıkıştırmayı sunucuya bırakır.
+ * Sunucu kullanılamıyorsa (misafir, depolama yok) null döner.
+ */
+async function uploadOriginalForServerOptimization(file: File, optimize: 'design' | 'photo'): Promise<UploadInfo | null> {
+  try {
+    if (file.size > CHUNK_BYTES) return await uploadInChunks(file, { optimize });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('optimize', optimize);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!res.ok) return null;
+    const info = readUploadInfo(await res.json());
+    return info?.durable ? info : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function uploadMediaToServer(
@@ -85,10 +150,21 @@ export async function uploadMediaToServer(
       fileToUpload = new File([blob], `upload-${Date.now()}.${ext}`, { type: actualType });
     }
 
+    // Method 0: Büyük dosyalar parçalı yüklenir (tek istek sınırı ~4,5 MB).
+    if (fileToUpload.size > CHUNK_BYTES) {
+      try {
+        const chunked = await uploadInChunks(fileToUpload, options);
+        if (chunked && (!options.requireDurable || chunked.durable)) return chunked.url;
+      } catch (chunkErr) {
+        console.warn('[uploadMediaToServer] Chunked upload failed, trying direct upload:', chunkErr);
+      }
+    }
+
     // Method 1: Direct FormData Upload to /api/upload (Cloudflare R2 / Server Storage)
     try {
       const formData = new FormData();
       formData.append('file', fileToUpload);
+      if (options.optimize) formData.append('optimize', options.optimize);
       const uploadRes = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
@@ -112,6 +188,7 @@ export async function uploadMediaToServer(
             dataUrl: rawDataUrl,
             filename: fileToUpload.name,
             mimeType: fileToUpload.type,
+            optimize: options.optimize,
           }),
         });
         if (jsonRes.ok) {
@@ -212,13 +289,35 @@ export async function optimizeMockupImage(
 }
 
 /**
- * Optimizes PNG/JPEG/WebP designs while 100% preserving alpha channel transparency.
- * Automatically compresses to optimized WebP format for fast rendering, tiny file size, and high visual clarity.
+ * Tasarım (baskı dosyası) yükleme. Giriş yapılmışsa dosya tarayıcıda yeniden kodlanmadan sunucuya gider,
+ * sunucu neredeyse kayıpsız WebP'ye çevirir (çözünürlük korunur, en uzun kenar en fazla 4500 px).
+ * Sunucu kullanılamıyorsa (misafir) tarayıcıda yüksek kaliteli WebP'ye çevrilip yerelde saklanır.
  */
 export async function optimizeDesignImage(
   fileOrDataUrl: File | string,
-  maxDimension = 2000
+  maxDimension = 4096
 ): Promise<OptimizedImageResult> {
+  if (fileOrDataUrl instanceof File && /^image\/(png|jpeg|webp)$/.test(fileOrDataUrl.type)) {
+    const info = await uploadOriginalForServerOptimization(fileOrDataUrl, 'design');
+    if (info) {
+      let { width, height } = info;
+      if (!width || !height) {
+        const { img } = await loadImageSource(fileOrDataUrl);
+        width = img.naturalWidth;
+        height = img.naturalHeight;
+      }
+      return {
+        dataUrl: '',
+        url: info.url,
+        width,
+        height,
+        originalSize: fileOrDataUrl.size,
+        optimizedSize: info.size ?? fileOrDataUrl.size,
+        mimeType: info.mimeType ?? fileOrDataUrl.type,
+      };
+    }
+  }
+
   const { img, originalSize } = await loadImageSource(fileOrDataUrl);
 
   let width = img.naturalWidth || img.width;
@@ -248,8 +347,8 @@ export async function optimizeDesignImage(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Compress to WebP preserving alpha transparency
-  const quality = 0.88;
+  // Yerel (misafir) yedek: yüksek kaliteli WebP, saydamlık korunur.
+  const quality = 0.95;
   let optimizedDataUrl = canvas.toDataURL('image/webp', quality);
   let finalMime = 'image/webp';
 
@@ -260,9 +359,7 @@ export async function optimizeDesignImage(
   }
 
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
-
-  // Upload optimized binary design to server API (or fallback to local dataUrl if guest/offline)
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime);
+  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime, { optimize: 'design' });
 
   return {
     dataUrl: optimizedDataUrl,

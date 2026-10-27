@@ -17,13 +17,28 @@ interface DesignItemMenuProps {
   onDelete: (id: string) => void;
 }
 
-/** Tasarım dosyasını orijinal hâliyle indirir (saydam PNG korunur). */
+/** Görseli kayıpsız PNG'ye çevirir (saydamlık korunur); zaten PNG ise olduğu gibi döner. */
+async function toPngBlob(blob: Blob): Promise<Blob> {
+  if (blob.type === 'image/png') return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  return new Promise((resolve, reject) => canvas.toBlob((png) => (png ? resolve(png) : reject(new Error('PNG oluşturulamadı.'))), 'image/png'));
+}
+
+/**
+ * Tasarımı baskıya hazır PNG olarak indirir. Depoda neredeyse kayıpsız WebP olarak saklanan tasarımlar
+ * indirirken PNG'ye çevrilir (baskı firmaları çoğunlukla PNG ister; saydamlık korunur).
+ */
 async function downloadDesign(design: DesignItem) {
   const fileName = `${design.name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'tasarim'}.png`;
   try {
     const res = await fetch(design.src);
     if (!res.ok) throw new Error(String(res.status));
-    const url = URL.createObjectURL(await res.blob());
+    const url = URL.createObjectURL(await toPngBlob(await res.blob()));
     const link = Object.assign(document.createElement('a'), { href: url, download: fileName });
     document.body.appendChild(link);
     link.click();

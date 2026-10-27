@@ -34,8 +34,8 @@ const ASPECTS: Array<{ id: Aspect; label: string; ratio: number | null }> = [
 /** Fotoğraflarda (mockup) çıktının en uzun kenarı; tasarımlar orijinal çözünürlükte kalır. */
 const PHOTO_MAX_SIDE = 3000;
 const MIN_SIZE = 16;
-/** Sunucu yükleme sınırının (10 MB) biraz altı. */
-const MAX_OUTPUT_BYTES = 9.5 * 1024 * 1024;
+/** Parçalı yükleme sınırının (60 MB) altı; sunucu kaydederken ayrıca sıkıştırır. */
+const MAX_OUTPUT_BYTES = 55 * 1024 * 1024;
 
 /** Oranı koruyarak görselin içine sığan en büyük, ortalanmış dikdörtgen. */
 function fitAspect(width: number, height: number, ratio: number | null, around?: Rect): Rect {
@@ -231,7 +231,7 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
       };
       let { w, h } = outputSize;
       let dataUrl = render(w, h);
-      // Yükleme sınırı (10 MB) aşılırsa PNG kayıpsız kalır, çözünürlük kademeli düşürülür.
+      // Yükleme sınırı aşılırsa PNG kayıpsız kalır, çözünürlük kademeli düşürülür.
       while (dataUrl.length * 0.75 > MAX_OUTPUT_BYTES && Math.max(w, h) > 1200) {
         w = Math.round(w * 0.85);
         h = Math.round(h * 0.85);
@@ -329,7 +329,7 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Çerçeveyi sürükleyin, köşelerinden boyutlandırın.
-            {outputSize && <> Çıktı: <strong className="font-mono">{outputSize.w}×{outputSize.h}px</strong> {variant === 'design' ? '(PNG, kayıpsız)' : '(WebP)'}</>}
+            {outputSize && <> Çıktı: <strong className="font-mono">{outputSize.w}×{outputSize.h}px</strong> {variant === 'design' ? '(kayıpsız kalitede)' : '(WebP)'}</>}
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={isSaving} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl">

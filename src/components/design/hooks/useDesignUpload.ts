@@ -34,8 +34,8 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
-          // Automatic WebP compression with 100% alpha transparency preservation
-          const optimized = await optimizeDesignImage(file, 2000);
+          // Sunucuda neredeyse kayıpsız WebP (çözünürlük ve saydamlık korunur)
+          const optimized = await optimizeDesignImage(file);
           if (optimized.mimeType === 'image/webp') webpImageCount++;
           else fallbackImageCount++;
           savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);

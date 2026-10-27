@@ -185,7 +185,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
         // Kalıcı depolamaya yükle. Başarısız olursa görsel base64 olarak çalışma alanına eklenmez;
         // aksi halde çalışma alanı bulut sınırını aşar ve senkron durur.
         const [src, size] = await Promise.all([
-          uploadMediaToServer(dataUrl, finalMime, { requireDurable: true }),
+          uploadMediaToServer(dataUrl, finalMime, { requireDurable: true, optimize: 'design' }),
           readImageSize(dataUrl),
         ]);
 

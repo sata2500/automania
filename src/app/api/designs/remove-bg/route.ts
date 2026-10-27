@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { removeChromaBackground, evaluateChromaKeyQuality } from '@/lib/chroma-key';
 import { BackgroundRemovalError, removeBackgroundAuto } from '@/lib/background-removal';
+import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { uploadToR2, isR2Configured } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -87,8 +88,10 @@ export async function POST(req: NextRequest) {
     let bgRemovedUrl: string | undefined;
     // imageUrl verildiyse ve R2 kuruluysa sonucu kullanıcının alanına yükleyip URL dönelim
     if (imageUrl && isR2Configured()) {
-      const fileName = createOwnedUploadName(session.id, 'bg-removed', 'image/png');
-      const uploadResult = await uploadToR2(pngBuffer, fileName, 'image/png');
+      // Depoda neredeyse kayıpsız WebP olarak saklanır (önizleme için PNG ayrıca döner).
+      const stored = await optimizeImageForStorage(pngBuffer, 'image/png', 'design');
+      const fileName = createOwnedUploadName(session.id, 'bg-removed', stored.mimeType);
+      const uploadResult = await uploadToR2(stored.buffer, fileName, stored.mimeType);
       bgRemovedUrl = uploadResult.url;
     }
 
