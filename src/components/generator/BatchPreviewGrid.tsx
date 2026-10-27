@@ -94,7 +94,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
             {savedForEtsyCount} görsel Etsy için kaydedildi. Sıradaki adım: ilan başlığı, açıklama ve etiketleri üretmek.
           </span>
           <button type="button" onClick={onGoToSeo} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shrink-0">
-            Etsy SEO&apos;ya git <ArrowRight className="w-3.5 h-3.5" />
+            İlan Stüdyosu&apos;na git <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       )}

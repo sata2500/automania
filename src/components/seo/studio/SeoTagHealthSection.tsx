@@ -8,7 +8,7 @@ import { evaluateEtsyListingSeo, type KeywordPoolInputRow } from '@/lib/etsy-seo
 export const SeoTagHealthSection: React.FC = () => {
   const { selectedTags, generatedTitle, generatedDescription, enrichedKeywords } = useEtsySeo();
 
-  // Genel SEO skoru "5. Etsy İlanlarım" sekmesiyle aynı motor ve ölçekle hesaplanır;
+  // Genel SEO skoru "Etsy'deki İlanlarım" görünümüyle aynı motor ve ölçekle hesaplanır;
   // böylece ilan yayınlandıktan sonra iki sekmede farklı puan görülmez.
   const overall = useMemo(() => {
     const keywordPoolRows: KeywordPoolInputRow[] = (enrichedKeywords || [])

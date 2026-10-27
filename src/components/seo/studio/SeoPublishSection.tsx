@@ -1,11 +1,12 @@
 'use client';
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ShieldCheck, Send, CheckCircle, XCircle, ExternalLink, CircleAlert } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Send, ListChecks, CheckCircle, XCircle, ExternalLink, CircleAlert } from 'lucide-react';
 import { buildPublishChecklist } from '@/lib/etsy-preflight';
 import { LIVE_PUBLISH_CONFIRMATION, isLivePublishEnabled } from '@/lib/etsy-publish-mode';
 import { EtsySerpPreview } from '../components/EtsySerpPreview';
 import { useEtsySeo } from '../context/EtsySeoContext';
 import { Spinner } from '@/components/common/Spinner';
+import { openListingsView } from '@/components/listings/listings-view';
 
 type MockupPreview = {
   folderId?: string;
@@ -30,6 +31,8 @@ export const SeoPublishSection: React.FC = () => {
     isSupply,
     isPublishing,
     handlePublishToEtsy,
+    handleSaveToReview,
+    isSavingToReview,
     publishResult,
     duplicatePublish,
     setDuplicatePublish,
@@ -138,12 +141,24 @@ export const SeoPublishSection: React.FC = () => {
               <div className="flex w-full sm:w-auto flex-col gap-2">
                 <div className="flex w-full flex-col sm:flex-row gap-2">
                   <button
+                    type="button"
+                    onClick={async () => {
+                      if (await handleSaveToReview()) openListingsView('review');
+                    }}
+                    disabled={!canPublish || isSavingToReview}
+                    className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    title="Etsy'ye göndermeden Hazır İlanlar'a ekler; oradan onaylayıp hemen veya zamanlı yayınlarsınız."
+                  >
+                    {isSavingToReview ? <Spinner className="w-3.5 h-3.5" /> : <ListChecks className="w-3.5 h-3.5" />}
+                    Hazır İlanlar&apos;a Ekle
+                  </button>
+                  <button
                     onClick={() => publish('draft')}
                     disabled={!canPublish}
                     className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isPublishing ? <Spinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                    Taslak (Draft) Olarak Aktar
+                    Etsy’ye Taslak Gönder
                   </button>
                   <button
                     type="button"

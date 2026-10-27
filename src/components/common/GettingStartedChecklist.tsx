@@ -3,6 +3,7 @@
 import React from 'react';
 import { CheckCircle2, Circle, Sparkles, X, ArrowRight } from 'lucide-react';
 import type { TabKey } from '@/components/common/Header';
+import { openListingsView } from '@/components/listings/listings-view';
 import type { DesignItem, MockupItem } from '@/types/pod';
 
 interface GettingStartedChecklistProps {
@@ -37,15 +38,15 @@ export const GettingStartedChecklist: React.FC<GettingStartedChecklistProps> = (
     { id: 'mockup', label: 'Mockup ekleyin', hint: 'Ürün fotoğraflarınızı "1. Mockup\'lar" sekmesine yükleyin.', done: mockups.length > 0, action: () => onNavigate('mockups'), actionLabel: 'Mockup\'lara git' },
     { id: 'area', label: 'Baskı alanını yerleştirin', hint: 'Tasarımın mockup üzerinde nereye basılacağını belirleyin ve kaydedin.', done: hasPrintArea, action: () => onNavigate('mockups'), actionLabel: 'Baskı alanı çiz' },
     { id: 'design', label: 'Tasarım yükleyin', hint: 'Şeffaf PNG tasarımınızı yükleyin ya da AI ile üretin.', done: designs.length > 0, action: () => onNavigate('designs'), actionLabel: 'Tasarımlara git' },
-    { id: 'active', label: 'Tasarımı üretime alın', hint: 'Toplu üretim yalnızca "aktif" tasarımlarla yapılır; kartın menüsünden aktif edin.', done: designs.some((d) => d.isSelected), action: () => onNavigate('designs'), actionLabel: 'Tasarımı aktif et' },
-    { id: 'generate', label: 'Görselleri üretin', hint: 'Mockup ve tasarımları eşleştirip ilan görsellerini oluşturun.', done: hasGenerated, action: () => onNavigate('generator'), actionLabel: 'Toplu üretime git' },
+    { id: 'active', label: 'Tasarımı üretime alın', hint: 'Üretim yalnızca "aktif" tasarımlarla yapılır; kartın menüsünden aktif edin.', done: designs.some((d) => d.isSelected), action: () => onNavigate('designs'), actionLabel: 'Tasarımı aktif et' },
+    { id: 'generate', label: 'Görselleri üretin', hint: 'Mockup ve tasarımları eşleştirip ilan görsellerini oluşturun.', done: hasGenerated, action: () => onNavigate('generator'), actionLabel: 'Üretime git' },
     {
       id: 'publish',
       label: isSignedIn ? 'Etsy\'de yayınlayın' : 'Giriş yapıp Etsy\'de yayınlayın',
-      hint: isSignedIn ? 'AI ile başlık ve etiketleri üretip ilanı Etsy\'ye taslak olarak aktarın.' : 'SEO ve Etsy yayını için hesap gerekir; taslaklarınız girişten sonra hesabınıza aktarılır.',
+      hint: isSignedIn ? 'İlanlar > İlan Stüdyosu\'nda AI ile başlık ve etiketleri üretip ilanı Hazır İlanlar\'a ekleyin veya Etsy\'ye gönderin.' : 'SEO ve Etsy yayını için hesap gerekir; taslaklarınız girişten sonra hesabınıza aktarılır.',
       done: false,
-      action: isSignedIn ? () => onNavigate('seo') : onLogin,
-      actionLabel: isSignedIn ? 'Etsy SEO\'ya git' : 'Giriş yap',
+      action: isSignedIn ? () => { openListingsView('studio'); onNavigate('listings'); } : onLogin,
+      actionLabel: isSignedIn ? 'İlan Stüdyosu\'na git' : 'Giriş yap',
     },
   ];
 

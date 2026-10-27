@@ -175,7 +175,7 @@ function formatMegabytes(bytes: number): string {
 }
 
 /** data: URL'nin gerçek MIME türü (yoksa yedek değer). */
-export function mimeTypeOfDataUrl(value: string, fallback: string): string {
+function mimeTypeOfDataUrl(value: string, fallback: string): string {
   const match = /^data:([^;,]+)[;,]/.exec(value);
   return match?.[1] || fallback;
 }
@@ -717,7 +717,7 @@ export async function loadSampleAppData(): Promise<AppDataPayload> {
 /**
  * Calls the internal blob API to securely delete a list of URLs from Vercel Blob.
  */
-export async function deleteBlobs(urls: string[]): Promise<void> {
+async function deleteBlobs(urls: string[]): Promise<void> {
   if (!urls || urls.length === 0) return;
   const unique = [...new Set(urls.filter(Boolean))];
   // Sunucu tek istekte en fazla 100 URL kabul eder.

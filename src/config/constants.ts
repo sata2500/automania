@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   USER_LIST: 'automania_pod_user_list_v1',
   THEME_PREFERENCE: 'automania_pod_theme_preference',
   ACTIVE_TAB: 'automania_pod_active_tab_v1',
+  LISTINGS_VIEW: 'automania_listings_view',
   GUEST_BANNER_DISMISSED: 'automania_guest_banner_dismissed',
   EMPTY_WORKSPACE_DISMISSED: 'automania_empty_workspace_dismissed',
   PWA_BANNER_DISMISSED: 'automania_pwa_banner_dismissed',

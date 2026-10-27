@@ -21,11 +21,10 @@ const EtsySeoContent = () => {
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
-                <span>Etsy Listing Studio & Varyasyon Editörü</span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full uppercase font-mono">v3 Canlı</span>
+                <span>İlan Stüdyosu</span>
               </h2>
               <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
-                Yapay Zeka SEO Metin Yazarı ile başlık, açıklama ve 13 altın etiket üretin; kargo/mağaza ayarları ve varyasyon fiyatlarıyla doğrudan Etsy&apos;ye aktarın.
+                AI ile başlık, açıklama ve 13 etiket üretin, varyasyon fiyatlarını ayarlayın; ilanı Hazır İlanlar&apos;a ekleyin veya doğrudan Etsy&apos;ye gönderin.
               </p>
             </div>
           </div>
@@ -36,7 +35,7 @@ const EtsySeoContent = () => {
             className="w-full md:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
           >
             {isGenerating ? <Spinner className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-            {isGenerating ? 'SEO Modeli Üretiyor...' : 'AI SEO İle Yeniden Üret'}
+            {isGenerating ? 'Üretiliyor…' : 'AI ile Yeniden Üret'}
           </button>
         </div>
 
@@ -57,8 +56,7 @@ const EtsySeoContent = () => {
             className={`flex-1 py-2.5 px-3 sm:px-4 rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 ${activeTab === 'studio' || activeTab === 'publish' ? 'bg-emerald-500 text-white font-bold shadow-md' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             <FileText className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">1. AI Listing Studio & Etsy Yayınlama (Uçtan Uca İlan & SEO)</span>
-            <span className="sm:hidden">1. AI Listing Studio</span>
+            <span>İlan Metni & Yayın</span>
           </button>
 
           <button
@@ -66,8 +64,7 @@ const EtsySeoContent = () => {
             className={`flex-1 py-2.5 px-3 sm:px-4 rounded-lg transition-all flex items-center justify-center gap-2 shrink-0 ${activeTab === 'variations' ? 'bg-emerald-500 text-white font-bold shadow-md' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             <Layers className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">2. Varyasyon & Fiyat Matris Tablosu ({variations.length} Kombinasyon)</span>
-            <span className="sm:hidden">2. Varyasyon & Fiyat ({variations.length})</span>
+            <span>Varyasyon & Fiyat ({variations.length})</span>
           </button>
         </div>
       </div>

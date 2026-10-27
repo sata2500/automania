@@ -288,7 +288,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div>
                   <span className="font-bold block">Oturum Açmanın Avantajları</span>
                   <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed block mt-0.5">
-                    Google ile ücretsiz oturum açarak Etsy mağazanızı bağlayabilir, Etsy SEO ve İlan Yöneticisini kullanabilir, bulut yedekleme ile verilerinize her cihazdan erişebilirsiniz.
+                    Google ile ücretsiz oturum açarak Etsy mağazanızı bağlayabilir, ilan stüdyosunu ve otomatik yayın kuyruğunu kullanabilir, bulut yedekleme ile verilerinize her cihazdan erişebilirsiniz.
                   </span>
                 </div>
               </div>

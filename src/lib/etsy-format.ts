@@ -16,7 +16,7 @@ export const MAX_ETSY_TAG_CHARS = 20;
 const DISALLOWED_TAG_CHARS = /[^\p{L}\p{N}\s\-'™©®]/gu;
 
 /** Tek bir etiketi Etsy'nin kabul edeceği hale getirir (geçersizse boş string). */
-export function sanitizeEtsyTag(tag: unknown): string {
+function sanitizeEtsyTag(tag: unknown): string {
   if (typeof tag !== 'string') return '';
   const cleaned = tag.replace(DISALLOWED_TAG_CHARS, ' ').replace(/\s+/g, ' ').trim();
   return cleaned.length <= MAX_ETSY_TAG_CHARS ? cleaned : '';

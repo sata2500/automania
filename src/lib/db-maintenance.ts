@@ -50,7 +50,7 @@ async function lastAppliedMigrationMillis(): Promise<number | null> {
   }
 }
 
-export async function getMigrationStatus(): Promise<MigrationStatus> {
+async function getMigrationStatus(): Promise<MigrationStatus> {
   const [entries, last] = await Promise.all([readJournal(), lastAppliedMigrationMillis()]);
   return computeMigrationStatus(entries, last);
 }

@@ -5,7 +5,6 @@ import Image from 'next/image';
 import {
   Sparkles,
   Image as ImageIcon,
-  Tag,
   Palette,
   Sun,
   Moon,
@@ -13,13 +12,12 @@ import {
   User,
   ShoppingBag,
   Lock,
-  ClipboardCheck,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { BrandMark } from './BrandLogo';
 import { useAuth } from './UserAuthContext';
 
-export type TabKey = 'mockups' | 'designs' | 'generator' | 'review' | 'seo' | 'listings';
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'listings';
 
 interface HeaderProps {
   activeTab: TabKey;
@@ -30,17 +28,15 @@ interface HeaderProps {
 }
 
 const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.ElementType }[] = [
-  { key: 'mockups',   label: "1. Mockup'lar",      shortLabel: "Mockup'lar",   icon: ImageIcon   },
-  { key: 'designs',   label: '2. Tasarımlar',      shortLabel: 'Tasarımlar',   icon: Palette     },
-  { key: 'generator', label: '3. Toplu Üretim',    shortLabel: 'Toplu Üretim', icon: Sparkles    },
-  { key: 'review',    label: '4. Hazır İlanlar',   shortLabel: 'Hazır',        icon: ClipboardCheck },
-  { key: 'seo',       label: '5. Etsy SEO',        shortLabel: 'SEO',          icon: Tag         },
-  { key: 'listings',  label: '6. Etsy İlanlarım',  shortLabel: 'İlanlarım',    icon: ShoppingBag },
+  { key: 'mockups',   label: "1. Mockup'lar", shortLabel: "Mockup'lar", icon: ImageIcon   },
+  { key: 'designs',   label: '2. Tasarımlar', shortLabel: 'Tasarımlar', icon: Palette     },
+  { key: 'generator', label: '3. Üretim',     shortLabel: 'Üretim',     icon: Sparkles    },
+  { key: 'listings',  label: '4. İlanlar',    shortLabel: 'İlanlar',    icon: ShoppingBag },
 ];
 
 
 /** Misafirlere gösterilen ama giriş gerektiren adımlar (tıklayınca giriş penceresi açılır). */
-const LOCKED_FOR_GUESTS = new Set<TabKey>(['review', 'seo', 'listings']);
+const LOCKED_FOR_GUESTS = new Set<TabKey>(['listings']);
 
 const THEME_LABELS: Record<string, string> = {
   system: 'Sistem',
@@ -102,7 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Top Navigation Tabs */}
             <nav aria-label="Ana navigasyon" className="hidden lg:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60">
-              {TABS.map(({ key, label, shortLabel, icon: Icon }) => {
+              {TABS.map(({ key, label, icon: Icon }) => {
                 const badge = getBadge(key);
                 const isActive = activeTab === key;
                 const isLocked = !user && LOCKED_FOR_GUESTS.has(key);
@@ -119,8 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
                     }`}
                   >
                     <Icon className="w-4 h-4" />
-                    <span className="xl:hidden">{shortLabel}</span>
-                    <span className="hidden xl:inline">{label}</span>
+                    <span>{label}</span>
                     {isLocked && <Lock className="w-3 h-3" aria-label="Giriş gerekli" />}
                     {badge !== null && (
                       <span

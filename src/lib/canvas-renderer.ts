@@ -32,7 +32,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
  * Canvas'ı data URL'e çevirir. `toBlob` kodlamayı ana thread dışında yaptığı için toplu üretimde
  * arayüz donmaz (`toDataURL` her görselde sayfayı yüzlerce ms kilitler). Format desteklenmezse PNG'ye düşer.
  */
-export async function canvasToDataUrl(canvas: HTMLCanvasElement, format: string, quality: number): Promise<string> {
+async function canvasToDataUrl(canvas: HTMLCanvasElement, format: string, quality: number): Promise<string> {
   const blob = await new Promise<Blob | null>((resolve) => {
     try {
       canvas.toBlob(resolve, format, quality);

@@ -2,7 +2,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
-export const createFFmpegInstance = async (): Promise<FFmpeg> => {
+const createFFmpegInstance = async (): Promise<FFmpeg> => {
   const ffmpeg = new FFmpeg();
   const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
   

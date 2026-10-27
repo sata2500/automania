@@ -6,13 +6,12 @@ import dynamic from 'next/dynamic';
 import { AppSplash, TabSkeleton } from '@/components/common/LoadingScreens';
 import { LoadingState } from '@/components/common/Spinner';
 import { useRouter } from 'next/navigation';
+import { openListingsView, type ListingsView } from '@/components/listings/listings-view';
 const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <TabSkeleton label="Editör yükleniyor" layout="editor" /> });
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <TabSkeleton label="Tasarımlar yükleniyor" layout="grid" /> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <TabSkeleton label="Üretim stüdyosu yükleniyor" layout="grid" /> });
-const EtsySeoHelper = dynamic(() => import('@/components/seo/EtsySeoHelper').then(mod => mod.EtsySeoHelper), { ssr: false, loading: () => <TabSkeleton label="Etsy SEO asistanı yükleniyor" layout="list" /> });
+const ListingsHub = dynamic(() => import('@/components/listings/ListingsHub').then(mod => mod.ListingsHub), { ssr: false, loading: () => <TabSkeleton label="İlanlar yükleniyor" layout="list" /> });
 const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <TabSkeleton label="Otomasyon şablonları yükleniyor" layout="list" /> });
-const ListingReviewQueue = dynamic(() => import('@/components/review/ListingReviewQueue').then(mod => mod.ListingReviewQueue), { ssr: false, loading: () => <TabSkeleton label="Hazır ilanlar yükleniyor" layout="list" /> });
-const EtsyListingManager = dynamic(() => import('@/components/listings/EtsyListingManager').then(mod => mod.EtsyListingManager), { ssr: false, loading: () => <TabSkeleton label="Etsy ilan paneli yükleniyor" layout="list" /> });
 
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
 import {
@@ -35,7 +34,9 @@ import { Sparkles, Info, User, X, LayoutTemplate } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useToast } from '@/components/common/ToastContext';
 
-const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'review', 'seo', 'listings'];
+const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'listings'];
+/** Eski sürümlerde ayrı olan sekmeler artık İlanlar merkezinin alt görünümleri. */
+const LEGACY_TABS: Record<string, ListingsView> = { review: 'review', seo: 'studio' };
 
 type GeneratorView = 'manual' | 'templates';
 const GENERATOR_VIEWS: { key: GeneratorView; label: string; icon: React.ElementType }[] = [
@@ -97,7 +98,7 @@ function ProtectedTabPlaceholder({ loading, onLogin }: { loading: boolean; onLog
   return (
     <div className="max-w-lg mx-auto my-10 p-6 text-center rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">
       <p className="text-sm font-bold text-slate-900 dark:text-white">Bu adım için giriş yapmanız gerekiyor</p>
-      <p className="text-xs text-slate-500 dark:text-slate-400">Etsy SEO ve ilan yönetimi, Etsy mağazanızın bağlı olduğu bir hesap gerektirir. Hazırladığınız taslaklar girişten sonra hesabınıza aktarılır.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">İlan hazırlama ve yönetimi, Etsy mağazanızın bağlı olduğu bir hesap gerektirir. Hazırladığınız taslaklar girişten sonra hesabınıza aktarılır.</p>
       <button type="button" onClick={onLogin} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">Giriş Yap</button>
     </div>
   );
@@ -112,9 +113,13 @@ function MainContent() {
   useEffect(() => {
     const tabTimer = window.setTimeout(() => {
       try {
-        const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) as TabKey;
-        if (savedTab && TAB_ORDER.includes(savedTab)) {
-          setActiveTabState(savedTab);
+        const savedTab = localStorage.getItem(STORAGE_KEYS.ACTIVE_TAB) ?? '';
+        if (LEGACY_TABS[savedTab]) {
+          openListingsView(LEGACY_TABS[savedTab]);
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, 'listings');
+          setActiveTabState('listings');
+        } else if (TAB_ORDER.includes(savedTab as TabKey)) {
+          setActiveTabState(savedTab as TabKey);
         }
       } catch {}
     }, 0);
@@ -124,7 +129,7 @@ function MainContent() {
 
   const setActiveTab = (tab: TabKey) => {
     // Prevent guest from navigating to protected tabs
-    if (!user && (tab === 'review' || tab === 'seo' || tab === 'listings')) {
+    if (!user && tab === 'listings') {
       setIsAuthModalOpen(true);
       return;
     }
@@ -134,10 +139,10 @@ function MainContent() {
     } catch {}
   };
 
-  // If user is guest and on a protected tab (seo or listings), show mockups — but only once the
+  // If user is guest and on a protected tab (listings), show mockups — but only once the
   // stored session has been checked; otherwise a signed-in user loses their tab on every reload.
   // The saved tab is kept so it is restored after the user signs in.
-  const isProtectedTab = activeTabState === 'review' || activeTabState === 'seo' || activeTabState === 'listings';
+  const isProtectedTab = activeTabState === 'listings';
   const activeTab: TabKey = authStatus === 'ready' && !user && isProtectedTab ? 'mockups' : activeTabState;
 
   const {
@@ -539,15 +544,11 @@ function MainContent() {
               setRenderedMatches={setRenderedMatches}
               hasGenerated={hasGenerated}
               setHasGenerated={setHasGenerated}
-              onGoToSeo={user ? () => setActiveTab('seo') : undefined}
+              onGoToSeo={user ? () => { openListingsView('studio'); setActiveTab('listings'); } : undefined}
             />
           )}
 
-          {activeTab === 'review' && (user ? <ListingReviewQueue /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
-
-          {activeTab === 'seo' && (user ? <EtsySeoHelper /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
-
-          {activeTab === 'listings' && (user ? <EtsyListingManager /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
+          {activeTab === 'listings' && (user ? <ListingsHub /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
         </ErrorBoundary>
 
 

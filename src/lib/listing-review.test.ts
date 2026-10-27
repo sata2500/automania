@@ -78,6 +78,22 @@ describe('publishReviewItem', () => {
     expect(reviewOf().status).toBe('published');
   });
 
+  it('publishes a studio listing with its own Etsy settings instead of a template', async () => {
+    state.template = null;
+    const etsy = { shippingProfileId: '7', readinessStateId: '', taxonomyId: 482, price: 30, whoMade: 'i_did', whenMade: 'made_to_order' };
+    const variations = [{ id: 'v1', size: 'M', color: 'Black', price: 30, quantity: 5, sku: '', enabled: true }];
+    state.run = {
+      ...state.run!, templateId: 'manual',
+      steps: { listingCreation: { status: 'completed', output: { review: { status: 'awaiting' }, manualListing: { etsy, variations } } } },
+    };
+    const result = await publishReviewItem('u1', 'run1');
+    expect(result.status).toBe('published');
+    const template = (buildListingRequest.mock.calls[0] as unknown[])[1] as { automationSchedule: unknown; variationConfig: unknown };
+    expect(template.automationSchedule).toEqual({ etsy });
+    expect(template.variationConfig).toEqual({ rows: variations });
+    state.template = { id: 't1', userId: 'u1', automationSchedule: {} };
+  });
+
   it('refuses to publish twice when the lock is already taken', async () => {
     state.claimable = false;
     await expect(publishReviewItem('u1', 'run1')).rejects.toThrow(/yayınlanamaz/);

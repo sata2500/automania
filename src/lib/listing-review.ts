@@ -6,12 +6,30 @@
 import { and, desc, eq, sql as drizzleSql } from 'drizzle-orm';
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
-import { buildListingRequest, type RunRow } from '@/lib/automation-runner';
+import { buildListingRequest, type RunRow, type TemplateRow } from '@/lib/automation-runner';
 import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { writeAuditLog } from '@/lib/audit-log';
-import type { AutomationRunSteps, GeneratedSeoData, ListingReviewState, ListingReviewStatus } from '@/types/templates';
+import type {
+  AutomationRunSteps,
+  GeneratedSeoData,
+  ListingReviewState,
+  ListingReviewStatus,
+  PodTemplateEtsyListingSettings,
+} from '@/types/templates';
+import type { EtsyVariationRow } from '@/types/pod';
+
+/** İlan Stüdyosu'nda elle hazırlanıp kuyruğa eklenen ilanların otomasyon kimliği yerine geçen değer. */
+export const MANUAL_TEMPLATE_ID = 'manual';
+
+/** Elle hazırlanan ilanın Etsy ayarları ve varyasyonları (otomasyon şablonu yerine ilanla birlikte saklanır). */
+export type ManualListingSettings = { etsy: PodTemplateEtsyListingSettings; variations: EtsyVariationRow[] };
+
+function manualSettingsOf(steps: unknown): ManualListingSettings | null {
+  const manual = (steps as AutomationRunSteps | null)?.listingCreation?.output?.manualListing;
+  return manual && typeof manual === 'object' ? manual as ManualListingSettings : null;
+}
 
 export class ListingReviewError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -67,10 +85,12 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
     if (!review) return [];
     const steps = run.steps as AutomationRunSteps;
     const warning = steps.listingCreation?.output?.warning;
+    const manual = manualSettingsOf(steps);
+    const price = manual?.etsy.price ?? schedule?.etsy?.price;
     return [{
       runId: run.id,
       templateId: run.templateId,
-      templateName: templateName ?? 'Silinmiş otomasyon',
+      templateName: manual ? 'İlan Stüdyosu' : templateName ?? 'Silinmiş otomasyon',
       createdAt: run.createdAt ? new Date(run.createdAt).toISOString() : null,
       review,
       seo: run.generatedSeo as GeneratedSeoData | null,
@@ -78,7 +98,7 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
       videoUrl: run.generatedVideoUrl,
       designUrl: run.generatedDesignUrl,
       etsyListingId: run.etsyListingId,
-      price: typeof schedule?.etsy?.price === 'number' ? schedule.etsy.price : null,
+      price: typeof price === 'number' ? price : null,
       warning: typeof warning === 'string' ? warning : null,
     }];
   });
@@ -205,7 +225,11 @@ export async function publishReviewItem(userId: string, runId: string): Promise<
   };
 
   try {
-    const [template] = await db.select().from(podTemplates).where(and(eq(podTemplates.id, run.templateId), eq(podTemplates.userId, userId)));
+    // Elle hazırlanan ilan Etsy ayarlarını kendisi taşır; otomasyon ilanı şablonundan okur.
+    const manual = manualSettingsOf(steps);
+    const [template] = manual
+      ? [{ automationSchedule: { etsy: manual.etsy }, variationConfig: { rows: manual.variations } } as unknown as TemplateRow]
+      : await db.select().from(podTemplates).where(and(eq(podTemplates.id, run.templateId), eq(podTemplates.userId, userId)));
     if (!template) return await fail('Bu ilanın otomasyonu silinmiş; Etsy ayarları bulunamadı.');
 
     let listingId = run.etsyListingId;
@@ -314,4 +338,68 @@ export async function publishDueReviewItems(
     }
   }
   return { published, failed, staleReset: stale.length };
+}
+
+export type ManualDraftInput = {
+  title: string;
+  description: string;
+  tags: string[];
+  taxonomyId: number;
+  taxonomyProperties: Record<string, number[]>;
+  materials: string[];
+  styles: string[];
+  shopSectionId?: string | null;
+  photos: string[];
+  imageAltTexts?: string[];
+  videoUrl?: string | null;
+  designUrl?: string | null;
+  settings: ManualListingSettings;
+};
+
+/**
+ * İlan Stüdyosu'nda hazırlanan ilanı Hazır İlanlar kuyruğuna ekler. Otomasyon çalıştırmalarıyla aynı
+ * tabloda, `MANUAL_TEMPLATE_ID` ile saklanır; düzenleme, zamanlama ve yayın aynı akıştan yapılır.
+ */
+export async function createManualDraft(userId: string, input: ManualDraftInput): Promise<string> {
+  const runId = crypto.randomUUID();
+  const now = new Date();
+  const done = { status: 'skipped' as const, error: 'İlan Stüdyosu\'nda hazırlandı.' };
+  const review: ListingReviewState = { status: 'awaiting', updatedAt: now.toISOString() };
+  const steps: AutomationRunSteps = {
+    designGeneration: done,
+    backgroundRemoval: done,
+    mockupRender: done,
+    videoGeneration: done,
+    seoGeneration: done,
+    listingCreation: { status: 'completed', completedAt: now.toISOString(), output: { review, manualListing: input.settings } },
+  };
+  const seo: GeneratedSeoData = {
+    title: input.title,
+    description: input.description,
+    tags: input.tags,
+    taxonomyId: input.taxonomyId,
+    taxonomyProperties: input.taxonomyProperties,
+    keywords: [],
+    shopSectionId: input.shopSectionId ?? null,
+    materials: input.materials,
+    styles: input.styles,
+    imageAltTexts: input.imageAltTexts,
+  };
+  await db.insert(automationRuns).values({
+    id: runId,
+    templateId: MANUAL_TEMPLATE_ID,
+    userId,
+    status: 'completed',
+    steps,
+    generatedDesignUrl: input.designUrl ?? null,
+    generatedMockupUrls: input.photos,
+    generatedVideoUrl: input.videoUrl ?? null,
+    generatedSeo: seo,
+    triggerType: 'manual',
+    createdAt: now,
+    startedAt: now,
+    completedAt: now,
+    updatedAt: now,
+  });
+  return runId;
 }

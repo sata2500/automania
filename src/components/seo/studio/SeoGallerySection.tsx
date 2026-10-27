@@ -36,7 +36,7 @@ export const SeoGallerySection: React.FC = () => {
       <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 p-4 rounded-2xl flex items-center space-x-3">
         <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
         <div className="text-xs text-amber-800 dark:text-amber-200">
-          <span className="font-bold block">Henüz Toplu Üretim Yapmadınız</span>
+          <span className="font-bold block">Henüz Üretim Yapmadınız</span>
           Mockup sekmesinde tasarımlarınızı hazırlayıp toplu üretime gönderdiğinizde, üretilen klasörler burada görüntülenecektir.
         </div>
       </div>
@@ -53,7 +53,7 @@ export const SeoGallerySection: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
           <Folder className="w-4 h-4 text-emerald-500" />
-          Toplu Üretim Klasörleriniz ({foldersWithMockups.length} Adet):
+          Üretim Klasörleriniz ({foldersWithMockups.length} Adet):
         </label>
         {selectedFolderId && (
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-500/20 truncate max-w-full">

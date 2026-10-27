@@ -87,7 +87,7 @@ export async function setSessionCookie(payload: TokenPayload) {
   });
 }
 
-export async function getSession(): Promise<TokenPayload | null> {
+async function getSession(): Promise<TokenPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;

@@ -17,6 +17,7 @@ import type {
 } from '@/types/etsy';
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { selectEtsyPublishMedia, validateWhoMade } from '@/lib/etsy-preflight';
+import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { containsWord, detectPrimarySubject } from '@/lib/listing-subject';
 
 /** Bu cihazda Etsy'ye aktarılmış klasörler: aynı klasörün yanlışlıkla ikinci kez ilan olarak açılmasını önler. */
@@ -1460,7 +1461,76 @@ function useEtsySeoState() {
     }
   };
 
-  
+
+  const [isSavingToReview, setIsSavingToReview] = useState(false);
+
+  /** Stüdyoda hazırlanan ilanı Etsy'ye göndermeden Hazır İlanlar kuyruğuna ekler (oradan onaylanıp zamanlanır). */
+  const handleSaveToReview = async (): Promise<boolean> => {
+    if (isSavingToReview) return false;
+    const whoMadeError = validateWhoMade({ whoMade, isSupply, whenMade });
+    if (whoMadeError) {
+      toast.error(whoMadeError);
+      return false;
+    }
+    const media = selectEtsyPublishMedia(dbGeneratedMockups.filter(m => m.folderId === selectedFolderId && m.previewUrl));
+    if (media.photos.length === 0) {
+      toast.error('İlana eklenecek en az bir mockup fotoğrafı gerekli.');
+      return false;
+    }
+    setIsSavingToReview(true);
+    try {
+      const store = async (url: string, mime: string) => {
+        const stored = await uploadMediaToServer(url, mime, { requireDurable: true });
+        if (!/^\/api\/(r2|uploads)\//.test(stored)) throw new Error('Görsel depolamaya yüklenemedi.');
+        return stored;
+      };
+      const photos = await Promise.all(media.photos.map(m => store(m.previewUrl!, 'image/webp')));
+      const video = media.videos[0]?.previewUrl;
+      const videoUrl = video ? await store(video, 'video/mp4').catch(() => null) : null;
+      const designUrl = selectedDesign?.src && /^\/api\/(r2|uploads)\//.test(selectedDesign.src) ? selectedDesign.src : null;
+      const res = await fetch('/api/listing-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: generatedTitle,
+          description: generatedDescription,
+          tags: selectedTags,
+          taxonomyId,
+          taxonomyProperties: selectedTaxonomyProperties,
+          materials,
+          styles,
+          shopSectionId: selectedShopSectionId || null,
+          photos,
+          videoUrl,
+          designUrl,
+          settings: {
+            etsy: {
+              shippingProfileId: selectedShippingProfileId || '',
+              readinessStateId: selectedReadinessStateId || '',
+              returnPolicyId: selectedReturnPolicyId || undefined,
+              shopSectionId: selectedShopSectionId || undefined,
+              taxonomyId,
+              price: basePrice,
+              whoMade,
+              whenMade,
+              productionPartnerIds: productionPartnerId ? [String(productionPartnerId)] : undefined,
+              shouldAutoRenew,
+            },
+            variations,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'İlan kaydedilemedi.');
+      toast.success('İlan Hazır İlanlar listesine eklendi. Oradan onaylayıp yayınlayabilir veya zamanlayabilirsiniz.');
+      return true;
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+      return false;
+    } finally {
+      setIsSavingToReview(false);
+    }
+  };
 
   const contextValue = {
     activeTab, setActiveTab,
@@ -1560,7 +1630,9 @@ function useEtsySeoState() {
     openLoadTemplateModal, handleLoadTemplate, handleDeleteTemplate,
     handleFetchListings, handleSelectListingTemplate,
     filteredVariations, handleDragStart, handleDragEnter,
-    handlePublishToEtsy
+    handlePublishToEtsy,
+    handleSaveToReview,
+    isSavingToReview,
   };
 
   return contextValue;

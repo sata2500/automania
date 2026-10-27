@@ -245,7 +245,7 @@ export const VariationModals: React.FC = () => {
                 </div>
               ) : etsyListings.length === 0 ? (
                 <div className="text-center py-8 text-slate-500 text-sm font-semibold">
-                  Kayıtlı ilan bulunamadı. İlanlarınızı önce &quot;5. Etsy İlanlarım&quot; sekmesinden Etsy ile senkronize edin.
+                  Kayıtlı ilan bulunamadı. İlanlarınızı önce İlanlar › &quot;Etsy&apos;deki İlanlarım&quot; bölümünden Etsy ile senkronize edin.
                 </div>
               ) : (
                 <div className="space-y-3">

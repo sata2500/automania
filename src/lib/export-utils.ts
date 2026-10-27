@@ -1,7 +1,7 @@
 import { RenderedMatch, ExportFormatType } from '@/types/pod';
 import { downloadBlob } from './download';
 
-export function dataURLtoBlob(dataurl: string): Blob {
+function dataURLtoBlob(dataurl: string): Blob {
   const arr = dataurl.split(',');
   const mimeMatch = arr[0].match(/:(.*?);/);
   const mime = mimeMatch ? mimeMatch[1] : 'image/webp';
@@ -39,7 +39,7 @@ export function formatExportFileName(
   return `${prefix}${cleanMockup}_${cleanDesign}.${ext}`;
 }
 
-export async function getBlobFromUrl(url: string): Promise<Blob> {
+async function getBlobFromUrl(url: string): Promise<Blob> {
   if (url.startsWith('data:')) {
     return dataURLtoBlob(url);
   }

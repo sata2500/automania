@@ -65,7 +65,7 @@ export function mergeGuestIntoAccount(
 }
 
 /** Çalışma alanında hâlâ kullanılan tüm medya URL'leri. */
-export function collectReferencedMediaUrls(collections: Partial<WorkspaceCollections>): Set<string> {
+function collectReferencedMediaUrls(collections: Partial<WorkspaceCollections>): Set<string> {
   const urls = new Set<string>();
   for (const mockup of collections.mockups || []) if (mockup.src) urls.add(mockup.src);
   for (const design of collections.designs || []) if (design.src) urls.add(design.src);

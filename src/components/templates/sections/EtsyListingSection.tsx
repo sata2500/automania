@@ -162,7 +162,7 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
           ) : !options?.connected ? (
             <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Etsy mağazanız bağlı değil. İlan ayarlarını seçmek için önce Etsy SEO sekmesinden mağazanızı bağlayın. Bağlantı olmadan çalıştırmalar ilan adımını atlar.</span>
+              <span>Etsy mağazanız bağlı değil. İlan ayarlarını seçmek için önce İlanlar › İlan Stüdyosu’ndan mağazanızı bağlayın. Bağlantı olmadan çalıştırmalar ilan adımını atlar.</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -65,7 +65,7 @@ export const GuestMigrationBanner: React.FC<GuestMigrationBannerProps> = ({
   const parts: string[] = [];
   if (guestMockupCount > 0) parts.push(`+${guestMockupCount} Mockup`);
   if (guestDesignCount > 0) parts.push(`+${guestDesignCount} Tasarım`);
-  if (guestBatchCount > 0) parts.push(`+${guestBatchCount} Toplu Üretim`);
+  if (guestBatchCount > 0) parts.push(`+${guestBatchCount} Üretim`);
   const badgeText = parts.join(' • ') || 'Yerel Taslak';
 
   const handleMigrate = async () => {

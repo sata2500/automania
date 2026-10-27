@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Mockup klasörünün otomasyonu: Toplu Üretim › Otomasyonlar ile aynı kayıt ve aynı sihirbaz.
+ * Mockup klasörünün otomasyonu: Üretim › Otomasyonlar ile aynı kayıt ve aynı sihirbaz.
  * Klasöre bağlı otomasyon varsa düzenlenir; yoksa yeni kurulum başlar.
  */
 import React, { useEffect, useState } from 'react';
