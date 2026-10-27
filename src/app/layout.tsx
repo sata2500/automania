@@ -32,8 +32,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   // favicon.ico (16/32/48) app/ klasöründen otomatik eklenir; modern tarayıcılar vektörel SVG simgeyi kullanır.
   icons: {
-    icon: [{ url: "/icon-logo.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon-apple-180.png", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: "/icon-logo.svg?v=3", type: "image/svg+xml" }],
+    apple: [{ url: "/icon-apple-180.png?v=3", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

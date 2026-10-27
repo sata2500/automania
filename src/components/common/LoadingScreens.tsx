@@ -1,27 +1,7 @@
 'use client';
 
 import React from 'react';
-
-/**
- * Marka simgesi (katmanlar + yıldız), uygulama simgesiyle aynı çizim. Yükleme ekranında, telefonun
- * PWA açılış ekranındaki simgeyle aynı yerde ve boyutta durur; geçiş fark edilmez.
- */
-function BrandGlyph({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="8 3 50 54" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="splash-top" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#8b6cf0" />
-          <stop offset="1" stopColor="#b16cf8" />
-        </linearGradient>
-      </defs>
-      <path d="M32 31 53 42.5 32 54 11 42.5Z" fill="#3b2a9e" />
-      <path d="M32 24.5 53 36 32 47.5 11 36Z" fill="#5b3fc4" />
-      <path d="M32 17 53 28.5 32 40 11 28.5Z" fill="url(#splash-top)" />
-      <path className="app-splash-sparkle" d="M50 6c.8 3.4 2.2 4.8 5.6 5.6-3.4.8-4.8 2.2-5.6 5.6-.8-3.4-2.2-4.8-5.6-5.6 3.4-.8 4.8-2.2 5.6-5.6Z" />
-    </svg>
-  );
-}
+import { BrandGlyph } from '@/components/common/BrandLogo';
 
 /**
  * Uygulama açılırken (çalışma alanı tarayıcıdan/buluttan yüklenirken) tam ekran gösterilen karşılama.
@@ -38,7 +18,7 @@ export function AppSplash({ visible }: { visible: boolean }) {
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative w-40 h-40 flex items-center justify-center">
           <span className="app-splash-glow absolute inset-0 rounded-full" aria-hidden="true" />
-          <BrandGlyph className="relative w-[4.75rem] h-[4.75rem]" />
+          <BrandGlyph className="relative w-[4.75rem] h-[4.75rem]" sparkleClassName="app-splash-sparkle" />
         </div>
       </div>
       <div className="absolute inset-x-0 top-1/2 mt-24 flex justify-center">

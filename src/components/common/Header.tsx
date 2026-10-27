@@ -3,7 +3,6 @@
 import React from 'react';
 import Image from 'next/image';
 import {
-  Layers,
   Sparkles,
   Image as ImageIcon,
   Tag,
@@ -17,6 +16,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
+import { BrandMark } from './BrandLogo';
 import { useAuth } from './UserAuthContext';
 
 export type TabKey = 'mockups' | 'designs' | 'generator' | 'review' | 'seo' | 'listings';
@@ -89,9 +89,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Ana sayfaya dön"
               onKeyDown={(e) => e.key === 'Enter' && setActiveTab('mockups')}
             >
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <Layers className="w-4 h-4 md:w-6 md:h-6 text-white" />
-              </div>
+              <BrandMark className="w-8 h-8 md:w-10 md:h-10" />
               <div>
                 <span className="text-base md:text-xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 dark:from-white dark:via-slate-200 dark:to-indigo-300 bg-clip-text text-transparent leading-tight block">
                   Automania POD

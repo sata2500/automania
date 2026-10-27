@@ -1,17 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2d3548"/>
-      <stop offset="1" stop-color="#1c2232"/>
-    </linearGradient>
-    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#8b6cf0"/>
-      <stop offset="1" stop-color="#b16cf8"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
-  <path d="M32 31 53 42.5 32 54 11 42.5Z" fill="#3b2a9e"/>
-  <path d="M32 24.5 53 36 32 47.5 11 36Z" fill="#5b3fc4"/>
-  <path d="M32 17 53 28.5 32 40 11 28.5Z" fill="url(#top)"/>
-  <path d="M50 6c.8 3.4 2.2 4.8 5.6 5.6-3.4.8-4.8 2.2-5.6 5.6-.8-3.4-2.2-4.8-5.6-5.6 3.4-.8 4.8-2.2 5.6-5.6Z" fill="#e0d2ff"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs>
+  <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b6cf0"/><stop offset="1" stop-color="#b16cf8"/></linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#7c3aed" stop-opacity="0.5"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></radialGradient>
+</defs>
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <circle cx="32" cy="32.64" r="25.6" fill="url(#glow)"/>
+  <g transform="translate(32 32) scale(0.9866666666666667) translate(-33.3 -30)"><path d="M32 31 53 42.5 32 54 11 42.5Z" fill="#3b2a9e"/><path d="M32 24.5 53 36 32 47.5 11 36Z" fill="#5b3fc4"/><path d="M32 17 53 28.5 32 40 11 28.5Z" fill="url(#top)"/><path d="M50 6c.8 3.4 2.2 4.8 5.6 5.6-3.4.8-4.8 2.2-5.6 5.6-.8-3.4-2.2-4.8-5.6-5.6 3.4-.8 4.8-2.2 5.6-5.6Z" fill="#e0d2ff"/></g></svg>
