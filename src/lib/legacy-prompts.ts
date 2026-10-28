@@ -606,3 +606,16 @@ CANVAS AND BACKGROUND (required for automatic background removal):
 - Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
 
 Output only the image.`;
+
+/** Plaka/koyu zemin yasağı eklenmeden önceki "Diğer kumaş versiyonu" varsayılanı. */
+export const LEGACY_DESIGN_VARIANT_V2 = `Redraw this exact t-shirt graphic as a version for {{fabric}}.
+
+Keep everything identical: composition, subject, characters, layout, proportions, all text and its spelling. Change only the ink colors so the design stands out clearly on {{fabric}}: light and bright inks for dark garments (avoid large black or very dark areas), dark and saturated inks for light garments. Keep the color harmony of the original.
+
+CANVAS AND BACKGROUND (required for automatic background removal):
+- Only the flat artwork itself: never show a t-shirt, garment, person or product mockup.
+- Square canvas, the graphic centered with equal empty margins, same size as in the original.
+- Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, shadow, border or frame. Do not use {{keyColorName}} or similar shades in the design.
+- Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
+
+Output only the image.`;

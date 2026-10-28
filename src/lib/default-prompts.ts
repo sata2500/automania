@@ -184,6 +184,7 @@ CANVAS AND BACKGROUND (required for automatic background removal):
 - Only the flat artwork itself: never show a t-shirt, garment, person or product mockup.
 - Square canvas, the graphic centered with equal empty margins, same size as in the original.
 - Background: one flat, uniform {{keyColorName}} ({{keyColorHex}}) fill covering the entire canvas edge to edge. No gradient, texture, shadow, border or frame. Do not use {{keyColorName}} or similar shades in the design.
+- Never place the graphic on a black or dark backdrop, square, rectangle, panel, card or patch. The garment itself is the dark (or light) backdrop: everything outside the artwork's own shapes must stay {{keyColorName}}, even if the original had an empty area there.
 - Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
 
 Output only the image.`;

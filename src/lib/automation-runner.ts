@@ -339,7 +339,10 @@ async function createFabricVariant(
       : { data: input.rawImage, mimeType: input.mimeType };
     const images = await generateImage(config, { prompt, image: source });
     if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
-    const { pngBuffer, width, height } = await removeChromaBackground(Buffer.from(images[0].data, 'base64'), { keyColor: KEY_COLORS[input.keyBackground] });
+    // Model versiyonu perde yerine siyah zemine veya dolu bir plakaya çizebilir: zemin türüne göre ayıklanır.
+    // Desenli zeminde hata fırlar ve o mockup'larda otomatik renk dönüşümü kullanılır.
+    const { removeVariantBackground } = await import('@/lib/background-removal');
+    const { pngBuffer, width, height } = await removeVariantBackground(Buffer.from(images[0].data, 'base64'), KEY_COLORS[input.keyBackground]);
     const upload = await storeDesignImage(ctx.userId, `auto-design-${ctx.runId}-${target}`, pngBuffer);
     await addAutomationDesign(ctx.userId, {
       id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

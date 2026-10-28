@@ -174,7 +174,14 @@ export async function removeBackgroundAuto(input: Buffer): Promise<BackgroundRem
   const { width, height } = info;
   const analysis = analyzeBackground(data, width, height);
   if (analysis.kind === 'transparent') {
-    throw new BackgroundRemovalError('Bu tasarımın arka planı zaten saydam.', 'transparent');
+    // Zemin saydam ama tasarım dolu bir plakanın (ör. siyah kare) üzerindeyse plaka kaldırılır.
+    const removed = removeBackdropPlate(data, width, height);
+    if (removed === 0) throw new BackgroundRemovalError('Bu tasarımın arka planı zaten saydam.', 'transparent');
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) { data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; }
+    }
+    const pngBuffer = await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+    return { pngBuffer, method: 'solid', removedRatio: removed / (width * height), width, height };
   }
   if (analysis.kind === 'complex' || !analysis.color) {
     throw new BackgroundRemovalError(
@@ -194,4 +201,87 @@ export async function removeBackgroundAuto(input: Buffer): Promise<BackgroundRem
   }
   const pngBuffer = await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
   return { pngBuffer, method: analysis.kind, removedRatio, width, height };
+}
+
+/** Saydam zemin üzerindeki opak alanın sınır kutusu ve bu kutunun ne kadarının dolu olduğu. */
+function opaqueBounds(data: Uint8Array | Buffer, width: number, height: number) {
+  let minX = width, minY = height, maxX = -1, maxY = -1, opaque = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3]! < 128) continue;
+      opaque++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return null;
+  const w = maxX - minX + 1, h = maxY - minY + 1;
+  return { x: minX, y: minY, w, h, fill: opaque / (w * h) };
+}
+
+/** Bir kutunun piksellerini ayrı bir RGBA tamponuna kopyalar (geri yazmak için `pasteRegion`). */
+function copyRegion(data: Uint8Array | Buffer, width: number, box: { x: number; y: number; w: number; h: number }) {
+  const out = Buffer.alloc(box.w * box.h * 4);
+  for (let y = 0; y < box.h; y++) {
+    const from = ((box.y + y) * width + box.x) * 4;
+    out.set(data.subarray(from, from + box.w * 4), y * box.w * 4);
+  }
+  return out;
+}
+
+function pasteRegion(data: Uint8Array | Buffer, width: number, box: { x: number; y: number; w: number; h: number }, region: Buffer) {
+  for (let y = 0; y < box.h; y++) {
+    data.set(region.subarray(y * box.w * 4, (y + 1) * box.w * 4), ((box.y + y) * width + box.x) * 4);
+  }
+}
+
+/**
+ * Yapay zekânın ürettiği kumaş versiyonunun zeminini kaldırır (yerinde değiştirir). Görsel modelleri koyu
+ * kumaş versiyonunu sık sık perde rengi yerine siyah zemine ya da tasarımın arkasına dolu bir dikdörtgen
+ * plakaya çizer; bu zemin baskıda siyah bir kare olarak görünür.
+ *  - Kenarlar perde rengindeyse chroma key, düz nötr bir renkteyse (siyah, beyaz…) düz zemin ayıklayıcı.
+ *  - Ardından opak alan neredeyse dolu bir dikdörtgense ve çevresi düz bir renkse bu plaka da kendi
+ *    kenarlarından ayıklanır. Yuvarlak amblemler (dolu oranı düşük) ve desenli kenarlar korunur.
+ * Zemin desenliyse hata fırlatır; çağıran otomatik renk dönüşümüne geçer.
+ */
+export function cleanupVariantBackground(data: Uint8Array | Buffer, width: number, height: number, keyColor?: Rgb): void {
+  const analysis = analyzeBackground(data, width, height);
+  if (analysis.kind === 'complex' || (analysis.kind !== 'transparent' && !analysis.color)) {
+    throw new BackgroundRemovalError('Versiyonun arka planı düz bir renk değil.', analysis.kind);
+  }
+  if (analysis.kind === 'chroma') keyOutBackground(data, width, height, keyColor ?? analysis.color);
+  if (analysis.kind === 'solid') keyOutSolidBackground(data, width, height, analysis.color!);
+
+  removeBackdropPlate(data, width, height);
+}
+
+/**
+ * Saydam zemin üzerinde tasarımın arkasında kalmış dolu, düz renkli dikdörtgen plakayı kaldırır.
+ * Opak alan sınır kutusunun en az %92'sini doldurmuyorsa (amblem, serbest biçimli tasarım) veya
+ * kutunun çevresi düz bir renk değilse dokunulmaz. Kaldırılan piksel sayısını döner.
+ */
+function removeBackdropPlate(data: Uint8Array | Buffer, width: number, height: number): number {
+  const box = opaqueBounds(data, width, height);
+  if (!box || box.fill < 0.92 || box.w < width * 0.2 || box.h < height * 0.2) return 0;
+  const region = copyRegion(data, width, box);
+  const plate = analyzeBackground(region, box.w, box.h);
+  if (plate.kind !== 'solid' || !plate.color || plate.uniformity < 0.8) return 0;
+  const removed = keyOutSolidBackground(region, box.w, box.h, plate.color);
+  if (removed < box.w * box.h * 0.05) return 0;
+  pasteRegion(data, width, box, region);
+  return removed;
+}
+
+/** `cleanupVariantBackground` görsel sarmalayıcısı: modelin ham çıktısından saydam PNG üretir. */
+export async function removeVariantBackground(input: Buffer, keyColor?: Rgb): Promise<{ pngBuffer: Buffer; width: number; height: number }> {
+  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  cleanupVariantBackground(data, width, height, keyColor);
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) { data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; }
+  }
+  const pngBuffer = await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  return { pngBuffer, width, height };
 }

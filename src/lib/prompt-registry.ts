@@ -27,6 +27,7 @@ import {
   LEGACY_GENERATE_DESIGN_V6,
   LEGACY_GENERATE_DESIGN_V7,
   LEGACY_DESIGN_VARIANT_V1,
+  LEGACY_DESIGN_VARIANT_V2,
   LEGACY_GENERATE_LISTING,
   LEGACY_GENERATE_LISTING_V2,
   LEGACY_GENERATE_LISTING_V3,
@@ -111,7 +112,7 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     title: 'Diğer kumaş versiyonu',
     description: 'Otomasyonda "Diğer kumaş rengi için ayrı versiyon" açıksa ana tasarım görsel modeline gönderilir ve diğer kumaş rengine uygun renklerle yeniden çizilir; o renkteki mockup\'larda bu versiyon kullanılır.',
     defaultValue: DEFAULT_DESIGN_VARIANT_PROMPT,
-    legacyDefaults: [LEGACY_DESIGN_VARIANT_V1],
+    legacyDefaults: [LEGACY_DESIGN_VARIANT_V1, LEGACY_DESIGN_VARIANT_V2],
     variables: [
       v('fabric', 'Hedef kumaş', 'Versiyonun basılacağı kumaş rengi (ör. "dark-colored garments (black, navy, charcoal)").', '🧵'),
       v('keyColorName', 'Perde rengi adı', '"pure chroma-key green" veya "pure magenta".', '🎨'),

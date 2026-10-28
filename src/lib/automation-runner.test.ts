@@ -62,6 +62,7 @@ vi.mock('@/lib/ai-provider', () => ({
 const recolor = vi.hoisted(() => vi.fn(async () => ({ pngBuffer: Buffer.from('dark-ink') })));
 vi.mock('@/lib/recolor', () => ({ recolorDesign: recolor }));
 vi.mock('@/lib/chroma-key', () => ({ removeChromaBackground: vi.fn(async () => ({ pngBuffer: Buffer.from('png'), width: 2048, height: 2048 })) }));
+vi.mock('@/lib/background-removal', () => ({ removeVariantBackground: vi.fn(async () => ({ pngBuffer: Buffer.from('ai-variant'), width: 2048, height: 2048 })) }));
 vi.mock('@/lib/r2', () => ({
   isR2Configured: () => true,
   uploadToR2: vi.fn(async (_b: Buffer, key: string) => ({ url: `/api/r2/${key}`, key, size: 1 })),
@@ -290,10 +291,8 @@ describe('fabric variants', () => {
 
   it('redraws the design for dark garments with the image model and prints that version on dark mockups', async () => {
     folderSetup({ designFabric: 'light', fabricVariant: true, audienceGroup: 'men' });
-    const { removeChromaBackground } = await import('@/lib/chroma-key');
-    vi.mocked(removeChromaBackground)
-      .mockResolvedValueOnce({ pngBuffer: Buffer.from('png'), width: 2048, height: 2048 } as never)
-      .mockResolvedValueOnce({ pngBuffer: Buffer.from('ai-dark'), width: 2048, height: 2048 } as never);
+    const { removeVariantBackground } = await import('@/lib/background-removal');
+    vi.mocked(removeVariantBackground).mockResolvedValueOnce({ pngBuffer: Buffer.from('ai-dark'), width: 2048, height: 2048 });
     const { generateImage } = await import('@/lib/ai-provider');
     const { renderDesignOnMockup } = await import('@/lib/backend-render');
 
