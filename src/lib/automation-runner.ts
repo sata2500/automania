@@ -797,10 +797,10 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
   const media = run.generatedVideoUrl && review?.includeVideo !== false ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
   // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
   // Varyasyonlar otomasyonun seçtiği kayıtlı şablondan (manuel ilanda Hazır İlanlar'da seçilen şablondan)
-  // gelir; hiç yoksa ilan tek fiyatla açılır.
+  // gelir; hiç yoksa ilan tek fiyatla açılır. Baskıya göre üretim: stok her kombinasyonda 999.
   const variationRows = await resolveVariationRows(userId, template.variationConfig);
   const variations = variationRows.some((row) => row.enabled !== false)
-    ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: row.enabled !== false }))
+    ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: 999, sku: row.sku || undefined, enabled: row.enabled !== false }))
     : [];
 
   const credentials = {
