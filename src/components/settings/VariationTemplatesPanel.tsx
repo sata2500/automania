@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { Download, FilePlus2, Pencil, Plus, Save, Search, Store, Trash2, X } from 'lucide-react';
+import { FilePlus2, Pencil, Plus, Save, Search, Store, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
 import { DialogPanel } from '@/components/common/DialogPanel';
@@ -42,12 +42,7 @@ const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)))
 
 type Draft = { id: string | null; name: string; rows: EtsyVariationRow[] };
 
-export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
-  /** "Yeni şablon" bu satırlarla başlar (Ayarlar'daki varsayılan varyasyonlar). */
-  newTemplateRows: () => EtsyVariationRow[];
-  /** Şablonu Ayarlar'daki varsayılan varyasyonlara aktarır. */
-  onUseAsDefault: (rows: EtsyVariationRow[]) => void;
-}) {
+export function VariationTemplatesPanel() {
   const toast = useToast();
   const [templates, setTemplates] = useState<EtsyVariationTemplate[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -125,14 +120,14 @@ export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5 bg-slate-50/60 dark:bg-slate-950/40">
+    <div className="space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Kayıtlı şablonlar</span>
         <div className="flex flex-wrap gap-1.5">
           <button type="button" onClick={() => setImportOpen(true)} disabled={!templates} className={`${smallBtn} border border-orange-200 dark:border-orange-500/40 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10`}>
             <Store className="w-3.5 h-3.5" /> Etsy ilanından çek
           </button>
-          <button type="button" onClick={() => openDraft({ id: null, name: '', rows: newTemplateRows() })} disabled={!templates} className={`${smallBtn} border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800`}>
+          <button type="button" onClick={() => openDraft({ id: null, name: '', rows: [] })} disabled={!templates} className={`${smallBtn} border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800`}>
             <FilePlus2 className="w-3.5 h-3.5" /> Yeni şablon
           </button>
         </div>
@@ -168,7 +163,7 @@ export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
       )}
 
       {draft && (
-        <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 p-3 space-y-3">
+        <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 p-2 sm:p-3 space-y-2.5 -mx-1 sm:mx-0">
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={draft.name}
@@ -180,7 +175,7 @@ export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
             />
             <button type="button" onClick={closeDraft} aria-label="Düzenleyiciyi kapat" className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"><X className="w-4 h-4" /></button>
           </div>
-          <VariationSheet rows={draft.rows} onChange={(rows) => setDraft({ ...draft, rows })} />
+          <VariationSheet key={draft.id ?? 'new'} rows={draft.rows} onChange={(rows) => setDraft({ ...draft, rows })} />
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
             <button type="button" onClick={() => void saveDraft(false)} disabled={busy || (!dirty && draft.id !== null)} className={`${smallBtn} bg-indigo-600 hover:bg-indigo-500 text-white`}>
               {busy ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} {draft.id ? 'Kaydet' : 'Şablon olarak kaydet'}
@@ -190,9 +185,6 @@ export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
                 Yeni şablon olarak kaydet
               </button>
             )}
-            <button type="button" onClick={() => onUseAsDefault(draft.rows)} disabled={draft.rows.length === 0} className={`${smallBtn} text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 ml-auto`} title="Bu varyasyonları Üretim'den oluşturulan ilanların varsayılanı yapar">
-              <Download className="w-3.5 h-3.5" /> Varsayılan varyasyonlara aktar
-            </button>
           </div>
         </div>
       )}
@@ -212,18 +204,19 @@ export function VariationTemplatesPanel({ newTemplateRows, onUseAsDefault }: {
 }
 
 /**
- * Excel benzeri varyasyon tablosu: filtreler, toplu fiyat/stok/satış durumu, beden ve renk ekleme/çıkarma,
- * ok tuşları ve Enter ile hücreler arasında gezinme, Excel'den çok satırlı yapıştırma (aşağı doğru doldurur).
+ * Excel benzeri varyasyon tablosu. Filtreler sütun başlıklarındadır (satış durumu, beden, renk); toplu
+ * fiyat/stok/satış durumu filtrelenen satırlara uygulanır. ↑/↓/Enter ile hücreler arasında gezilir, Excel'den
+ * çok satırlı yapıştırma aşağı doğru doldurur. Bedenler ve renkler açılır bölümden eklenir/çıkarılır.
  */
 function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange: (rows: EtsyVariationRow[]) => void }) {
   const [sizeFilter, setSizeFilter] = useState('');
   const [colorFilter, setColorFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'on' | 'off'>('all');
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkQty, setBulkQty] = useState('');
   const [newSize, setNewSize] = useState('');
   const [newColor, setNewColor] = useState('');
+  const [manageOpen, setManageOpen] = useState(rows.length === 0);
   const tableRef = useRef<HTMLTableElement>(null);
 
   const sizes = useMemo(() => unique(rows.map((r) => r.size)), [rows]);
@@ -232,16 +225,24 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
     (!sizeFilter || r.size === sizeFilter)
     && (!colorFilter || r.color === colorFilter)
     && (statusFilter === 'all' || (statusFilter === 'on') === r.enabled)), [rows, sizeFilter, colorFilter, statusFilter]);
-  const targetIds = useMemo(() => {
-    const chosen = visible.filter((r) => selected.has(r.id));
-    return new Set((chosen.length > 0 ? chosen : visible).map((r) => r.id));
-  }, [visible, selected]);
-  const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
+  const visibleIds = useMemo(() => new Set(visible.map((r) => r.id)), [visible]);
+  const filtered = Boolean(sizeFilter || colorFilter || statusFilter !== 'all');
   const enabledCount = rows.filter((r) => r.enabled).length;
 
-  const patchRows = (ids: Set<string>, patch: (row: EtsyVariationRow) => Partial<EtsyVariationRow>) =>
-    onChange(rows.map((r) => (ids.has(r.id) ? { ...r, ...patch(r) } : r)));
+  const patchVisible = (patch: Partial<EtsyVariationRow>) => onChange(rows.map((r) => (visibleIds.has(r.id) ? { ...r, ...patch } : r)));
   const patchRow = (id: string, patch: Partial<EtsyVariationRow>) => onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  const applyBulk = () => {
+    const patch: Partial<EtsyVariationRow> = {};
+    const price = Number(bulkPrice.replace(',', '.'));
+    if (bulkPrice !== '' && price > 0) patch.price = Math.round(price * 100) / 100;
+    const qty = Math.trunc(Number(bulkQty));
+    if (bulkQty !== '' && qty >= 0) patch.quantity = Math.min(999, qty);
+    if (Object.keys(patch).length === 0) return;
+    patchVisible(patch);
+    setBulkPrice('');
+    setBulkQty('');
+  };
 
   /** Bir bedenin mevcut fiyatı (yoksa en düşük fiyat) yeni renklerde kullanılır. */
   const priceFor = (size: string) => rows.find((r) => r.size === size)?.price ?? (rows.length > 0 ? Math.min(...rows.map((r) => r.price)) : 24.99);
@@ -266,18 +267,17 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
     }
     onChange([...rows, ...added]);
   };
-
-  const addSize = () => {
-    const size = newSize.replace(/\s+/g, ' ').trim().slice(0, 60);
-    if (!size) return;
-    addCombos([size], colors.length > 0 ? colors : ['']);
-    setNewSize('');
+  const addValue = (kind: 'size' | 'color') => {
+    const raw = kind === 'size' ? newSize : newColor;
+    const values = unique(raw.split(',').map((v) => v.replace(/\s+/g, ' ').trim().slice(0, 60)));
+    if (values.length === 0) return;
+    if (kind === 'size') { addCombos(values, colors.length > 0 ? colors : ['']); setNewSize(''); }
+    else { addCombos(sizes.length > 0 ? sizes : [''], values); setNewColor(''); }
   };
-  const addColor = () => {
-    const color = newColor.replace(/\s+/g, ' ').trim().slice(0, 60);
-    if (!color) return;
-    addCombos(sizes.length > 0 ? sizes : [''], [color]);
-    setNewColor('');
+  const removeValue = (kind: 'size' | 'color', value: string) => {
+    onChange(rows.filter((r) => r[kind] !== value));
+    if (kind === 'size' && sizeFilter === value) setSizeFilter('');
+    if (kind === 'color' && colorFilter === value) setColorFilter('');
   };
 
   /** Ok tuşları/Enter ile aynı sütunda üst/alt satıra geçer. */
@@ -304,111 +304,119 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
     onChange(rows.map((r) => (updates.has(r.id) ? { ...r, [field]: updates.get(r.id)! } : r)));
   };
 
-  const removeValue = (kind: 'size' | 'color', value: string) => {
-    onChange(rows.filter((r) => r[kind] !== value));
-    if (kind === 'size' && sizeFilter === value) setSizeFilter('');
-    if (kind === 'color' && colorFilter === value) setColorFilter('');
-  };
-
   const sortRows = () => {
     const order = (list: string[], v: string) => list.indexOf(v);
     onChange([...rows].sort((a, b) => order(colors, a.color) - order(colors, b.color) || order(sizes, a.size) - order(sizes, b.size)));
   };
 
-  const targetLabel = selected.size > 0 && visible.some((r) => selected.has(r.id)) ? `${targetIds.size} seçili satıra` : `${targetIds.size} görünen satıra`;
-  const cellInput = 'w-full min-w-0 px-2 py-1.5 bg-transparent text-right tabular-nums outline-none rounded focus:bg-indigo-50 dark:focus:bg-indigo-500/15 focus:ring-1 focus:ring-indigo-400';
+  const headerSelect = 'w-full max-w-full bg-transparent text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer truncate';
+  const cellInput = 'w-full min-w-0 px-1.5 py-1.5 bg-transparent text-right tabular-nums outline-none rounded focus:bg-indigo-50 dark:focus:bg-indigo-500/15 focus:ring-1 focus:ring-indigo-400';
+  const smallInput = 'w-full min-w-0 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs';
 
   return (
-    <div className="space-y-2.5">
-      {/* Bedenler ve renkler: ekle / çıkar (çıkarılınca o satırlar silinir) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {([['size', 'Bedenler', sizes, newSize, setNewSize, addSize], ['color', 'Renkler', colors, newColor, setNewColor, addColor]] as const).map(([kind, label, values, draftValue, setDraftValue, add]) => (
-          <div key={kind} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-1.5">
-            <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">{label} ({values.filter(Boolean).length})</span>
-            <div className="flex flex-wrap gap-1">
-              {values.filter(Boolean).map((value) => (
-                <span key={value} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                  {value}
-                  <button type="button" onClick={() => removeValue(kind, value)} aria-label={`${value} ve satırlarını kaldır`} className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-            </div>
-            <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); add(); }}>
-              <input value={draftValue} onChange={(e) => setDraftValue(e.target.value)} placeholder={kind === 'size' ? 'Beden ekle (ör. 4XL)' : 'Renk ekle (ör. Forest Green)'} aria-label={kind === 'size' ? 'Yeni beden' : 'Yeni renk'} className={`${inputClass} !py-1.5 !text-xs`} />
-              <button type="submit" disabled={!draftValue.trim()} aria-label="Ekle" className="shrink-0 px-2 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40"><Plus className="w-3.5 h-3.5" /></button>
-            </form>
+    <div className="space-y-2">
+      {/* Beden ve renk yönetimi (açılır) */}
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+        <button type="button" onClick={() => setManageOpen((v) => !v)} aria-expanded={manageOpen} className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+          <span>Bedenler ({sizes.length}) · Renkler ({colors.length})</span>
+          <span className="text-indigo-600 dark:text-indigo-300">{manageOpen ? 'Kapat' : 'Ekle / çıkar'}</span>
+        </button>
+        {manageOpen && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 pt-0">
+            {(['size', 'color'] as const).map((kind) => {
+              const values = kind === 'size' ? sizes : colors;
+              const draftValue = kind === 'size' ? newSize : newColor;
+              const setDraftValue = kind === 'size' ? setNewSize : setNewColor;
+              return (
+                <div key={kind} className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1">
+                    {values.map((value) => (
+                      <span key={value} className="inline-flex items-center gap-0.5 pl-2 pr-0.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                        {value}
+                        <button type="button" onClick={() => removeValue(kind, value)} aria-label={`${value} ve satırlarını kaldır`} className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                  <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); addValue(kind); }}>
+                    <input value={draftValue} onChange={(e) => setDraftValue(e.target.value)} placeholder={kind === 'size' ? 'Beden ekle (ör. 4XL, 5XL)' : 'Renk ekle (ör. Forest Green)'} aria-label={kind === 'size' ? 'Yeni beden' : 'Yeni renk'} className={smallInput} />
+                    <button type="submit" disabled={!draftValue.trim()} aria-label="Ekle" className="shrink-0 px-2 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40"><Plus className="w-3.5 h-3.5" /></button>
+                  </form>
+                </div>
+              );
+            })}
           </div>
-        ))}
+        )}
       </div>
 
-      {/* Filtreler ve toplu düzenleme */}
-      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-        <select value={sizeFilter} onChange={(e) => setSizeFilter(e.target.value)} aria-label="Bedene göre süz" className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs">
-          <option value="">Tüm bedenler</option>
-          {sizes.map((s) => <option key={s} value={s}>{s || '(boş)'}</option>)}
-        </select>
-        <select value={colorFilter} onChange={(e) => setColorFilter(e.target.value)} aria-label="Renge göre süz" className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs">
-          <option value="">Tüm renkler</option>
-          {colors.map((c) => <option key={c} value={c}>{c || '(boş)'}</option>)}
-        </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="Duruma göre süz" className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs">
-          <option value="all">Tüm durumlar</option>
-          <option value="on">Satışta</option>
-          <option value="off">Satışta değil</option>
-        </select>
-        <button type="button" onClick={sortRows} className="px-2 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold">Sırala (renk › beden)</button>
-        <span className={`ml-auto font-semibold ${rows.length > MAX_VARIATION_COMBINATIONS ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>
-          {enabledCount} satışta · {rows.length}/{MAX_VARIATION_COMBINATIONS}
+      {/* Toplu düzenleme: filtrelenen satırlara uygulanır */}
+      <form className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs" onSubmit={(e) => { e.preventDefault(); applyBulk(); }}>
+        <span className="w-full sm:w-auto font-semibold text-slate-600 dark:text-slate-300">
+          {filtered ? `Filtrelenen ${visible.length} satıra:` : `Tüm ${visible.length} satıra:`}
+        </span>
+        <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)} inputMode="decimal" placeholder="Fiyat" aria-label="Toplu fiyat" className={`${smallInput} !w-20`} />
+        <input value={bulkQty} onChange={(e) => setBulkQty(e.target.value)} inputMode="numeric" placeholder="Stok" aria-label="Toplu stok" className={`${smallInput} !w-16`} />
+        <button type="submit" disabled={visible.length === 0 || (!(Number(bulkPrice.replace(',', '.')) > 0) && bulkQty === '')} className="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-40">Uygula</button>
+        <span className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-slate-700" />
+        <button type="button" disabled={visible.length === 0} onClick={() => patchVisible({ enabled: true })} className="px-2 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold disabled:opacity-40">Satışa aç</button>
+        <button type="button" disabled={visible.length === 0} onClick={() => patchVisible({ enabled: false })} className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold disabled:opacity-40">Kapat</button>
+      </form>
+
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className={`font-semibold ${rows.length > MAX_VARIATION_COMBINATIONS ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>
+          {enabledCount} satışta · {rows.length}/{MAX_VARIATION_COMBINATIONS} kombinasyon
+        </span>
+        <span className="flex items-center gap-2">
+          {filtered && <button type="button" onClick={() => { setSizeFilter(''); setColorFilter(''); setStatusFilter('all'); }} className="font-bold text-indigo-600 dark:text-indigo-300">Filtreleri temizle</button>}
+          <button type="button" onClick={sortRows} className="font-bold text-slate-600 dark:text-slate-300">Sırala</button>
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs">
-        <span className="font-semibold text-slate-500 dark:text-slate-400 mr-1">Toplu ({targetLabel}):</span>
-        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const v = Number(bulkPrice); if (v > 0) { patchRows(targetIds, () => ({ price: Math.round(v * 100) / 100 })); setBulkPrice(''); } }}>
-          <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)} type="number" min={0.2} step={0.01} placeholder="Fiyat" aria-label="Toplu fiyat" className="w-20 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950" />
-          <button type="submit" disabled={!(Number(bulkPrice) > 0)} className="px-2 py-1.5 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-40">Uygula</button>
-        </form>
-        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const v = Math.trunc(Number(bulkQty)); if (bulkQty !== '' && v >= 0) { patchRows(targetIds, () => ({ quantity: Math.min(999, v) })); setBulkQty(''); } }}>
-          <input value={bulkQty} onChange={(e) => setBulkQty(e.target.value)} type="number" min={0} max={999} placeholder="Stok" aria-label="Toplu stok" className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950" />
-          <button type="submit" disabled={bulkQty === ''} className="px-2 py-1.5 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-40">Uygula</button>
-        </form>
-        <button type="button" onClick={() => patchRows(targetIds, () => ({ enabled: true }))} className="px-2 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold">Satışa aç</button>
-        <button type="button" onClick={() => patchRows(targetIds, () => ({ enabled: false }))} className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold">Satıştan kaldır</button>
-      </div>
 
-      {/* Tablo */}
-      <div className="overflow-auto max-h-[28rem] rounded-lg border border-slate-200 dark:border-slate-700">
-        <table ref={tableRef} className="w-full min-w-[30rem] text-xs border-collapse">
-          <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            <tr>
-              <th className="w-9 p-2 border-b border-slate-200 dark:border-slate-700">
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={() => setSelected(allVisibleSelected ? new Set() : new Set(visible.map((r) => r.id)))}
-                  aria-label="Görünen satırların tümünü seç"
-                  className="w-4 h-4 rounded"
-                />
+      {/* Tablo: filtreler sütun başlıklarında */}
+      <div className="overflow-auto max-h-[60vh] sm:max-h-[28rem] rounded-lg border border-slate-200 dark:border-slate-700">
+        <table ref={tableRef} className="w-full table-fixed text-xs border-collapse">
+          <colgroup>
+            <col className="w-[3.75rem]" />
+            <col />
+            <col />
+            <col className="w-[4.75rem] sm:w-28" />
+            <col className="w-[3.5rem] sm:w-24" />
+          </colgroup>
+          <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
+            <tr className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <th className="px-2 pt-1.5 text-left font-bold">Satış</th>
+              <th className="px-2 pt-1.5 text-left font-bold">Beden</th>
+              <th className="px-2 pt-1.5 text-left font-bold">Renk</th>
+              <th className="px-2 pt-1.5 text-right font-bold">Fiyat</th>
+              <th className="px-2 pt-1.5 text-right font-bold">Stok</th>
+            </tr>
+            <tr className="border-b border-slate-200 dark:border-slate-700">
+              <th className="px-1.5 pb-1.5 font-normal">
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="Satış durumuna göre süz" className={headerSelect}>
+                  <option value="all">Tümü</option>
+                  <option value="on">Açık</option>
+                  <option value="off">Kapalı</option>
+                </select>
               </th>
-              <th className="p-2 text-left font-bold border-b border-slate-200 dark:border-slate-700 w-20">Satışta</th>
-              <th className="p-2 text-left font-bold border-b border-slate-200 dark:border-slate-700">Beden</th>
-              <th className="p-2 text-left font-bold border-b border-slate-200 dark:border-slate-700">Renk</th>
-              <th className="p-2 text-right font-bold border-b border-slate-200 dark:border-slate-700 w-28">Fiyat</th>
-              <th className="p-2 text-right font-bold border-b border-slate-200 dark:border-slate-700 w-24">Stok</th>
+              <th className="px-1.5 pb-1.5 font-normal">
+                <select value={sizeFilter} onChange={(e) => setSizeFilter(e.target.value)} aria-label="Bedene göre süz" className={headerSelect}>
+                  <option value="">Tümü</option>
+                  {sizes.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </th>
+              <th className="px-1.5 pb-1.5 font-normal">
+                <select value={colorFilter} onChange={(e) => setColorFilter(e.target.value)} aria-label="Renge göre süz" className={headerSelect}>
+                  <option value="">Tümü</option>
+                  {colors.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </th>
+              <th />
+              <th />
             </tr>
           </thead>
           <tbody>
             {visible.map((row, index) => (
-              <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 ${selected.has(row.id) ? 'bg-indigo-50/70 dark:bg-indigo-500/10' : 'odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-900/60'} ${row.enabled ? '' : 'text-slate-400'}`}>
-                <td className="p-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(row.id)}
-                    onChange={() => setSelected((prev) => { const next = new Set(prev); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; })}
-                    aria-label={`${row.size} ${row.color} seç`}
-                    className="w-4 h-4 rounded"
-                  />
-                </td>
-                <td className="p-2">
+              <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-900/60 ${row.enabled ? '' : 'text-slate-400'}`}>
+                <td className="px-2 py-1">
                   <button
                     type="button"
                     role="switch"
@@ -420,11 +428,12 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
                     <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${row.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </button>
                 </td>
-                <td className="p-2 font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap">{row.size || '—'}</td>
-                <td className="p-2 font-semibold whitespace-nowrap">{row.color || '—'}</td>
+                <td className="px-2 py-1 font-bold text-indigo-700 dark:text-indigo-300 truncate">{row.size || '—'}</td>
+                <td className="px-2 py-1 font-semibold truncate" title={row.color}>{row.color || '—'}</td>
                 <td className="p-0.5">
                   <input
                     type="number"
+                    inputMode="decimal"
                     min={0.2}
                     step={0.01}
                     value={row.price}
@@ -435,12 +444,13 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
                     onPaste={(e) => pasteDown(e, index, 'price')}
                     onFocus={(e) => e.target.select()}
                     aria-label={`${row.size} ${row.color} fiyat`}
-                    className={`${cellInput} font-bold ${row.price < 0.2 ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-400'}`}
+                    className={`${cellInput} font-bold ${row.price < 0.2 ? 'text-red-600' : row.enabled ? 'text-emerald-700 dark:text-emerald-400' : ''}`}
                   />
                 </td>
                 <td className="p-0.5">
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={0}
                     max={999}
                     value={row.quantity}
@@ -457,13 +467,13 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr><td colSpan={6} className="p-6 text-center text-slate-500">{rows.length === 0 ? 'Henüz varyasyon yok: yukarıdan beden ve renk ekleyin.' : 'Filtrelere uyan satır yok.'}</td></tr>
+              <tr><td colSpan={5} className="p-6 text-center text-slate-500">{rows.length === 0 ? 'Henüz varyasyon yok: yukarıdan beden ve renk ekleyin.' : 'Filtrelere uyan satır yok.'}</td></tr>
             )}
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-        İpucu: Hücreler arasında ↑/↓ veya Enter ile gezinin. Excel&apos;den bir sütun kopyalayıp fiyat ya da stok hücresine yapıştırırsanız değerler aşağı doğru doldurulur. Toplu işlemler satır seçiliyse seçili satırlara, değilse görünen satırlara uygulanır.
+      <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+        İpucu: ↑/↓ veya Enter ile hücreler arasında gezinin. Excel&apos;den bir sütunu fiyat ya da stok hücresine yapıştırırsanız değerler aşağı doğru doldurulur.
       </p>
     </div>
   );

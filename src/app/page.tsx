@@ -15,6 +15,7 @@ const ListingsHub = dynamic(() => import('@/components/listings/ListingsHub').th
 const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <TabSkeleton label="Otomasyon şablonları yükleniyor" layout="list" /> });
 
 import { generateMatchingPairs } from '@/lib/canvas-renderer';
+import { OPEN_TAB_EVENT } from '@/lib/app-navigation';
 import {
   saveAppData,
   loadSampleAppData,
@@ -126,6 +127,18 @@ function MainContent() {
     }, 0);
 
     return () => window.clearTimeout(tabTimer);
+  }, []);
+
+  // Diğer bileşenlerden sekme geçişi (openAppTab).
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const tab = (event as CustomEvent).detail;
+      if (!TAB_ORDER.includes(tab as TabKey)) return;
+      setActiveTabState(tab as TabKey);
+      try { localStorage.setItem(STORAGE_KEYS.ACTIVE_TAB, tab); } catch {}
+    };
+    window.addEventListener(OPEN_TAB_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_TAB_EVENT, onOpen);
   }, []);
 
   const setActiveTab = (tab: TabKey) => {

@@ -12,7 +12,7 @@ import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { writeAuditLog } from '@/lib/audit-log';
 import { runSkuOf } from '@/lib/run-sku';
-import { MANUAL_TEMPLATE_ID, manualSettingsOf, type ManualListingSettings } from '@/lib/manual-listing';
+import { hasManualVariations, MANUAL_TEMPLATE_ID, manualSettingsOf, withManualSettings, type ManualListingSettings } from '@/lib/manual-listing';
 import { sanitizeSku } from '@/lib/sku';
 import type {
   AutomationRunSteps,
@@ -61,6 +61,11 @@ export type ReviewItem = {
   sku: string | null;
   /** Manuel üretimden gelen ilanın metni arka planda hazırlanıyor */
   preparing: boolean;
+  /**
+   * Manuel üretim ilanının varyasyonları (yayından önce kayıtlı şablonlardan seçilir). Otomasyon
+   * ilanlarında null: varyasyonlar otomasyonun ayarından gelir.
+   */
+  variations: { templateId: string | null; templateName: string | null; count: number; enabled: number } | null;
 };
 
 /**
@@ -116,6 +121,14 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
       warning: typeof warning === 'string' ? warning : null,
       sku: runSkuOf(steps),
       preparing: run.status === 'pending' || run.status === 'running',
+      variations: manual
+        ? {
+            templateId: manual.variationTemplateId ?? null,
+            templateName: manual.variationTemplateName ?? (manual.variations?.length ? 'Klasörün otomasyonundan' : null),
+            count: manual.variations?.length ?? 0,
+            enabled: manual.variations?.filter((r) => r.enabled !== false).length ?? 0,
+          }
+        : null,
     }];
   });
 }
@@ -158,7 +171,19 @@ export type ReviewEdits = {
   includeVideo?: boolean;
   imageAltTexts?: Record<string, string>;
   sku?: string;
+  /** Manuel ilan: kayıtlı varyasyon şablonunu seçer (satırlar ilana kopyalanır). */
+  variationTemplateId?: string;
 };
+
+const NO_VARIATIONS_ERROR = 'Yayınlamadan önce ilanın varyasyonlarını seçin (Ayarlar › Varyasyonlar\'daki kayıtlı şablonlardan).';
+
+/** Kayıtlı varyasyon şablonunu yükler (yoksa hata). */
+async function loadVariationTemplate(userId: string, templateId: string) {
+  const [workspace] = await db.select({ templates: userWorkspaces.etsyVariationTemplates }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
+  const template = ((workspace?.templates as Array<{ id: string; name?: string; variations?: EtsyVariationRow[] }> | null) ?? []).find((t) => t.id === templateId);
+  if (!template?.variations?.length) throw new ListingReviewError('Varyasyon şablonu bulunamadı veya boş.', 404);
+  return { id: template.id, name: template.name || 'Adsız şablon', rows: template.variations };
+}
 
 /** İlan metnini ve fotoğraf seçimini günceller (yalnızca yayınlanmamış ilanlarda). */
 export async function updateReviewItem(userId: string, runId: string, edits: ReviewEdits): Promise<void> {
@@ -189,6 +214,13 @@ export async function updateReviewItem(userId: string, runId: string, edits: Rev
     }
     seo.imageAltTexts = alts;
   }
+  let steps = run.steps as AutomationRunSteps;
+  if (edits.variationTemplateId !== undefined) {
+    const manual = manualSettingsOf(steps);
+    if (!manual) throw new ListingReviewError('Bu ilanın varyasyonları otomasyonundan gelir; otomasyon ayarlarından değiştirin.', 409);
+    const template = await loadVariationTemplate(userId, edits.variationTemplateId);
+    steps = withManualSettings(steps, { ...manual, variations: template.rows, variationTemplateId: template.id, variationTemplateName: template.name });
+  }
   const next: ListingReviewState = { ...review };
   if (edits.photos !== undefined) {
     const photos = edits.photos.filter((url, i, list) => allPhotos.includes(url) && list.indexOf(url) === i);
@@ -204,7 +236,7 @@ export async function updateReviewItem(userId: string, runId: string, edits: Rev
     // Tasarım da yeni SKU ile aranabilsin.
     if (run.generatedDesignUrl) await tagDesignWithSku(userId, run.generatedDesignUrl, sku);
   }
-  await saveReview(runId, run.steps as AutomationRunSteps, next, { generatedSeo: seo });
+  await saveReview(runId, steps, next, { generatedSeo: seo });
 }
 
 export type ReviewAction =
@@ -221,6 +253,8 @@ export async function applyReviewAction(userId: string, runId: string, action: R
   switch (action.type) {
     case 'approve': {
       if (!EDITABLE.includes(review.status)) throw new ListingReviewError('Bu ilan onaylanamaz.', 409);
+      const manual = manualSettingsOf(run.steps);
+      if (manual && !hasManualVariations(manual)) throw new ListingReviewError(NO_VARIATIONS_ERROR, 409);
       const at = action.scheduledAt ? new Date(action.scheduledAt) : new Date();
       if (Number.isNaN(at.getTime())) throw new ListingReviewError('Geçersiz tarih.');
       next = { ...review, status: 'scheduled', scheduledAt: at.toISOString(), error: null };
@@ -269,6 +303,7 @@ export async function publishReviewItem(userId: string, runId: string): Promise<
   try {
     // Elle hazırlanan ilan Etsy ayarlarını kendisi taşır; otomasyon ilanı şablonundan okur.
     const manual = manualSettingsOf(steps);
+    if (manual && !hasManualVariations(manual)) return await fail(NO_VARIATIONS_ERROR);
     const [template] = manual
       ? [{ automationSchedule: { etsy: manual.etsy }, variationConfig: { rows: manual.variations } } as unknown as TemplateRow]
       : await db.select().from(podTemplates).where(and(eq(podTemplates.id, run.templateId), eq(podTemplates.userId, userId)));
@@ -437,6 +472,8 @@ async function loadFolderAutomation(userId: string, folderId: string) {
     productType: template.seoHints?.productType?.trim() || null,
     notes: template.seoHints?.customNotes?.trim() || null,
     variations: rows,
+    variationTemplateId: sourceId ?? null,
+    variationTemplateName: template.variationConfig?.sourceTemplateName ?? null,
   };
 }
 
@@ -446,7 +483,6 @@ async function loadFolderAutomation(userId: string, folderId: string) {
  */
 export async function createProductionDraft(userId: string, input: ProductionDraftInput): Promise<{ runId: string }> {
   const { loadListingDefaults } = await import('@/lib/user-settings');
-  const { variationRowsFromDefaults } = await import('@/lib/listing-defaults');
   const { generateListingSku } = await import('@/lib/sku');
   const defaults = await loadListingDefaults(userId);
   const analysis = input.design.analysis ?? {};
@@ -459,7 +495,10 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const sku = generateListingSku(productType);
   const settings: ManualListingSettings = {
     etsy: { ...defaults.etsy, ...(folder?.taxonomyId ? { taxonomyId: folder.taxonomyId } : {}) },
-    variations: folder?.variations?.length ? folder.variations : variationRowsFromDefaults(defaults.variations),
+    // Klasörün otomasyonunda varyasyon yoksa ilan Hazır İlanlar'da yayından önce şablon seçilerek tamamlanır.
+    variations: folder?.variations ?? [],
+    variationTemplateId: folder?.variations?.length ? folder.variationTemplateId : null,
+    variationTemplateName: folder?.variations?.length ? folder.variationTemplateName : null,
     sku,
     productType,
     notes: folder?.notes ?? '',

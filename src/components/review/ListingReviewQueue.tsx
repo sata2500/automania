@@ -296,6 +296,9 @@ export function ListingReviewQueue() {
                     {item.review.status === 'failed' && item.review.error && (
                       <p className="text-[10px] sm:text-[11px] text-red-600 dark:text-red-400 flex items-start gap-1" title={item.review.error}><XCircle className="w-3 h-3 shrink-0 mt-0.5" /> <span className="line-clamp-2">{item.review.error}</span></p>
                     )}
+                    {item.variations && item.variations.enabled === 0 && !item.preparing && item.review.status !== 'published' && (
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0" /> <span className="truncate">Varyasyon seçilmedi</span></p>
+                    )}
                     {item.warning && item.review.status === 'awaiting' && (
                       <p className="text-[10px] sm:text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1" title={item.warning}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> <span className="line-clamp-2">{item.warning}</span></p>
                     )}

@@ -20,7 +20,6 @@ import { generateListingSku } from '@/lib/sku';
 import { runSkuOf } from '@/lib/run-sku';
 import { MANUAL_TEMPLATE_ID, manualTemplateFor } from '@/lib/manual-listing';
 import { loadListingDefaults } from '@/lib/user-settings';
-import { variationRowsFromDefaults } from '@/lib/listing-defaults';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { AUTOMATION_DESIGN_FOLDER_ID } from '@/lib/design-library';
 import { createOwnedUploadName } from '@/lib/upload-security';
@@ -585,16 +584,37 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
   };
 }
 
+/**
+ * İlan videosu: "Yapay zekâ ile video üret" açıksa yalnızca üretilen video gönderilir (klasördeki video
+ * kullanılmaz). Kapalıysa klasöre yüklenen video (varsa) gönderilir. Etsy API'si ilan başına tek video
+ * yükletir. Yapay zekâ videosu üretilemezse klasördeki videoya düşülür (uyarıyla).
+ */
 async function runVideo(ctx: StepContext): Promise<StepResult> {
-  const { template, userId, runId } = ctx;
+  const { template, userId } = ctx;
   const schedule = template.automationSchedule;
+  const folderVideo = async () => selectAutomationMockups(await loadWorkspaceMockups(userId), template.mockupConfig).video;
   if (!schedule?.generateVideo) {
-    // AI videosu istenmiyorsa şablondaki video mockup'ı (varsa) ilana eklenir.
-    const mockups = await loadWorkspaceMockups(userId);
-    const video = selectAutomationMockups(mockups, template.mockupConfig).video;
+    const video = await folderVideo();
     if (video) return { patch: { generatedVideoUrl: video.src }, output: { source: 'mockup', mockupId: video.id } };
-    throw new StepSkipped('Video istenmedi.');
+    throw new StepSkipped('Video istenmedi ve klasörde video yok.');
   }
+  try {
+    return await generateAiVideo(ctx);
+  } catch (error) {
+    const video = await folderVideo().catch(() => null);
+    if (!video) throw error;
+    console.warn('[Automation] AI video failed; using the folder video.', describeAiError(error));
+    return {
+      patch: { generatedVideoUrl: video.src },
+      output: { source: 'mockup', mockupId: video.id },
+      warning: `Yapay zekâ videosu üretilemedi; klasördeki video kullanıldı. ${describeAiError(error).slice(0, 200)}`,
+    };
+  }
+}
+
+async function generateAiVideo(ctx: StepContext): Promise<StepResult> {
+  const { template, userId, runId } = ctx;
+  const schedule = template.automationSchedule!;
 
   const config = await loadAIConfig();
   const { generateVideo, isOmniVideoModel } = await import('@/lib/ai-provider');
@@ -776,9 +796,9 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
   const media = run.generatedVideoUrl && review?.includeVideo !== false ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
   // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
-  const templateRows = await resolveVariationRows(userId, template.variationConfig);
-  // Şablonda varyasyon yoksa Ayarlar'daki beden × renk varyasyonları kullanılır.
-  const variationRows = templateRows.length > 0 ? templateRows : variationRowsFromDefaults(defaults.variations);
+  // Varyasyonlar otomasyonun seçtiği kayıtlı şablondan (manuel ilanda Hazır İlanlar'da seçilen şablondan)
+  // gelir; hiç yoksa ilan tek fiyatla açılır.
+  const variationRows = await resolveVariationRows(userId, template.variationConfig);
   const variations = variationRows.some((row) => row.enabled !== false)
     ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: row.enabled !== false }))
     : [];

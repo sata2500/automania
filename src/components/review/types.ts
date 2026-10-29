@@ -17,4 +17,6 @@ export type ReviewItemView = {
   sku: string | null;
   /** Manuel üretimden gelen ilanın metni arka planda hazırlanıyor */
   preparing?: boolean;
+  /** Manuel üretim ilanının varyasyonları (yayından önce seçilir); otomasyon ilanlarında null. */
+  variations?: { templateId: string | null; templateName: string | null; count: number; enabled: number } | null;
 };

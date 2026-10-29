@@ -12,7 +12,10 @@ export const MANUAL_TEMPLATE_ID = 'manual';
 /** İlanla birlikte saklanan Etsy ayarları ve varyasyonlar. */
 export type ManualListingSettings = {
   etsy: PodTemplateEtsyListingSettings;
+  /** Yayından önce Hazır İlanlar'da seçilen kayıtlı varyasyon şablonunun satırları (boşsa seçilmemiş). */
   variations: EtsyVariationRow[];
+  variationTemplateId?: string | null;
+  variationTemplateName?: string | null;
   sku?: string;
   productType?: string;
   notes?: string;
@@ -25,6 +28,19 @@ export function manualSettingsOf(steps: unknown): ManualListingSettings | null {
   const s = steps as AutomationRunSteps | null;
   const manual = s?.listingCreation?.output?.manualListing ?? s?.mockupRender?.output?.listingSettings;
   return manual && typeof manual === 'object' ? manual as ManualListingSettings : null;
+}
+
+/** Ayarları kaydedildiği yere (eski stüdyo: `listingCreation`, üretim: `mockupRender`) geri yazar. */
+export function withManualSettings(steps: AutomationRunSteps, settings: ManualListingSettings): AutomationRunSteps {
+  if (steps.listingCreation?.output?.manualListing) {
+    return { ...steps, listingCreation: { ...steps.listingCreation, output: { ...steps.listingCreation.output, manualListing: settings } } };
+  }
+  return { ...steps, mockupRender: { ...steps.mockupRender!, output: { ...steps.mockupRender?.output, listingSettings: settings } } };
+}
+
+/** Manuel ilanın satışta en az bir varyasyonu var mı (yoksa yayından önce şablon seçilmeli). */
+export function hasManualVariations(settings: ManualListingSettings | null): boolean {
+  return Boolean(settings?.variations?.some((row) => row.enabled !== false));
 }
 
 /**

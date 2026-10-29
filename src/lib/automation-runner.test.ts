@@ -240,7 +240,7 @@ describe('executeAutomationRun', () => {
     expect(createDraft).not.toHaveBeenCalled();
   });
 
-  it('fills missing shipping settings and variations from the user listing defaults', async () => {
+  it('fills missing shipping settings from the user listing defaults; variations only come from templates', async () => {
     listingDefaults.value = {
       etsy: { shippingProfileId: '77', readinessStateId: '88' },
       variations: { sizes: ['M', 'L'], colors: ['Black'], basePrice: 25, sizePrices: {}, quantity: 10 },
@@ -251,7 +251,8 @@ describe('executeAutomationRun', () => {
     listingDefaults.value = null;
     const [, , input] = createDraft.mock.calls[0] as unknown as [string, unknown, { shipping_profile_id: string; readiness_state_id: string; variations: Array<{ size: string }> }];
     expect(input).toMatchObject({ shipping_profile_id: '77', readiness_state_id: '88' });
-    expect(input.variations.map((v) => v.size)).toEqual(['M', 'L']);
+    // Şablonda varyasyon yoksa ilan tek fiyatla açılır (eski varsayılan varyasyonlar kullanılmaz).
+    expect(input.variations ?? []).toEqual([]);
   });
 
   it('refuses to run a record that is not pending', async () => {

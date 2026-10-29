@@ -4,8 +4,9 @@
  * Hazır İlanlar › ilan penceresi: fotoğraf seçimi ve sırası, video, başlık, etiketler, açıklama ve alt metinler
  * düzenlenir; ilan hemen yayınlanır, zamanlanır veya reddedilir.
  */
-import React, { useState } from 'react';
-import { ArrowDown, ArrowUp, CalendarClock, ExternalLink, Rocket, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, CalendarClock, ExternalLink, Layers, Rocket, RotateCcw, Save, Settings, Trash2, X } from 'lucide-react';
+import { openAppTab } from '@/lib/app-navigation';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/ToastContext';
@@ -24,6 +25,80 @@ function initialPhotos(item: ReviewItemView): PhotoRow[] {
     ...order.filter((url) => item.photos.includes(url)).map((url) => ({ url, included: true, alt: alt(url) })),
     ...item.photos.filter((url) => !order.includes(url)).map((url) => ({ url, included: false, alt: alt(url) })),
   ];
+}
+
+type VariationTemplateOption = { id: string; name: string; variations?: Array<{ enabled?: boolean }> };
+
+/**
+ * Manuel üretim ilanının varyasyonları: kayıtlı şablonlardan biri seçilir (satırlar ilana kopyalanır).
+ * Kayıtlı şablon yoksa Ayarlar › Varyasyonlar'a yönlendirir (Etsy'den çekme veya yeni şablon).
+ */
+function VariationPicker({ item, editable, onChanged }: { item: ReviewItemView; editable: boolean; onChanged: () => Promise<void> }) {
+  const toast = useToast();
+  const [templates, setTemplates] = useState<VariationTemplateOption[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const current = item.variations!;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/workspace/variation-templates', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setTemplates(Array.isArray(data?.templates) ? data.templates.filter((t: VariationTemplateOption) => t?.id && t.variations?.length) : []); })
+      .catch(() => { if (!cancelled) setTemplates([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const choose = async (templateId: string) => {
+    if (!templateId || templateId === current.templateId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/listing-review/${item.runId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variationTemplateId: templateId }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || 'Varyasyonlar seçilemedi.');
+      toast.success('Varyasyonlar ilana eklendi.');
+      await onChanged();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Varyasyonlar seçilemedi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const missing = current.enabled === 0;
+  return (
+    <section className={`rounded-2xl border p-3 space-y-2 ${missing ? 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
+      <div className="flex items-center gap-2">
+        <Layers className={`w-4 h-4 shrink-0 ${missing ? 'text-amber-600' : 'text-indigo-500'}`} />
+        <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex-1">Varyasyonlar</span>
+        {!missing && <span className="text-[11px] text-slate-500 dark:text-slate-400">{current.enabled} satışta / {current.count}</span>}
+      </div>
+      {missing && <p className="text-[11px] text-amber-800 dark:text-amber-200">Yayınlamadan önce kayıtlı varyasyon şablonlarınızdan birini seçin.</p>}
+      {templates === null ? (
+        <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-3.5 h-3.5" /> Şablonlar yükleniyor…</div>
+      ) : templates.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[11px] text-slate-600 dark:text-slate-300 flex-1 min-w-48">Kayıtlı varyasyon şablonunuz yok. Ayarlar&apos;da Etsy&apos;deki bir ilanınızdan çekebilir veya yeni şablon oluşturabilirsiniz.</p>
+          <button type="button" onClick={() => openAppTab('settings')} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+            <Settings className="w-3.5 h-3.5" /> Ayarlar › Varyasyonlar
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <select
+            value={current.templateId ?? ''}
+            disabled={!editable || saving}
+            onChange={(e) => void choose(e.target.value)}
+            aria-label="Varyasyon şablonu"
+            className={`${inputClass} flex-1 min-w-0`}
+          >
+            {!current.templateId && <option value="">{current.count > 0 ? `${current.templateName ?? 'Mevcut varyasyonlar'} (${current.count})` : 'Şablon seçin…'}</option>}
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.variations?.filter((r) => r.enabled !== false).length ?? 0} satışta)</option>)}
+          </select>
+          {saving && <Spinner className="w-4 h-4 shrink-0" />}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function ListingReviewEditor({ item, onClose, onChanged }: { item: ReviewItemView; onClose: () => void; onChanged: () => Promise<void> }) {
@@ -177,6 +252,8 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
               </div>
             )}
           </section>
+
+          {item.variations && <VariationPicker item={item} editable={editable} onChanged={onChanged} />}
 
           {/* Metinler */}
           <section className="space-y-4">
