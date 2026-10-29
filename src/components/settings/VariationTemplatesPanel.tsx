@@ -6,8 +6,9 @@
  * otomasyonlar sonraki çalıştırmada güncel satırları kullanır.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { FilePlus2, Pencil, Plus, Save, Search, Store, Trash2, X } from 'lucide-react';
+import { Check, FilePlus2, Filter, Pencil, Plus, Save, Search, Store, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
 import { DialogPanel } from '@/components/common/DialogPanel';
@@ -203,42 +204,97 @@ export function VariationTemplatesPanel() {
   );
 }
 
-/** Çoklu seçimli filtre çipleri (boş seçim = hepsi). */
-function ChipFilter({ label, values, selected, onChange }: { label: string; values: string[]; selected: Set<string>; onChange: (next: Set<string>) => void }) {
-  if (values.length === 0) return null;
-  const toggle = (value: string) => {
-    const next = new Set(selected);
-    if (next.has(value)) next.delete(value); else next.add(value);
-    onChange(next);
+/**
+ * Tablo başlığı filtresi: başlığa dokununca seçenekler onay kutularıyla açılır (çok seçenekte arama),
+ * "Uygula" ile tablo süzülür. Boş seçim = hepsi. Pencere tablonun kaydırma alanına kırpılmasın diye
+ * ekrana sabitlenir.
+ */
+function HeaderFilter({ label, options, selected, onChange, align = 'left' }: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+  align?: 'left' | 'right';
+}) {
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [draft, setDraft] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState('');
+  const active = selected.size > 0;
+
+  const open = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = Math.min(288, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(align === 'right' ? rect.right - width : rect.left, window.innerWidth - width - 8));
+    // Aşağıda yer azsa (alt menü dahil) pencere ekranın üst yarısına sığacak şekilde yukarı alınır.
+    setAnchor({ top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 420)), left, width });
+    setDraft(new Set(selected));
+    setQuery('');
   };
+  const close = () => setAnchor(null);
+  const shown = options.filter((o) => !query.trim() || o.label.toLocaleLowerCase('tr').includes(query.trim().toLocaleLowerCase('tr')));
+  const toggle = (value: string) => setDraft((prev) => { const next = new Set(prev); if (next.has(value)) next.delete(value); else next.add(value); return next; });
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{label}{selected.size > 0 ? ` (${selected.size} seçili)` : ''}</span>
-        {selected.size > 0 && <button type="button" onClick={() => onChange(new Set())} className="text-[11px] font-bold text-indigo-600 dark:text-indigo-300">Tümü</button>}
-      </div>
-      <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
-        {values.map((value) => {
-          const on = selected.has(value);
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={on}
-              onClick={() => toggle(value)}
-              className={`px-2 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${on ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'}`}
-            >
-              {value}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={open}
+        aria-haspopup="dialog"
+        aria-expanded={anchor !== null}
+        className={`inline-flex items-center gap-1 max-w-full uppercase tracking-wide font-bold ${active ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+      >
+        <span className="truncate">{label}</span>
+        <Filter className={`w-3 h-3 shrink-0 ${active ? 'fill-current' : ''}`} aria-hidden="true" />
+        {active && <span className="shrink-0 px-1 rounded bg-indigo-600 text-white text-[9px] normal-case">{selected.size}</span>}
+      </button>
+      {anchor && createPortal(
+        <>
+          <div className="fixed inset-0 z-[80]" onClick={close} aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-label={`${label} filtresi`}
+            onKeyDown={(e) => { if (e.key === 'Escape') close(); }}
+            style={{ top: anchor.top, left: anchor.left, width: anchor.width }}
+            className="fixed z-[81] flex flex-col max-h-[min(24rem,70vh)] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl normal-case tracking-normal text-left"
+          >
+            {options.length > 8 && (
+              <div className="p-2 border-b border-slate-100 dark:border-slate-800">
+                <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`${label} ara`} aria-label={`${label} ara`} className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs font-normal" />
+              </div>
+            )}
+            <div className="flex items-center justify-between px-3 pt-2 text-[11px] font-bold">
+              <button type="button" onClick={() => setDraft(new Set([...draft, ...shown.map((o) => o.value)]))} className="text-indigo-600 dark:text-indigo-300">Tümünü seç</button>
+              <button type="button" onClick={() => setDraft(new Set())} className="text-slate-500 dark:text-slate-400">Temizle</button>
+            </div>
+            <ul className="flex-1 overflow-y-auto p-1.5">
+              {shown.map((o) => {
+                const on = draft.has(o.value);
+                return (
+                  <li key={o.value}>
+                    <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                      <input type="checkbox" checked={on} onChange={() => toggle(o.value)} className="w-4 h-4 rounded accent-indigo-600" />
+                      <span className="truncate">{o.label}</span>
+                    </label>
+                  </li>
+                );
+              })}
+              {shown.length === 0 && <li className="px-2 py-3 text-xs text-slate-500">Eşleşen yok.</li>}
+            </ul>
+            <div className="flex items-center gap-2 p-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="flex-1 text-[11px] text-slate-500 dark:text-slate-400">{draft.size === 0 ? 'Hepsi gösterilir' : `${draft.size} seçili`}</span>
+              <button type="button" onClick={close} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300">İptal</button>
+              <button type="button" onClick={() => { onChange(draft); close(); }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold"><Check className="w-3.5 h-3.5" /> Uygula</button>
+            </div>
+          </div>
+        </>,
+        document.body,
+      )}
+    </>
   );
 }
 
 /**
- * Excel benzeri varyasyon tablosu (Satış, Beden, Renk, Fiyat). Beden ve renk filtreleri çoklu seçimlidir;
+ * Excel benzeri varyasyon tablosu (Satış, Beden, Renk, Fiyat). Filtreler başlıklardadır (çoklu seçim);
  * toplu fiyat ve "Satışa aç/Kapat" yalnızca görünen (filtrelenen) satırlara uygulanır. Stok gösterilmez:
  * baskıya göre üretimde ilan her kombinasyon için 999 stokla yayınlanır. ↑/↓/Enter ile hücreler arasında
  * gezilir; Excel'den çok satırlı yapıştırma aşağı doğru doldurur.
@@ -246,7 +302,7 @@ function ChipFilter({ label, values, selected, onChange }: { label: string; valu
 function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange: (rows: EtsyVariationRow[]) => void }) {
   const [sizeFilter, setSizeFilter] = useState<Set<string>>(() => new Set());
   const [colorFilter, setColorFilter] = useState<Set<string>>(() => new Set());
-  const [statusFilter, setStatusFilter] = useState<'all' | 'on' | 'off'>('all');
+  const [statusFilter, setStatusFilter] = useState<Set<string>>(() => new Set());
   const [bulkPrice, setBulkPrice] = useState('');
   const [newSize, setNewSize] = useState('');
   const [newColor, setNewColor] = useState('');
@@ -258,9 +314,10 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
   const visible = useMemo(() => rows.filter((r) =>
     (sizeFilter.size === 0 || sizeFilter.has(r.size))
     && (colorFilter.size === 0 || colorFilter.has(r.color))
-    && (statusFilter === 'all' || (statusFilter === 'on') === r.enabled)), [rows, sizeFilter, colorFilter, statusFilter]);
+    && (statusFilter.size === 0 || statusFilter.has(r.enabled ? 'on' : 'off'))), [rows, sizeFilter, colorFilter, statusFilter]);
   const visibleIds = useMemo(() => new Set(visible.map((r) => r.id)), [visible]);
-  const filtered = sizeFilter.size > 0 || colorFilter.size > 0 || statusFilter !== 'all';
+  const filtered = sizeFilter.size > 0 || colorFilter.size > 0 || statusFilter.size > 0;
+  const clearFilters = () => { setSizeFilter(new Set()); setColorFilter(new Set()); setStatusFilter(new Set()); };
   const enabledCount = rows.filter((r) => r.enabled).length;
 
   const patchVisible = (patch: Partial<EtsyVariationRow>) => onChange(rows.map((r) => (visibleIds.has(r.id) ? { ...r, ...patch } : r)));
@@ -375,20 +432,6 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
         )}
       </div>
 
-      {/* Filtreler: beden ve renkte birden fazla seçilebilir */}
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div role="radiogroup" aria-label="Satış durumu" className="inline-flex p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-bold">
-            {([['all', 'Tümü'], ['on', 'Satışta'], ['off', 'Kapalı']] as const).map(([key, label]) => (
-              <button key={key} type="button" role="radio" aria-checked={statusFilter === key} onClick={() => setStatusFilter(key)} className={`px-2.5 py-1 rounded-md ${statusFilter === key ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400'}`}>{label}</button>
-            ))}
-          </div>
-          {filtered && <button type="button" onClick={() => { setSizeFilter(new Set()); setColorFilter(new Set()); setStatusFilter('all'); }} className="text-[11px] font-bold text-indigo-600 dark:text-indigo-300">Filtreleri temizle</button>}
-        </div>
-        <ChipFilter label="Beden" values={sizes} selected={sizeFilter} onChange={setSizeFilter} />
-        <ChipFilter label="Renk" values={colors} selected={colorFilter} onChange={setColorFilter} />
-      </div>
-
       {/* Toplu düzenleme: görünen satırlara uygulanır */}
       <form className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/30 text-xs" onSubmit={(e) => { e.preventDefault(); applyBulk(); }}>
         <span className="w-full sm:w-auto font-semibold text-slate-700 dark:text-slate-200">
@@ -405,23 +448,32 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
         <span className={`font-semibold ${rows.length > MAX_VARIATION_COMBINATIONS ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>
           {enabledCount} satışta · {rows.length}/{MAX_VARIATION_COMBINATIONS} kombinasyon
         </span>
-        <button type="button" onClick={sortRows} className="font-bold text-slate-600 dark:text-slate-300">Sırala</button>
+        <span className="flex items-center gap-3">
+          {filtered && <button type="button" onClick={clearFilters} className="font-bold text-indigo-600 dark:text-indigo-300">Filtreleri temizle</button>}
+          <button type="button" onClick={sortRows} className="font-bold text-slate-600 dark:text-slate-300">Sırala</button>
+        </span>
       </div>
 
       <div className="overflow-auto max-h-[60vh] sm:max-h-[28rem] rounded-lg border border-slate-200 dark:border-slate-700">
         <table ref={tableRef} className="w-full table-fixed text-xs border-collapse">
           <colgroup>
-            <col className="w-[3.75rem]" />
+            <col className="w-[4.75rem]" />
             <col />
             <col />
             <col className="w-[5.5rem] sm:w-28" />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
-            <tr className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-              <th className="px-2 py-2 text-left font-bold">Satış</th>
-              <th className="px-2 py-2 text-left font-bold">Beden</th>
-              <th className="px-2 py-2 text-left font-bold">Renk</th>
-              <th className="px-2 py-2 text-right font-bold">Fiyat</th>
+            <tr className="text-[10px] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+              <th className="px-2 py-2 text-left">
+                <HeaderFilter label="Satış" options={[{ value: 'on', label: 'Satışta' }, { value: 'off', label: 'Kapalı' }]} selected={statusFilter} onChange={setStatusFilter} />
+              </th>
+              <th className="px-2 py-2 text-left">
+                <HeaderFilter label="Beden" options={sizes.map((v) => ({ value: v, label: v }))} selected={sizeFilter} onChange={setSizeFilter} />
+              </th>
+              <th className="px-2 py-2 text-left">
+                <HeaderFilter label="Renk" options={colors.map((v) => ({ value: v, label: v }))} selected={colorFilter} onChange={setColorFilter} />
+              </th>
+              <th className="px-2 py-2 text-right font-bold uppercase tracking-wide">Fiyat</th>
             </tr>
           </thead>
           <tbody>
