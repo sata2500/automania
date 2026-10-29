@@ -108,7 +108,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
               </button>
             )}
             <button type="button" onClick={onGoToSeo} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
-              Stüdyoda düzenle <ArrowRight className="w-3.5 h-3.5" />
+              Elle hazırla <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

@@ -400,13 +400,13 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 {variationSummary ? (
                   <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                     {variationSummary.count} varyasyon · {variationSummary.sizes} beden/ürün · {variationSummary.colors} renk · ${variationSummary.min.toFixed(2)}–${variationSummary.max.toFixed(2)}.
-                    {' '}İlan Stüdyosu’nda bu şablonda yaptığınız fiyat değişiklikleri sonraki çalıştırmalarda otomatik kullanılır.
+                    {' '}Yeni İlan ekranında bu şablonda yaptığınız fiyat değişiklikleri sonraki çalıştırmalarda otomatik kullanılır.
                   </p>
                 ) : !variationSourceId && (
                   <div className="mt-2">
                     <label className={labelClass} htmlFor="aw-price">Fiyat (USD)</label>
                     <input id="aw-price" type="number" min={0.2} step={0.01} className={inputClass} value={fixedPrice} onChange={(e) => setFixedPrice(Number(e.target.value) || 0)} />
-                    {variationTemplates?.length === 0 && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Varyasyon şablonları İlan Stüdyosu’ndaki varyasyon tablosundan kaydedilir.</p>}
+                    {variationTemplates?.length === 0 && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Varyasyon şablonları Yeni İlan ekranındaki varyasyon tablosundan kaydedilir.</p>}
                   </div>
                 )}
               </div>

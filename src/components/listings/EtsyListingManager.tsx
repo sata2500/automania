@@ -8,14 +8,12 @@ import {
   Eye,
   TrendingUp,
   Search,
-  Grid,
-  List,
   CheckSquare,
   Square,
-  ExternalLink,
-  Tag,
   ShoppingBag,
   Heart,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { ListingDetailModal } from './ListingDetailModal';
@@ -39,6 +37,8 @@ export const EtsyListingManager: React.FC = () => {
     inactive: 0,
     other: 0,
     avgScore: 0,
+    totalViews: 0,
+    totalFavorites: 0,
     analyzedCount: 0,
     lastSyncedAt: null as string | null,
     hoursSinceLastSync: null as number | null,
@@ -48,15 +48,13 @@ export const EtsyListingManager: React.FC = () => {
   // UI / Filter state
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [autoSyncBanner, setAutoSyncBanner] = useState<string | null>(null);
   const [etsyNotConnected, setEtsyNotConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState('all');
   const [scoreFilter, setScoreFilter] = useState('all');
   const [visionFilter, setVisionFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
-  // Bileşen yalnızca istemcide (ssr: false) yüklenir: masaüstünde tablo, mobilde kart görünümü.
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => (window.innerWidth < 768 ? 'grid' : 'table'));
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Auto-sync trigger guard (run once on mount if stale)
@@ -75,7 +73,6 @@ export const EtsyListingManager: React.FC = () => {
   // Trigger automated background synchronization if data is older than 24 hours
   const triggerAutoSync = useCallback(async () => {
     setIsSyncing(true);
-    setAutoSyncBanner('Etsy verileriniz 24 saatten eski olduğu için arka planda güncelleniyor, lütfen bekleyin...');
     try {
       const res = await fetch('/api/etsy/listings', {
         method: 'POST',
@@ -102,7 +99,6 @@ export const EtsyListingManager: React.FC = () => {
       console.error('Auto sync error:', err);
     } finally {
       setIsSyncing(false);
-      setAutoSyncBanner(null);
     }
   }, [success, warning]);
 
@@ -311,632 +307,265 @@ export const EtsyListingManager: React.FC = () => {
     setIsBulkModalOpen(true);
   };
 
-  // Score color helper
-  const getScoreColor = (sc: number) => {
-    if (sc >= 85) return 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    if (sc >= 60) return 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30';
-    return 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30';
-  };
-
   const selectedListingsList = useMemo(() => listings.filter(l => selectedIds.includes(l.listing_id)), [listings, selectedIds]);
 
+  const syncLabel = isSyncing
+    ? 'Etsy ile güncelleniyor…'
+    : stats.lastSyncedAt
+    ? `Son güncelleme: ${formatSyncAge(stats.hoursSinceLastSync, stats.lastSyncedAt)}`
+    : 'Henüz Etsy ile eşitlenmedi';
+  const extraFilterCount = (scoreFilter !== 'all' ? 1 : 0) + (visionFilter !== 'all' ? 1 : 0);
+  const stateChips: Array<{ key: string; label: string; count: number }> = [
+    { key: 'all', label: 'Tümü', count: stats.total },
+    { key: 'active', label: 'Aktif', count: stats.active },
+    { key: 'draft', label: 'Taslak', count: stats.draft },
+    { key: 'inactive', label: 'Pasif', count: stats.inactive },
+    ...(stats.other > 0 ? [{ key: 'sold_out', label: 'Tükendi', count: 0 }, { key: 'expired', label: 'Süresi doldu', count: 0 }] : []),
+  ];
+
   return (
-    <div className="space-y-6">
-
-      {/* 24-HOUR AUTO SYNC NOTIFICATION BANNER */}
-      {autoSyncBanner && (
-        <div className="bg-gradient-to-r from-indigo-900/80 via-purple-900/80 to-indigo-900/80 border border-indigo-500/50 rounded-2xl p-4 text-indigo-100 flex items-center justify-between gap-3 shadow-xl backdrop-blur animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500/20 rounded-xl">
-              <Spinner className="w-5 h-5 text-indigo-700 dark:text-indigo-300" />
-            </div>
-            <div>
-              <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Otomatik Arka Plan Senkronizasyonu</span>
-                <span className="text-[10px] bg-indigo-500/30 text-indigo-700 dark:text-indigo-200 px-2 py-0.5 rounded-full font-mono">24 Saat Kuralı</span>
-              </div>
-              <p className="text-xs text-indigo-700 dark:text-indigo-200/90 mt-0.5">{autoSyncBanner}</p>
-            </div>
+    <div className="space-y-4">
+      {/* Başlık, eşitleme durumu ve özet */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-indigo-500 shrink-0" /> Etsy&apos;deki İlanlarım
+            </h2>
+            <p className={`text-[11px] mt-0.5 flex items-center gap-1.5 ${stats.isStale && !isSyncing ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
+              {isSyncing && <Spinner className="w-3 h-3" />}
+              {syncLabel}
+              {!isSyncing && <span className="text-slate-400">· 24 saatte bir otomatik</span>}
+            </p>
           </div>
-        </div>
-      )}
-      
-      {/* 1. TOP STATS & HEADER BANNER */}
-      <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-        
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 relative z-10">
-          <div className="flex items-start sm:items-center space-x-3.5">
-            <div className="p-3 bg-gradient-to-tr from-indigo-600 to-purple-600 text-white rounded-2xl shadow-lg shadow-indigo-500/20 shrink-0">
-              <ShoppingBag className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  Etsy İlan Yönetimi & AI SEO Denetçisi
-                </h2>
-                <span className="text-[10px] bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full uppercase font-mono font-bold">
-                  DB Önbellekli
-                </span>
-              </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
-                Etsy mağazanızdaki tüm ilanları senkronize edin, kapak görsellerini Vision AI ile analiz edin, SEO puanlarını 0-100 arası denetleyin ve tek tıkla yapay zeka ile güncelleyin.
-              </p>
-            </div>
-          </div>
-
-          {/* Action Button: Clean Single Primary Sync Button */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <button
-              onClick={handleSyncEtsy}
-              disabled={isSyncing}
-              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              title="Etsy'deki en güncel ilan, görüntülenme ve favori verilerini çeker (24 saatte bir otomatik güncellenir)"
-            >
-              {isSyncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
-              <span>{isSyncing ? 'Senkronize Ediliyor...' : 'Etsy Verilerini Güncelle'}</span>
-            </button>
-          </div>
-
+          <button
+            onClick={handleSyncEtsy}
+            disabled={isSyncing}
+            className="shrink-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1.5 disabled:opacity-50"
+            title="Etsy'deki en güncel ilan, görüntülenme ve favori verilerini çeker"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Şimdi güncelle</span>
+          </button>
         </div>
 
-        {/* 4 Metrics Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-200 dark:border-slate-800/80">
-          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] text-slate-400 font-medium">Toplam İlan</span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-extrabold text-slate-900 dark:text-white">{stats.total}</span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                ({stats.active} Aktif / {stats.draft} Taslak)
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] text-slate-400 font-medium">Ortalama Mağaza SEO Skoru</span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className={`text-xl font-extrabold ${getScoreColor(stats.avgScore)}`}>
-                {stats.avgScore}/100
-              </span>
-              <span className="text-[10px] text-slate-400">
-                {stats.avgScore >= 85 ? 'Mükemmel' : stats.avgScore >= 65 ? 'İyi' : 'Geliştirilmeli'}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <span className="text-[11px] text-slate-400 font-medium">Görsel (Vision) Analizi</span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400">{stats.analyzedCount}</span>
-              <span className="text-[10px] text-slate-500">/ {stats.total} İlan</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-50/70 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-400 font-medium">Son Senkronizasyon</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
-                stats.isStale ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-              }`}>
-                {stats.isStale ? 'Yenilenmeli' : 'Güncel'}
-              </span>
-            </div>
-            <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1 truncate">
-              {stats.lastSyncedAt 
-                ? `${new Date(stats.lastSyncedAt).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${stats.hoursSinceLastSync !== null && stats.hoursSinceLastSync < 24 ? ` (${stats.hoursSinceLastSync < 1 ? 'Az önce' : `${Math.floor(stats.hoursSinceLastSync)} sa önce`})` : ''}`
-                : 'Henüz senkronize edilmedi'}
-            </div>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatTile label="İlan" value={stats.total.toLocaleString('tr-TR')} hint={`${stats.active} aktif · ${stats.draft} taslak`} />
+          <StatTile label="Görüntülenme" value={stats.totalViews.toLocaleString('tr-TR')} hint="tüm ilanlar, toplam" icon={<Eye className="w-3.5 h-3.5" />} />
+          <StatTile label="Favori" value={stats.totalFavorites.toLocaleString('tr-TR')} hint="tüm ilanlar, toplam" icon={<Heart className="w-3.5 h-3.5" />} />
+          <StatTile
+            label="SEO ortalaması"
+            value={`${stats.avgScore}/100`}
+            hint={stats.active > 0 ? 'aktif ilanlar' : 'tüm ilanlar'}
+            valueClassName={scoreTextColor(stats.avgScore)}
+            title="Uygulamanın SEO puanlaması: başlık, 13 etiket, açıklama ve anahtar kelime havuzuna göre hesaplanır (Etsy'nin kendi puanı değildir)."
+          />
         </div>
       </div>
 
-      {/* 2. FILTER & SEARCH TOOLBAR */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-          
-          {/* Search Box */}
-          <div className="relative w-full md:w-80">
+      {/* Arama ve filtreler */}
+      <div className="space-y-2.5">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              inputMode="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Başlık, ID veya Etiket ara..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+              placeholder="Başlık, etiket veya ilan no ara…"
+              aria-label="İlan ara"
+              className="w-full pl-9 pr-9 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {/* State Filter */}
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="all">Durum: Tümü ({stats.total})</option>
-              <option value="active">Aktif ({stats.active})</option>
-              <option value="draft">Taslak ({stats.draft})</option>
-              <option value="inactive">Pasif ({stats.inactive})</option>
-              {stats.other > 0 && <option value="sold_out">Tükendi</option>}
-              {stats.other > 0 && <option value="expired">⌛ Süresi Doldu</option>}
-            </select>
-
-            {/* Score Filter */}
-            <select
-              value={scoreFilter}
-              onChange={(e) => setScoreFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="all">SEO Skoru: Tümü</option>
-              <option value="excellent">Mükemmel (90-100)</option>
-              <option value="good">İyi (75-89)</option>
-              <option value="warning">Geliştirilmeli (50-74)</option>
-              <option value="critical">Kritik (&lt;50)</option>
-            </select>
-
-            {/* Vision Filter */}
-            <select
-              value={visionFilter}
-              onChange={(e) => setVisionFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="all">Görsel Analiz: Tümü</option>
-              <option value="analyzed">Analiz Edilenler ({stats.analyzedCount})</option>
-              <option value="not_analyzed">Analiz Bekleyenler ({stats.total - stats.analyzedCount})</option>
-            </select>
-
-            {/* Sort Filter */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="newest">Sıralama: En Yeni</option>
-              <option value="oldest">Sıralama: En Eski</option>
-              <option value="views_desc">En Çok Görüntülenen</option>
-              <option value="views_asc">En Az Görüntülenen</option>
-              <option value="favorers_desc">En Çok Favorilenen</option>
-              <option value="favorers_asc">En Az Favorilenen</option>
-              <option value="score_desc">SEO: Yüksekten Düşüğe</option>
-              <option value="score_asc">SEO: Düşükten Yükseğe</option>
-              <option value="price_desc">Fiyat: Yüksekten Düşüğe</option>
-              <option value="price_asc">Fiyat: Düşükten Yükseğe</option>
-              <option value="title_asc">Başlık (A-Z)</option>
-              <option value="title_desc">Başlık (Z-A)</option>
-            </select>
-
-            {/* View Mode Toggle */}
-            <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  viewMode === 'grid'
-                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                }`}
-                title="Kart Görünümü"
-              >
-                <Grid className="w-4 h-4" />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery('')} aria-label="Aramayı temizle" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+                <X className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  viewMode === 'table'
-                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                }`}
-                title="Tablo Görünümü"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+            )}
           </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sıralama"
+            className="w-32 sm:w-44 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs rounded-xl px-2.5 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="newest">En yeni</option>
+            <option value="oldest">En eski</option>
+            <option value="views_desc">En çok görüntülenen</option>
+            <option value="favorers_desc">En çok favorilenen</option>
+            <option value="score_asc">SEO: en düşük önce</option>
+            <option value="score_desc">SEO: en yüksek önce</option>
+            <option value="price_desc">Fiyat: yüksek → düşük</option>
+            <option value="price_asc">Fiyat: düşük → yüksek</option>
+            <option value="title_asc">Başlık (A-Z)</option>
+          </select>
         </div>
 
-        {/* Selection Action Bar */}
-        {filteredAndSortedListings.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSelectAll}
-                className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold"
-              >
-                {selectedIds.length === filteredAndSortedListings.length && filteredAndSortedListings.length > 0 ? (
-                  <CheckSquare className="w-4 h-4 text-indigo-500" />
-                ) : (
-                  <Square className="w-4 h-4 text-slate-400" />
-                )}
-                <span>Tümünü Seç ({selectedIds.length}/{filteredAndSortedListings.length})</span>
-              </button>
-            </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {stateChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => setStateFilter(chip.key)}
+              aria-pressed={stateFilter === chip.key}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                stateFilter === chip.key
+                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+              }`}
+            >
+              {chip.label}{chip.key !== 'sold_out' && chip.key !== 'expired' ? <span className="ml-1 opacity-60">{chip.count}</span> : null}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowMoreFilters((v) => !v)}
+            aria-expanded={showMoreFilters}
+            className={`shrink-0 ml-auto px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1 ${
+              extraFilterCount > 0 ? 'border-indigo-400 text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Filtre{extraFilterCount > 0 ? ` (${extraFilterCount})` : ''}
+          </button>
+        </div>
 
-            {selectedIds.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 font-mono text-[11px] bg-slate-100/60 dark:bg-slate-800/60 px-2 py-1 rounded-md">
-                  {selectedIds.length} ilan seçildi:
-                </span>
-                <button
-                  onClick={() => handleOpenBulkModal('evaluate_seo')}
-                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                >
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Seçilileri Puanla</span>
-                </button>
-                <button
-                  onClick={() => handleOpenBulkModal('vision')}
-                  className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Seçilileri Analiz Et</span>
-                </button>
-                <button
-                  onClick={() => handleOpenBulkModal('optimize')}
-                  className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Seçililere AI SEO Üret</span>
-                </button>
-                <button
-                  onClick={() => setSelectedIds([])}
-                  className="text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-xs underline ml-1"
-                >
-                  Vazgeç
-                </button>
-              </div>
-            )}
+        {showMoreFilters && (
+          <div className="grid grid-cols-2 gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 space-y-1">
+              <span>SEO puanı</span>
+              <select value={scoreFilter} onChange={(e) => setScoreFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-200">
+                <option value="all">Tümü</option>
+                <option value="excellent">Mükemmel (90+)</option>
+                <option value="good">İyi (75-89)</option>
+                <option value="warning">Geliştirilmeli (50-74)</option>
+                <option value="critical">Kritik (&lt;50)</option>
+              </select>
+            </label>
+            <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 space-y-1">
+              <span>Görsel analiz ({stats.analyzedCount}/{stats.total})</span>
+              <select value={visionFilter} onChange={(e) => setVisionFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-200">
+                <option value="all">Tümü</option>
+                <option value="analyzed">Analiz edilenler</option>
+                <option value="not_analyzed">Analiz bekleyenler</option>
+              </select>
+            </label>
+          </div>
+        )}
+
+        {filteredAndSortedListings.length > 0 && (
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>{filteredAndSortedListings.length} ilan</span>
+            <button onClick={handleSelectAll} className="flex items-center gap-1.5 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400">
+              {selectedIds.length === filteredAndSortedListings.length ? <CheckSquare className="w-4 h-4 text-indigo-500" /> : <Square className="w-4 h-4" />}
+              {selectedIds.length > 0 ? `${selectedIds.length} seçili` : 'Tümünü seç'}
+            </button>
           </div>
         )}
       </div>
 
-      {/* 3. LISTINGS CONTENT (GRID OR TABLE) */}
+      {/* İlanlar */}
       {isLoading ? (
-        <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-          <Spinner className="w-8 h-8 text-indigo-500 mx-auto" />
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white">İlanlar Yükleniyor...</h4>
-          <p className="text-xs text-slate-500">Veritabanından önbellek kayıtları çekiliyor</p>
+        <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+          <Spinner className="w-7 h-7 text-indigo-500 mx-auto" />
+          <p className="text-xs text-slate-500">İlanlar yükleniyor…</p>
         </div>
       ) : filteredAndSortedListings.length === 0 ? (
-        <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
-            <ShoppingBag className="w-7 h-7" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              {stats.total === 0 ? 'Veritabanında Henüz Etsy İlanı Bulunmuyor' : 'Filtreye Uygun İlan Bulunamadı'}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              {stats.total === 0 && etsyNotConnected
-                ? 'İlanlarınızı görmek için önce Etsy mağazanızı bağlayın. Bağlantıdan sonra bu sekmeye geri dönersiniz.'
-                : stats.total === 0
-                ? 'Etsy mağazanızdaki ilanları veritabanınıza çekmek için "Etsy Verilerini Güncelle" butonuna tıklayın.'
-                : 'Arama veya filtre kriterlerinizi değiştirerek tekrar deneyin.'}
-            </p>
-          </div>
+        <div className="p-10 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 space-y-3">
+          <ShoppingBag className="w-10 h-10 mx-auto text-indigo-500/60" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            {stats.total === 0 ? 'Henüz Etsy ilanı yok' : 'Filtreye uygun ilan bulunamadı'}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            {stats.total === 0 && etsyNotConnected
+              ? 'İlanlarınızı görmek için Etsy mağazanızı bağlayın.'
+              : stats.total === 0
+              ? 'Etsy mağazanızdaki ilanları getirmek için "Şimdi güncelle"ye dokunun.'
+              : 'Arama veya filtreleri değiştirerek tekrar deneyin.'}
+          </p>
           {stats.total === 0 && etsyNotConnected && (
-            <a
-              href="/api/etsy/auth?returnUrl=/"
-              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2"
-            >
+            <a href="/api/etsy/auth?returnUrl=/" className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl inline-flex items-center gap-2">
               Etsy Mağazamı Bağla
             </a>
           )}
           {stats.total === 0 && !etsyNotConnected && (
-            <button
-              onClick={handleSyncEtsy}
-              disabled={isSyncing}
-              className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2 disabled:opacity-50"
-            >
-              {isSyncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
-              <span>{isSyncing ? 'Etsy Verileri Çekiliyor...' : 'Etsy Verilerini Güncelle'}</span>
+            <button onClick={handleSyncEtsy} disabled={isSyncing} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 disabled:opacity-50">
+              {isSyncing ? <Spinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />} Şimdi güncelle
             </button>
           )}
-
         </div>
-      ) : viewMode === 'grid' ? (
-        /* GRID VIEW */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      ) : (
+        // Etsy arama sonuçları gibi: telefonda iki sütun, büyük ekranda beş sütuna kadar.
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-3 gap-y-5 sm:gap-x-4">
           {filteredAndSortedListings.map((item) => {
             const isSelected = selectedIds.includes(item.listing_id);
             const score = Number(item.seo_score || 0);
-            const rawTags = Array.isArray(item.tags)
-              ? item.tags
-              : typeof item.tags === 'string'
-              ? JSON.parse(item.tags)
-              : [];
-            const tagCount = rawTags.length;
-            const vision = typeof item.vision_analysis === 'string'
-              ? JSON.parse(item.vision_analysis)
-              : item.vision_analysis || {};
             const imageUrl = item.primary_image_url || item.images?.[0]?.url_570xN || item.images?.[0]?.url_fullxfull || '/placeholder.png';
-
             return (
-              <div
-                key={item.listing_id}
-                className={`bg-white dark:bg-slate-900 rounded-2xl border transition-all hover:shadow-lg flex flex-col overflow-hidden group ${
-                  isSelected
-                    ? 'border-indigo-500 ring-2 ring-indigo-500/20'
-                    : 'border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                {/* Card Top: Image + Badges */}
-                <div className="relative aspect-video bg-slate-50 dark:bg-slate-950 overflow-hidden">
-                  <Image
-                    loader={({ src }) => src}
-                    src={imageUrl}
-                    alt={item.title || 'Etsy ilan görseli'}
-                    fill
-                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 33vw, 25vw"
-                    unoptimized
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-
-                  {/* Multi-select check */}
-                  <button
-                    onClick={() => handleToggleSelect(item.listing_id)}
-                    className="absolute top-2.5 left-2.5 z-10 p-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white hover:bg-black/80 transition-colors"
-                  >
-                    {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    ) : (
-                      <Square className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <div key={item.listing_id} className="group relative flex flex-col min-w-0">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSelect(item.listing_id)}
+                  aria-label={isSelected ? 'Seçimi kaldır' : 'İlanı seç'}
+                  aria-pressed={isSelected}
+                  className={`absolute top-2 left-2 z-10 p-1 rounded-md backdrop-blur-md transition-opacity ${isSelected || selectedIds.length > 0 ? 'opacity-100' : 'opacity-80 sm:opacity-0 sm:group-hover:opacity-100'} bg-black/50 text-white`}
+                >
+                  {isSelected ? <CheckSquare className="w-4 h-4 text-indigo-300" /> : <Square className="w-4 h-4" />}
+                </button>
+                <button type="button" onClick={() => handleOpenDetail(item)} className="text-left flex flex-col flex-1 min-w-0">
+                  <div className={`relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-1 transition-shadow group-hover:shadow-lg ${isSelected ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}`}>
+                    <Image
+                      loader={({ src }) => src}
+                      src={imageUrl}
+                      alt={item.title || 'Etsy ilan görseli'}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                      unoptimized
+                      className="object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                    />
+                    {item.state !== 'active' && (
+                      <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold bg-amber-400 text-slate-950">
+                        {formatListingState(item.state)}
+                      </span>
                     )}
-                  </button>
-
-                  {/* State badge */}
-                  <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md backdrop-blur-md tracking-wide ${
-                      item.state === 'active'
-                        ? 'bg-emerald-500/90 text-white'
-                        : 'bg-amber-500/90 text-slate-950'
-                    }`}>
-                      {formatListingState(item.state)}
+                    <span className={`absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold flex items-center gap-1 ${scoreBadgeColor(score)}`} title="SEO puanı">
+                      <TrendingUp className="w-3 h-3" /> {score}
                     </span>
                   </div>
-
-                  {/* SEO Score Pill */}
-                  <div className="absolute bottom-2.5 left-2.5">
-                    <div className={`px-2.5 py-1 rounded-lg backdrop-blur-md border text-xs font-black flex items-center gap-1.5 shadow-md ${
-                      score >= 85
-                        ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-300 border-emerald-500/50'
-                        : score >= 60
-                        ? 'bg-amber-50 dark:bg-amber-950/90 text-amber-700 dark:text-amber-300 border-amber-500/50'
-                        : 'bg-rose-50 dark:bg-rose-950/90 text-rose-700 dark:text-rose-300 border-rose-500/50'
-                    }`}>
-                      <TrendingUp className="w-3.5 h-3.5" />
-                      <span>SEO: {score}/100 ({score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F'})</span>
-                    </div>
+                  <div className="pt-2 space-y-0.5 min-w-0">
+                    <p className="text-xs sm:text-[13px] leading-snug text-slate-800 dark:text-slate-100 line-clamp-2">{item.title || 'Başlıksız ilan'}</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{formatPrice(item.price, item.currency_code)}</p>
+                    <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2.5">
+                      <span className="inline-flex items-center gap-0.5"><Eye className="w-3 h-3" aria-label="Görüntülenme" />{item.views || 0}</span>
+                      <span className="inline-flex items-center gap-0.5"><Heart className="w-3 h-3" aria-label="Favori" />{item.num_favorers || 0}</span>
+                    </p>
                   </div>
-
-                  {/* Views & Favs */}
-                  <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2 text-[10px] font-bold text-white bg-black/70 backdrop-blur-md px-2 py-1 rounded-lg">
-                    <span className="inline-flex items-center gap-1"><Eye className="w-3 h-3" aria-label="Görüntülenme" />{item.views || 0}</span>
-                    <span className="inline-flex items-center gap-1"><Heart className="w-3 h-3" aria-label="Favori" />{item.num_favorers || 0}</span>
-                  </div>
-                </div>
-
-                {/* Card Body */}
-                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-mono">#{item.listing_id}</span>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        ${item.price} {item.currency_code}
-                      </span>
-                    </div>
-
-                    <h4
-                      className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug cursor-pointer hover:text-indigo-500 transition-colors"
-                      onClick={() => handleOpenDetail(item)}
-                      title={item.title ?? undefined}
-                    >
-                      {item.title || 'Başlıksız İlan'}
-                    </h4>
-
-                    {/* Vision Status / Subject pill */}
-                    {vision.primarySubject ? (
-                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/40 flex items-center gap-1.5 truncate">
-                        <Eye className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{vision.primarySubject}</span>
-                      </div>
-                    ) : (
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <span>Görsel analizi yapılmadı</span>
-                        <span className="text-indigo-500 font-semibold cursor-pointer" onClick={() => handleOpenDetail(item)}>
-                          Analiz Et &rarr;
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Tag count meter */}
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        <Tag className="w-3 h-3 text-slate-400" />
-                        <span>Etiketler:</span>
-                      </span>
-                      <span className={`font-mono font-bold ${tagCount === 13 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                        {tagCount}/13 {tagCount < 13 && `(${13 - tagCount} eksik)`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Card Footer Actions */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                    <button
-                      onClick={() => handleOpenDetail(item)}
-                      className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>İncele & SEO</span>
-                    </button>
-
-                    {item.url && (
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-                        title="Etsy'de Görüntüle"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
+                </button>
               </div>
             );
           })}
         </div>
-      ) : (
-        /* TABLE VIEW */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase font-mono text-[10px]">
-                <tr>
-                  <th className="p-3.5 w-10">
-                    <button onClick={handleSelectAll}>
-                      {selectedIds.length === filteredAndSortedListings.length && filteredAndSortedListings.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-indigo-500" />
-                      ) : (
-                        <Square className="w-4 h-4 text-slate-400" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="p-3.5">İlan / Görsel</th>
-                  <th className="p-3.5">SEO Skoru</th>
-                  <th className="p-3.5">Etiketler</th>
-                  <th className="p-3.5">Görsel Analiz</th>
-                  <th className="p-3.5">Fiyat / Durum</th>
-                  <th className="p-3.5">Görüntülenme</th>
-                  <th className="p-3.5 text-right">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredAndSortedListings.map((item) => {
-                  const isSelected = selectedIds.includes(item.listing_id);
-                  const score = Number(item.seo_score || 0);
-                  const rawTags = Array.isArray(item.tags)
-                    ? item.tags
-                    : typeof item.tags === 'string'
-                    ? JSON.parse(item.tags)
-                    : [];
-                  const vision = typeof item.vision_analysis === 'string'
-                    ? JSON.parse(item.vision_analysis)
-                    : item.vision_analysis || {};
-                  const imageUrl = item.primary_image_url || item.images?.[0]?.url_570xN || item.images?.[0]?.url_fullxfull || '/placeholder.png';
+      )}
 
-                  return (
-                    <tr
-                      key={item.listing_id}
-                      className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
-                        isSelected ? 'bg-indigo-50/30 dark:bg-indigo-950/20' : ''
-                      }`}
-                    >
-                      <td className="p-3.5">
-                        <button onClick={() => handleToggleSelect(item.listing_id)}>
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-indigo-500" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-400" />
-                          )}
-                        </button>
-                      </td>
-
-                      <td className="p-3.5">
-                        <div className="flex items-center space-x-3">
-                          <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shrink-0">
-                            <Image
-                              loader={({ src }) => src}
-                              src={imageUrl}
-                              alt={item.title || 'Etsy ilan görseli'}
-                              fill
-                              sizes="48px"
-                              unoptimized
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0 max-w-sm">
-                            <div className="text-[10px] font-mono text-slate-400">#{item.listing_id}</div>
-                            <div
-                              role="button" tabIndex={0} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleOpenDetail(item); } }} onClick={() => handleOpenDetail(item)}
-                              className="font-bold text-slate-900 dark:text-white truncate cursor-pointer hover:text-indigo-500"
-                              title={item.title ?? undefined}
-                            >
-                              {item.title || 'Başlıksız İlan'}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-3.5">
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border inline-flex items-center gap-1 ${getScoreColor(score)}`}>
-                          <TrendingUp className="w-3 h-3" />
-                          <span>{score}/100 ({score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F'})</span>
-                        </span>
-                      </td>
-
-                      <td className="p-3.5">
-                        <span className={`font-mono text-xs font-bold ${rawTags.length === 13 ? 'text-emerald-500' : 'text-amber-500'}`}>
-                          {rawTags.length} / 13
-                        </span>
-                      </td>
-
-                      <td className="p-3.5">
-                        {vision.primarySubject ? (
-                          <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium truncate max-w-xs block" title={vision.primarySubject}>
-                            {vision.primarySubject}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-500 italic">Analiz Yok</span>
-                        )}
-                      </td>
-
-                      <td className="p-3.5">
-                        <div className="font-bold text-slate-900 dark:text-white">
-                          ${item.price} {item.currency_code}
-                        </div>
-                        <span className={`text-[10px] font-bold ${item.state === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                          {formatListingState(item.state)}
-                        </span>
-                      </td>
-
-                      <td className="p-3.5 text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center gap-1"><Eye className="w-3 h-3" aria-label="Görüntülenme" />{item.views || 0}</div>
-                        <div className="flex items-center gap-1"><Heart className="w-3 h-3" aria-label="Favori" />{item.num_favorers || 0}</div>
-                      </td>
-
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenDetail(item)}
-                            className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg font-bold text-xs transition-colors"
-                          >
-                            İncele & SEO
-                          </button>
-                          {item.url && (
-                            <a
-                              href={item.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      {/* Toplu işlemler: seçim varken ekranın altında sabit */}
+      {selectedIds.length > 0 && (
+        <div className="fixed left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+88px)] lg:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-2.5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold text-slate-700 dark:text-slate-200 px-1">{selectedIds.length} seçili</span>
+          <button onClick={() => handleOpenBulkModal('optimize')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" /> AI ile iyileştir
+          </button>
+          <button onClick={() => handleOpenBulkModal('evaluate_seo')} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" /> Puanla
+          </button>
+          <button onClick={() => handleOpenBulkModal('vision')} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1">
+            <Eye className="w-3.5 h-3.5" /> Görseli analiz et
+          </button>
+          <button onClick={() => setSelectedIds([])} aria-label="Seçimi temizle" className="ml-auto p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* 4. MODALS */}
-      {/* Detail & SEO Audit Modal */}
+      {/* Ayrıntı ve SEO düzenleme */}
       <ListingDetailModal
         listing={selectedListingForModal}
         isOpen={isDetailModalOpen}
@@ -950,7 +579,6 @@ export const EtsyListingManager: React.FC = () => {
         isDetailLoading={isDetailLoading}
       />
 
-      {/* Bulk Operations Modal */}
       {bulkActionType && (
         <BulkActionModal
           isOpen={isBulkModalOpen}
@@ -967,7 +595,44 @@ export const EtsyListingManager: React.FC = () => {
           }}
         />
       )}
-
     </div>
   );
 };
+
+function StatTile({ label, value, hint, icon, valueClassName, title }: { label: string; value: string; hint: string; icon?: React.ReactNode; valueClassName?: string; title?: string }) {
+  return (
+    <div className="bg-slate-50 dark:bg-slate-950/60 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 min-w-0" title={title}>
+      <span className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">{icon}{label}</span>
+      <div className={`text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-tight ${valueClassName ?? ''}`}>{value}</div>
+      <span className="text-[10px] text-slate-400 truncate block">{hint}</span>
+    </div>
+  );
+}
+
+function scoreTextColor(score: number) {
+  if (score >= 85) return '!text-emerald-600 dark:!text-emerald-400';
+  if (score >= 60) return '!text-amber-600 dark:!text-amber-400';
+  return '!text-rose-600 dark:!text-rose-400';
+}
+
+function scoreBadgeColor(score: number) {
+  if (score >= 85) return 'bg-emerald-500/90 text-white';
+  if (score >= 60) return 'bg-amber-400/90 text-slate-950';
+  return 'bg-rose-500/90 text-white';
+}
+
+function formatPrice(price: unknown, currency: string | null | undefined) {
+  const value = Number(price);
+  if (!Number.isFinite(value)) return '';
+  try {
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: currency || 'USD' }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${currency ?? ''}`.trim();
+  }
+}
+
+function formatSyncAge(hours: number | null, iso: string) {
+  if (hours !== null && hours < 1) return 'az önce';
+  if (hours !== null && hours < 24) return `${Math.floor(hours)} saat önce`;
+  return new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}

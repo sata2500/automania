@@ -117,6 +117,9 @@ export async function GET(req: Request) {
     let otherCount = 0;
     let analyzedCount = 0;
     let totalScoreSum = 0;
+    let activeScoreSum = 0;
+    let totalViews = 0;
+    let totalFavorites = 0;
     let lastSyncedAt: string | null = null;
 
     for (const r of allRows) {
@@ -131,6 +134,9 @@ export async function GET(req: Request) {
       }
 
       totalScoreSum += Number(r.seo_score || 0);
+      if (r.state === 'active') activeScoreSum += Number(r.seo_score || 0);
+      totalViews += Number(r.views || 0);
+      totalFavorites += Number(r.num_favorers || 0);
 
       if (r.last_synced_at) {
         if (!lastSyncedAt || new Date(r.last_synced_at) > new Date(lastSyncedAt)) {
@@ -139,7 +145,10 @@ export async function GET(req: Request) {
       }
     }
 
-    const avgScore = total > 0 ? Math.round(totalScoreSum / total) : 0;
+    // Mağaza ortalaması satıştaki (aktif) ilanlardan hesaplanır; aktif ilan yoksa tüm ilanlardan.
+    const avgScore = activeCount > 0
+      ? Math.round(activeScoreSum / activeCount)
+      : total > 0 ? Math.round(totalScoreSum / total) : 0;
     const now = Date.now();
     const lastSyncTime = lastSyncedAt ? new Date(lastSyncedAt).getTime() : 0;
     const hoursSinceLastSync = lastSyncTime > 0 ? (now - lastSyncTime) / (1000 * 60 * 60) : 999999;
@@ -205,6 +214,8 @@ export async function GET(req: Request) {
         inactive: inactiveCount,
         other: otherCount,
         avgScore,
+        totalViews,
+        totalFavorites,
         analyzedCount,
         lastSyncedAt,
         hoursSinceLastSync: Math.round(hoursSinceLastSync * 10) / 10,

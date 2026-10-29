@@ -63,7 +63,8 @@ describe('GET /api/etsy/listings', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.stats).toMatchObject({ total: 2, active: 1, draft: 1, inactive: 0, avgScore: 80, analyzedCount: 1 });
+    // Mağaza SEO ortalaması yalnızca aktif ilanlardan (92); taslak (68) ortalamayı düşürmez.
+    expect(body.stats).toMatchObject({ total: 2, active: 1, draft: 1, inactive: 0, avgScore: 92, analyzedCount: 1, totalViews: 150, totalFavorites: 11 });
     expect(body.listings).toHaveLength(1);
     expect(body.listings[0].listing_id).toBe('100');
     expect(taggedQueryText(sqlMock.mock.calls[0])).toContain('SELECT id');

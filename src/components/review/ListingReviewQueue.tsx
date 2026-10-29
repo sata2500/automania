@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CheckCircle2, ClipboardCheck, ExternalLink, RefreshCw, Rocket, RotateCcw, Trash2, XCircle, AlertTriangle, Film,
+  CalendarClock, CheckCircle2, ClipboardCheck, Plus, ExternalLink, RefreshCw, Rocket, RotateCcw, Trash2, XCircle, AlertTriangle, Film,
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
@@ -33,7 +33,7 @@ const INTERVAL_OPTIONS = [
   { minutes: 1440, label: 'Günde bir' },
 ];
 
-export function ListingReviewQueue() {
+export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {}) {
   const toast = useToast();
   const [items, setItems] = useState<ReviewItemView[] | null>(null);
   const [filter, setFilter] = useState<Filter>('awaiting');
@@ -124,15 +124,22 @@ export function ListingReviewQueue() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-indigo-500" /> Hazır İlanlar</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Otomasyonların ve İlan Stüdyosu&apos;nun hazırladığı ilanlar burada bekler. İlana dokunup düzenleyin, hemen yayınlayın veya zamanlayın; zamanlananlar saatlik zamanlayıcıyla Etsy&apos;de <strong>yayına</strong> alınır.
+            Otomasyonların ve &quot;Yeni İlan&quot; ile hazırladığınız ilanlar burada bekler. İlana dokunup düzenleyin, hemen yayınlayın veya zamanlayın; zamanlananlar Etsy&apos;de otomatik <strong>yayına</strong> alınır.
           </p>
         </div>
-        <button type="button" onClick={() => void load()} className="self-start sm:self-auto px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
-          <RefreshCw className="w-3.5 h-3.5" /> Yenile
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onCreate && (
+            <button type="button" onClick={onCreate} className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/20">
+              <Plus className="w-3.5 h-3.5" /> Yeni İlan
+            </button>
+          )}
+          <button type="button" onClick={() => void load()} aria-label="Yenile" title="Yenile" className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      <div role="tablist" aria-label="İlan durumu" className="flex flex-wrap gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/60 w-full sm:w-auto sm:inline-flex">
+      <div role="tablist" aria-label="İlan durumu" className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -140,15 +147,19 @@ export function ListingReviewQueue() {
             role="tab"
             aria-selected={filter === f.key}
             onClick={() => { setFilter(f.key); setSelected(new Set()); setShowSchedule(false); }}
-            className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${filter === f.key ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap transition-colors ${
+              filter === f.key
+                ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+            }`}
           >
-            {f.label} <span className="ml-1 opacity-70">{counts[f.key]}</span>
+            {f.label}<span className="ml-1 opacity-60">{counts[f.key]}</span>
           </button>
         ))}
       </div>
 
       {(filter === 'awaiting' || filter === 'scheduled' || filter === 'rejected') && visible.length > 0 && (
-        <div className="flex flex-col gap-3 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <div className={`flex flex-col gap-3 ${selectedVisible.length > 0 ? 'p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900' : ''}`}>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
               <input
@@ -157,7 +168,7 @@ export function ListingReviewQueue() {
                 checked={selectedVisible.length === visible.length}
                 onChange={(e) => setSelected(e.target.checked ? new Set(visible.map((i) => i.runId)) : new Set())}
               />
-              Tümünü seç ({selectedVisible.length}/{visible.length})
+              {selectedVisible.length > 0 ? `${selectedVisible.length}/${visible.length} seçili` : `Tümünü seç (${visible.length})`}
             </label>
             {selectedVisible.length > 0 && filter === 'awaiting' && (
               <>
@@ -215,10 +226,17 @@ export function ListingReviewQueue() {
       )}
 
       {visible.length === 0 ? (
-        <div className="p-8 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400">
-          {filter === 'awaiting'
-            ? 'İnceleme bekleyen ilan yok. Otomasyonlar çalıştıkça hazırlanan ilanlar burada görünür.'
-            : 'Bu bölümde ilan yok.'}
+        <div className="p-8 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400 space-y-3">
+          <p>
+            {filter === 'awaiting'
+              ? 'İnceleme bekleyen ilan yok. Otomasyonlar çalıştıkça hazırlanan ilanlar burada görünür.'
+              : 'Bu bölümde ilan yok.'}
+          </p>
+          {filter === 'awaiting' && onCreate && (
+            <button type="button" onClick={onCreate} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Üretim görsellerinden yeni ilan hazırla
+            </button>
+          )}
         </div>
       ) : (
         // Etsy arama sonuçları gibi: telefonda iki sütun, büyük ekranda beş sütuna kadar kompakt kartlar.

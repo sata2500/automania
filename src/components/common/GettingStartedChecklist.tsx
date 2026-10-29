@@ -43,10 +43,10 @@ export const GettingStartedChecklist: React.FC<GettingStartedChecklistProps> = (
     {
       id: 'publish',
       label: isSignedIn ? 'Etsy\'de yayınlayın' : 'Giriş yapıp Etsy\'de yayınlayın',
-      hint: isSignedIn ? 'İlanlar > İlan Stüdyosu\'nda AI ile başlık ve etiketleri üretip ilanı Hazır İlanlar\'a ekleyin veya Etsy\'ye gönderin.' : 'SEO ve Etsy yayını için hesap gerekir; taslaklarınız girişten sonra hesabınıza aktarılır.',
+      hint: isSignedIn ? 'İlanlar › Hazır İlanlar › Yeni İlan ile AI başlık ve etiketleri üretip ilanı hazırlayın; oradan yayınlayın veya zamanlayın.' : 'SEO ve Etsy yayını için hesap gerekir; taslaklarınız girişten sonra hesabınıza aktarılır.',
       done: false,
       action: isSignedIn ? () => { openListingsView('studio'); onNavigate('listings'); } : onLogin,
-      actionLabel: isSignedIn ? 'İlan Stüdyosu\'na git' : 'Giriş yap',
+      actionLabel: isSignedIn ? 'Yeni ilan hazırla' : 'Giriş yap',
     },
   ];
 

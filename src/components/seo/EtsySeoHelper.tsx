@@ -21,7 +21,7 @@ const EtsySeoContent = () => {
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
-                <span>İlan Stüdyosu</span>
+                <span>Yeni İlan Hazırla</span>
               </h2>
               <p className="text-xs text-slate-700 dark:text-slate-300 mt-1">
                 AI ile başlık, açıklama ve 13 etiket üretin, varyasyon fiyatlarını ayarlayın; ilanı Hazır İlanlar&apos;a ekleyin veya doğrudan Etsy&apos;ye gönderin.

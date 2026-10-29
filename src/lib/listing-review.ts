@@ -93,7 +93,7 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
     return [{
       runId: run.id,
       templateId: run.templateId,
-      templateName: manual ? 'İlan Stüdyosu' : templateName ?? 'Silinmiş otomasyon',
+      templateName: manual ? 'Elle hazırlanan' : templateName ?? 'Silinmiş otomasyon',
       createdAt: run.createdAt ? new Date(run.createdAt).toISOString() : null,
       review,
       seo: run.generatedSeo as GeneratedSeoData | null,
@@ -397,7 +397,7 @@ export async function createManualDraft(userId: string, input: ManualDraftInput)
   const runId = crypto.randomUUID();
   const now = new Date();
   const sku = sanitizeSku(input.sku) || null;
-  const done = { status: 'skipped' as const, error: 'İlan Stüdyosu\'nda hazırlandı.' };
+  const done = { status: 'skipped' as const, error: 'Yeni İlan ekranında elle hazırlandı.' };
   const review: ListingReviewState = { status: 'awaiting', updatedAt: now.toISOString() };
   const steps: AutomationRunSteps = {
     designGeneration: done,
