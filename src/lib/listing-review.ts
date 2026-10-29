@@ -5,7 +5,7 @@
  */
 import { and, desc, eq, inArray, or, sql as drizzleSql } from 'drizzle-orm';
 import { db, sql } from '@/lib/db';
-import { automationRuns, podTemplates } from '@/db/schema';
+import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
 import { buildListingRequest, type RunRow, type TemplateRow } from '@/lib/automation-runner';
 import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
@@ -20,6 +20,7 @@ import type {
   ListingReviewState,
   ListingReviewStatus,
 } from '@/types/templates';
+import type { EtsyVariationRow } from '@/types/pod';
 
 export { MANUAL_TEMPLATE_ID, type ManualListingSettings } from '@/lib/manual-listing';
 
@@ -411,10 +412,33 @@ export type ProductionDraftInput = {
     id?: string | null;
     url?: string | null;
     name: string;
-    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string } | null;
+    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string; productType?: string } | null;
   };
+  folderId?: string | null;
   folderName?: string;
 };
+
+/** Mockup klasörüne bağlı otomasyonun ilan ayarları (kategori, ürün tipi, notlar, varyasyonlar). */
+async function loadFolderAutomation(userId: string, folderId: string) {
+  const [template] = await db.select().from(podTemplates)
+    .where(and(eq(podTemplates.userId, userId), drizzleSql`${podTemplates.mockupConfig} ->> 'folderId' = ${folderId}`))
+    .limit(1);
+  if (!template) return null;
+  let rows = template.variationConfig?.rows?.length ? template.variationConfig.rows : null;
+  // Otomasyon kayıtlı bir varyasyon şablonuna bağlıysa şablonun güncel satırları kullanılır.
+  const sourceId = template.variationConfig?.sourceTemplateId;
+  if (sourceId) {
+    const [workspace] = await db.select({ templates: userWorkspaces.etsyVariationTemplates }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
+    const source = ((workspace?.templates as Array<{ id: string; variations?: EtsyVariationRow[] }> | null) ?? []).find((t) => t.id === sourceId);
+    if (source?.variations?.length) rows = source.variations;
+  }
+  return {
+    taxonomyId: Number(template.automationSchedule?.etsy?.taxonomyId) || null,
+    productType: template.seoHints?.productType?.trim() || null,
+    notes: template.seoHints?.customNotes?.trim() || null,
+    variations: rows,
+  };
+}
 
 /**
  * Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir: görseller hazırdır; ilan metni (SEO)
@@ -428,13 +452,17 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  const sku = generateListingSku(defaults.productType);
+  // Kategori, ürün tipi ve (seçildiyse) varyasyonlar mockup klasörünün otomasyonundan gelir;
+  // mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan. Klasörün otomasyonu yoksa varsayılanlar kullanılır.
+  const folder = input.folderId ? await loadFolderAutomation(userId, input.folderId) : null;
+  const productType = folder?.productType || analysis.productType || 'T-shirt';
+  const sku = generateListingSku(productType);
   const settings: ManualListingSettings = {
-    etsy: defaults.etsy,
-    variations: variationRowsFromDefaults(defaults.variations),
+    etsy: { ...defaults.etsy, ...(folder?.taxonomyId ? { taxonomyId: folder.taxonomyId } : {}) },
+    variations: folder?.variations?.length ? folder.variations : variationRowsFromDefaults(defaults.variations),
     sku,
-    productType: defaults.productType,
-    notes: defaults.notes,
+    productType,
+    notes: folder?.notes ?? '',
     subject,
   };
   const now = new Date();

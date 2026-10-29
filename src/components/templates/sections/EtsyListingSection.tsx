@@ -216,6 +216,7 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full', embed
                   </div>
                 )}
               </div>
+              {!embedded && <>
               <div>
                 <span className={labelClass}>Paketli ağırlık (isteğe bağlı)</span>
                 <div className="flex gap-1.5">
@@ -242,6 +243,7 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full', embed
                 <input type="checkbox" className="mt-0.5 w-4 h-4 accent-amber-500" checked={etsy.shouldAutoRenew === true} onChange={(e) => updateEtsy({ shouldAutoRenew: e.target.checked })} />
                 <span><strong>Otomatik yenile</strong> — ilan 4 ay sonra süresi dolunca Etsy yeniler (her yenileme 0,20 $ ücretlidir).</span>
               </label>
+              </>}
               {storeOnly && (
                 <p className="sm:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
                   Mağaza bölümü her ilan için, ürünün konusuna göre yapay zekâ tarafından mağazanızdaki bölümler arasından seçilir.

@@ -21,6 +21,7 @@ const schema = z.object({
   photos: z.array(storedMedia).min(1, 'İlana eklenecek görsel yok.').max(20, 'Etsy en fazla 20 fotoğraf kabul eder.'),
   photoLabels: z.array(z.string().max(300)).max(20).optional(),
   videoUrl: storedMedia.nullable().optional(),
+  folderId: z.string().max(255).nullable().optional(),
   folderName: z.string().max(200).optional(),
   design: z.object({
     id: z.string().max(255).nullable().optional(),
@@ -31,6 +32,7 @@ const schema = z.object({
       keywords: z.array(z.string().max(100)).max(60).optional(),
       primarySubject: z.string().max(300).optional(),
       primaryAesthetic: z.string().max(300).optional(),
+      productType: z.string().max(100).optional(),
     }).nullable().optional(),
   }),
 });

@@ -385,13 +385,14 @@ export function useBatchGenerator({
           photos: photos.map((p) => p.url),
           photoLabels: photos.map((p) => p.label.slice(0, 300)),
           videoUrl: video,
+          folderId: renderedMatches[0]?.folderId ?? null,
           folderName: renderedMatches[0]?.folderName,
           design: {
             id: design?.id ?? null,
             url: design && /^\/api\/(r2|uploads)\//.test(design.src) ? design.src : null,
             name: design?.name ?? renderedMatches[0]?.designName ?? 'Tasarım',
             analysis: analysis
-              ? { description: analysis.description, keywords: analysis.keywords?.slice(0, 60), primarySubject: analysis.primarySubject, primaryAesthetic: analysis.primaryAesthetic }
+              ? { description: analysis.description, keywords: analysis.keywords?.slice(0, 60), primarySubject: analysis.primarySubject, primaryAesthetic: analysis.primaryAesthetic, productType: analysis.productType }
               : null,
           },
         }),

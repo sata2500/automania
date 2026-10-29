@@ -1,5 +1,6 @@
 /**
- * Kullanıcının ilan varsayılanları (Ayarlar sekmesi): ürün tipi, Etsy mağaza ayarları ve varyasyonlar.
+ * Kullanıcının ilan varsayılanları (Ayarlar sekmesi): Etsy mağaza ayarları ve varyasyonlar. Kategori ve
+ * ürün tipi mağazanın tamamı için değil, mockup klasörünün otomasyonunda belirlenir.
  * Manuel üretimden açılan ilanlar bunlarla hazırlanır; otomasyon şablonunda eksik kalan Etsy ayarları ve
  * varyasyonlar da buradan tamamlanır. Saf modül (istemci ve sunucuda kullanılır).
  */
@@ -17,10 +18,6 @@ export type VariationDefaults = {
 };
 
 export type ListingDefaults = {
-  /** Ürün tipi (ör. "T-shirt"): ilan metni ve SKU öneki buna göre */
-  productType: string;
-  /** İlan metnine eklenecek mağaza notları (kumaş, baskı, beden bilgisi…) */
-  notes: string;
   etsy: PodTemplateEtsyListingSettings;
   variations: VariationDefaults;
 };
@@ -29,8 +26,6 @@ export const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 export const DEFAULT_COLORS = ['White', 'Black', 'Sand', 'Navy', 'Sport Grey'];
 
 export const EMPTY_LISTING_DEFAULTS: ListingDefaults = {
-  productType: 'T-shirt',
-  notes: '',
   etsy: {
     shippingProfileId: '',
     readinessStateId: '',
@@ -68,8 +63,6 @@ export function normalizeListingDefaults(input: unknown): ListingDefaults {
     if (sizes.includes(size)) sizePrices[size] = money(price, basePrice);
   }
   return {
-    productType: String(raw.productType ?? base.productType).trim().slice(0, 80) || base.productType,
-    notes: String(raw.notes ?? '').trim().slice(0, 2000),
     etsy: { ...etsy, price: money(etsy.price, basePrice), taxonomyId: Number(etsy.taxonomyId) || base.etsy.taxonomyId },
     variations: {
       sizes,
@@ -107,4 +100,40 @@ export function missingListingSettings(defaults: ListingDefaults): string[] {
     !defaults.etsy.shippingProfileId && 'kargo profili',
     !defaults.etsy.readinessStateId && 'hazırlık süresi',
   ].filter(Boolean) as string[];
+}
+
+/**
+ * Kayıtlı varyasyon şablonunu (beden × renk satırları) düzenleyici biçimine çevirir: temel fiyat en düşük
+ * fiyat, bedene özel fiyat o bedenin ilk açık satırının fiyatıdır. Renge göre farklı fiyat varsa
+ * `colorSpecificPrices` ile bildirilir (düzenleyici beden bazlı fiyat kullanır).
+ */
+export function variationDefaultsFromRows(rows: EtsyVariationRow[]): VariationDefaults & { colorSpecificPrices: boolean } {
+  const sizes = Array.from(new Set(rows.map((r) => r.size).filter(Boolean)));
+  const colors = Array.from(new Set(rows.map((r) => r.color).filter(Boolean)));
+  const priced = rows.filter((r) => r.enabled !== false && Number(r.price) > 0);
+  // Temel fiyat en düşük fiyattır (büyük bedenler genelde daha pahalıdır).
+  const basePrice = priced.length > 0 ? Math.min(...priced.map((r) => Number(r.price))) : EMPTY_LISTING_DEFAULTS.variations.basePrice;
+  const sizePrices: Record<string, number> = {};
+  let colorSpecificPrices = false;
+  for (const size of sizes) {
+    const prices = new Set(priced.filter((r) => r.size === size).map((r) => Number(r.price)));
+    if (prices.size > 1) colorSpecificPrices = true;
+    const first = priced.find((r) => r.size === size);
+    if (first && Number(first.price) !== basePrice) sizePrices[size] = Number(first.price);
+  }
+  const maxQuantity = Math.max(0, ...rows.map((r) => Math.trunc(Number(r.quantity) || 0)));
+  const quantity = maxQuantity > 0 ? Math.min(999, maxQuantity) : EMPTY_LISTING_DEFAULTS.variations.quantity;
+  return { sizes, colors, basePrice, sizePrices, quantity, colorSpecificPrices };
+}
+
+/**
+ * Düzenleyicideki varyasyonları kayıtlı şablon satırlarına çevirir. Aynı beden/renk satırı önceki şablonda
+ * varsa satışa kapalılık ve SKU bilgisi korunur.
+ */
+export function templateRowsFromDefaults(variations: VariationDefaults, previous: EtsyVariationRow[] = []): EtsyVariationRow[] {
+  const byKey = new Map(previous.map((r) => [`${r.size}\u0000${r.color}`, r]));
+  return variationRowsFromDefaults(variations).map((row) => {
+    const old = byKey.get(`${row.size}\u0000${row.color}`);
+    return old ? { ...row, id: old.id || row.id, enabled: old.enabled !== false, sku: old.sku ?? '' } : row;
+  });
 }

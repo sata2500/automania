@@ -7,20 +7,22 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Layers, Monitor, Moon, Package, Save, Store, Sun, User, X } from 'lucide-react';
+import { Download, Layers, Monitor, Moon, Package, Save, Store, Sun, Trash2, User, X } from 'lucide-react';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
 import { EtsyListingSection } from '@/components/templates/sections/EtsyListingSection';
-import { CategoryPicker, type TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
 import {
   MAX_VARIATION_COMBINATIONS,
   missingListingSettings,
   normalizeListingDefaults,
+  templateRowsFromDefaults,
+  variationDefaultsFromRows,
   type ListingDefaults,
 } from '@/lib/listing-defaults';
 import type { PodTemplateAutomationSchedule } from '@/types/templates';
+import type { EtsyVariationRow, EtsyVariationTemplate } from '@/types/pod';
 
 const cardClass = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-4';
 const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
@@ -72,6 +74,161 @@ function ChipListInput({ id, values, onChange, placeholder }: { id: string; valu
   );
 }
 
+/** Eski kayıtlardaki eksik/metin alanları API şemasına uyacak biçime getirir. */
+function cleanTemplate(template: EtsyVariationTemplate): EtsyVariationTemplate {
+  const rows = (Array.isArray(template.variations) ? template.variations : []).map((row, index): EtsyVariationRow => ({
+    id: String(row?.id || `row-${index}`).slice(0, 100),
+    size: String(row?.size ?? '').trim().slice(0, 60),
+    color: String(row?.color ?? '').trim().slice(0, 60),
+    price: Math.max(0, Math.min(50_000, Number(row?.price) || 0)),
+    quantity: Math.max(0, Math.min(999, Math.trunc(Number(row?.quantity) || 0))),
+    sku: String(row?.sku ?? '').slice(0, 64),
+    enabled: row?.enabled !== false,
+  }));
+  return { id: String(template.id), name: String(template.name || 'Adsız şablon').slice(0, 100), updatedAt: template.updatedAt, variations: rows.slice(0, MAX_VARIATION_COMBINATIONS) };
+}
+
+/**
+ * Kayıtlı varyasyon şablonları: düzenleyiciye yükleme, düzenlenmiş varyasyonlarla şablonu güncelleme,
+ * yeni şablon olarak kaydetme ve silme. Otomasyonlar şablona bağlıysa güncel satırları kullanır.
+ */
+function VariationTemplates({ variations, onLoad }: {
+  variations: ListingDefaults['variations'];
+  onLoad: (variations: ListingDefaults['variations']) => void;
+}) {
+  const toast = useToast();
+  const [templates, setTemplates] = useState<EtsyVariationTemplate[] | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [isNaming, setIsNaming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/workspace/variation-templates', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setTemplates((Array.isArray(data?.templates) ? data.templates : []).filter((t: EtsyVariationTemplate) => t?.id).map(cleanTemplate));
+      })
+      .catch(() => { if (!cancelled) setTemplates([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const active = templates?.find((t) => t.id === activeId) ?? null;
+
+  const persist = async (next: EtsyVariationTemplate[], successMessage: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/workspace/variation-templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'Şablonlar kaydedilemedi.');
+      setTemplates(next);
+      toast.success(successMessage);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Şablonlar kaydedilemedi.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const load = (template: EtsyVariationTemplate) => {
+    const { colorSpecificPrices, ...loaded } = variationDefaultsFromRows(template.variations);
+    onLoad(loaded);
+    setActiveId(template.id);
+    if (colorSpecificPrices) toast.info('Bu şablonda renge göre farklı fiyatlar var; düzenleyicide bedene göre fiyat kullanılır.');
+    else toast.success(`"${template.name}" yüklendi. Değişiklikleri şablona veya varsayılanlara kaydedebilirsiniz.`);
+  };
+
+  const tooMany = variations.sizes.length * variations.colors.length > MAX_VARIATION_COMBINATIONS;
+  const empty = variations.sizes.length === 0 || variations.colors.length === 0;
+
+  const updateActive = () => {
+    if (!templates || !active) return;
+    const next = templates.map((t) => t.id === active.id
+      ? { ...t, updatedAt: new Date().toISOString(), variations: templateRowsFromDefaults(variations, t.variations) }
+      : t);
+    void persist(next, `"${active.name}" güncellendi.`);
+  };
+
+  const saveAsNew = async () => {
+    const name = newName.replace(/\s+/g, ' ').trim();
+    if (!templates || !name) return;
+    const template: EtsyVariationTemplate = { id: `vt-${Date.now()}`, name: name.slice(0, 100), updatedAt: new Date().toISOString(), variations: templateRowsFromDefaults(variations) };
+    if (await persist([...templates, template], `"${template.name}" şablonu kaydedildi.`)) {
+      setActiveId(template.id);
+      setNewName('');
+      setIsNaming(false);
+    }
+  };
+
+  const remove = (template: EtsyVariationTemplate) => {
+    if (!templates || !window.confirm(`"${template.name}" şablonu silinsin mi? Bu şablona bağlı otomasyonlar Ayarlar'daki varyasyonları kullanır.`)) return;
+    void persist(templates.filter((t) => t.id !== template.id), 'Şablon silindi.').then((ok) => { if (ok && activeId === template.id) setActiveId(null); });
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5 bg-slate-50/60 dark:bg-slate-950/40">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Kayıtlı şablonlar</span>
+        {templates === null && <Spinner className="w-3.5 h-3.5" />}
+      </div>
+      {templates && templates.length === 0 && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">Henüz kayıtlı şablon yok. Aşağıdaki varyasyonları düzenleyip yeni şablon olarak kaydedebilirsiniz.</p>
+      )}
+      {templates && templates.length > 0 && (
+        <ul className="space-y-1.5">
+          {templates.map((template) => {
+            const isActive = template.id === activeId;
+            const count = template.variations.filter((r) => r.enabled).length;
+            return (
+              <li key={template.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${isActive ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 dark:border-indigo-500/50' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{template.name}</span>
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    {count} kombinasyon{template.updatedAt ? ` · ${new Date(template.updatedAt).toLocaleDateString('tr-TR')}` : ''}{isActive ? ' · düzenleniyor' : ''}
+                  </span>
+                </span>
+                <button type="button" onClick={() => load(template)} disabled={busy} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-50">
+                  <Download className="w-3.5 h-3.5" /> Yükle
+                </button>
+                <button type="button" onClick={() => remove(template)} disabled={busy} aria-label={`${template.name} sil`} className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {templates && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {active && (
+            <button type="button" onClick={updateActive} disabled={busy || tooMany || empty} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold disabled:opacity-50">
+              <Save className="w-3.5 h-3.5" /> &quot;{active.name}&quot; şablonunu güncelle
+            </button>
+          )}
+          {isNaming ? (
+            <form className="flex flex-1 min-w-0 items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); void saveAsNew(); }}>
+              <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={100} placeholder="Şablon adı (ör. Unisex tişört)" aria-label="Yeni şablon adı" className={`${inputClass} !w-auto flex-1 min-w-0 py-1.5`} />
+              <button type="submit" disabled={busy || !newName.trim() || tooMany || empty} className="shrink-0 px-3 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold disabled:opacity-50">Kaydet</button>
+              <button type="button" onClick={() => { setIsNaming(false); setNewName(''); }} className="shrink-0 px-2 py-2 text-xs font-bold text-slate-500">Vazgeç</button>
+            </form>
+          ) : (
+            <button type="button" onClick={() => setIsNaming(true)} disabled={busy || tooMany || empty || templates.length >= 100} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-50">
+              Yeni şablon olarak kaydet
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel() {
   const { user, setIsAuthModalOpen } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -79,7 +236,6 @@ export function SettingsPanel() {
   const [defaults, setDefaults] = useState<ListingDefaults | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [categories, setCategories] = useState<TaxonomyOption[]>([]);
   const [etsyConnected, setEtsyConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -93,10 +249,6 @@ export function SettingsPanel() {
         setSavedSnapshot(JSON.stringify(loaded));
       })
       .catch(() => { if (!cancelled) setDefaults(normalizeListingDefaults(null)); });
-    fetch('/api/etsy/taxonomy')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (!cancelled && Array.isArray(data?.categories)) setCategories(data.categories); })
-      .catch(() => {});
     fetch('/api/etsy/shipping-profiles')
       .then((r) => r.json())
       .then((data) => { if (!cancelled) setEtsyConnected(Boolean(data?.connected)); })
@@ -197,33 +349,19 @@ export function SettingsPanel() {
 
       {/* İlan varsayılanları */}
       <section className={cardClass} aria-label="İlan varsayılanları">
-        <SectionTitle icon={Package} title="İlan varsayılanları" hint="Üretim'den oluşturulan ilanlar bu ayarlarla hazırlanır; otomasyonlarda boş bırakılan ayarlar da buradan alınır." />
+        <SectionTitle icon={Package} title="Mağaza ayarları" hint="Tüm ilanlarda kullanılır (Üretim'den oluşturulanlar ve otomasyonlarda boş bırakılanlar). Kategori ve ürün tipi her klasörün otomasyonunda belirlenir." />
         {missing.length > 0 && (
           <p className="text-xs rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-2.5">
             Yayınlamak için seçilmesi gereken: <strong>{missing.join(', ')}</strong>.
           </p>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass} htmlFor="set-product">Ürün tipi</label>
-            <input id="set-product" className={inputClass} value={defaults.productType} maxLength={80} onChange={(e) => update({ productType: e.target.value })} placeholder="Ör. T-shirt, Sweatshirt" />
-          </div>
-          <div>
-            <label className={labelClass} htmlFor="set-whomade">Kim üretti?</label>
-            <select id="set-whomade" className={inputClass} value={defaults.etsy.whoMade} onChange={(e) => update({ etsy: { ...defaults.etsy, whoMade: e.target.value as ListingDefaults['etsy']['whoMade'] } })}>
-              <option value="i_did">Ben tasarladım (POD)</option>
-              <option value="someone_else">Başka biri / üretim ortağı</option>
-              <option value="collective">Ekip (kolektif)</option>
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label className={labelClass} htmlFor="set-category">Etsy kategorisi</label>
-            {categories.length > 0 ? (
-              <CategoryPicker id="set-category" categories={categories} value={defaults.etsy.taxonomyId} onChange={(id) => update({ etsy: { ...defaults.etsy, taxonomyId: id } })} />
-            ) : (
-              <input id="set-category" type="number" min={1} className={inputClass} value={defaults.etsy.taxonomyId} onChange={(e) => update({ etsy: { ...defaults.etsy, taxonomyId: Number(e.target.value) || 0 } })} />
-            )}
-          </div>
+        <div>
+          <label className={labelClass} htmlFor="set-whomade">Kim üretti?</label>
+          <select id="set-whomade" className={inputClass} value={defaults.etsy.whoMade} onChange={(e) => update({ etsy: { ...defaults.etsy, whoMade: e.target.value as ListingDefaults['etsy']['whoMade'] } })}>
+            <option value="i_did">Ben tasarladım (POD)</option>
+            <option value="someone_else">Başka biri / üretim ortağı</option>
+            <option value="collective">Ekip (kolektif)</option>
+          </select>
         </div>
         <EtsyListingSection
           variant="store"
@@ -231,15 +369,12 @@ export function SettingsPanel() {
           schedule={schedule}
           onChange={(next) => update({ etsy: { ...defaults.etsy, ...next.etsy } })}
         />
-        <div>
-          <label className={labelClass} htmlFor="set-notes">Mağaza notları (ilan metnine eklenir)</label>
-          <textarea id="set-notes" rows={3} className={inputClass} value={defaults.notes} maxLength={2000} onChange={(e) => update({ notes: e.target.value })} placeholder="Ör. Comfort Colors 1717, %100 pamuk, beden tablosu fotoğraflarda; yıkama talimatları…" />
-        </div>
       </section>
 
       {/* Varyasyonlar */}
       <section className={cardClass} aria-label="Varyasyonlar">
         <SectionTitle icon={Layers} title="Varyasyonlar" hint="Her ilan bu beden ve renklerin tüm kombinasyonlarıyla açılır. Bedene özel fiyat vermezseniz temel fiyat kullanılır." />
+        <VariationTemplates variations={defaults.variations} onLoad={(variations) => updateVariations(variations)} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
             <label className={labelClass} htmlFor="set-sizes">Bedenler</label>

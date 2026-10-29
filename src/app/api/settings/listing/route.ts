@@ -1,6 +1,6 @@
 /**
- * GET/PUT /api/settings/listing — Ayarlar sekmesindeki ilan varsayılanları (ürün tipi, Etsy mağaza
- * ayarları, varyasyonlar). Manuel üretimden açılan ilanlar ve otomasyonların eksik ayarları bunları kullanır.
+ * GET/PUT /api/settings/listing — Ayarlar sekmesindeki ilan varsayılanları (Etsy mağaza ayarları ve
+ * varyasyonlar). Manuel üretimden açılan ilanlar ve otomasyonların eksik ayarları bunları kullanır.
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -13,8 +13,6 @@ export const dynamic = 'force-dynamic';
 
 const shortText = z.string().trim().max(60);
 const schema = z.object({
-  productType: z.string().trim().min(1).max(80),
-  notes: z.string().max(2000).default(''),
   etsy: etsyListingSettingsSchema,
   variations: z.object({
     sizes: z.array(shortText).max(30),
