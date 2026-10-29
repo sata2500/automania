@@ -1,6 +1,6 @@
 'use client';
 import { getErrorMessage } from '@/lib/errors';
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/components/common/ToastContext';
 import { deleteUnreferencedBlobs, loadAppData, saveAppData } from '@/lib/storage-service';
 import { DesignItem, EtsyVariationRow, EtsyVariationTemplate, EvaluatedKeyword, RenderedMatch } from '@/types/pod';
@@ -18,6 +18,7 @@ import type {
 import { LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { selectEtsyPublishMedia, validateWhoMade } from '@/lib/etsy-preflight';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
+import { generateListingSku } from '@/lib/sku';
 import { clearStudioAutoDraft, openListingsView, peekStudioAutoDraft } from '@/components/listings/listings-view';
 import { pickPreferredId, prefsFromTemplates, readStorePrefs, saveStorePrefs, type EtsyStorePrefs } from '@/lib/etsy-store-prefs';
 import { containsWord, detectPrimarySubject } from '@/lib/listing-subject';
@@ -521,38 +522,9 @@ function useEtsySeoState() {
     }
   };
 
-  // Smart SKU Generator: {CATEGORY_SLUG}_{3_DIGIT_LISTING_INDEX}
-  const generateSmartSku = useCallback((catId: number, currentListingsCount: number, customPrefix?: string) => {
-    let prefix = 'TSHIRT';
-    if (customPrefix && customPrefix.trim()) {
-      const lower = customPrefix.toLowerCase();
-      if (lower.includes('sweatshirt')) prefix = 'SWEATSHIRT';
-      else if (lower.includes('hoodie')) prefix = 'HOODIE';
-      else if (lower.includes('tank')) prefix = 'TANKTOP';
-      else if (lower.includes('long sleeve') || lower.includes('longsleeve')) prefix = 'LONGSLEEVE';
-      else if (lower.includes('mug') || lower.includes('kupa')) prefix = 'MUG';
-      else if (lower.includes('tote') || lower.includes('çanta')) prefix = 'TOTEBAG';
-      else if (lower.includes('shirt') || lower.includes('t-shirt') || lower.includes('tshirt')) prefix = 'TSHIRT';
-      else {
-        const clean = customPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if (clean.length > 0) prefix = clean.slice(0, 10);
-      }
-    } else {
-      if (catId === 1081) prefix = 'TSHIRT';
-      else if (catId === 1082) prefix = 'SWEATSHIRT';
-      else if (catId === 1083) prefix = 'HOODIE';
-      else if (catId === 1084) prefix = 'TANKTOP';
-      else if (catId === 1085) prefix = 'LONGSLEEVE';
-      else if (catId === 69151443) prefix = 'MUG';
-      else if (catId === 69151447) prefix = 'TOTEBAG';
-    }
-    const nextNum = Math.max(1, (currentListingsCount || 0) + 1);
-    const formattedNum = String(nextNum).padStart(3, '0');
-    return `${prefix}_${formattedNum}`;
-  }, []);
 
   const handleRegenerateSku = () => {
-    const newSku = generateSmartSku(taxonomyId, etsyListings?.length || 0, productType || niche);
+    const newSku = generateListingSku(productType || niche);
     setSku(newSku);
     toast.info(`Yeni İlan SKU Kodu oluşturuldu: ${newSku}`);
   };
@@ -1049,9 +1021,9 @@ function useEtsySeoState() {
         if (data.listing.styles && Array.isArray(data.listing.styles)) setStyles(data.listing.styles);
         if (data.listing.shop_section_id) setSelectedShopSectionId(data.listing.shop_section_id.toString());
         
-        // Auto-generate dynamic category-based SKU: {CATEGORY}_{COUNT}
-        const autoSku = generateSmartSku(data.listing.taxonomy_id || taxonomyId, etsyListings?.length || 0, productType || niche);
-        setSku(autoSku);
+        // İlan SKU'su (ÜRÜN-YYAAGG-XXXX): siparişte görünür; tasarım bu kodla Tasarımlar'da bulunur.
+        // Mevcut SKU korunur ki aynı ilan için metin yeniden üretildiğinde kod değişmesin.
+        setSku(prev => prev || generateListingSku(productType || niche));
         
         if (data.listing.taxonomy_properties_values) {
           const formattedProps: Record<number, number[]> = {};
@@ -1476,6 +1448,7 @@ function useEtsySeoState() {
           taxonomy_properties_values: selectedTaxonomyProperties,
           shipping_profile_id: parseInt(selectedShippingProfileId, 10),
           readiness_state_id: selectedReadinessStateId ? parseInt(selectedReadinessStateId, 10) : undefined,
+          design_url: selectedDesign?.src && /^\/api\/(r2|uploads)\//.test(selectedDesign.src) ? selectedDesign.src : undefined,
           images: [...media.photos, ...media.videos].map(m => ({ url: m.previewUrl, isVideo: m.isVideo === true })),
         })
       });
@@ -1557,6 +1530,7 @@ function useEtsySeoState() {
           photos,
           videoUrl,
           designUrl,
+          sku: sku || null,
           settings: {
             etsy: {
               shippingProfileId: selectedShippingProfileId || '',
@@ -1681,7 +1655,7 @@ function useEtsySeoState() {
     handleFolderDragStart, handleFolderDragOver, handleFolderDrop,
     handleMockupDragStart, handleMockupDragOver, handleMockupDrop, handleMoveMockupStep,
     draggedMockupId, setDraggedMockupId,
-    generateSmartSku, handleRegenerateSku,
+    handleRegenerateSku,
     handleSaveEtsySettings,
     statusFilter, setStatusFilter,
     colorFilter, setColorFilter,

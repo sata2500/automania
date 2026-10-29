@@ -34,6 +34,7 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
   const [tags, setTags] = useState<string[]>(item.seo?.tags ?? []);
   const [tagInput, setTagInput] = useState('');
   const [description, setDescription] = useState(item.seo?.description ?? '');
+  const [sku, setSku] = useState(item.sku ?? '');
   const [photos, setPhotos] = useState<PhotoRow[]>(() => initialPhotos(item));
   const [includeVideo, setIncludeVideo] = useState(item.review.includeVideo !== false);
   const [scheduleAt, setScheduleAt] = useState(() => toLocalInputValue(item.review.scheduledAt ? new Date(item.review.scheduledAt) : new Date(Date.now() + 60 * 60_000)));
@@ -72,6 +73,7 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
       photos: included.map((p) => p.url),
       includeVideo,
       imageAltTexts: Object.fromEntries(photos.map((p) => [p.url, p.alt])),
+      ...(sku.trim() && sku.trim() !== (item.sku ?? '') ? { sku } : {}),
     });
     setDirty(false);
   };
@@ -110,7 +112,7 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
               İlanı incele <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-              {item.templateName} · {formatDateTime(item.createdAt)}{item.price != null ? ` · ${item.price} (varyasyon yoksa)` : ''}
+              {item.templateName} · {formatDateTime(item.createdAt)}{item.price != null ? ` · ${item.price.toFixed(2)}` : ''}
             </p>
           </div>
           <button type="button" onClick={onClose} disabled={Boolean(busy)} aria-label="Kapat" className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl">
@@ -178,6 +180,10 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
 
           {/* Metinler */}
           <section className="space-y-4">
+            <div>
+              <label className={labelClass} htmlFor="review-sku">SKU (siparişte görünür; tasarım bu kodla Tasarımlar&apos;da aranır)</label>
+              <input id="review-sku" className={`${inputClass} font-mono uppercase`} value={sku} maxLength={32} disabled={!editable} placeholder="Ör. TSH-261029-K7QD" onChange={(e) => change(setSku)(e.target.value.toUpperCase())} />
+            </div>
             <div>
               <label className={labelClass} htmlFor="review-title">Başlık ({title.length}/140)</label>
               <input id="review-title" className={inputClass} value={title} maxLength={140} disabled={!editable} onChange={(e) => change(setTitle)(e.target.value)} />

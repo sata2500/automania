@@ -97,6 +97,9 @@ export interface DesignItem {
   /** Etiketler */
   tags?: string[];
 
+  /** Bu tasarımla açılan ilanların SKU'ları (Tasarımlar sekmesinde SKU ile aranır). */
+  skus?: string[];
+
   /** Yapay zeka tarafından mı üretildi? */
   generatedByAI?: boolean;
 

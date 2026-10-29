@@ -19,6 +19,7 @@ const editSchema = z.object({
   photos: z.array(z.string().max(2000)).max(30).optional(),
   includeVideo: z.boolean().optional(),
   imageAltTexts: z.record(z.string().max(2000), z.string().max(500)).optional(),
+  sku: z.string().max(64).optional(),
 });
 
 const actionSchema = z.object({

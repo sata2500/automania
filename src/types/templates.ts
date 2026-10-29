@@ -185,6 +185,8 @@ export interface AutomationStepResult {
   completedAt?: string;
   error?: string;
   output?: Record<string, unknown>;
+  /** Adımın kaç kez başlatıldığı: süre sınırında kesilip sürdürülen adım sonsuza dek denenmez. */
+  attempts?: number;
 }
 
 /** Tüm otomasyon adımları */
@@ -231,6 +233,8 @@ export interface ListingReviewState {
   photos?: string[];
   /** Video ilana eklensin mi (varsayılan: evet) */
   includeVideo?: boolean;
+  /** İncelemede elle değiştirilmiş ilan SKU'su (yoksa otomasyonun ürettiği) */
+  sku?: string;
   updatedAt: string;
 }
 

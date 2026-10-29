@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { scheduleUserTick } from '@/lib/automation-scheduler-hook';
 import { db } from '@/lib/db';
 import { userWorkspaces } from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -23,13 +24,16 @@ function payloadContainsTemporaryMedia(body: WorkspaceSaveInput): boolean {
   ].some(hasTemporaryMediaUrl);
 }
 
-export async function GET(_request: Request) {
+export async function GET(request: Request) {
   try {
     const session = await getAuthoritativeSession();
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const userId = session.id;
+    // Uygulama açıldığında kullanıcının kaçırılmış zamanlanmış otomasyonları ve yarıda kalmış
+    // çalıştırmaları yanıt döndükten sonra işlenir (harici zamanlayıcı gecikse bile).
+    scheduleUserTick(userId, request);
 
     // Yalnızca istemciye dönen kolonlar okunur (gizli token kolonları ve olası eksik kolonlar sorguya girmez).
     const rows = await db

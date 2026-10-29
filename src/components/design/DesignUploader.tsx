@@ -21,6 +21,8 @@ import { DesignGrid } from './components/DesignGrid';
 import { DesignAnalysisModal } from './components/DesignAnalysisModal';
 import { DesignFolderModal } from './components/DesignFolderModal';
 import { AIDesignGeneratorModal } from './components/AIDesignGeneratorModal';
+import { DesignRenameModal } from './components/DesignRenameModal';
+import { Search, X } from 'lucide-react';
 
 interface DesignUploaderProps {
   designs: DesignItem[];
@@ -59,6 +61,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     return false;
   };
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
+  const [renameTarget, setRenameTarget] = useState<DesignItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // AI Design Generator Modal
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
@@ -113,6 +117,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     designs,
     setDesigns,
     activeDesignFolderId,
+    searchQuery,
   });
 
   const {
@@ -383,6 +388,29 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       {/* Main Studio Design Cards Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+        {/* Arama: ad, ilan SKU'su, etiket */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tasarım ara: SKU (ör. TSH-261029-K7QD), ad veya etiket…"
+            aria-label="Tasarım ara"
+            className="w-full pl-9 pr-9 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} aria-label="Aramayı temizle" className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {searchQuery.trim() && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">{filteredDesigns.length} tasarım bulundu (tüm klasörlerde)</p>
+        )}
+
         {/* Action Toolbar */}
         <DesignToolbar
           designs={designs}
@@ -415,12 +443,26 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
             }
           }}
           onCropClick={(design) => setCropTargetDesign(design)}
+          onRenameClick={(design) => setRenameTarget(design)}
+          searchQuery={searchQuery}
           onRemoveBgClick={handleRemoveBgClick}
           onRecolorClick={handleRecolorClick}
           onMoveToFolder={handleMoveToFolder}
           onDeleteClick={requestDeleteDesign}
         />
       </div>
+
+      {renameTarget && (
+        <DesignRenameModal
+          design={renameTarget}
+          onClose={() => setRenameTarget(null)}
+          onSave={(name) => {
+            setDesigns((prev) => prev.map((d) => (d.id === renameTarget.id ? { ...d, name } : d)));
+            setRenameTarget(null);
+            toast.success(`Tasarım adı "${name}" olarak güncellendi.`);
+          }}
+        />
+      )}
 
       {/* Interactive Crop Modal */}
       {cropTargetDesign && (

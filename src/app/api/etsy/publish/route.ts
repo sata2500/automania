@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { tagDesignWithSku } from '@/lib/listing-review';
+import { sanitizeSku } from '@/lib/sku';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { validateEtsyDraftPreflight, validateWhoMade } from '@/lib/etsy-preflight';
@@ -171,6 +173,10 @@ export async function POST(req: Request) {
       throw error;
     }
     const { listingId, listingUrl, variationsUpdated, imageItems, videoItems, uploadErrors } = draft;
+    // Tasarım, siparişte görünen SKU ile Tasarımlar sekmesinde aranabilsin.
+    const designUrl = typeof body.design_url === 'string' && /^\/api\/(r2|uploads)\//.test(body.design_url) ? body.design_url : null;
+    const listingSku = sanitizeSku(typeof sku === 'string' ? sku : '');
+    if (listingId && designUrl && listingSku) await tagDesignWithSku(session.id, designUrl, listingSku);
     const { imagesUploaded } = draft;
 
     let activated = false;

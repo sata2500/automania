@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight, Eraser, Download } from 'lucide-react';
+import { Sparkles, Crop, Trash2, FolderInput, Folder, Check, Layers, ChevronRight, Eraser, Download, Pencil } from 'lucide-react';
 import { DesignItem, MockupFolder } from '@/types/pod';
 
 interface DesignItemMenuProps {
@@ -11,6 +11,7 @@ interface DesignItemMenuProps {
   onClose: () => void;
   onAnalyze: (design: DesignItem) => void;
   onCrop: (design: DesignItem) => void;
+  onRename?: (design: DesignItem) => void;
   onRemoveBg?: (design: DesignItem) => void;
   onRecolor?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
@@ -58,6 +59,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
   isAnalyzing,
   onClose,
   onAnalyze,
+  onRename,
   onCrop,
   onRemoveBg,
   onRecolor,
@@ -121,6 +123,20 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
         <Download className="w-4 h-4 text-emerald-500 shrink-0" />
         <span>İndir (PNG)</span>
       </button>
+
+      {/* Rename */}
+      {onRename && (
+        <button
+          onClick={() => {
+            onClose();
+            onRename(design);
+          }}
+          className="w-full px-3.5 py-2 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors text-left font-medium cursor-pointer"
+        >
+          <Pencil className="w-4 h-4 text-indigo-500 shrink-0" />
+          <span>Yeniden Adlandır</span>
+        </button>
+      )}
 
       {/* Crop */}
       <button

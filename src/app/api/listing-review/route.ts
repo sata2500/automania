@@ -24,6 +24,7 @@ const manualDraftSchema = z.object({
   photos: z.array(storedMedia).min(1).max(20),
   videoUrl: storedMedia.nullable().optional(),
   designUrl: z.string().max(2000).nullable().optional(),
+  sku: z.string().max(64).nullable().optional(),
   settings: z.object({
     etsy: etsyListingSettingsSchema,
     variations: z.array(z.object({

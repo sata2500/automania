@@ -16,6 +16,8 @@ vi.mock('drizzle-orm', () => ({
   and: (...args: unknown[]) => args,
   eq: (...args: unknown[]) => args,
   inArray: (...args: unknown[]) => args,
+  lt: (...args: unknown[]) => args,
+  or: (...args: unknown[]) => args,
   sql: () => ({ __sql: true }),
 }));
 vi.mock('@/lib/db', () => {
@@ -66,6 +68,7 @@ vi.mock('@/lib/background-removal', () => ({ removeVariantBackground: vi.fn(asyn
 vi.mock('@/lib/r2', () => ({
   isR2Configured: () => true,
   uploadToR2: vi.fn(async (_b: Buffer, key: string) => ({ url: `/api/r2/${key}`, key, size: 1 })),
+  deleteFromR2: vi.fn(async () => ({ deletedCount: 1 })),
 }));
 vi.mock('@/lib/upload-security', () => ({ createOwnedUploadName: (u: string, n: string) => `user-${u}-${n}` }));
 vi.mock('@/lib/app-settings', () => ({ loadSetting: vi.fn(async () => ''), loadSettings: vi.fn(async () => ({})) }));
@@ -177,6 +180,12 @@ describe('executeAutomationRun', () => {
     expect(input.images.map((m) => m.url)).toEqual(['/api/r2/user-u1-auto-mockup-run1-1', '/api/r2/user-u1-chart.png']);
     expect(input.variations).toHaveLength(1);
     expect(input.shipping_profile_id).toBe('11');
+    // İlan, tasarım adımında üretilen SKU ile açılır; ham görsel arka plan kaldırmadan sonra silinir.
+    const designOutput = (state.run?.steps as Record<string, { output?: { sku?: string; rawUrl?: string } }>).designGeneration.output;
+    expect(designOutput?.sku).toMatch(/^[A-Z]{3}-\d{6}-[2-9A-Z]{4}$/);
+    expect((input as unknown as { sku?: string }).sku).toBe(designOutput?.sku);
+    const { deleteFromR2 } = await import('@/lib/r2');
+    expect(vi.mocked(deleteFromR2)).toHaveBeenCalledWith([designOutput?.rawUrl]);
   });
 
   it('review mode keeps the listing in the review queue instead of sending it to Etsy', async () => {
@@ -233,6 +242,38 @@ describe('executeAutomationRun', () => {
     await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
     expect(state.run?.status).toBe('failed');
     expect(state.run?.errorMessage).toBe('Etsy reddetti: geçersiz kategori');
+  });
+});
+
+describe('resuming a run cut off by the function time limit', () => {
+  it('continues the interrupted design step without regenerating the stored design', async () => {
+    const { generateImage } = await import('@/lib/ai-provider');
+    state.run = {
+      ...state.run!,
+      steps: {
+        ...pendingSteps(),
+        designGeneration: {
+          status: 'running', attempts: 1,
+          output: { prompt: 'p', finalPrompt: 'fp', keyBackground: 'green', sku: 'TSH-261029-ABCD', rawUrl: '/api/r2/user-u1-auto-raw-run1', rawMimeType: 'image/png' },
+        },
+      },
+    };
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    const steps = state.run?.steps as Record<string, { status: string; attempts?: number; output?: { sku?: string } }>;
+    expect(steps.designGeneration).toMatchObject({ status: 'completed', attempts: 2 });
+    expect(steps.backgroundRemoval.output?.sku).toBe('TSH-261029-ABCD');
+    // Ana tasarım tekrar üretilmez (yalnızca SEO/ilan gibi görsel dışı adımlar çalışır).
+    expect(vi.mocked(generateImage)).not.toHaveBeenCalled();
+  });
+
+  it('gives up on a step that keeps getting cut off', async () => {
+    state.run = { ...state.run!, steps: { ...pendingSteps(), designGeneration: { status: 'running', attempts: 3 } } };
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    const steps = state.run?.steps as Record<string, { status: string; error?: string }>;
+    expect(steps.designGeneration.status).toBe('failed');
+    expect(steps.designGeneration.error).toMatch(/zaman aşımı/);
+    expect(steps.mockupRender.status).toBe('skipped');
+    expect(state.run?.status).toBe('failed');
   });
 });
 

@@ -402,6 +402,24 @@ export async function createEtsyDraftListing(
     } catch (err: unknown) {
       uploadErrors.push(`Varyasyon hatası: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
+  } else if (listingId && sku) {
+    // Varyasyonsuz ilanda SKU envanterdeki tek ürüne yazılır (taslak oluşturma isteği SKU almaz).
+    try {
+      const invRes = await etsyFetch(`https://openapi.etsy.com/v3/application/listings/${listingId}/inventory`, {
+        method: 'PUT',
+        headers: {
+          'x-api-key': `${etsyApiKey}:${etsySharedSecret || ''}`,
+          'Authorization': `Bearer ${etsyAccessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          products: [{ sku, property_values: [], offerings: [{ price, quantity, is_enabled: true, readiness_state_id }] }],
+        }),
+      });
+      if (!invRes.ok) uploadErrors.push(await readEtsyError(invRes, 'SKU kaydedilemedi'));
+    } catch (err: unknown) {
+      uploadErrors.push(`SKU hatası: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
   }
 
   // Upload images/videos if provided

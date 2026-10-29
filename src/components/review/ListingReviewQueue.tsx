@@ -124,7 +124,7 @@ export function ListingReviewQueue() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-indigo-500" /> Hazır İlanlar</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Otomasyonların ve İlan Stüdyosu&apos;nun hazırladığı ilanlar Etsy&apos;ye gönderilmeden önce burada bekler. Beğendiklerinizi düzenleyip hemen yayınlayın veya zamanlayın; beğenmediklerinizi reddedin. Zamanlanan ilanlar saatlik zamanlayıcı ile Etsy&apos;de <strong>yayına</strong> alınır.
+            Otomasyonların ve İlan Stüdyosu&apos;nun hazırladığı ilanlar burada bekler. İlana dokunup düzenleyin, hemen yayınlayın veya zamanlayın; zamanlananlar saatlik zamanlayıcıyla Etsy&apos;de <strong>yayına</strong> alınır.
           </p>
         </div>
         <button type="button" onClick={() => void load()} className="self-start sm:self-auto px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
@@ -221,53 +221,60 @@ export function ListingReviewQueue() {
             : 'Bu bölümde ilan yok.'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        // Etsy arama sonuçları gibi: telefonda iki sütun, büyük ekranda beş sütuna kadar kompakt kartlar.
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-3 gap-y-5 sm:gap-x-4">
           {visible.map((item) => {
             const badge = STATUS_BADGES[item.review.status];
             const photos = item.review.photos ?? item.photos;
             const canSelect = filter !== 'published';
+            const hasVideo = Boolean(item.videoUrl && item.review.includeVideo !== false);
             return (
-              <div key={item.runId} className="group relative flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div key={item.runId} className="group relative flex flex-col min-w-0">
                 {canSelect && (
                   <input
                     type="checkbox"
                     aria-label="İlanı seç"
-                    className="absolute top-3 left-3 z-10 w-5 h-5 accent-indigo-600"
+                    className="absolute top-2 left-2 z-10 w-5 h-5 accent-indigo-600 drop-shadow"
                     checked={selected.has(item.runId)}
                     onChange={() => toggle(item.runId)}
                   />
                 )}
-                <button type="button" onClick={() => setOpenId(item.runId)} className="text-left flex flex-col flex-1">
-                  <div className="relative aspect-square bg-slate-100 dark:bg-slate-800">
+                <button type="button" onClick={() => setOpenId(item.runId)} className="text-left flex flex-col flex-1 min-w-0">
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-800 group-hover:shadow-lg transition-shadow">
                     {photos[0] && (
-                       
-                      <img src={photos[0]} alt={item.seo?.imageAltTexts?.[item.photos.indexOf(photos[0])] || item.seo?.title || 'İlan fotoğrafı'} loading="lazy" className="w-full h-full object-cover" />
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photos[0]} alt={item.seo?.imageAltTexts?.[item.photos.indexOf(photos[0])] || item.seo?.title || 'İlan fotoğrafı'} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
                     )}
-                    <span className={`absolute top-3 right-3 px-2 py-0.5 rounded-lg text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
-                    <span className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-0.5 rounded-lg bg-black/60 text-white text-[10px] font-bold">
-                      {photos.length} fotoğraf{item.videoUrl && item.review.includeVideo !== false ? <><Film className="w-3 h-3 ml-1" /> video</> : null}
+                    <span className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
+                    <span className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[9px] sm:text-[10px] font-bold">
+                      {photos.length}{hasVideo && <Film className="w-3 h-3" aria-label="video" />}
                     </span>
                   </div>
-                  <div className="p-3 space-y-1.5 flex-1">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-2">{item.seo?.title || 'Başlıksız ilan'}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.templateName} · {formatDateTime(item.createdAt)}</p>
+                  <div className="pt-2 space-y-0.5 min-w-0">
+                    <p className="text-xs sm:text-[13px] leading-snug text-slate-800 dark:text-slate-100 line-clamp-2">{item.seo?.title || 'Başlıksız ilan'}</p>
+                    {item.price != null && (
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{item.price.toFixed(2)}</p>
+                    )}
+                    <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {item.sku ? <span className="font-mono">{item.sku}</span> : item.templateName}
+                    </p>
                     {item.review.status === 'scheduled' && item.review.scheduledAt && (
-                      <p className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" /> {formatDateTime(item.review.scheduledAt)}</p>
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 flex items-center gap-1"><CalendarClock className="w-3 h-3 shrink-0" /> <span className="truncate">{formatDateTime(item.review.scheduledAt)}</span></p>
                     )}
                     {item.review.status === 'published' && (
-                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> {formatDateTime(item.review.publishedAt)}</p>
+                      <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3 shrink-0" /> <span className="truncate">{formatDateTime(item.review.publishedAt)}</span></p>
                     )}
                     {item.review.status === 'failed' && item.review.error && (
-                      <p className="text-[11px] text-red-600 dark:text-red-400 flex items-start gap-1 line-clamp-3"><XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {item.review.error}</p>
+                      <p className="text-[10px] sm:text-[11px] text-red-600 dark:text-red-400 flex items-start gap-1" title={item.review.error}><XCircle className="w-3 h-3 shrink-0 mt-0.5" /> <span className="line-clamp-2">{item.review.error}</span></p>
                     )}
                     {item.warning && item.review.status === 'awaiting' && (
-                      <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {item.warning}</p>
+                      <p className="text-[10px] sm:text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1" title={item.warning}><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> <span className="line-clamp-2">{item.warning}</span></p>
                     )}
                   </div>
                 </button>
                 {item.review.listingUrl && (
-                  <a href={item.review.listingUrl} target="_blank" rel="noopener noreferrer" className="mx-3 mb-3 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 flex items-center gap-1 hover:underline">
-                    <ExternalLink className="w-3.5 h-3.5" /> Etsy&apos;de aç
+                  <a href={item.review.listingUrl} target="_blank" rel="noopener noreferrer" className="mt-1 text-[10px] sm:text-[11px] font-bold text-indigo-600 dark:text-indigo-300 flex items-center gap-1 hover:underline">
+                    <ExternalLink className="w-3 h-3" /> Etsy&apos;de aç
                   </a>
                 )}
               </div>

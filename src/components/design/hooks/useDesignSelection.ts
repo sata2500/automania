@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { DesignItem, TargetApparel } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
+import { matchesDesignQuery } from '@/lib/design-search';
 
 export const SLOT_LABELS: Record<TargetApparel, string> = {
   dark: 'Açık Kumaş',
@@ -12,27 +13,33 @@ interface UseDesignSelectionProps {
   designs: DesignItem[];
   setDesigns: React.Dispatch<React.SetStateAction<DesignItem[]>>;
   activeDesignFolderId: string | null;
+  /** Arama yapılıyorsa tüm klasörlerde aranır */
+  searchQuery?: string;
 }
 
 export function useDesignSelection({
   designs,
   setDesigns,
   activeDesignFolderId,
+  searchQuery = '',
 }: UseDesignSelectionProps) {
   const toast = useToast();
   const [selectedDesignIds, setSelectedDesignIds] = useState<string[]>([]);
 
   // Filtered designs based on active folder
+  // Arama varken klasörden bağımsız tüm tasarımlarda aranır (sipariş SKU'su hangi klasörde olursa olsun bulunsun).
   const filteredDesigns = useMemo(() => {
+    if (searchQuery.trim()) return designs.filter((d) => matchesDesignQuery(d, searchQuery));
     return designs.filter((d) =>
       activeDesignFolderId ? d.folderId === activeDesignFolderId : true
     );
-  }, [designs, activeDesignFolderId]);
+  }, [designs, activeDesignFolderId, searchQuery]);
 
-  // Klasör değişince seçim temizlenir: toplu sil/taşı ekranda görünmeyen tasarımları etkilemesin.
-  const [selectionFolderId, setSelectionFolderId] = useState(activeDesignFolderId);
-  if (selectionFolderId !== activeDesignFolderId) {
-    setSelectionFolderId(activeDesignFolderId);
+  // Klasör veya arama değişince seçim temizlenir: toplu sil/taşı ekranda görünmeyen tasarımları etkilemesin.
+  const viewKey = `${activeDesignFolderId ?? ''}|${searchQuery.trim()}`;
+  const [selectionViewKey, setSelectionViewKey] = useState(viewKey);
+  if (selectionViewKey !== viewKey) {
+    setSelectionViewKey(viewKey);
     setSelectedDesignIds([]);
   }
 

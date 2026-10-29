@@ -1,4 +1,6 @@
 import { formatValidationError, templateInputSchema } from '@/lib/validation/templates';
+import { scheduleUserTick } from '@/lib/automation-scheduler-hook';
+import { readCronHeartbeat } from '@/lib/automation-scheduler';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { podTemplates, userWorkspaces } from '@/db/schema';
@@ -45,7 +47,7 @@ async function migrateLegacyFolderTemplates(userId: string, templates: TemplateR
  * GET /api/templates
  * Kullanıcının tüm şablonlarını döner.
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     const session = await getAuthoritativeSession();
     if (!session?.id) {
@@ -58,8 +60,11 @@ export async function GET(_req: NextRequest) {
       .where(eq(podTemplates.userId, session.id))
       .orderBy(podTemplates.updatedAt);
     const migrated = await migrateLegacyFolderTemplates(session.id, templates);
+    scheduleUserTick(session.id, req);
+    // Harici zamanlayıcının son çağrısı: arayüz zamanlayıcı kurulmamışsa veya duruksa uyarır.
+    const schedulerLastCronAt = await readCronHeartbeat().catch(() => null);
 
-    return NextResponse.json({ templates: migrated, total: migrated.length });
+    return NextResponse.json({ templates: migrated, total: migrated.length, schedulerLastCronAt });
   } catch (error) {
     console.error('[GET /api/templates] Error:', error);
     return NextResponse.json(

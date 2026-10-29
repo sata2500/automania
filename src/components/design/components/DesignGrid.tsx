@@ -13,6 +13,9 @@ interface DesignGridProps {
   onSetProductionActive: (id: string, target: TargetApparel) => void;
   onAnalyzeClick: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
+  onRenameClick?: (design: DesignItem) => void;
+  /** Arama yapılıyorsa boş durum mesajı buna göre gösterilir */
+  searchQuery?: string;
   onRemoveBgClick?: (design: DesignItem) => void;
   onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
@@ -29,6 +32,8 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
   onSetProductionActive,
   onAnalyzeClick,
   onCropClick,
+  onRenameClick,
+  searchQuery,
   onRemoveBgClick,
   onRecolorClick,
   onMoveToFolder,
@@ -38,10 +43,19 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
     return (
       <div className="text-center py-16 px-4 bg-slate-50 dark:bg-slate-900/40 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500">
         <Palette className="w-12 h-12 mx-auto mb-3 opacity-30" />
-        <p className="text-sm font-semibold">Bu klasörde henüz tasarım bulunmuyor.</p>
-        <p className="text-xs text-slate-400 mt-1">
-          Yukarıdaki yükleme alanını kullanarak tasarım yükleyebilirsiniz.
-        </p>
+        {searchQuery?.trim() ? (
+          <>
+            <p className="text-sm font-semibold">&quot;{searchQuery.trim()}&quot; ile eşleşen tasarım bulunamadı.</p>
+            <p className="text-xs text-slate-400 mt-1">Arama tüm klasörlerde tasarım adına, SKU&apos;lara ve etiketlere bakar.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold">Bu klasörde henüz tasarım bulunmuyor.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Yukarıdaki yükleme alanını kullanarak tasarım yükleyebilirsiniz.
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -60,6 +74,7 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
           onSetProductionActive={onSetProductionActive}
           onAnalyzeClick={onAnalyzeClick}
           onCropClick={onCropClick}
+          onRenameClick={onRenameClick}
           onRemoveBgClick={onRemoveBgClick}
           onRecolorClick={onRecolorClick}
           onMoveToFolder={onMoveToFolder}

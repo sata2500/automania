@@ -107,6 +107,9 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
                     {name === 'listingCreation' && (step.output as { review?: { status?: string } } | undefined)?.review && (
                       <p className="mt-0.5 text-indigo-600 dark:text-indigo-300">{REVIEW_LABELS[(step.output as { review: { status: string } }).review.status] ?? 'Hazır İlanlar\'da'}</p>
                     )}
+                    {name === 'backgroundRemoval' && typeof step.output?.sku === 'string' && (
+                      <p className="mt-0.5 font-mono text-slate-600 dark:text-slate-300">SKU: {step.output.sku}</p>
+                    )}
                     {step.error && <p className={`mt-0.5 break-words ${step.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>{step.error}</p>}
                   </div>
                 </li>

@@ -19,6 +19,7 @@ interface DesignCardProps {
   onSetProductionActive: (id: string, target: TargetApparel) => void;
   onAnalyzeClick: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
+  onRenameClick?: (design: DesignItem) => void;
   onRemoveBgClick?: (design: DesignItem) => void;
   onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
   onMoveToFolder: (designId: string, folderId: string | null) => void;
@@ -35,6 +36,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
   onSetProductionActive,
   onAnalyzeClick,
   onCropClick,
+  onRenameClick,
   onRemoveBgClick,
   onRecolorClick,
   onMoveToFolder,
@@ -155,6 +157,9 @@ export const DesignCard: React.FC<DesignCardProps> = ({
         >
           {design.name}
         </p>
+        {(design.skus ?? []).filter((sku) => !design.name.includes(sku)).slice(0, 2).map((sku) => (
+          <p key={sku} className="text-[9px] sm:text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-300 truncate" title="İlan SKU'su">{sku}</p>
+        ))}
 
         <div
           className="pt-1.5 sm:pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1"
@@ -206,6 +211,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
           onClose={() => setMenuPosition(null)}
           onAnalyze={onAnalyzeClick}
           onCrop={onCropClick}
+          onRename={onRenameClick}
           onRemoveBg={onRemoveBgClick}
           onRecolor={onRecolorClick}
           onMoveToFolder={onMoveToFolder}

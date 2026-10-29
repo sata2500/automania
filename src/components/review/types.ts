@@ -14,4 +14,5 @@ export type ReviewItemView = {
   etsyListingId: string | null;
   price: number | null;
   warning: string | null;
+  sku: string | null;
 };

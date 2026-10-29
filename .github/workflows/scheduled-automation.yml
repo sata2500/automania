@@ -2,8 +2,9 @@ name: Scheduled automation
 
 # Şablon zamanlamaları saat bazındadır. Vercel Hobby planı yalnızca günlük cron
 # desteklediği için tetikleyici GitHub Actions üzerinden saatte bir çalışır.
-# Gerekli repository secret'ları: AUTOMATION_APP_URL (ör. https://automania.example)
-# ve CRON_SECRET (Vercel ortamındaki CRON_SECRET ile aynı, en az 32 karakter).
+# Gerekli repository secret'ı: CRON_SECRET (Vercel ortamındaki CRON_SECRET ile aynı, en az 32 karakter).
+# İsteğe bağlı: AUTOMATION_APP_URL (varsayılan: canlı uygulama adresi).
+# GitHub zamanlanmış işleri yoğunlukta geciktirebilir; uygulama kaçırılan saatleri 8 saate kadar telafi eder.
 on:
   schedule:
     - cron: '2 * * * *'
@@ -18,11 +19,11 @@ jobs:
     steps:
       - name: Trigger due automation templates
         env:
-          APP_URL: ${{ secrets.AUTOMATION_APP_URL }}
+          APP_URL: ${{ secrets.AUTOMATION_APP_URL || 'https://automania-gamma.vercel.app' }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "AUTOMATION_APP_URL / CRON_SECRET tanımlı değil; atlanıyor."
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning title=Zamanlayıcı kapalı::CRON_SECRET repository secret'ı tanımlı değil; zamanlanmış otomasyonlar tetiklenmiyor."
             exit 0
           fi
           curl --fail-with-body --silent --show-error --max-time 60 \

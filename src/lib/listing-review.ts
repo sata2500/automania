@@ -11,6 +11,8 @@ import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { writeAuditLog } from '@/lib/audit-log';
+import { runSkuOf } from '@/lib/run-sku';
+import { sanitizeSku } from '@/lib/sku';
 import type {
   AutomationRunSteps,
   GeneratedSeoData,
@@ -24,7 +26,7 @@ import type { EtsyVariationRow } from '@/types/pod';
 export const MANUAL_TEMPLATE_ID = 'manual';
 
 /** Elle hazırlanan ilanın Etsy ayarları ve varyasyonları (otomasyon şablonu yerine ilanla birlikte saklanır). */
-export type ManualListingSettings = { etsy: PodTemplateEtsyListingSettings; variations: EtsyVariationRow[] };
+export type ManualListingSettings = { etsy: PodTemplateEtsyListingSettings; variations: EtsyVariationRow[]; sku?: string };
 
 function manualSettingsOf(steps: unknown): ManualListingSettings | null {
   const manual = (steps as AutomationRunSteps | null)?.listingCreation?.output?.manualListing;
@@ -65,6 +67,7 @@ export type ReviewItem = {
   etsyListingId: string | null;
   price: number | null;
   warning: string | null;
+  sku: string | null;
 };
 
 /** Kullanıcının kuyruktaki ilanları (en yeni önce). */
@@ -100,6 +103,7 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
       etsyListingId: run.etsyListingId,
       price: typeof price === 'number' ? price : null,
       warning: typeof warning === 'string' ? warning : null,
+      sku: runSkuOf(steps),
     }];
   });
 }
@@ -123,6 +127,7 @@ export type ReviewEdits = {
   photos?: string[];
   includeVideo?: boolean;
   imageAltTexts?: Record<string, string>;
+  sku?: string;
 };
 
 /** İlan metnini ve fotoğraf seçimini günceller (yalnızca yayınlanmamış ilanlarda). */
@@ -162,6 +167,13 @@ export async function updateReviewItem(userId: string, runId: string, edits: Rev
     next.photos = photos;
   }
   if (edits.includeVideo !== undefined) next.includeVideo = edits.includeVideo;
+  if (edits.sku !== undefined) {
+    const sku = sanitizeSku(edits.sku);
+    if (!sku) throw new ListingReviewError('SKU boş olamaz (harf, rakam, - . _).');
+    next.sku = sku;
+    // Tasarım da yeni SKU ile aranabilsin.
+    if (run.generatedDesignUrl) await tagDesignWithSku(userId, run.generatedDesignUrl, sku);
+  }
   await saveReview(runId, run.steps as AutomationRunSteps, next, { generatedSeo: seo });
 }
 
@@ -353,8 +365,29 @@ export type ManualDraftInput = {
   imageAltTexts?: string[];
   videoUrl?: string | null;
   designUrl?: string | null;
+  sku?: string | null;
   settings: ManualListingSettings;
 };
+
+/**
+ * Tasarımı SKU ile etiketler (Tasarımlar sekmesindeki arama için). Aynı görsel birden çok ilanda
+ * kullanılabildiği için SKU'lar listede biriktirilir. Görsel çalışma alanında yoksa bir şey yapılmaz.
+ */
+export async function tagDesignWithSku(userId: string, designUrl: string, sku: string) {
+  await sql`
+    UPDATE user_workspaces
+    SET designs = (
+      SELECT jsonb_agg(
+        CASE WHEN elem ->> 'src' = ${designUrl} AND NOT COALESCE(elem -> 'skus', '[]'::jsonb) @> ${JSON.stringify([sku])}::jsonb
+          THEN jsonb_set(elem, '{skus}', COALESCE(elem -> 'skus', '[]'::jsonb) || ${JSON.stringify([sku])}::jsonb)
+          ELSE elem END
+        ORDER BY ord)
+      FROM jsonb_array_elements(designs) WITH ORDINALITY AS t(elem, ord)
+    ),
+    updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = ${userId} AND designs @> ${JSON.stringify([{ src: designUrl }])}::jsonb
+  `.catch((error: unknown) => console.warn('[Listing Review] Design SKU tag failed', error));
+}
 
 /**
  * İlan Stüdyosu'nda hazırlanan ilanı Hazır İlanlar kuyruğuna ekler. Otomasyon çalıştırmalarıyla aynı
@@ -363,6 +396,7 @@ export type ManualDraftInput = {
 export async function createManualDraft(userId: string, input: ManualDraftInput): Promise<string> {
   const runId = crypto.randomUUID();
   const now = new Date();
+  const sku = sanitizeSku(input.sku) || null;
   const done = { status: 'skipped' as const, error: 'İlan Stüdyosu\'nda hazırlandı.' };
   const review: ListingReviewState = { status: 'awaiting', updatedAt: now.toISOString() };
   const steps: AutomationRunSteps = {
@@ -371,7 +405,7 @@ export async function createManualDraft(userId: string, input: ManualDraftInput)
     mockupRender: done,
     videoGeneration: done,
     seoGeneration: done,
-    listingCreation: { status: 'completed', completedAt: now.toISOString(), output: { review, manualListing: input.settings } },
+    listingCreation: { status: 'completed', completedAt: now.toISOString(), output: { review, manualListing: { ...input.settings, ...(sku ? { sku } : {}) } } },
   };
   const seo: GeneratedSeoData = {
     title: input.title,
@@ -401,5 +435,6 @@ export async function createManualDraft(userId: string, input: ManualDraftInput)
     completedAt: now,
     updatedAt: now,
   });
+  if (sku && input.designUrl) await tagDesignWithSku(userId, input.designUrl, sku);
   return runId;
 }

@@ -68,6 +68,8 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
   const [startingId, setStartingId] = useState<string | null>(null);
   /** Şablon başına en son otomasyon çalıştırması. */
   const [latestRuns, setLatestRuns] = useState<Record<string, AutomationRun>>({});
+  // undefined: henüz bilinmiyor; null: harici zamanlayıcı hiç çağrılmadı.
+  const [schedulerLastCronAt, setSchedulerLastCronAt] = useState<string | null | undefined>(undefined);
   const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [detailsTemplateId, setDetailsTemplateId] = useState<string | null>(null);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
         if (!res.ok) throw new Error('Şablonlar yüklenemedi.');
         const data = await res.json();
         setTemplates(data.templates ?? []);
+        setSchedulerLastCronAt(typeof data.schedulerLastCronAt === 'string' ? data.schedulerLastCronAt : null);
 
         // Çalıştırma geçmişi isteğe bağlıdır; alınamazsa şablonlar yine gösterilir.
         if (runsRes?.ok) {
@@ -288,6 +291,10 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
           isCancelling={cancellingRunId === latestRuns[detailsTemplateId].id}
         />
       )}
+      <SchedulerHealthNotice
+        lastCronAt={schedulerLastCronAt}
+        hasScheduled={templates.some(t => t.isActive && t.automationSchedule?.enabled)}
+      />
       {/* Başlık: diğer sekmelerle aynı kart yapısı */}
       <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -650,6 +657,30 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
           onClose={() => { setIsBuilderOpen(false); setEditingTemplate(null); }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Zamanlanmış otomasyon varken harici zamanlayıcı hiç çağrılmadıysa veya 3 saatten uzun süredir
+ * çağrılmıyorsa uyarır. Uygulama açıkken kaçırılan saatler yine telafi edilir; uyarı bunu da söyler.
+ */
+function SchedulerHealthNotice({ lastCronAt, hasScheduled }: { lastCronAt: string | null | undefined; hasScheduled: boolean }) {
+  // Saat yalnızca yanıt geldiğinde okunur (render sırasında Date.now() kullanılmaz).
+  const [now] = useState(() => Date.now());
+  if (!hasScheduled || lastCronAt === undefined) return null;
+  const last = lastCronAt ? new Date(lastCronAt).getTime() : null;
+  if (last !== null && now - last < 3 * 60 * 60_000) return null;
+  return (
+    <div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30 p-3.5 text-xs text-amber-900 dark:text-amber-100 space-y-1">
+      <p className="font-bold">
+        {last === null ? 'Saatlik zamanlayıcı henüz hiç çalışmadı' : `Saatlik zamanlayıcı en son ${new Date(last).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })} tarihinde çalıştı`}
+      </p>
+      <p>
+        Uygulama kapalıyken zamanlanmış otomasyonların çalışması için GitHub deposunun Settings › Secrets and variables › Actions bölümüne
+        {' '}<code className="font-mono">CRON_SECRET</code> eklenmeli (Vercel ortam değişkenlerindeki <code className="font-mono">CRON_SECRET</code> ile aynı, en az 32 karakter).
+        O zamana kadar kaçırılan saatler, uygulamayı her açtığınızda (son 8 saat içinde) otomatik telafi edilir.
+      </p>
     </div>
   );
 }

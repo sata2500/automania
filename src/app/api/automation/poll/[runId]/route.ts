@@ -8,7 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { automationRuns } from '@/db/schema';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { runAndContinue } from '@/lib/automation-runner';
+import { DEAD_RUN_MS, runAndContinue } from '@/lib/automation-runner';
 
 export const maxDuration = 300;
 
@@ -35,7 +35,9 @@ export async function GET(
     // Yarıda kalmış (süre bütçesi dolmuş) veya hiç başlamamış çalıştırma: kullanıcı izlerken kaldığı yerden sürdür.
     // Aynı anda iki çağrı gelse bile çalıştırıcı yalnızca 'pending' kaydı sahiplenir.
     const lastTouched = (run.updatedAt ?? run.createdAt)?.getTime() ?? 0;
-    if (run.status === 'pending' && Date.now() - lastTouched > RESUME_IDLE_MS) {
+    // Süre sınırında kesilip 'running' durumunda kalmış çalıştırma da kaldığı adımdan sürdürülür.
+    const idle = Date.now() - lastTouched;
+    if ((run.status === 'pending' && idle > RESUME_IDLE_MS) || (run.status === 'running' && idle > DEAD_RUN_MS)) {
       const origin = new URL(req.url).origin;
       after(async () => { await runAndContinue({ runId: run.id, templateId: run.templateId, userId: run.userId }, origin); });
     }

@@ -11,11 +11,13 @@
  */
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
-import { and, eq, inArray, sql as drizzleSql } from 'drizzle-orm';
+import { and, eq, inArray, lt, or, sql as drizzleSql } from 'drizzle-orm';
 import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeChromaBackground } from '@/lib/chroma-key';
 import { KEY_COLORS, keyColorPromptValues, pickKeyBackground, type KeyBackground } from '@/lib/key-background';
-import { uploadToR2, isR2Configured } from '@/lib/r2';
+import { uploadToR2, isR2Configured, deleteFromR2 } from '@/lib/r2';
+import { generateListingSku } from '@/lib/sku';
+import { runSkuOf } from '@/lib/run-sku';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
@@ -68,6 +70,13 @@ const INVOCATION_BUDGET_MS = 170_000;
 /** Video adımı yalnızca en az bu kadar süre kalmışsa başlatılır; aksi halde yeni çağrıya bırakılır. */
 const VIDEO_MIN_REMAINING_MS = 260_000;
 const VIDEO_MAX_WAIT_MS = 230_000;
+/**
+ * 'running' durumundaki bir çalıştırma bu kadar süredir güncellenmediyse fonksiyonu süre sınırında (300 sn)
+ * kesilmiş demektir: takip, zamanlayıcı veya kullanıcı etkinliği onu kaldığı adımdan sürdürür.
+ */
+export const DEAD_RUN_MS = 6 * 60_000;
+/** Aynı adım en fazla bu kadar kez başlatılır (kesilip sürdürülen adımlar dahil). */
+const MAX_STEP_ATTEMPTS = 3;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export type RunRow = typeof automationRuns.$inferSelect;
@@ -193,6 +202,8 @@ type StepContext = {
   variantPng?: Buffer;
   /** Çalıştırmanın adım kayıtları (niş araştırması çıktısı buradan okunur) */
   steps?: AutomationRunSteps;
+  /** Adım içinde ara kayıt (uzun adımlar kesilirse kaldığı yerden sürsün) */
+  persist?: (patch: Partial<RunRow>) => Promise<void>;
 };
 
 /** Bu çalıştırmanın tasarım/SEO ipuçları: otomatik modda niş araştırmasının sonucu kullanılır. */
@@ -202,78 +213,165 @@ function runHints(ctx: StepContext) {
 
 type StepResult = { patch?: Partial<RunRow>; output?: Record<string, unknown>; skipped?: string; warning?: string };
 
-async function runDesignSteps(ctx: StepContext, steps: AutomationRunSteps, persist: (patch: Partial<RunRow>) => Promise<void>) {
+/** Tasarım üretimi adımının çıktısı: arka plan kaldırma ayrı adımda (gerekirse ayrı çağrıda) ham görsellerden yapılır. */
+type DesignStepOutput = {
+  prompt: string;
+  finalPrompt: string;
+  keyBackground: KeyBackground;
+  /** İlanın SKU'su: tasarımlar bu kodla adlandırılır, ilan Etsy'de bu SKU ile açılır. */
+  sku: string;
+  rawUrl: string;
+  rawMimeType: string;
+  /** Diğer kumaş rengi için yapay zekâ versiyonu (null: istenmedi/gerekmedi) */
+  variant?: { fabric: 'light' | 'dark'; rawUrl: string | null; error?: string } | null;
+};
+
+/** Görsel modelinin ham çıktısını (perde zeminli) sonraki adım için depolar. */
+async function storeRawImage(userId: string, name: string, data: Buffer, mimeType: string): Promise<string> {
+  return (await uploadToR2(data, createOwnedUploadName(userId, name, mimeType), mimeType)).url;
+}
+
+/**
+ * Tasarım üretimi: ana tasarımı ve (ayar açıksa) diğer kumaş rengi versiyonunu üretir, ham hallerini depolar.
+ * Ana tasarım üretildikten sonra ara kayıt yapılır: çağrı süre sınırında kesilirse adım yeniden başladığında
+ * ana tasarım tekrar üretilmez, yalnızca eksik versiyon üretilir.
+ */
+async function runDesignGeneration(ctx: StepContext): Promise<StepResult> {
   const { template, userId, runId } = ctx;
   const config = await loadAIConfig();
   const hints = runHints(ctx);
-  const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
-  const basePrompt = buildDesignConcept(hints);
-  // Perde rengi konuya göre seçilir: yeşil ağırlıklı konularda (Noel, orman…) magenta, tasarımın yeşilleri korunur.
-  const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${basePrompt}`);
-  const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
-    concept: basePrompt,
-    style: research?.style?.trim() || 'not specified',
-    audienceGroup: audienceGroupLabel(hints.audienceGroup),
-    fabric: fabricLabel(hints.designFabric),
-    ...keyColorPromptValues(keyBackground),
-  });
-  const generatedImages = await generateImage(config, { prompt: finalPrompt });
-  if (!generatedImages || generatedImages.length === 0) throw new Error('AI tasarımı üretemedi.');
+  const previous = ctx.steps?.designGeneration?.output as Partial<DesignStepOutput> | undefined;
+  let output: Partial<DesignStepOutput> = previous?.rawUrl ? { ...previous } : {};
+  let rawMain: Buffer | null = null;
 
-  steps.designGeneration = { ...steps.designGeneration, status: 'completed', completedAt: new Date().toISOString(), output: { prompt: basePrompt } };
-  steps.backgroundRemoval = { status: 'running', startedAt: new Date().toISOString() };
-  await persist({ steps });
+  if (!output.rawUrl) {
+    const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
+    const basePrompt = buildDesignConcept(hints);
+    // Perde rengi konuya göre seçilir: yeşil ağırlıklı konularda (Noel, orman…) magenta, tasarımın yeşilleri korunur.
+    const keyBackground = pickKeyBackground(`${hints.primaryNiche ?? ''} ${basePrompt}`);
+    const finalPrompt = fillPrompt(await loadPrompt('ai_prompt_generate_design'), {
+      concept: basePrompt,
+      style: research?.style?.trim() || 'not specified',
+      audienceGroup: audienceGroupLabel(hints.audienceGroup),
+      fabric: fabricLabel(hints.designFabric),
+      ...keyColorPromptValues(keyBackground),
+    });
+    const generatedImages = await generateImage(config, { prompt: finalPrompt });
+    if (!generatedImages || generatedImages.length === 0) throw new Error('AI tasarımı üretemedi.');
+    if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
+    rawMain = Buffer.from(generatedImages[0].data, 'base64');
+    const rawMimeType = generatedImages[0].mimeType || 'image/png';
+    output = {
+      prompt: basePrompt,
+      finalPrompt,
+      keyBackground,
+      sku: generateListingSku(hints.productType || template.seoHints?.productType),
+      rawUrl: await storeRawImage(userId, `auto-raw-${runId}`, rawMain, rawMimeType),
+      rawMimeType,
+    };
+    if (ctx.steps && ctx.persist) {
+      ctx.steps.designGeneration = { ...ctx.steps.designGeneration!, output };
+      await ctx.persist({ steps: ctx.steps });
+    }
+  }
+
+  if (output.variant === undefined) {
+    output.variant = await createFabricVariant(ctx, config, {
+      rawImage: rawMain ?? await loadImageForUser(userId, output.rawUrl!),
+      mimeType: output.rawMimeType || 'image/png',
+      keyBackground: output.keyBackground ?? 'green',
+    });
+  }
+  const variant = output.variant;
+  return {
+    output,
+    ...(variant?.error ? { warning: `${variant.fabric === 'dark' ? 'Koyu' : 'Açık'} kumaş versiyonu üretilemedi; otomatik renk dönüşümü kullanılacak. ${variant.error}` } : {}),
+  };
+}
+
+/**
+ * Arka plan kaldırma: ana tasarımın perde zeminini, kumaş versiyonunun ise (siyah zemin veya plaka dahil)
+ * zeminini kaldırır; ikisini de SKU adıyla Tasarımlar sekmesine ekler ve ham görselleri siler.
+ */
+async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
+  const { template, userId, runId } = ctx;
+  const design = ctx.steps?.designGeneration?.output as Partial<DesignStepOutput> | undefined;
+  if (!design?.rawUrl) {
+    // Bu sürümden önce başlamış çalıştırmalar tasarımı tek adımda işlemişti.
+    if (ctx.run.generatedDesignUrl) return {};
+    throw new Error('Tasarımın ham görseli bulunamadı; otomasyonu yeniden çalıştırın.');
+  }
+  const hints = runHints(ctx);
+  const keyColor = KEY_COLORS[design.keyBackground ?? 'green'];
+  const sku = design.sku || generateListingSku(hints.productType);
+  const title = hints.primaryNiche || template.name;
 
   // Kompozisyon (kare, ortalı, kenar boşlukları) görsel üretiminde istenir; burada kırpma yapılmaz.
-  const { pngBuffer, width: designWidth, height: designHeight } = await removeChromaBackground(
-    Buffer.from(generatedImages[0].data, 'base64'),
-    { keyColor: KEY_COLORS[keyBackground] },
-  );
-  if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
-  const uploadResult = await storeDesignImage(userId, `auto-design-${runId}`, pngBuffer);
-
+  const main = await removeChromaBackground(await loadImageForUser(userId, design.rawUrl), { keyColor });
+  const upload = await storeDesignImage(userId, `auto-design-${runId}`, main.pngBuffer);
   const newDesign: DesignItem = {
     id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    name: `${hints.primaryNiche || template.name} · ${new Date().toLocaleDateString('tr-TR')}`,
+    name: `${sku} · ${title}`,
     folderId: AUTOMATION_DESIGN_FOLDER.id,
-    src: uploadResult.url,
-    width: designWidth,
-    height: designHeight,
+    src: upload.url,
+    width: main.width,
+    height: main.height,
     targetApparel: 'both',
     isProductionActive: false,
     createdAt: Date.now(),
     tags: [],
+    skus: [sku],
     generatedByAI: true,
-    promptUsed: finalPrompt,
+    promptUsed: design.finalPrompt,
   };
-
   // Atomik ekleme: eşzamanlı çalıştırmalar birbirinin tasarımını silmez; updated_at değiştiği için
   // açık istemciler yeni tasarımı senkronla görür.
   await addAutomationDesign(userId, newDesign);
+  ctx.designPng = main.pngBuffer;
 
-  // Diğer kumaş rengi için yapay zekâ versiyonu (ayar açıksa ve klasörde o renkte mockup varsa).
-  const variant = await createFabricVariant(ctx, config, {
-    rawImage: Buffer.from(generatedImages[0].data, 'base64'),
-    mimeType: generatedImages[0].mimeType,
-    keyBackground,
-    designName: newDesign.name,
-  });
+  let variantUrl: string | null = null;
+  let warning: string | undefined;
+  const variant = design.variant;
+  if (variant?.rawUrl) {
+    try {
+      // Model versiyonu perde yerine siyah zemine veya dolu bir plakaya çizebilir: zemin türüne göre ayıklanır.
+      // Desenli zeminde hata fırlar ve o mockup'larda otomatik renk dönüşümü kullanılır.
+      const { removeVariantBackground } = await import('@/lib/background-removal');
+      const cleaned = await removeVariantBackground(await loadImageForUser(userId, variant.rawUrl), keyColor);
+      const variantUpload = await storeDesignImage(userId, `auto-design-${runId}-${variant.fabric}`, cleaned.pngBuffer);
+      await addAutomationDesign(userId, {
+        id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: `${sku} · ${title} · ${variant.fabric === 'dark' ? 'koyu kumaş' : 'açık kumaş'}`,
+        folderId: AUTOMATION_DESIGN_FOLDER.id,
+        src: variantUpload.url,
+        width: cleaned.width,
+        height: cleaned.height,
+        targetApparel: variant.fabric,
+        isProductionActive: false,
+        createdAt: Date.now(),
+        tags: [],
+        skus: [sku],
+        generatedByAI: true,
+      });
+      ctx.variantPng = cleaned.pngBuffer;
+      variantUrl = variantUpload.url;
+    } catch (error) {
+      const message = describeAiError(error);
+      console.warn('[Automation] Fabric variant background removal failed; automatic recolor will be used.', { runId, message });
+      warning = `${variant.fabric === 'dark' ? 'Koyu' : 'Açık'} kumaş versiyonunun zemini temizlenemedi; otomatik renk dönüşümü kullanıldı. ${message.slice(0, 200)}`;
+    }
+  } else if (variant?.error) {
+    warning = `${variant.fabric === 'dark' ? 'Koyu' : 'Açık'} kumaş versiyonu üretilemedi; otomatik renk dönüşümü kullanıldı. ${variant.error}`;
+  }
 
-  ctx.designPng = pngBuffer;
-  steps.backgroundRemoval = {
-    ...steps.backgroundRemoval,
-    status: 'completed',
-    completedAt: new Date().toISOString(),
-    ...(variant ? {
-      output: {
-        variantFabric: variant.fabric,
-        variantUrl: variant.url,
-        ...(variant.error ? { warning: `${variant.fabric === 'dark' ? 'Koyu' : 'Açık'} kumaş versiyonu üretilemedi; otomatik renk dönüşümü kullanıldı. ${variant.error}` } : {}),
-      },
-    } : {}),
+  // Ham görseller artık gerekmez (silinemezse depolama temizliği sonra kaldırır).
+  await deleteFromR2([design.rawUrl, ...(variant?.rawUrl ? [variant.rawUrl] : [])]).catch(() => undefined);
+
+  return {
+    patch: { generatedDesignId: newDesign.id, generatedDesignUrl: upload.url },
+    output: { sku, ...(variant ? { variantFabric: variant.fabric, variantUrl } : {}) },
+    ...(warning ? { warning } : {}),
   };
-  ctx.run = { ...ctx.run, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url };
-  await persist({ steps, generatedDesignId: newDesign.id, generatedDesignUrl: uploadResult.url });
 }
 
 /** Tasarımı Tasarımlar sekmesindeki "Otomasyon Tasarımları" klasörüne atomik olarak ekler. */
@@ -318,8 +416,8 @@ const MAX_INLINE_IMAGE_BYTES = 12 * 1024 * 1024;
 async function createFabricVariant(
   ctx: StepContext,
   config: Awaited<ReturnType<typeof loadAIConfig>>,
-  input: { rawImage: Buffer; mimeType: string; keyBackground: KeyBackground; designName: string },
-): Promise<{ fabric: 'light' | 'dark'; url: string | null; error?: string } | null> {
+  input: { rawImage: Buffer; mimeType: string; keyBackground: KeyBackground },
+): Promise<{ fabric: 'light' | 'dark'; rawUrl: string | null; error?: string } | null> {
   const hints = runHints(ctx);
   const base = hints.designFabric ?? 'light';
   if (!hints.fabricVariant || base === 'universal') return null;
@@ -339,31 +437,13 @@ async function createFabricVariant(
       : { data: input.rawImage, mimeType: input.mimeType };
     const images = await generateImage(config, { prompt, image: source });
     if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
-    // Model versiyonu perde yerine siyah zemine veya dolu bir plakaya çizebilir: zemin türüne göre ayıklanır.
-    // Desenli zeminde hata fırlar ve o mockup'larda otomatik renk dönüşümü kullanılır.
-    const { removeVariantBackground } = await import('@/lib/background-removal');
-    const { pngBuffer, width, height } = await removeVariantBackground(Buffer.from(images[0].data, 'base64'), KEY_COLORS[input.keyBackground]);
-    const upload = await storeDesignImage(ctx.userId, `auto-design-${ctx.runId}-${target}`, pngBuffer);
-    await addAutomationDesign(ctx.userId, {
-      id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: `${input.designName} · ${target === 'dark' ? 'koyu kumaş' : 'açık kumaş'}`,
-      folderId: AUTOMATION_DESIGN_FOLDER.id,
-      src: upload.url,
-      width,
-      height,
-      targetApparel: target,
-      isProductionActive: false,
-      createdAt: Date.now(),
-      tags: [],
-      generatedByAI: true,
-      promptUsed: prompt,
-    });
-    ctx.variantPng = pngBuffer;
-    return { fabric: target, url: upload.url };
+    const mimeType = images[0].mimeType || 'image/png';
+    const rawUrl = await storeRawImage(ctx.userId, `auto-raw-${ctx.runId}-${target}`, Buffer.from(images[0].data, 'base64'), mimeType);
+    return { fabric: target, rawUrl };
   } catch (error) {
     const message = describeAiError(error);
     console.warn('[Automation] Fabric variant failed; automatic recolor will be used.', { runId: ctx.runId, message });
-    return { fabric: target, url: null, error: message.slice(0, 300) };
+    return { fabric: target, rawUrl: null, error: message.slice(0, 300) };
   }
 }
 
@@ -684,6 +764,8 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
     item_dimensions_unit: etsy.itemDimensionsUnit,
     variations,
     images: media,
+    // İlan düzeyinde tek SKU: siparişte görünür, tasarım bu kodla Tasarımlar sekmesinde bulunur.
+    sku: runSkuOf(run.steps) ?? undefined,
   };
   return { credentials, input };
 }
@@ -728,6 +810,8 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
 
 const STEP_RUNNERS: Partial<Record<AutomationStepName, (ctx: StepContext) => Promise<StepResult>>> = {
   nicheResearch: runNicheResearch,
+  designGeneration: runDesignGeneration,
+  backgroundRemoval: runBackgroundRemoval,
   mockupRender: runMockupRender,
   videoGeneration: runVideo,
   seoGeneration: runSeo,
@@ -749,11 +833,15 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
 
   if (!template || !existing) return { ok: false, runId, reason: 'not_found' };
 
-  // Aynı run'ın iki kez çalıştırılmasını engelle: yalnızca 'pending' durumundaki kayıt 'running'e geçebilir.
+  // Aynı run'ın iki kez çalıştırılmasını engelle: yalnızca 'pending' kayıt ya da fonksiyon süre sınırında
+  // kesildiği için 'running' durumunda kalmış (uzun süredir dokunulmamış) kayıt sahiplenilebilir.
   const claimed = await db
     .update(automationRuns)
     .set({ status: 'running', startedAt: drizzleSql`COALESCE(${automationRuns.startedAt}, NOW())`, updatedAt: new Date() })
-    .where(and(eq(automationRuns.id, runId), eq(automationRuns.status, 'pending')))
+    .where(and(eq(automationRuns.id, runId), or(
+      eq(automationRuns.status, 'pending'),
+      and(eq(automationRuns.status, 'running'), lt(automationRuns.updatedAt, new Date(Date.now() - DEAD_RUN_MS))),
+    )))
     .returning();
   if (claimed.length === 0) return { ok: false, runId, reason: 'not_pending' };
 
@@ -763,6 +851,7 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
     await db.update(automationRuns).set({ ...patch, updatedAt: new Date() }).where(eq(automationRuns.id, runId));
     ctx.run = { ...ctx.run, ...patch };
   };
+  ctx.persist = persist;
   const isCancelled = async () => {
     const [row] = await db.select({ status: automationRuns.status }).from(automationRuns).where(eq(automationRuns.id, runId));
     return row?.status === 'cancelled';
@@ -783,15 +872,19 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
       }
       ranAnyStep = true;
 
-      steps[step] = { status: 'running', startedAt: new Date().toISOString() };
-      await persist({ steps });
-
-      if (step === 'designGeneration' || step === 'backgroundRemoval') {
-        // Tasarım ve arka plan kaldırma tek birimdir: ara çıktı (perde arka planlı görsel) saklanmaz.
-        steps.designGeneration = { status: 'running', startedAt: new Date().toISOString() };
-        await runDesignSteps(ctx, steps, persist);
+      // Süre sınırında kesilen adım (durumu 'running' kalmış) yeniden başlatılır; ara çıktısı korunur.
+      // Aynı adım tekrar tekrar kesiliyorsa sonsuza dek denenmez.
+      const attempts = (steps[step]?.attempts ?? 0) + 1;
+      if (attempts > MAX_STEP_ATTEMPTS) {
+        steps[step] = { ...steps[step], status: 'failed', completedAt: new Date().toISOString(), error: 'Adım art arda zaman aşımına uğradı; otomasyonu yeniden çalıştırın.' };
+        for (const later of AUTOMATION_STEP_ORDER.slice(AUTOMATION_STEP_ORDER.indexOf(step) + 1)) {
+          if (!isStepDone(steps[later]?.status)) steps[later] = { status: 'skipped', error: 'Önceki adım başarısız olduğu için atlandı.' };
+        }
+        await persist({ steps });
         continue;
       }
+      steps[step] = { ...(steps[step]?.status === 'running' ? { output: steps[step]?.output } : {}), status: 'running', startedAt: new Date().toISOString(), attempts };
+      await persist({ steps });
 
       const runner = STEP_RUNNERS[step];
       try {
@@ -810,7 +903,7 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
         steps[step] = { ...steps[step], status: skipped ? 'skipped' : 'failed', completedAt: new Date().toISOString(), error: message.slice(0, 500) };
         await persist({ steps });
         // Görsel üretilemezse sonraki adımların anlamı yok.
-        if (!skipped && step === 'mockupRender') {
+        if (!skipped && (step === 'designGeneration' || step === 'backgroundRemoval' || step === 'mockupRender')) {
           for (const later of AUTOMATION_STEP_ORDER.slice(AUTOMATION_STEP_ORDER.indexOf(step) + 1)) {
             if (!isStepDone(steps[later]?.status)) steps[later] = { status: 'skipped', error: 'Önceki adım başarısız olduğu için atlandı.' };
           }
@@ -872,12 +965,16 @@ export async function failStaleAutomationRuns(olderThanMinutes = 30, filter: { t
   return rows.length;
 }
 
-/** Bekleyen (yeni ya da yarıda kalmış) ve bir süredir dokunulmamış çalıştırmalar: zamanlayıcı bunları sürdürür. */
-export async function findResumableRuns(idleSeconds = 60, limit = 10): Promise<AutomationRunInput[]> {
+/** Bekleyen (yeni ya da yarıda kalmış) veya süre sınırında kesilmiş çalıştırmalar: zamanlayıcı bunları sürdürür. */
+export async function findResumableRuns(idleSeconds = 60, limit = 10, userId?: string): Promise<AutomationRunInput[]> {
+  const deadSeconds = Math.round(DEAD_RUN_MS / 1000);
   const rows = await sql`
     SELECT id, template_id, user_id FROM automation_runs
-    WHERE status = 'pending'
-      AND COALESCE(updated_at, created_at) < CURRENT_TIMESTAMP - make_interval(secs => ${idleSeconds}::int)
+    WHERE (${userId ?? null}::text IS NULL OR user_id = ${userId ?? null})
+      AND (
+        (status = 'pending' AND COALESCE(updated_at, created_at) < CURRENT_TIMESTAMP - make_interval(secs => ${idleSeconds}::int))
+        OR (status = 'running' AND COALESCE(updated_at, started_at, created_at) < CURRENT_TIMESTAMP - make_interval(secs => ${deadSeconds}::int))
+      )
     ORDER BY created_at ASC
     LIMIT ${limit}
   `;
