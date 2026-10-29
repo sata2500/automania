@@ -186,6 +186,10 @@ describe('executeAutomationRun', () => {
     expect((input as unknown as { sku?: string }).sku).toBe(designOutput?.sku);
     const { deleteFromR2 } = await import('@/lib/r2');
     expect(vi.mocked(deleteFromR2)).toHaveBeenCalledWith([designOutput?.rawUrl]);
+    // 4K ham çıktı genel 20 MB görsel sınırına takılmadan okunur.
+    const { loadImageForUser } = await import('@/lib/media-source');
+    const rawLoad = vi.mocked(loadImageForUser).mock.calls.find((call) => call[1] === designOutput?.rawUrl);
+    expect(rawLoad?.[2]?.maxBytes).toBeGreaterThan(20 * 1024 * 1024);
   });
 
   it('review mode keeps the listing in the review queue instead of sending it to Etsy', async () => {

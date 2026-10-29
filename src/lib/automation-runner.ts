@@ -77,6 +77,11 @@ const VIDEO_MAX_WAIT_MS = 230_000;
 export const DEAD_RUN_MS = 6 * 60_000;
 /** Aynı adım en fazla bu kadar kez başlatılır (kesilip sürdürülen adımlar dahil). */
 const MAX_STEP_ATTEMPTS = 3;
+/**
+ * Otomasyonun kendi ürettiği görseller (4K ham çıktı ve tasarım PNG'leri) depodan bu sınıra kadar okunur:
+ * 4K ham PNG'ler 20 MB'lık genel görsel sınırını aşabilir.
+ */
+const GENERATED_IMAGE_MAX_BYTES = 100 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export type RunRow = typeof automationRuns.$inferSelect;
@@ -277,7 +282,7 @@ async function runDesignGeneration(ctx: StepContext): Promise<StepResult> {
 
   if (output.variant === undefined) {
     output.variant = await createFabricVariant(ctx, config, {
-      rawImage: rawMain ?? await loadImageForUser(userId, output.rawUrl!),
+      rawImage: rawMain ?? await loadImageForUser(userId, output.rawUrl!, { maxBytes: GENERATED_IMAGE_MAX_BYTES }),
       mimeType: output.rawMimeType || 'image/png',
       keyBackground: output.keyBackground ?? 'green',
     });
@@ -307,7 +312,7 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
   const title = hints.primaryNiche || template.name;
 
   // Kompozisyon (kare, ortalı, kenar boşlukları) görsel üretiminde istenir; burada kırpma yapılmaz.
-  const main = await removeChromaBackground(await loadImageForUser(userId, design.rawUrl), { keyColor });
+  const main = await removeChromaBackground(await loadImageForUser(userId, design.rawUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES }), { keyColor });
   const upload = await storeDesignImage(userId, `auto-design-${runId}`, main.pngBuffer);
   const newDesign: DesignItem = {
     id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -337,7 +342,7 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
       // Model versiyonu perde yerine siyah zemine veya dolu bir plakaya çizebilir: zemin türüne göre ayıklanır.
       // Desenli zeminde hata fırlar ve o mockup'larda otomatik renk dönüşümü kullanılır.
       const { removeVariantBackground } = await import('@/lib/background-removal');
-      const cleaned = await removeVariantBackground(await loadImageForUser(userId, variant.rawUrl), keyColor);
+      const cleaned = await removeVariantBackground(await loadImageForUser(userId, variant.rawUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES }), keyColor);
       const variantUpload = await storeDesignImage(userId, `auto-design-${runId}-${variant.fabric}`, cleaned.pngBuffer);
       await addAutomationDesign(userId, {
         id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -472,7 +477,7 @@ async function runNicheResearch(ctx: StepContext): Promise<StepResult> {
 async function runMockupRender(ctx: StepContext): Promise<StepResult> {
   const { run, template, userId, runId } = ctx;
   if (!run.generatedDesignUrl) throw new Error('Tasarım bulunamadı.');
-  const design = ctx.designPng ?? await loadImageForUser(userId, run.generatedDesignUrl);
+  const design = ctx.designPng ?? await loadImageForUser(userId, run.generatedDesignUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES });
   const mockups = await loadWorkspaceMockups(userId);
   const plan = selectAutomationMockups(mockups, template.mockupConfig);
   if (plan.render.length === 0 && plan.statics.length === 0) {
@@ -490,7 +495,7 @@ async function runMockupRender(ctx: StepContext): Promise<StepResult> {
     if (!target) return design;
     if (!variantDesign && variantInfo?.variantUrl) {
       try {
-        variantDesign = await loadImageForUser(userId, variantInfo.variantUrl);
+        variantDesign = await loadImageForUser(userId, variantInfo.variantUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES });
       } catch (error) {
         console.warn('[Automation] Fabric variant could not be loaded; using automatic recolor.', error instanceof Error ? error.message : error);
       }
