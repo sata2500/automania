@@ -18,6 +18,9 @@ import { KEY_COLORS, keyColorPromptValues, pickKeyBackground, type KeyBackground
 import { uploadToR2, isR2Configured, deleteFromR2 } from '@/lib/r2';
 import { generateListingSku } from '@/lib/sku';
 import { runSkuOf } from '@/lib/run-sku';
+import { MANUAL_TEMPLATE_ID, manualTemplateFor } from '@/lib/manual-listing';
+import { loadListingDefaults } from '@/lib/user-settings';
+import { variationRowsFromDefaults } from '@/lib/listing-defaults';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
@@ -53,7 +56,7 @@ import {
 } from '@/lib/automation-plan';
 import type { DesignItem, EtsyVariationRow, MockupItem } from '@/types/pod';
 import { variationConfigFromRows } from '@/lib/folder-template';
-import type { AutomationRunSteps, AutomationStepName, GeneratedSeoData, ListingReviewState } from '@/types/templates';
+import type { AutomationRunSteps, AutomationStepName, GeneratedSeoData, ListingReviewState, PodTemplateEtsyListingSettings } from '@/types/templates';
 
 export type AutomationRunInput = {
   runId: string;
@@ -119,6 +122,19 @@ async function resolveVariationRows(userId: string, config: TemplateRow['variati
     console.warn('[Automation] Variation template lookup failed; using saved rows.', error instanceof Error ? error.message : error);
     return fallback;
   }
+}
+
+/** Şablonun dolu Etsy ayarları geçerlidir; boş bırakılanlar kullanıcının ilan varsayılanlarından gelir. */
+function mergeEtsySettings(
+  template: Partial<PodTemplateEtsyListingSettings> | null | undefined,
+  defaults: PodTemplateEtsyListingSettings,
+): PodTemplateEtsyListingSettings {
+  const merged: Record<string, unknown> = { ...defaults };
+  for (const [key, value] of Object.entries(template ?? {})) {
+    const empty = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+    if (!empty) merged[key] = value;
+  }
+  return merged as unknown as PodTemplateEtsyListingSettings;
 }
 
 async function jpegForListing(buffer: Buffer): Promise<Buffer> {
@@ -670,7 +686,11 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const propertyCount = Object.keys(seo.taxonomyProperties).length;
   if (run.generatedDesignId) {
     const parsed = listing as typeof listing & { detectedSubject?: unknown; detectedAesthetic?: unknown };
-    await attachDesignInsights(userId, run.generatedDesignId, {
+    // Kullanıcının kendi tasarımında (manuel üretim) mevcut görsel analizi korunur; yalnızca ilan metni eklenir.
+    const keepAnalysis = template.id === MANUAL_TEMPLATE_ID;
+    await attachDesignInsights(userId, run.generatedDesignId, keepAnalysis
+      ? { seo: { title: seo.title, description: seo.description, tags: seo.tags, generatedAt: Date.now() } }
+      : {
       analysis: {
         description: designPrompt,
         keywords: Array.from(new Set([...keywords, ...seo.tags])).slice(0, 30),
@@ -719,9 +739,11 @@ const stringList = (value: unknown, max: number): string[] =>
 export async function buildListingRequest(userId: string, template: TemplateRow, run: RunRow, review?: ListingReviewState | null) {
   const seo = run.generatedSeo as GeneratedSeoData | null;
   if (!seo?.title) throw new StepSkipped('SEO metni olmadığı için ilan açılmadı.');
-  const etsy = template.automationSchedule?.etsy;
-  if (!etsy?.shippingProfileId || !etsy.readinessStateId) {
-    throw new StepSkipped('Şablonda kargo profili veya hazırlık süresi seçilmemiş; "Etsy İlanı" adımından seçin.');
+  const defaults = await loadListingDefaults(userId);
+  // Şablonda boş bırakılan mağaza ayarları Ayarlar sekmesindeki ilan varsayılanlarından tamamlanır.
+  const etsy = mergeEtsySettings(template.automationSchedule?.etsy, defaults.etsy);
+  if (!etsy.shippingProfileId || !etsy.readinessStateId) {
+    throw new StepSkipped('Kargo profili veya hazırlık süresi seçilmemiş; Ayarlar › İlan varsayılanları bölümünden seçin.');
   }
   const whoMadeError = validateWhoMade({ whoMade: etsy.whoMade, isSupply: false, whenMade: etsy.whenMade });
   if (whoMadeError) throw new Error(whoMadeError);
@@ -740,7 +762,9 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
   if (photos.length === 0) throw new Error('İlana eklenecek görsel yok.');
   const media = run.generatedVideoUrl && review?.includeVideo !== false ? [...photos, { url: run.generatedVideoUrl, isVideo: true }] : photos;
   // Satışa kapalı satırlar da gönderilir: Etsy envanterde tüm beden × renk kombinasyonlarını ister.
-  const variationRows = await resolveVariationRows(userId, template.variationConfig);
+  const templateRows = await resolveVariationRows(userId, template.variationConfig);
+  // Şablonda varyasyon yoksa Ayarlar'daki beden × renk varyasyonları kullanılır.
+  const variationRows = templateRows.length > 0 ? templateRows : variationRowsFromDefaults(defaults.variations);
   const variations = variationRows.some((row) => row.enabled !== false)
     ? variationRows.map((row) => ({ size: row.size, color: row.color, price: row.price, quantity: row.quantity, sku: row.sku || undefined, enabled: row.enabled !== false }))
     : [];
@@ -794,12 +818,12 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
   // İnceleme modu (varsayılan): ilan Etsy'ye gönderilmez, Hazır İlanlar'da onay bekler.
   if ((schedule.listingMode ?? 'review') === 'review') {
     if (!(run.generatedSeo as GeneratedSeoData | null)?.title) throw new StepSkipped('SEO metni olmadığı için ilan hazırlanmadı.');
-    const etsy = schedule.etsy;
+    const etsy = mergeEtsySettings(schedule.etsy, (await loadListingDefaults(userId)).etsy);
     const review: ListingReviewState = { status: 'awaiting', updatedAt: new Date().toISOString() };
     return {
       output: { review },
-      warning: !etsy?.shippingProfileId || !etsy.readinessStateId
-        ? 'Kargo profili veya hazırlık süresi seçilmemiş; yayınlamadan önce otomasyonun "Etsy İlanı" adımından seçin.'
+      warning: !etsy.shippingProfileId || !etsy.readinessStateId
+        ? 'Kargo profili veya hazırlık süresi seçilmemiş; yayınlamadan önce Ayarlar › İlan varsayılanları bölümünden seçin.'
         : undefined,
     };
   }
@@ -835,15 +859,18 @@ const STEP_RUNNERS: Partial<Record<AutomationStepName, (ctx: StepContext) => Pro
 // ─── Çalıştırıcı ─────────────────────────────────────────────────────────────
 
 export async function executeAutomationRun({ runId, templateId, userId }: AutomationRunInput): Promise<AutomationRunOutcome> {
-  const [template] = await db
-    .select()
-    .from(podTemplates)
-    .where(and(eq(podTemplates.id, templateId), eq(podTemplates.userId, userId)));
-
   const [existing] = await db
     .select()
     .from(automationRuns)
     .where(and(eq(automationRuns.id, runId), eq(automationRuns.userId, userId)));
+
+  // Manuel üretimden açılan ilanın şablonu yoktur: oluşturulurken alınan ayar kopyasından türetilir.
+  const [template] = templateId === MANUAL_TEMPLATE_ID
+    ? [existing ? manualTemplateFor(userId, existing.steps) as unknown as TemplateRow | null : null]
+    : await db
+      .select()
+      .from(podTemplates)
+      .where(and(eq(podTemplates.id, templateId), eq(podTemplates.userId, userId)));
 
   if (!template || !existing) return { ok: false, runId, reason: 'not_found' };
 

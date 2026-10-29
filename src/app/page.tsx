@@ -6,10 +6,11 @@ import dynamic from 'next/dynamic';
 import { AppSplash, TabSkeleton } from '@/components/common/LoadingScreens';
 import { LoadingState } from '@/components/common/Spinner';
 import { useRouter } from 'next/navigation';
-import { openListingsView, requestStudioAutoDraft, type ListingsView } from '@/components/listings/listings-view';
+import { openListingsView, type ListingsView } from '@/components/listings/listings-view';
 const MockupCanvasEditor = dynamic(() => import('@/components/mockup/MockupCanvasEditor').then(mod => mod.MockupCanvasEditor), { ssr: false, loading: () => <TabSkeleton label="Editör yükleniyor" layout="editor" /> });
 const DesignUploader = dynamic(() => import('@/components/design/DesignUploader').then(mod => mod.DesignUploader), { ssr: false, loading: () => <TabSkeleton label="Tasarımlar yükleniyor" layout="grid" /> });
 const BatchPreviewGrid = dynamic(() => import('@/components/generator/BatchPreviewGrid').then(mod => mod.BatchPreviewGrid), { ssr: false, loading: () => <TabSkeleton label="Üretim stüdyosu yükleniyor" layout="grid" /> });
+const SettingsPanel = dynamic(() => import('@/components/settings/SettingsPanel').then(mod => mod.SettingsPanel), { ssr: false, loading: () => <TabSkeleton label="Ayarlar yükleniyor" layout="list" /> });
 const ListingsHub = dynamic(() => import('@/components/listings/ListingsHub').then(mod => mod.ListingsHub), { ssr: false, loading: () => <TabSkeleton label="İlanlar yükleniyor" layout="list" /> });
 const TemplatesManager = dynamic(() => import('@/components/templates/TemplatesManager').then(mod => mod.TemplatesManager), { ssr: false, loading: () => <TabSkeleton label="Otomasyon şablonları yükleniyor" layout="list" /> });
 
@@ -34,9 +35,9 @@ import { Sparkles, Info, User, X, LayoutTemplate } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import { useToast } from '@/components/common/ToastContext';
 
-const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'listings'];
+const TAB_ORDER: TabKey[] = ['mockups', 'designs', 'generator', 'listings', 'settings'];
 /** Eski sürümlerde ayrı olan sekmeler artık İlanlar merkezinin alt görünümleri. */
-const LEGACY_TABS: Record<string, ListingsView> = { review: 'review', seo: 'studio' };
+const LEGACY_TABS: Record<string, ListingsView> = { review: 'review', seo: 'review' };
 
 type GeneratorView = 'manual' | 'templates';
 const GENERATOR_VIEWS: { key: GeneratorView; label: string; icon: React.ElementType }[] = [
@@ -129,7 +130,7 @@ function MainContent() {
 
   const setActiveTab = (tab: TabKey) => {
     // Prevent guest from navigating to protected tabs
-    if (!user && tab === 'listings') {
+    if (!user && (tab === 'listings' || tab === 'settings')) {
       setIsAuthModalOpen(true);
       return;
     }
@@ -142,7 +143,7 @@ function MainContent() {
   // If user is guest and on a protected tab (listings), show mockups — but only once the
   // stored session has been checked; otherwise a signed-in user loses their tab on every reload.
   // The saved tab is kept so it is restored after the user signs in.
-  const isProtectedTab = activeTabState === 'listings';
+  const isProtectedTab = activeTabState === 'listings' || activeTabState === 'settings';
   const activeTab: TabKey = authStatus === 'ready' && !user && isProtectedTab ? 'mockups' : activeTabState;
 
   const {
@@ -544,12 +545,13 @@ function MainContent() {
               setRenderedMatches={setRenderedMatches}
               hasGenerated={hasGenerated}
               setHasGenerated={setHasGenerated}
-              onGoToSeo={user ? () => { openListingsView('studio'); setActiveTab('listings'); } : undefined}
-              onAutoListing={user ? (folderId) => { requestStudioAutoDraft(folderId); openListingsView('studio'); setActiveTab('listings'); } : undefined}
+              onGoToListings={user ? () => { openListingsView('review'); setActiveTab('listings'); } : undefined}
             />
           )}
 
           {activeTab === 'listings' && (user ? <ListingsHub /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
+
+          {activeTab === 'settings' && (user ? <SettingsPanel /> : <ProtectedTabPlaceholder loading={authStatus === 'loading'} onLogin={() => setIsAuthModalOpen(true)} />)}
         </ErrorBoundary>
 
 

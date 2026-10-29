@@ -17,6 +17,8 @@ interface EtsyListingSectionProps {
   onChange: (schedule: PodTemplateAutomationSchedule) => void;
   /** 'store': yalnızca mağaza ayarları (kargo, hazırlık, iade, bölüm) — kategori ve fiyat başka adımda seçilir */
   variant?: 'full' | 'store';
+  /** Ayarlar sekmesinde: otomasyona özel açıklama ve eksik alan listesi gösterilmez */
+  embedded?: boolean;
 }
 
 export const DEFAULT_ETSY_LISTING_SETTINGS: PodTemplateEtsyListingSettings = {
@@ -61,7 +63,7 @@ export function getEtsyListingSettingsErrors(schedule: PodTemplateAutomationSche
 const selectClass = 'w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/40 text-slate-800 dark:text-slate-100';
 const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
 
-export function EtsyListingSection({ schedule, onChange, variant = 'full' }: EtsyListingSectionProps) {
+export function EtsyListingSection({ schedule, onChange, variant = 'full', embedded = false }: EtsyListingSectionProps) {
   const storeOnly = variant === 'store';
   const [options, setOptions] = useState<StoreOptions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -162,7 +164,7 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
           ) : !options?.connected ? (
             <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Etsy mağazanız bağlı değil. İlan ayarlarını seçmek için önce İlanlar › Hazır İlanlar › Yeni İlan ekranından mağazanızı bağlayın. Bağlantı olmadan çalıştırmalar ilan adımını atlar.</span>
+              <span>Etsy mağazanız bağlı değil. İlan ayarlarını seçmek için önce Ayarlar › Etsy mağazası bölümünden mağazanızı bağlayın. Bağlantı olmadan çalıştırmalar ilan adımını atlar.</span>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -217,9 +219,9 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
               <div>
                 <span className={labelClass}>Paketli ağırlık (isteğe bağlı)</span>
                 <div className="flex gap-1.5">
-                  <input type="number" min={0} step={0.1} aria-label="Ağırlık" className={selectClass} value={etsy.itemWeight ?? ''}
+                  <input type="number" min={0} step={0.1} aria-label="Ağırlık" className={`${selectClass} !w-auto flex-1 min-w-0`} value={etsy.itemWeight ?? ''}
                     onChange={(e) => updateEtsy({ itemWeight: numberOrUndefined(e.target.value), itemWeightUnit: etsy.itemWeightUnit ?? 'oz' })} />
-                  <select aria-label="Ağırlık birimi" className={`${selectClass} w-20 shrink-0`} value={etsy.itemWeightUnit ?? 'oz'} onChange={(e) => updateEtsy({ itemWeightUnit: e.target.value as PodTemplateEtsyListingSettings['itemWeightUnit'] })}>
+                  <select aria-label="Ağırlık birimi" className={`${selectClass} !w-20 shrink-0`} value={etsy.itemWeightUnit ?? 'oz'} onChange={(e) => updateEtsy({ itemWeightUnit: e.target.value as PodTemplateEtsyListingSettings['itemWeightUnit'] })}>
                     {['oz', 'lb', 'g', 'kg'].map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
@@ -228,10 +230,10 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
                 <span className={labelClass}>Paket ölçüleri U × G × Y (isteğe bağlı)</span>
                 <div className="flex gap-1.5">
                   {(['itemLength', 'itemWidth', 'itemHeight'] as const).map((field, i) => (
-                    <input key={field} type="number" min={0} step={0.1} aria-label={['Uzunluk', 'Genişlik', 'Yükseklik'][i]} className={selectClass} value={etsy[field] ?? ''}
+                    <input key={field} type="number" min={0} step={0.1} aria-label={['Uzunluk', 'Genişlik', 'Yükseklik'][i]} className={`${selectClass} !w-auto flex-1 min-w-0`} value={etsy[field] ?? ''}
                       onChange={(e) => updateEtsy({ [field]: numberOrUndefined(e.target.value), itemDimensionsUnit: etsy.itemDimensionsUnit ?? 'in' })} />
                   ))}
-                  <select aria-label="Ölçü birimi" className={`${selectClass} w-20 shrink-0`} value={etsy.itemDimensionsUnit ?? 'in'} onChange={(e) => updateEtsy({ itemDimensionsUnit: e.target.value as PodTemplateEtsyListingSettings['itemDimensionsUnit'] })}>
+                  <select aria-label="Ölçü birimi" className={`${selectClass} !w-20 shrink-0`} value={etsy.itemDimensionsUnit ?? 'in'} onChange={(e) => updateEtsy({ itemDimensionsUnit: e.target.value as PodTemplateEtsyListingSettings['itemDimensionsUnit'] })}>
                     {['in', 'cm'].map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
@@ -300,14 +302,14 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full' }: Ets
             </div>
           </div>}
 
-          <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300">
+          {!embedded && <div className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 text-[11px] text-slate-600 dark:text-slate-300">
             <Store className="w-4 h-4 shrink-0 text-amber-500" />
             <span>
               Otomasyon ilanları her zaman <strong>taslak</strong> olarak açar; canlıya almadan önce Etsy&apos;de veya &quot;İlanlarım&quot; sekmesinde kontrol edebilirsiniz. Üretici beyanı &quot;Ben yaptım&quot;, üretim zamanı &quot;Siparişe göre&quot; olarak gönderilir. Varyasyon adımındaki satırlar ilanın envanterine aktarılır.
             </span>
-          </div>
+          </div>}
 
-          {errors.length > 0 && !isLoading && options?.connected && (
+          {!embedded && errors.length > 0 && !isLoading && options?.connected && (
             <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 list-disc pl-5">
               {errors.map((error) => <li key={error}>{error}</li>)}
             </ul>

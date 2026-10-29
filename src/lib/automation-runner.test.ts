@@ -71,6 +71,11 @@ vi.mock('@/lib/r2', () => ({
   deleteFromR2: vi.fn(async () => ({ deletedCount: 1 })),
 }));
 vi.mock('@/lib/upload-security', () => ({ createOwnedUploadName: (u: string, n: string) => `user-${u}-${n}` }));
+const listingDefaults = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock('@/lib/user-settings', async () => {
+  const { normalizeListingDefaults } = await import('@/lib/listing-defaults');
+  return { loadListingDefaults: vi.fn(async () => ({ ...normalizeListingDefaults(listingDefaults.value), saved: Boolean(listingDefaults.value) })) };
+});
 vi.mock('@/lib/app-settings', () => ({ loadSetting: vi.fn(async () => ''), loadSettings: vi.fn(async () => ({})) }));
 vi.mock('@/lib/internal-auth', () => ({ getConfiguredSecret: () => undefined }));
 vi.mock('@/lib/media-source', () => ({ loadImageForUser: vi.fn(async () => Buffer.from('img')) }));
@@ -231,8 +236,22 @@ describe('executeAutomationRun', () => {
     await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
     const listing = (state.run?.steps as Record<string, { status: string; error?: string }>).listingCreation;
     expect(listing.status).toBe('skipped');
-    expect(listing.error).toMatch(/kargo profili/);
+    expect(listing.error).toMatch(/kargo profili/i);
     expect(createDraft).not.toHaveBeenCalled();
+  });
+
+  it('fills missing shipping settings and variations from the user listing defaults', async () => {
+    listingDefaults.value = {
+      etsy: { shippingProfileId: '77', readinessStateId: '88' },
+      variations: { sizes: ['M', 'L'], colors: ['Black'], basePrice: 25, sizePrices: {}, quantity: 10 },
+    };
+    state.template = baseTemplate({ etsy: { shippingProfileId: '', readinessStateId: '', taxonomyId: 482, price: 20, whoMade: 'i_did', whenMade: 'made_to_order' } });
+    (state.template as Record<string, unknown>).variationConfig = { rows: [] };
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    listingDefaults.value = null;
+    const [, , input] = createDraft.mock.calls[0] as unknown as [string, unknown, { shipping_profile_id: string; readiness_state_id: string; variations: Array<{ size: string }> }];
+    expect(input).toMatchObject({ shipping_profile_id: '77', readiness_state_id: '88' });
+    expect(input.variations.map((v) => v.size)).toEqual(['M', 'L']);
   });
 
   it('refuses to run a record that is not pending', async () => {
@@ -246,6 +265,47 @@ describe('executeAutomationRun', () => {
     await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
     expect(state.run?.status).toBe('failed');
     expect(state.run?.errorMessage).toBe('Etsy reddetti: geçersiz kategori');
+  });
+});
+
+describe('manual production listing', () => {
+  it('writes the listing text for uploaded mockups and puts it in the review queue without a template', async () => {
+    const { generateImage } = await import('@/lib/ai-provider');
+    state.template = null; // manuel ilanın şablonu yoktur
+    state.run = {
+      ...state.run!,
+      templateId: 'manual',
+      generatedMockupUrls: ['/api/r2/user-u1-m1.webp', '/api/r2/user-u1-m2.webp'],
+      generatedDesignUrl: '/api/r2/user-u1-design.png',
+      steps: {
+        nicheResearch: { status: 'skipped', output: { niche: 'lady electrician', keywords: ['electrician gift'] } },
+        designGeneration: { status: 'completed', output: { prompt: 'Vintage botanical wire cutters', sku: 'TSH-261029-ABCD' } },
+        backgroundRemoval: { status: 'completed', output: { sku: 'TSH-261029-ABCD' } },
+        mockupRender: {
+          status: 'completed',
+          output: {
+            photos: ['white tee', 'black tee'],
+            listingSettings: {
+              etsy: { shippingProfileId: '11', readinessStateId: '22', taxonomyId: 482, price: 24.99, whoMade: 'i_did', whenMade: 'made_to_order' },
+              variations: [{ id: 'm-black', size: 'M', color: 'Black', price: 24.99, quantity: 999, sku: '', enabled: true }],
+              productType: 'T-shirt', subject: 'lady electrician',
+            },
+          },
+        },
+        videoGeneration: { status: 'skipped' },
+        seoGeneration: { status: 'pending' },
+        listingCreation: { status: 'pending' },
+      },
+    };
+    const outcome = await executeAutomationRun({ runId: 'run1', templateId: 'manual', userId: 'u1' });
+    expect(outcome).toEqual({ ok: true, runId: 'run1' });
+    const steps = state.run?.steps as Record<string, { status: string; output?: { review?: { status: string } } }>;
+    expect(steps.seoGeneration.status).toBe('completed');
+    expect(steps.listingCreation.output?.review?.status).toBe('awaiting');
+    expect(createDraft).not.toHaveBeenCalled(); // Etsy'ye değil Hazır İlanlar'a
+    expect(vi.mocked(generateImage)).not.toHaveBeenCalled();
+    const listingInput = (generateListing.mock.calls[0] as unknown as [unknown, { images?: string[]; primarySubject?: string }])[1];
+    expect(listingInput.images).toEqual(['white tee', 'black tee']);
   });
 });
 

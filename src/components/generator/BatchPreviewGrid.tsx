@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { MockupItem, DesignItem, RenderedMatch, MockupFolder } from '@/types/pod';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useBatchGenerator } from './hooks/useBatchGenerator';
@@ -21,10 +21,8 @@ export interface BatchPreviewGridProps {
   setRenderedMatches: React.Dispatch<React.SetStateAction<RenderedMatch[]>>;
   hasGenerated: boolean;
   setHasGenerated: (val: boolean) => void;
-  /** Görseller Etsy için kaydedildikten sonra SEO sekmesine geçer. */
-  onGoToSeo?: () => void;
-  /** Klasör için ilan metnini otomatik üretip ilanı Hazır İlanlar'a ekler. */
-  onAutoListing?: (folderId: string) => void;
+  /** İlan oluşturulduktan sonra İlanlar › Hazır İlanlar'a geçer. */
+  onGoToListings?: () => void;
 }
 
 export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
@@ -38,11 +36,10 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   setRenderedMatches,
   hasGenerated,
   setHasGenerated,
-  onGoToSeo,
-  onAutoListing,
+  onGoToListings,
 }) => {
   const {
-    savedForEtsyCount,
+    listingCreated,
     isGenerating,
     exportProgress,
     confirmClearOpen,
@@ -59,7 +56,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     handleFolderClick,
     handleGenerate,
     handleDownloadZip,
-    handleSaveForEtsy,
+    handleCreateListing,
     handleClearResults,
     handleConfirmClear,
   } = useBatchGenerator({
@@ -86,31 +83,21 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
         user={user}
         onGenerate={handleGenerate}
         onDownloadZip={handleDownloadZip}
-        onSaveForEtsy={handleSaveForEtsy}
+        onCreateListing={handleCreateListing}
         onClearResults={handleClearResults}
       />
 
-      {savedForEtsyCount > 0 && onGoToSeo && (
+      {listingCreated && (
         <div role="status" className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 p-3 text-xs text-emerald-900 dark:text-emerald-200">
           <span className="flex-1 flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-            {savedForEtsyCount} görsel Etsy için kaydedildi. Sıradaki adım: ilanı hazırlamak.
+            İlan Hazır İlanlar&apos;a eklendi. Başlık, etiketler ve açıklama birkaç dakika içinde hazır olur.
           </span>
-          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-            {onAutoListing && renderedMatches[0]?.folderId && (
-              <button
-                type="button"
-                onClick={() => onAutoListing(renderedMatches[0]!.folderId)}
-                title="AI ile başlık, açıklama ve etiketleri üretir; ilanı kayıtlı mağaza ayarlarıyla Hazır İlanlar'a ekler."
-                className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Otomatik ilan hazırla
-              </button>
-            )}
-            <button type="button" onClick={onGoToSeo} className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
-              Elle hazırla <ArrowRight className="w-3.5 h-3.5" />
+          {onGoToListings && (
+            <button type="button" onClick={onGoToListings} className="shrink-0 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
+              Hazır İlanlar <ArrowRight className="w-3.5 h-3.5" />
             </button>
-          </div>
+          )}
         </div>
       )}
 

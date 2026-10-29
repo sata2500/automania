@@ -3,7 +3,7 @@
  * Kullanıcı ilanı düzenler, onaylar (hemen veya zamanlanmış) ya da reddeder; onaylanan ilan Etsy'de oluşturulup
  * yayına alınır. Durum, ilan adımının çıktısında (`steps.listingCreation.output.review`) tutulur.
  */
-import { and, desc, eq, sql as drizzleSql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql as drizzleSql } from 'drizzle-orm';
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates } from '@/db/schema';
 import { buildListingRequest, type RunRow, type TemplateRow } from '@/lib/automation-runner';
@@ -12,26 +12,16 @@ import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { writeAuditLog } from '@/lib/audit-log';
 import { runSkuOf } from '@/lib/run-sku';
+import { MANUAL_TEMPLATE_ID, manualSettingsOf, type ManualListingSettings } from '@/lib/manual-listing';
 import { sanitizeSku } from '@/lib/sku';
 import type {
   AutomationRunSteps,
   GeneratedSeoData,
   ListingReviewState,
   ListingReviewStatus,
-  PodTemplateEtsyListingSettings,
 } from '@/types/templates';
-import type { EtsyVariationRow } from '@/types/pod';
 
-/** İlan Stüdyosu'nda elle hazırlanıp kuyruğa eklenen ilanların otomasyon kimliği yerine geçen değer. */
-export const MANUAL_TEMPLATE_ID = 'manual';
-
-/** Elle hazırlanan ilanın Etsy ayarları ve varyasyonları (otomasyon şablonu yerine ilanla birlikte saklanır). */
-export type ManualListingSettings = { etsy: PodTemplateEtsyListingSettings; variations: EtsyVariationRow[]; sku?: string };
-
-function manualSettingsOf(steps: unknown): ManualListingSettings | null {
-  const manual = (steps as AutomationRunSteps | null)?.listingCreation?.output?.manualListing;
-  return manual && typeof manual === 'object' ? manual as ManualListingSettings : null;
-}
+export { MANUAL_TEMPLATE_ID, type ManualListingSettings } from '@/lib/manual-listing';
 
 export class ListingReviewError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -68,7 +58,21 @@ export type ReviewItem = {
   price: number | null;
   warning: string | null;
   sku: string | null;
+  /** Manuel üretimden gelen ilanın metni arka planda hazırlanıyor */
+  preparing: boolean;
 };
+
+/**
+ * Manuel üretim kaydının inceleme durumu: metin hazırlanırken ve hazırlanamadıysa kayıtta henüz inceleme
+ * durumu yoktur; kuyrukta görünsün diye çalıştırma durumundan türetilir.
+ */
+function manualReviewOf(run: RunRow): ListingReviewState | null {
+  if (run.templateId !== MANUAL_TEMPLATE_ID) return null;
+  const updatedAt = (run.updatedAt ?? run.createdAt ?? new Date()).toISOString();
+  if (run.status === 'failed') return { status: 'failed', error: run.errorMessage || 'İlan metni hazırlanamadı; yeniden deneyin.', updatedAt };
+  if (run.status === 'pending' || run.status === 'running') return { status: 'awaiting', updatedAt };
+  return null;
+}
 
 /** Kullanıcının kuyruktaki ilanları (en yeni önce). */
 export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
@@ -78,13 +82,19 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
     .leftJoin(podTemplates, eq(podTemplates.id, automationRuns.templateId))
     .where(and(
       eq(automationRuns.userId, userId),
-      eq(automationRuns.status, 'completed'),
-      drizzleSql`${automationRuns.steps} -> 'listingCreation' -> 'output' -> 'review' IS NOT NULL`,
+      or(
+        and(
+          eq(automationRuns.status, 'completed'),
+          drizzleSql`${automationRuns.steps} -> 'listingCreation' -> 'output' -> 'review' IS NOT NULL`,
+        ),
+        // Manuel üretimden gelen ilanlar metin hazırlanırken de görünür.
+        and(eq(automationRuns.templateId, MANUAL_TEMPLATE_ID), inArray(automationRuns.status, ['pending', 'running', 'failed'])),
+      ),
     ))
     .orderBy(desc(automationRuns.createdAt))
     .limit(300);
   return rows.flatMap(({ run, templateName, schedule }) => {
-    const review = reviewStateOf(run.steps);
+    const review = reviewStateOf(run.steps) ?? manualReviewOf(run);
     if (!review) return [];
     const steps = run.steps as AutomationRunSteps;
     const warning = steps.listingCreation?.output?.warning;
@@ -93,7 +103,7 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
     return [{
       runId: run.id,
       templateId: run.templateId,
-      templateName: manual ? 'Elle hazırlanan' : templateName ?? 'Silinmiş otomasyon',
+      templateName: manual ? 'Manuel üretim' : templateName ?? 'Silinmiş otomasyon',
       createdAt: run.createdAt ? new Date(run.createdAt).toISOString() : null,
       review,
       seo: run.generatedSeo as GeneratedSeoData | null,
@@ -104,14 +114,33 @@ export async function listReviewItems(userId: string): Promise<ReviewItem[]> {
       price: typeof price === 'number' ? price : null,
       warning: typeof warning === 'string' ? warning : null,
       sku: runSkuOf(steps),
+      preparing: run.status === 'pending' || run.status === 'running',
     }];
   });
 }
 
 async function loadOwnedRun(userId: string, runId: string): Promise<RunRow> {
   const [run] = await db.select().from(automationRuns).where(and(eq(automationRuns.id, runId), eq(automationRuns.userId, userId)));
-  if (!run || !reviewStateOf(run.steps)) throw new ListingReviewError('İlan bulunamadı.', 404);
-  return run;
+  if (!run) throw new ListingReviewError('İlan bulunamadı.', 404);
+  if (reviewStateOf(run.steps)) return run;
+  // Metni hazırlanamamış manuel ilan: reddedilebilsin diye inceleme durumu kayda yazılmış gibi işlenir.
+  const synthetic = run.status === 'failed' ? manualReviewOf(run) : null;
+  if (!synthetic) throw new ListingReviewError(run.templateId === MANUAL_TEMPLATE_ID ? 'İlan metni henüz hazırlanıyor.' : 'İlan bulunamadı.', run.templateId === MANUAL_TEMPLATE_ID ? 409 : 404);
+  return { ...run, steps: withReview(run.steps as AutomationRunSteps, synthetic) };
+}
+
+/** Metni hazırlanamamış manuel ilanı yeniden sıraya alır (başarısız adımlar tekrar çalışır). */
+export async function retryManualDraft(userId: string, runId: string): Promise<{ runId: string; templateId: string; userId: string }> {
+  const [run] = await db.select().from(automationRuns).where(and(eq(automationRuns.id, runId), eq(automationRuns.userId, userId)));
+  if (!run || run.templateId !== MANUAL_TEMPLATE_ID || run.status !== 'failed') throw new ListingReviewError('Bu ilan yeniden denenemez.', 409);
+  const steps = { ...(run.steps as AutomationRunSteps) };
+  for (const name of ['seoGeneration', 'listingCreation'] as const) {
+    if (steps[name]?.status !== 'completed') steps[name] = { status: 'pending' };
+  }
+  await db.update(automationRuns)
+    .set({ status: 'pending', steps, errorMessage: null, completedAt: null, updatedAt: new Date() })
+    .where(and(eq(automationRuns.id, runId), eq(automationRuns.status, 'failed')));
+  return { runId, templateId: run.templateId, userId };
 }
 
 async function saveReview(runId: string, steps: AutomationRunSteps, review: ListingReviewState, patch: Partial<RunRow> = {}) {
@@ -352,23 +381,6 @@ export async function publishDueReviewItems(
   return { published, failed, staleReset: stale.length };
 }
 
-export type ManualDraftInput = {
-  title: string;
-  description: string;
-  tags: string[];
-  taxonomyId: number;
-  taxonomyProperties: Record<string, number[]>;
-  materials: string[];
-  styles: string[];
-  shopSectionId?: string | null;
-  photos: string[];
-  imageAltTexts?: string[];
-  videoUrl?: string | null;
-  designUrl?: string | null;
-  sku?: string | null;
-  settings: ManualListingSettings;
-};
-
 /**
  * Tasarımı SKU ile etiketler (Tasarımlar sekmesindeki arama için). Aynı görsel birden çok ilanda
  * kullanılabildiği için SKU'lar listede biriktirilir. Görsel çalışma alanında yoksa bir şey yapılmaz.
@@ -389,52 +401,76 @@ export async function tagDesignWithSku(userId: string, designUrl: string, sku: s
   `.catch((error: unknown) => console.warn('[Listing Review] Design SKU tag failed', error));
 }
 
-/**
- * İlan Stüdyosu'nda hazırlanan ilanı Hazır İlanlar kuyruğuna ekler. Otomasyon çalıştırmalarıyla aynı
- * tabloda, `MANUAL_TEMPLATE_ID` ile saklanır; düzenleme, zamanlama ve yayın aynı akıştan yapılır.
- */
-export async function createManualDraft(userId: string, input: ManualDraftInput): Promise<string> {
-  const runId = crypto.randomUUID();
-  const now = new Date();
-  const sku = sanitizeSku(input.sku) || null;
-  const done = { status: 'skipped' as const, error: 'Yeni İlan ekranında elle hazırlandı.' };
-  const review: ListingReviewState = { status: 'awaiting', updatedAt: now.toISOString() };
-  const steps: AutomationRunSteps = {
-    designGeneration: done,
-    backgroundRemoval: done,
-    mockupRender: done,
-    videoGeneration: done,
-    seoGeneration: done,
-    listingCreation: { status: 'completed', completedAt: now.toISOString(), output: { review, manualListing: { ...input.settings, ...(sku ? { sku } : {}) } } },
+export type ProductionDraftInput = {
+  /** Depoya yüklenmiş mockup fotoğrafları, ilandaki sırayla */
+  photos: string[];
+  /** Her fotoğrafın kısa tanımı (alt metin üretimi için) */
+  photoLabels?: string[];
+  videoUrl?: string | null;
+  design: {
+    id?: string | null;
+    url?: string | null;
+    name: string;
+    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string } | null;
   };
-  const seo: GeneratedSeoData = {
-    title: input.title,
-    description: input.description,
-    tags: input.tags,
-    taxonomyId: input.taxonomyId,
-    taxonomyProperties: input.taxonomyProperties,
-    keywords: [],
-    shopSectionId: input.shopSectionId ?? null,
-    materials: input.materials,
-    styles: input.styles,
-    imageAltTexts: input.imageAltTexts,
+  folderName?: string;
+};
+
+/**
+ * Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir: görseller hazırdır; ilan metni (SEO)
+ * arka planda çalıştırıcı tarafından Ayarlar'daki ilan varsayılanlarıyla üretilir. Çalıştırma kimliğini döner.
+ */
+export async function createProductionDraft(userId: string, input: ProductionDraftInput): Promise<{ runId: string }> {
+  const { loadListingDefaults } = await import('@/lib/user-settings');
+  const { variationRowsFromDefaults } = await import('@/lib/listing-defaults');
+  const { generateListingSku } = await import('@/lib/sku');
+  const defaults = await loadListingDefaults(userId);
+  const analysis = input.design.analysis ?? {};
+  const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
+  const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
+  const sku = generateListingSku(defaults.productType);
+  const settings: ManualListingSettings = {
+    etsy: defaults.etsy,
+    variations: variationRowsFromDefaults(defaults.variations),
+    sku,
+    productType: defaults.productType,
+    notes: defaults.notes,
+    subject,
+  };
+  const now = new Date();
+  const runId = `run_${now.getTime()}_${Math.random().toString(36).slice(2, 9)}`;
+  const steps: AutomationRunSteps = {
+    // Tasarımın görsel analizi araştırma çıktısı yerine geçer (anahtar kelimeler ve stil ilan metnini besler).
+    nicheResearch: {
+      status: 'skipped',
+      error: 'Manuel üretim: konu tasarım analizinden alındı.',
+      output: { niche: subject, style: analysis.primaryAesthetic ?? '', keywords: (analysis.keywords ?? []).slice(0, 30) },
+    },
+    designGeneration: { status: 'completed', completedAt: now.toISOString(), output: { prompt: description, sku } },
+    backgroundRemoval: { status: 'completed', completedAt: now.toISOString(), output: { sku } },
+    mockupRender: {
+      status: 'completed',
+      completedAt: now.toISOString(),
+      output: { photos: input.photoLabels ?? [], listingSettings: settings, source: 'manual', folderName: input.folderName ?? null },
+    },
+    videoGeneration: { status: 'skipped', error: 'Manuel üretimde video oluşturulmaz.' },
+    seoGeneration: { status: 'pending' },
+    listingCreation: { status: 'pending' },
   };
   await db.insert(automationRuns).values({
     id: runId,
     templateId: MANUAL_TEMPLATE_ID,
     userId,
-    status: 'completed',
+    status: 'pending',
     steps,
-    generatedDesignUrl: input.designUrl ?? null,
+    generatedDesignId: input.design.id ?? null,
+    generatedDesignUrl: input.design.url ?? null,
     generatedMockupUrls: input.photos,
     generatedVideoUrl: input.videoUrl ?? null,
-    generatedSeo: seo,
     triggerType: 'manual',
     createdAt: now,
-    startedAt: now,
-    completedAt: now,
     updatedAt: now,
   });
-  if (sku && input.designUrl) await tagDesignWithSku(userId, input.designUrl, sku);
-  return runId;
+  if (input.design.url) await tagDesignWithSku(userId, input.design.url, sku);
+  return { runId };
 }

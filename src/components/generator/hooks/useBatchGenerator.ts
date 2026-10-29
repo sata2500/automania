@@ -8,7 +8,6 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { renderMockupWithDesign, generateMatchingPairs } from '@/lib/canvas-renderer';
 import { downloadMatchesAsZip, formatExportFileName } from '@/lib/export-utils';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
-import { loadAppData, saveAppData } from '@/lib/storage-service';
 import confetti from 'canvas-confetti';
 
 function getErrorMessage(error: unknown): string {
@@ -44,8 +43,8 @@ export function useBatchGenerator({
   const [isGenerating, setIsGenerating] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-  // Son "Etsy için kaydet" başarılı olduysa SEO sekmesine geçiş düğmesi gösterilir.
-  const [savedForEtsyCount, setSavedForEtsyCount] = useState(0);
+  // Son üretimden ilan oluşturulduysa Hazır İlanlar'a geçiş düğmesi gösterilir.
+  const [listingCreated, setListingCreated] = useState(false);
 
   const exportFormat: ExportFormatType = 'image/webp';
   const outputQuality = 0.95;
@@ -264,7 +263,7 @@ export function useBatchGenerator({
 
     setRenderedMatches(results);
     setHasGenerated(true);
-    setSavedForEtsyCount(0);
+    setListingCreated(false);
     setIsGenerating(false);
     setExportProgress(null);
 
@@ -307,22 +306,26 @@ export function useBatchGenerator({
     }
   };
 
-  const handleSaveForEtsy = async () => {
+  /**
+   * Üretilen görselleri depoya yükleyip ilanı Hazır İlanlar'a gönderir. İlan metni (başlık, etiketler,
+   * açıklama) sunucuda arka planda, Ayarlar'daki ilan varsayılanları ve varyasyonlarla hazırlanır.
+   */
+  const handleCreateListing = async () => {
     if (renderedMatches.length === 0) {
-      toast.warning('Kaydedilecek mockup bulunamadı.');
+      toast.warning('İlana eklenecek görsel bulunamadı.');
       return;
     }
     if (!user) {
-      toast.warning('Etsy için kaydetmek için lütfen önce giriş yapın.');
+      toast.warning('İlan oluşturmak için lütfen önce giriş yapın.');
       return;
     }
 
     setIsGenerating(true);
     setExportProgress(0);
-    const uploadToastId = toast.progress('Görseller Etsy için hazırlanıyor...', 5);
+    const uploadToastId = toast.progress('Görseller ilan için yükleniyor...', 5);
 
     try {
-      const updatedMatches: RenderedMatch[] = new Array(renderedMatches.length);
+      const uploadedUrls: string[] = new Array(renderedMatches.length);
       let completedCount = 0;
       const concurrency = 4;
       let aborted = false;
@@ -330,84 +333,82 @@ export function useBatchGenerator({
       const uploadItem = async (index: number) => {
         const match = renderedMatches[index];
         let persistentUrl = match.previewUrl;
-
         if (match.previewUrl.startsWith('blob:') || match.previewUrl.startsWith('data:')) {
           try {
-            const res = await fetch(match.previewUrl);
-            const blob = await res.blob();
-            const file = new File([blob], match.exportFileName, {
-              type: match.isVideo ? 'video/mp4' : 'image/webp',
-            });
-
+            const blob = await (await fetch(match.previewUrl)).blob();
+            const file = new File([blob], match.exportFileName, { type: match.isVideo ? 'video/mp4' : 'image/webp' });
             persistentUrl = await uploadMediaToServer(file, match.isVideo ? 'video/mp4' : 'image/webp', { requireDurable: true });
           } catch (e) {
-            console.warn(`[Save for Etsy] Mockup #${index + 1} upload failed; durable storage is required:`, e);
+            console.warn(`[Create listing] Mockup #${index + 1} upload failed; durable storage is required:`, e);
             aborted = true; // Diğer işçiler kuyruktaki yeni yüklemelere başlamasın
             throw e;
           }
         }
-
-        updatedMatches[index] = {
-          ...match,
-          previewUrl: persistentUrl,
-        };
-
+        uploadedUrls[index] = persistentUrl;
         completedCount++;
-        const pct = Math.round((completedCount / renderedMatches.length) * 100);
+        const pct = Math.round((completedCount / renderedMatches.length) * 90);
         setExportProgress(pct);
-        toast.updateProgressToast(
-          uploadToastId,
-          pct,
-          `Görseller Etsy için kaydediliyor... (${completedCount}/${renderedMatches.length})`
-        );
+        toast.updateProgressToast(uploadToastId, pct, `Görseller yükleniyor... (${completedCount}/${renderedMatches.length})`);
       };
 
-      // Run uploads in parallel with controlled concurrency
       const queue = Array.from({ length: renderedMatches.length }, (_, idx) => idx);
       const workers = Array.from({ length: Math.min(concurrency, renderedMatches.length) }, async () => {
         while (queue.length > 0 && !aborted) {
           const nextIdx = queue.shift();
-          if (nextIdx !== undefined) {
-            await uploadItem(nextIdx);
-          }
+          if (nextIdx !== undefined) await uploadItem(nextIdx);
         }
       });
-
       await Promise.all(workers);
+      setRenderedMatches(renderedMatches.map((m, i) => ({ ...m, previewUrl: uploadedUrls[i] ?? m.previewUrl })));
 
-      // Yükleme uzun sürebileceği için çalışma alanı kayıttan hemen önce güncel haliyle okunur.
-      const currentData = await loadAppData();
-
-      // Preserve mockups from other folders while updating current folder
-      const currentEtsyMockups = currentData.etsyGeneratedMockups || [];
-      const incomingFolderIds = new Set(updatedMatches.map((m) => m.folderId).filter(Boolean));
-      const preservedMockups = currentEtsyMockups.filter((m) => !incomingFolderIds.has(m.folderId));
-      currentData.etsyGeneratedMockups = [...preservedMockups, ...updatedMatches];
-
-      const saveResult = await saveAppData(currentData);
-      if (!saveResult.success) {
-        throw new Error(saveResult.message || 'Görseller yüklendi ancak çalışma alanına kaydedilemedi.');
+      // İlanın konusu ilk gerçek tasarımdan (bilgi görselleri hariç) alınır; analizi yoksa önce analiz edilir.
+      const designId = renderedMatches.find((m) => m.designId && m.designId !== 'static-ref')?.designId;
+      const design = designs.find((d) => d.id === designId);
+      let analysis = design?.analysis ?? null;
+      if (design && !analysis?.description && /^\/api\/(r2|uploads)\//.test(design.src)) {
+        toast.updateProgressToast(uploadToastId, 93, 'Tasarım analiz ediliyor...');
+        const res = await fetch('/api/designs/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ src: design.src }),
+        }).catch(() => null);
+        const data = await res?.json().catch(() => null);
+        if (data?.success && data.analysis) analysis = data.analysis;
       }
 
-      setRenderedMatches(updatedMatches);
-      setSavedForEtsyCount(updatedMatches.length);
-      toast.removeToast(uploadToastId);
-      
-      try {
-        confetti({
-          particleCount: 50,
-          spread: 60,
-          origin: { y: 0.8 },
-        });
-      } catch {}
+      const photos = renderedMatches.flatMap((m, i) => (m.isVideo ? [] : [{ url: uploadedUrls[i]!, label: `${m.mockupApparel ?? ''} ${m.designId === 'static-ref' ? 'static info image' : 'mockup with the design printed on it'}${m.mockupName ? ` (mockup name: "${m.mockupName}")` : ''}`.trim() }])).slice(0, MAX_ETSY_PHOTOS);
+      const video = renderedMatches.map((m, i) => (m.isVideo ? uploadedUrls[i] : null)).find(Boolean) ?? null;
+      const res = await fetch('/api/listing-review/from-production', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          photos: photos.map((p) => p.url),
+          photoLabels: photos.map((p) => p.label.slice(0, 300)),
+          videoUrl: video,
+          folderName: renderedMatches[0]?.folderName,
+          design: {
+            id: design?.id ?? null,
+            url: design && /^\/api\/(r2|uploads)\//.test(design.src) ? design.src : null,
+            name: design?.name ?? renderedMatches[0]?.designName ?? 'Tasarım',
+            analysis: analysis
+              ? { description: analysis.description, keywords: analysis.keywords?.slice(0, 60), primarySubject: analysis.primarySubject, primaryAesthetic: analysis.primaryAesthetic }
+              : null,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || 'İlan oluşturulamadı.');
 
-      toast.success(
-        `${updatedMatches.length} görsel Etsy için kaydedildi. Sıradaki adım: İlanlar sekmesinde ilanı hazırlayın.`
-      );
-    } catch (error: unknown) {
-      console.error('Save for Etsy error:', getErrorMessage(error));
+      setListingCreated(true);
       toast.removeToast(uploadToastId);
-      toast.error('Görseller kaydedilirken bir hata oluştu: ' + getErrorMessage(error));
+      try {
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+      } catch {}
+      toast.success('İlan Hazır İlanlar\'a eklendi; başlık, etiket ve açıklama arka planda hazırlanıyor.');
+    } catch (error: unknown) {
+      console.error('Create listing error:', getErrorMessage(error));
+      toast.removeToast(uploadToastId);
+      toast.error('İlan oluşturulamadı: ' + getErrorMessage(error));
     } finally {
       setIsGenerating(false);
       setExportProgress(null);
@@ -421,13 +422,13 @@ export function useBatchGenerator({
   const handleConfirmClear = () => {
     setRenderedMatches([]);
     setHasGenerated(false);
-    setSavedForEtsyCount(0);
+    setListingCreated(false);
     setConfirmClearOpen(false);
     toast.info('Üretim sonuçları temizlendi.');
   };
 
   return {
-    savedForEtsyCount,
+    listingCreated,
     isGenerating,
     exportProgress,
     confirmClearOpen,
@@ -444,7 +445,7 @@ export function useBatchGenerator({
     handleFolderClick,
     handleGenerate,
     handleDownloadZip,
-    handleSaveForEtsy,
+    handleCreateListing,
     handleClearResults,
     handleConfirmClear,
   };

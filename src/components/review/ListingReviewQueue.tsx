@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CheckCircle2, ClipboardCheck, Plus, ExternalLink, RefreshCw, Rocket, RotateCcw, Trash2, XCircle, AlertTriangle, Film,
+  CalendarClock, CheckCircle2, ClipboardCheck, ExternalLink, RefreshCw, Rocket, RotateCcw, Trash2, XCircle, AlertTriangle, Film,
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
@@ -33,7 +33,7 @@ const INTERVAL_OPTIONS = [
   { minutes: 1440, label: 'Günde bir' },
 ];
 
-export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {}) {
+export function ListingReviewQueue() {
   const toast = useToast();
   const [items, setItems] = useState<ReviewItemView[] | null>(null);
   const [filter, setFilter] = useState<Filter>('awaiting');
@@ -64,6 +64,22 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
       .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
   }, []);
+
+  // Metni hazırlanan (manuel üretim) ilan varken liste kendiliğinden yenilenir.
+  const hasPreparing = Boolean(items?.some((i) => i.preparing));
+  useEffect(() => {
+    if (!hasPreparing) return;
+    const timer = window.setInterval(() => { void load(); }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [hasPreparing, load]);
+
+  const retry = async (runId: string) => {
+    const res = await fetch(`/api/listing-review/${runId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'retry' }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) toast.error(data.error || 'Yeniden denenemedi.');
+    else toast.info('İlan metni yeniden hazırlanıyor.');
+    await load();
+  };
 
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.key, (items ?? []).filter((i) => f.statuses.includes(i.review.status)).length])) as Record<Filter, number>, [items]);
   const visible = useMemo(() => {
@@ -120,23 +136,16 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-indigo-500" /> Hazır İlanlar</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
-            Otomasyonların ve &quot;Yeni İlan&quot; ile hazırladığınız ilanlar burada bekler. İlana dokunup düzenleyin, hemen yayınlayın veya zamanlayın; zamanlananlar Etsy&apos;de otomatik <strong>yayına</strong> alınır.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {onCreate && (
-            <button type="button" onClick={onCreate} className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/20">
-              <Plus className="w-3.5 h-3.5" /> Yeni İlan
-            </button>
-          )}
           <button type="button" onClick={() => void load()} aria-label="Yenile" title="Yenile" className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
+          Otomasyonların ve Üretim&apos;de &quot;İlan Oluştur&quot; ile gönderdiğiniz ilanlar burada. Dokunup düzenleyin, hemen yayınlayın veya zamanlayın.
+        </p>
       </div>
 
       <div role="tablist" aria-label="İlan durumu" className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -229,14 +238,9 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
         <div className="p-8 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400 space-y-3">
           <p>
             {filter === 'awaiting'
-              ? 'İnceleme bekleyen ilan yok. Otomasyonlar çalıştıkça hazırlanan ilanlar burada görünür.'
+              ? 'İnceleme bekleyen ilan yok. Üretim sekmesinde görselleri üretip "İlan Oluştur"a dokunun veya bir otomasyon çalıştırın.'
               : 'Bu bölümde ilan yok.'}
           </p>
-          {filter === 'awaiting' && onCreate && (
-            <button type="button" onClick={onCreate} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Üretim görsellerinden yeni ilan hazırla
-            </button>
-          )}
         </div>
       ) : (
         // Etsy arama sonuçları gibi: telefonda iki sütun, büyük ekranda beş sütuna kadar kompakt kartlar.
@@ -244,7 +248,8 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
           {visible.map((item) => {
             const badge = STATUS_BADGES[item.review.status];
             const photos = item.review.photos ?? item.photos;
-            const canSelect = filter !== 'published';
+            const canSelect = filter !== 'published' && !item.preparing;
+            const canRetry = item.templateId === 'manual' && item.review.status === 'failed' && !item.seo?.title;
             const hasVideo = Boolean(item.videoUrl && item.review.includeVideo !== false);
             return (
               <div key={item.runId} className="group relative flex flex-col min-w-0">
@@ -257,19 +262,25 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
                     onChange={() => toggle(item.runId)}
                   />
                 )}
-                <button type="button" onClick={() => setOpenId(item.runId)} className="text-left flex flex-col flex-1 min-w-0">
+                <button type="button" disabled={item.preparing || canRetry} onClick={() => setOpenId(item.runId)} className="text-left flex flex-col flex-1 min-w-0 disabled:cursor-default">
                   <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-800 group-hover:shadow-lg transition-shadow">
                     {photos[0] && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={photos[0]} alt={item.seo?.imageAltTexts?.[item.photos.indexOf(photos[0])] || item.seo?.title || 'İlan fotoğrafı'} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
                     )}
-                    <span className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
+                    {item.preparing ? (
+                      <span className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center gap-1.5 text-white text-[11px] font-bold">
+                        <Spinner className="w-5 h-5" /> Metin hazırlanıyor…
+                      </span>
+                    ) : (
+                      <span className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
+                    )}
                     <span className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[9px] sm:text-[10px] font-bold">
                       {photos.length}{hasVideo && <Film className="w-3 h-3" aria-label="video" />}
                     </span>
                   </div>
                   <div className="pt-2 space-y-0.5 min-w-0">
-                    <p className="text-xs sm:text-[13px] leading-snug text-slate-800 dark:text-slate-100 line-clamp-2">{item.seo?.title || 'Başlıksız ilan'}</p>
+                    <p className="text-xs sm:text-[13px] leading-snug text-slate-800 dark:text-slate-100 line-clamp-2">{item.seo?.title || (item.preparing ? 'Başlık hazırlanıyor…' : 'Başlıksız ilan')}</p>
                     {item.price != null && (
                       <p className="text-sm font-bold text-slate-900 dark:text-white">{item.price.toFixed(2)}</p>
                     )}
@@ -290,6 +301,13 @@ export function ListingReviewQueue({ onCreate }: { onCreate?: () => void } = {})
                     )}
                   </div>
                 </button>
+                {canRetry && (
+                  <div className="mt-1 flex items-center gap-3 text-[10px] sm:text-[11px] font-bold">
+                    <button type="button" onClick={() => void retry(item.runId)} className="text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1">
+                      <RotateCcw className="w-3 h-3" /> Yeniden dene
+                    </button>
+                  </div>
+                )}
                 {item.review.listingUrl && (
                   <a href={item.review.listingUrl} target="_blank" rel="noopener noreferrer" className="mt-1 text-[10px] sm:text-[11px] font-bold text-indigo-600 dark:text-indigo-300 flex items-center gap-1 hover:underline">
                     <ExternalLink className="w-3 h-3" /> Etsy&apos;de aç

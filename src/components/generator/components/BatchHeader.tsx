@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { UserProfile } from '@/components/common/UserAuthContext';
-import { Sparkles, Play, FileArchive, CloudUpload, Trash2 } from 'lucide-react';
+import { Sparkles, Play, FileArchive, ListPlus, Trash2 } from 'lucide-react';
 import { Spinner } from '@/components/common/Spinner';
 
 interface BatchHeaderProps {
@@ -14,7 +14,8 @@ interface BatchHeaderProps {
   user: UserProfile | null;
   onGenerate: () => void;
   onDownloadZip: () => void;
-  onSaveForEtsy: () => void;
+  /** Görselleri yükleyip ilanı Hazır İlanlar'a gönderir (metin arka planda hazırlanır). */
+  onCreateListing: () => void;
   onClearResults: () => void;
 }
 
@@ -27,7 +28,7 @@ export const BatchHeader: React.FC<BatchHeaderProps> = ({
   user,
   onGenerate,
   onDownloadZip,
-  onSaveForEtsy,
+  onCreateListing,
   onClearResults,
 }) => {
   return (
@@ -81,13 +82,13 @@ export const BatchHeader: React.FC<BatchHeaderProps> = ({
 
         {hasGenerated && user && (
           <button
-            onClick={onSaveForEtsy}
+            onClick={onCreateListing}
             disabled={isGenerating || renderedMatchesCount === 0 || exportProgress !== null}
-            className="btn btn-etsy flex-1 sm:flex-initial"
-            title="Görselleri Etsy Yöneticisi sayfasına gönderir"
+            className="btn btn-success flex-1 sm:flex-initial"
+            title="Görselleri yükler ve ilanı Hazır İlanlar'a ekler; başlık, etiket ve açıklama otomatik hazırlanır."
           >
-            <CloudUpload className="w-3.5 h-3.5" />
-            <span><span className="sm:hidden">Etsy</span><span className="hidden sm:inline">Etsy&apos;ye Gönder</span></span>
+            <ListPlus className="w-3.5 h-3.5" />
+            <span>İlan Oluştur</span>
           </button>
         )}
 

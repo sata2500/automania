@@ -1,12 +1,14 @@
 /**
  * PATCH /api/listing-review/[runId] — ilan metnini ve fotoğraf seçimini düzenler.
- * POST  /api/listing-review/[runId] — { action: 'approve' | 'unschedule' | 'reject' | 'restore' | 'publish', scheduledAt? }
+ * POST  /api/listing-review/[runId] — { action: 'approve' | 'unschedule' | 'reject' | 'restore' | 'publish' | 'retry', scheduledAt? }
+ *   'retry' metni hazırlanamamış manuel ilanı yeniden hazırlatır.
  *   'publish' ilanı hemen Etsy'de oluşturup yayına alır; 'approve' zamanlar (scheduledAt yoksa ilk zamanlayıcı turunda).
  */
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { applyReviewAction, ListingReviewError, publishReviewItem, updateReviewItem } from '@/lib/listing-review';
+import { applyReviewAction, ListingReviewError, publishReviewItem, retryManualDraft, updateReviewItem } from '@/lib/listing-review';
+import { runAndContinue } from '@/lib/automation-runner';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { getErrorMessage } from '@/lib/errors';
 
@@ -23,7 +25,7 @@ const editSchema = z.object({
 });
 
 const actionSchema = z.object({
-  action: z.enum(['approve', 'unschedule', 'reject', 'restore', 'publish']),
+  action: z.enum(['approve', 'unschedule', 'reject', 'restore', 'publish', 'retry']),
   scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
 });
 
@@ -53,6 +55,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ runId: 
   if (!parsed.success) return NextResponse.json({ success: false, error: 'Geçersiz işlem.' }, { status: 400 });
   const { runId } = await params;
   try {
+    if (parsed.data.action === 'retry') {
+      const input = await retryManualDraft(session.id, runId);
+      const origin = new URL(req.url).origin;
+      after(async () => { await runAndContinue(input, origin); });
+      return NextResponse.json({ success: true });
+    }
     if (parsed.data.action === 'publish') {
       const rateLimit = await checkRateLimit(`listing-review:publish:${session.id}`, 30, 60 * 60_000);
       if (!rateLimit.allowed) return NextResponse.json({ success: false, error: 'Saatlik yayın sınırına ulaşıldı; biraz sonra tekrar deneyin.' }, { status: 429 });
@@ -61,7 +69,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ runId: 
     }
     const action = parsed.data.action === 'approve'
       ? { type: 'approve' as const, scheduledAt: parsed.data.scheduledAt ?? null }
-      : { type: parsed.data.action };
+      : { type: parsed.data.action as 'unschedule' | 'reject' | 'restore' };
     return NextResponse.json({ success: true, review: await applyReviewAction(session.id, runId, action) });
   } catch (error) {
     return errorResponse(error);

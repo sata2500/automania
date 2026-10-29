@@ -15,4 +15,6 @@ export type ReviewItemView = {
   price: number | null;
   warning: string | null;
   sku: string | null;
+  /** Manuel üretimden gelen ilanın metni arka planda hazırlanıyor */
+  preparing?: boolean;
 };

@@ -11,13 +11,14 @@ import {
   Monitor,
   User,
   ShoppingBag,
+  Settings,
   Lock,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { BrandMark } from './BrandLogo';
 import { useAuth } from './UserAuthContext';
 
-export type TabKey = 'mockups' | 'designs' | 'generator' | 'listings';
+export type TabKey = 'mockups' | 'designs' | 'generator' | 'listings' | 'settings';
 
 interface HeaderProps {
   activeTab: TabKey;
@@ -32,11 +33,12 @@ const TABS: { key: TabKey; label: string; shortLabel: string; icon: React.Elemen
   { key: 'designs',   label: '2. Tasarımlar', shortLabel: 'Tasarımlar', icon: Palette     },
   { key: 'generator', label: '3. Üretim',     shortLabel: 'Üretim',     icon: Sparkles    },
   { key: 'listings',  label: '4. İlanlar',    shortLabel: 'İlanlar',    icon: ShoppingBag },
+  { key: 'settings',  label: 'Ayarlar',       shortLabel: 'Ayarlar',    icon: Settings    },
 ];
 
 
 /** Misafirlere gösterilen ama giriş gerektiren adımlar (tıklayınca giriş penceresi açılır). */
-const LOCKED_FOR_GUESTS = new Set<TabKey>(['listings']);
+const LOCKED_FOR_GUESTS = new Set<TabKey>(['listings', 'settings']);
 
 const THEME_LABELS: Record<string, string> = {
   system: 'Sistem',
