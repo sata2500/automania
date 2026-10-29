@@ -231,9 +231,18 @@ type DesignStepOutput = {
   variant?: { fabric: 'light' | 'dark'; rawUrl: string | null; error?: string } | null;
 };
 
-/** Görsel modelinin ham çıktısını (perde zeminli) sonraki adım için depolar. */
-async function storeRawImage(userId: string, name: string, data: Buffer, mimeType: string): Promise<string> {
-  return (await uploadToR2(data, createOwnedUploadName(userId, name, mimeType), mimeType)).url;
+/**
+ * Görsel modelinin ham çıktısını (perde zeminli) sonraki adım için depolar. Önce kayıpsız PNG olarak
+ * sıkıştırılır: pikseller birebir aynı kalır (arka plan kaldırma kalitesi değişmez), dosya küçülür;
+ * depoya yazma/okuma hızlanır ve kumaş versiyonu için modele küçültülmeden gönderilebilir.
+ * Sıkıştırma başarısız olursa veya kazanç yoksa özgün dosya saklanır.
+ */
+async function storeRawImage(userId: string, name: string, data: Buffer, mimeType: string): Promise<{ url: string; buffer: Buffer; mimeType: string }> {
+  const optimized = await optimizeImageForStorage(data, mimeType, 'design').catch(() => null);
+  const buffer = optimized?.optimized ? optimized.buffer : data;
+  const storedMime = optimized?.optimized ? optimized.mimeType : mimeType;
+  const { url } = await uploadToR2(buffer, createOwnedUploadName(userId, name, storedMime), storedMime);
+  return { url, buffer, mimeType: storedMime };
 }
 
 /**
@@ -264,15 +273,15 @@ async function runDesignGeneration(ctx: StepContext): Promise<StepResult> {
     const generatedImages = await generateImage(config, { prompt: finalPrompt });
     if (!generatedImages || generatedImages.length === 0) throw new Error('AI tasarımı üretemedi.');
     if (!isR2Configured()) throw new Error('Depolama (R2) yapılandırılmamış.');
-    rawMain = Buffer.from(generatedImages[0].data, 'base64');
-    const rawMimeType = generatedImages[0].mimeType || 'image/png';
+    const stored = await storeRawImage(userId, `auto-raw-${runId}`, Buffer.from(generatedImages[0].data, 'base64'), generatedImages[0].mimeType || 'image/png');
+    rawMain = stored.buffer;
     output = {
       prompt: basePrompt,
       finalPrompt,
       keyBackground,
       sku: generateListingSku(hints.productType || template.seoHints?.productType),
-      rawUrl: await storeRawImage(userId, `auto-raw-${runId}`, rawMain, rawMimeType),
-      rawMimeType,
+      rawUrl: stored.url,
+      rawMimeType: stored.mimeType,
     };
     if (ctx.steps && ctx.persist) {
       ctx.steps.designGeneration = { ...ctx.steps.designGeneration!, output };
@@ -443,7 +452,7 @@ async function createFabricVariant(
     const images = await generateImage(config, { prompt, image: source });
     if (!images?.[0]) throw new Error('Görsel modeli versiyon üretmedi.');
     const mimeType = images[0].mimeType || 'image/png';
-    const rawUrl = await storeRawImage(ctx.userId, `auto-raw-${ctx.runId}-${target}`, Buffer.from(images[0].data, 'base64'), mimeType);
+    const { url: rawUrl } = await storeRawImage(ctx.userId, `auto-raw-${ctx.runId}-${target}`, Buffer.from(images[0].data, 'base64'), mimeType);
     return { fabric: target, rawUrl };
   } catch (error) {
     const message = describeAiError(error);
