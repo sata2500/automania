@@ -2,7 +2,8 @@ export const MAX_ETSY_TAGS = 13;
 export const MAX_ETSY_TAG_LENGTH = 20;
 export const MAX_ETSY_TITLE_LENGTH = 140;
 export const MAX_ETSY_PHOTOS = 20;
-export const MAX_ETSY_VIDEOS = 2;
+/** Etsy arayüzünde 2 video eklenebilir, ancak Open API v3 ilan başına yalnızca 1 video yükletir. */
+export const MAX_ETSY_VIDEOS = 1;
 export const MAX_ETSY_VARIATION_PRODUCTS = 4900;
 
 export type EtsyMediaItem = string | { url?: unknown; isVideo?: unknown };

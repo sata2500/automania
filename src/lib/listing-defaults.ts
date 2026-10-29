@@ -125,15 +125,3 @@ export function variationDefaultsFromRows(rows: EtsyVariationRow[]): VariationDe
   const quantity = maxQuantity > 0 ? Math.min(999, maxQuantity) : EMPTY_LISTING_DEFAULTS.variations.quantity;
   return { sizes, colors, basePrice, sizePrices, quantity, colorSpecificPrices };
 }
-
-/**
- * Düzenleyicideki varyasyonları kayıtlı şablon satırlarına çevirir. Aynı beden/renk satırı önceki şablonda
- * varsa satışa kapalılık ve SKU bilgisi korunur.
- */
-export function templateRowsFromDefaults(variations: VariationDefaults, previous: EtsyVariationRow[] = []): EtsyVariationRow[] {
-  const byKey = new Map(previous.map((r) => [`${r.size}\u0000${r.color}`, r]));
-  return variationRowsFromDefaults(variations).map((row) => {
-    const old = byKey.get(`${row.size}\u0000${row.color}`);
-    return old ? { ...row, id: old.id || row.id, enabled: old.enabled !== false, sku: old.sku ?? '' } : row;
-  });
-}

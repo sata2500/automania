@@ -12,7 +12,6 @@ import {
   Check,
   FolderInput,
   Folder,
-  Layers,
   ChevronDown,
   AlertCircle,
 } from 'lucide-react';
@@ -33,8 +32,8 @@ interface MockupSidebarListProps {
   onApplyConfigToSelected: () => void;
   onBatchDeleteRequest: () => void;
   onRequestDeleteMockup: (id: string) => void;
-  onMoveToFolder?: (mockupId: string, folderId: string | null) => void;
-  onBulkMove?: (folderId: string | null) => void;
+  onMoveToFolder?: (mockupId: string, folderId: string) => void;
+  onBulkMove?: (folderId: string) => void;
   activePrintArea?: PrintArea;
 }
 
@@ -300,17 +299,6 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
                     <div className="px-3 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                       Hedef Klasör Seçin
                     </div>
-                    <button
-                      onClick={() => {
-                        onBulkMove(null);
-                        setIsBulkFolderMenuOpen(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>Ana Klasör (Tümü)</span>
-                    </button>
-                    <div className="h-px bg-slate-100 dark:bg-slate-700 my-0.5" />
                     {mockupFolders.map((f) => (
                       <button
                         key={f.id}

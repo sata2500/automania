@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Image as ImageIcon } from 'lucide-react';
+import { FolderPlus, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
@@ -21,6 +21,7 @@ import { FolderTemplateDialog } from '../templates/FolderTemplateDialog';
 import { useMockupDraft } from './hooks/useMockupDraft';
 import { useMockupTransform } from './hooks/useMockupTransform';
 import { useMockupUpload } from './hooks/useMockupUpload';
+import { MAX_FOLDER_PHOTOS, MAX_FOLDER_VIDEOS } from '@/lib/mockup-folders';
 
 interface MockupCanvasEditorProps {
   mockups: MockupItem[];
@@ -114,10 +115,8 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     folderName: '',
   });
 
-  // Filter mockups for active folder
-  const filteredMockups = mockups.filter((m) =>
-    activeFolderId === null ? true : m.folderId === activeFolderId
-  );
+  // Etkin klasördeki mockup'lar ("Tüm Mockup'lar" görünümü yoktur; klasör yoksa liste boştur).
+  const filteredMockups = mockups.filter((m) => activeFolderId !== null && m.folderId === activeFolderId);
 
   // Selected Mockup reference — seçim etkin klasörün dışındaysa (ör. klasör değişti) klasörün ilk mockup'ı gösterilir.
   const selectedMockup =
@@ -237,34 +236,54 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     [mockups, selectedMockupId, setMockups, setSelectedMockupId, toast]
   );
 
-  // Single Move to Folder
-  const handleMoveMockupToFolder = useCallback(
-    (mockupId: string, folderId: string | null) => {
-      setMockups((prev) =>
-        prev.map((m) =>
-          m.id === mockupId ? { ...m, folderId: folderId || undefined } : m
-        )
-      );
-      toast.success('Mockup taşındı.');
+  /** Hedef klasöre taşındığında Etsy sınırı (20 görsel + 1 video) aşılıyorsa taşınamayanları ayırır. */
+  const planMove = useCallback(
+    (ids: string[], folderId: string) => {
+      const inTarget = mockups.filter((m) => m.folderId === folderId && !ids.includes(m.id));
+      let photos = inTarget.filter((m) => !m.isVideo).length;
+      let videos = inTarget.filter((m) => m.isVideo).length;
+      const allowed: string[] = [];
+      for (const m of mockups.filter((x) => ids.includes(x.id) && x.folderId !== folderId)) {
+        if (m.isVideo ? videos < MAX_FOLDER_VIDEOS : photos < MAX_FOLDER_PHOTOS) {
+          allowed.push(m.id);
+          if (m.isVideo) videos++; else photos++;
+        }
+      }
+      return allowed;
     },
-    [setMockups, toast]
+    [mockups]
   );
 
-  // Bulk Move to Folder
-  const handleBulkMoveMockups = useCallback(
-    (folderId: string | null) => {
-      if (selectedIds.length === 0) return;
-      setMockups((prev) =>
-        prev.map((m) =>
-          selectedIds.includes(m.id)
-            ? { ...m, folderId: folderId || undefined }
-            : m
-        )
-      );
-      setSelectedIds([]);
-      toast.success(`${selectedIds.length} mockup taşındı.`);
+  const moveMockups = useCallback(
+    (ids: string[], folderId: string) => {
+      const allowed = planMove(ids, folderId);
+      const skipped = ids.filter((id) => !allowed.includes(id) && mockups.find((m) => m.id === id)?.folderId !== folderId).length;
+      if (allowed.length > 0) {
+        setMockups((prev) => prev.map((m) => (allowed.includes(m.id) ? { ...m, folderId } : m)));
+      }
+      const folderName = mockupFolders.find((f) => f.id === folderId)?.name ?? 'klasör';
+      if (skipped > 0) {
+        toast.warning(`${skipped} mockup taşınamadı: "${folderName}" klasörü Etsy sınırında (en fazla ${MAX_FOLDER_PHOTOS} görsel + ${MAX_FOLDER_VIDEOS} video).`);
+      } else if (allowed.length > 0) {
+        toast.success(allowed.length === 1 ? `Mockup "${folderName}" klasörüne taşındı.` : `${allowed.length} mockup "${folderName}" klasörüne taşındı.`);
+      }
+      return allowed.length;
     },
-    [selectedIds, setMockups, toast]
+    [planMove, mockups, mockupFolders, setMockups, toast]
+  );
+
+  const handleMoveMockupToFolder = useCallback(
+    (mockupId: string, folderId: string) => { moveMockups([mockupId], folderId); },
+    [moveMockups]
+  );
+
+  const handleBulkMoveMockups = useCallback(
+    (folderId: string) => {
+      if (selectedIds.length === 0) return;
+      moveMockups(selectedIds, folderId);
+      setSelectedIds([]);
+    },
+    [selectedIds, moveMockups]
   );
 
   // Folder Operations
@@ -353,25 +372,27 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       const folder = mockupFolders.find((f) => f.id === folderId);
       if (!folder) return;
 
-      const itemCount = mockups.filter((m) => m.folderId === folderId).length;
-      // Tasarım klasörleriyle aynı davranış: klasör silinir, içindeki mockup'lar "Tüm Mockup'lar"a taşınır.
-      // Böylece klasör silmek hiçbir dosyayı kalıcı olarak silmez; mockup'lar ayrıca silinebilir.
+      // "Tüm Mockup'lar" olmadığı için klasör içindekilerle birlikte silinir (önce onay istenir).
+      const items = mockups.filter((m) => m.folderId === folderId);
       setConfirmModalState({
         isOpen: true,
         title: `'${folder.name}' klasörü silinsin mi?`,
-        message: itemCount > 0
-          ? `Klasör silinecek; içindeki ${itemCount} mockup silinmeyecek, "Tüm Mockup'lar" altına taşınacak.`
+        message: items.length > 0
+          ? `Klasör ve içindeki ${items.length} mockup kalıcı olarak silinecek. Mockup'ları korumak istiyorsanız önce başka bir klasöre taşıyın. Bu klasöre bağlı otomasyon varsa artık çalışmaz.`
           : 'Bu boş klasör silinecek.',
+        confirmText: items.length > 0 ? 'Klasörü ve mockup\'ları sil' : 'Klasörü sil',
         onConfirm: () => {
+          const remaining = mockups.filter((m) => m.folderId !== folderId);
+          const urls = items.map((m) => m.src).filter(Boolean);
+          if (urls.length > 0) void deleteUnreferencedBlobs(urls, { mockups: remaining });
           setMockupFolders((prev) => prev.filter((f) => f.id !== folderId));
-          setMockups((prev) => prev.map((m) => (m.folderId === folderId ? { ...m, folderId: undefined } : m)));
-          if (activeFolderId === folderId) setActiveFolderId(null);
+          setMockups(remaining);
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
-          toast.info(itemCount > 0 ? `'${folder.name}' silindi; ${itemCount} mockup "Tüm Mockup'lar"a taşındı.` : `'${folder.name}' silindi.`);
+          toast.info(items.length > 0 ? `'${folder.name}' ve içindeki ${items.length} mockup silindi.` : `'${folder.name}' silindi.`);
         },
       });
     },
-    [mockupFolders, mockups, activeFolderId, setMockupFolders, setMockups, setActiveFolderId, toast]
+    [mockupFolders, mockups, setMockupFolders, setMockups, toast]
   );
 
   // Crop Complete Handler
@@ -469,6 +490,19 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         onTemplateSettings={user ? (folder) => setTemplatePanelFolder(folder) : undefined}
       />
 
+      {mockupFolders.length === 0 ? (
+        <div className="text-center py-14 px-6 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700">
+          <FolderPlus className="w-11 h-11 mx-auto mb-3 text-amber-500" />
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Önce bir klasör oluşturun</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+            Her klasör bir Etsy ilanının fotoğraflarıdır: en fazla {MAX_FOLDER_PHOTOS} mockup görseli ve {MAX_FOLDER_VIDEOS} video.
+            Mockup&apos;larınızı klasöre yükleyip baskı alanlarını ayarlayın; Üretim&apos;de klasörü seçerek tasarımları basarsınız.
+          </p>
+          <button type="button" onClick={handleOpenNewFolderModal} className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold">
+            <FolderPlus className="w-4 h-4" /> Klasör oluştur
+          </button>
+        </div>
+      ) : (<>
       {/* 2. Mobile Segmented Switcher (Visible only on mobile < lg) */}
       <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl lg:hidden text-xs font-bold">
         <button
@@ -547,6 +581,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           <MockupSettingsPanel {...settingsPanelProps} />
         </div>
       </div>
+      </>)}
 
       {/* 4. Mobile Bottom Sheet Settings Drawer */}
       <MockupMobileDrawer

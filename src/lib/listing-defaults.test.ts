@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_LISTING_DEFAULTS, missingListingSettings, normalizeListingDefaults, templateRowsFromDefaults, variationDefaultsFromRows, variationRowsFromDefaults } from './listing-defaults';
+import { EMPTY_LISTING_DEFAULTS, missingListingSettings, normalizeListingDefaults, variationDefaultsFromRows, variationRowsFromDefaults } from './listing-defaults';
 
 describe('listing defaults', () => {
   it('fills missing fields and drops prices for sizes that are not offered', () => {
@@ -32,14 +32,6 @@ describe('saved variation templates', () => {
 
   it('turns template rows into sizes, colours and size prices', () => {
     expect(variationDefaultsFromRows(rows)).toEqual({ sizes: ['M', '2XL'], colors: ['White', 'Black'], basePrice: 25, sizePrices: { '2XL': 28 }, quantity: 999, colorSpecificPrices: false });
-  });
-
-  it('keeps disabled combinations and SKUs when the edited template is saved back', () => {
-    const edited = { ...variationDefaultsFromRows(rows), colors: ['White', 'Black', 'Navy'] };
-    const saved = templateRowsFromDefaults(edited, rows);
-    expect(saved).toHaveLength(6);
-    expect(saved.find((r) => r.size === 'M' && r.color === 'Black')).toMatchObject({ enabled: false, sku: 'X1', id: 'b' });
-    expect(saved.find((r) => r.size === '2XL' && r.color === 'Navy')).toMatchObject({ enabled: true, price: 28 });
   });
 
   it('flags templates whose prices differ by colour', () => {

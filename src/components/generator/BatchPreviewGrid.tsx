@@ -46,7 +46,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     mockupFolders,
     folderStatsMap,
     overLimitFolders,
-    allFoldersStats,
     currentPairs,
     currentItemCount,
     isCurrentSelectionEligible,
@@ -104,7 +103,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
         activeFolderId={activeFolderId}
         folderStatsMap={folderStatsMap}
         overLimitFolders={overLimitFolders}
-        allFoldersStats={allFoldersStats}
         onFolderClick={handleFolderClick}
       />
 

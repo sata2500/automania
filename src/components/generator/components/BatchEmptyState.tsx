@@ -50,11 +50,11 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
                 Etsy Medya Sınırı
               </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
-                {currentPairsCount} görsel (sınır: 20 fotoğraf + 2 video)
+                {currentPairsCount} görsel (sınır: 20 fotoğraf + 1 video)
               </span>
             </div>
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11.5px]">
-              Seçili alanda <strong className="font-semibold text-slate-900 dark:text-white">{currentItemCount} adet medya</strong> ve <strong className="font-semibold text-slate-900 dark:text-white">{currentPairsCount} varyasyon</strong> bulunmaktadır. Etsy bir ilanda en fazla <strong>20 fotoğraf ve 2 video</strong> kabul eder.
+              Seçili alanda <strong className="font-semibold text-slate-900 dark:text-white">{currentItemCount} adet medya</strong> ve <strong className="font-semibold text-slate-900 dark:text-white">{currentPairsCount} varyasyon</strong> bulunmaktadır. Etsy bir ilanda en fazla <strong>20 fotoğraf ve 1 video</strong> kabul eder.
             </p>
             <p className="text-amber-700 dark:text-amber-400 text-[11px] font-medium pt-0.5 flex items-center gap-1">
               <Lightbulb className="w-3.5 h-3.5 shrink-0" />
@@ -87,7 +87,7 @@ export const BatchEmptyState: React.FC<BatchEmptyStateProps> = ({
           }`}
           title={
             !isEligible
-              ? 'Etsy medya sınırı (20 fotoğraf + 2 video) aşıldığı için üretim yapılamaz.'
+              ? 'Etsy medya sınırı (20 fotoğraf + 1 video) aşıldığı için üretim yapılamaz.'
               : `Toplu Görselleri Üret (${currentPairsCount})`
           }
         >

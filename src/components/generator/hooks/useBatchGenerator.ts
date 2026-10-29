@@ -49,7 +49,7 @@ export function useBatchGenerator({
 
   const mockupFolders = useMemo(() => folders.filter((f) => f.type !== 'design'), [folders]);
 
-  // Etsy bir ilanda en fazla 20 fotoğraf ve 2 video kabul eder (MAX_ETSY_PHOTOS / MAX_ETSY_VIDEOS).
+  // Etsy bir ilanda en fazla 20 fotoğraf ve (API ile) 1 video kabul eder (MAX_ETSY_PHOTOS / MAX_ETSY_VIDEOS).
   // Sınır mockup sayısına değil, üretilecek görsellere (eşleşmelere) uygulanır.
   const fitsEtsyMediaLimits = (pairs: Array<{ mockup: { isVideo?: boolean } }>) => {
     const videos = pairs.filter((p) => p.mockup.isVideo === true).length;
@@ -78,68 +78,37 @@ export function useBatchGenerator({
     });
   }, [mockupFolders, folderStatsMap]);
 
-  // Stats for "Tüm Klasörler" (all mockup folders combined)
-  const allFoldersStats = useMemo(() => {
-    const allMockups = mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId));
-    const itemCount = allMockups.length;
-    const pairs = generateMatchingPairs(allMockups, designs, null);
-    const pairCount = pairs.length;
-    const isEligible = fitsEtsyMediaLimits(pairs);
-    return { itemCount, pairCount, isEligible };
-  }, [mockups, mockupFolders, designs]);
-
-  // Current selected scope pairs
+  // Seçili klasörün eşleşmeleri ("Tüm Klasörler" yoktur: her üretim tek bir klasör = tek ilan).
   const currentPairs = useMemo(() => {
-    if (activeFolderId) {
-      const folderMockups = mockups.filter((m) => m.folderId === activeFolderId);
-      return generateMatchingPairs(folderMockups, designs, activeFolderId);
-    }
-    const allMockups = mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId));
-    return generateMatchingPairs(allMockups, designs, null);
-  }, [activeFolderId, mockups, mockupFolders, designs]);
+    if (!activeFolderId) return [];
+    const folderMockups = mockups.filter((m) => m.folderId === activeFolderId);
+    return generateMatchingPairs(folderMockups, designs, activeFolderId);
+  }, [activeFolderId, mockups, designs]);
 
-  // Current item count in selected scope
-  const currentItemCount = useMemo(() => {
-    if (activeFolderId) {
-      return mockups.filter((m) => m.folderId === activeFolderId).length;
-    }
-    return mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId)).length;
-  }, [activeFolderId, mockups, mockupFolders]);
+  const currentItemCount = useMemo(
+    () => (activeFolderId ? mockups.filter((m) => m.folderId === activeFolderId).length : 0),
+    [activeFolderId, mockups]
+  );
 
-  // Eligibility check for the currently selected folder or "Tüm Klasörler"
   const isCurrentSelectionEligible = useMemo(() => {
-    if (activeFolderId) {
-      const stats = folderStatsMap.get(activeFolderId);
-      return stats ? stats.isEligible : fitsEtsyMediaLimits(currentPairs);
-    }
-    return allFoldersStats.isEligible;
-  }, [activeFolderId, folderStatsMap, currentPairs, allFoldersStats]);
+    if (!activeFolderId) return false;
+    const stats = folderStatsMap.get(activeFolderId);
+    return stats ? stats.isEligible : fitsEtsyMediaLimits(currentPairs);
+  }, [activeFolderId, folderStatsMap, currentPairs]);
 
-  const selectedFolderName = useMemo(() => {
-    if (activeFolderId) {
-      return mockupFolders.find((f) => f.id === activeFolderId)?.name || 'Seçili Klasör';
-    }
-    return 'Tüm Klasörler';
-  }, [activeFolderId, mockupFolders]);
+  const selectedFolderName = useMemo(
+    () => mockupFolders.find((f) => f.id === activeFolderId)?.name || 'Klasör',
+    [activeFolderId, mockupFolders]
+  );
 
-  const handleFolderClick = (folderId: string | null) => {
-    if (folderId === null) {
-      setActiveFolderId(null);
-      if (!allFoldersStats.isEligible) {
-        toast.warning(
-          `Tüm klasörlerde toplam ${allFoldersStats.itemCount} öğe ve ${allFoldersStats.pairCount} varyasyon var. Etsy tek bir ilanda en fazla 20 fotoğraf ve 2 video kabul ettiği için bu kapsam üretime alınamaz.`
-        );
-      }
-      return;
-    }
-
+  const handleFolderClick = (folderId: string) => {
     const stats = folderStatsMap.get(folderId);
     const folder = mockupFolders.find((f) => f.id === folderId);
     setActiveFolderId(folderId);
 
     if (stats && !stats.isEligible) {
       toast.warning(
-        `"${folder?.name || 'Klasör'}" içinde ${stats.itemCount} öğe / ${stats.pairCount} varyasyon var. Etsy en fazla 20 fotoğraf ve 2 video kabul eder.`
+        `"${folder?.name || 'Klasör'}" içinde ${stats.itemCount} öğe / ${stats.pairCount} varyasyon var. Etsy bir ilanda en fazla ${MAX_ETSY_PHOTOS} fotoğraf ve ${MAX_ETSY_VIDEOS} video kabul eder.`
       );
     }
   };
@@ -171,9 +140,9 @@ export function useBatchGenerator({
     // Determine batch identity for Etsy SEO grouping
     const primaryDesign = currentPairs.find((p) => p.design.id && p.design.id !== 'static-ref')?.design || currentPairs[0]?.design;
     const primaryDesignId = primaryDesign?.id || 'default';
-    const targetFolderId = activeFolderId || 'all';
+    const targetFolderId = activeFolderId || 'folder';
     const targetFolder = folders.find((f) => f.id === activeFolderId);
-    const targetFolderName = targetFolder?.name || 'Tüm Klasörler';
+    const targetFolderName = targetFolder?.name || 'Klasör';
     const batchFolderId = `batch-${primaryDesignId}-${targetFolderId}`;
     const batchFolderName = `${targetFolderName} - ${displayDesignName}`;
 
@@ -436,7 +405,6 @@ export function useBatchGenerator({
     mockupFolders,
     folderStatsMap,
     overLimitFolders,
-    allFoldersStats,
     currentPairs,
     currentItemCount,
     isCurrentSelectionEligible,

@@ -9,7 +9,7 @@ interface MockupFolderBarProps {
   setMockupFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>>;
   mockups: MockupItem[];
   activeFolderId: string | null;
-  setActiveFolderId: (id: string | null) => void;
+  setActiveFolderId: (id: string) => void;
   onOpenNewFolderModal: () => void;
   onOpenRenameFolderModal: (folder: MockupFolder) => void;
   onDuplicateFolder: (folderId: string) => void;
@@ -139,28 +139,6 @@ export const MockupFolderBar: React.FC<MockupFolderBarProps> = ({
   return (
     <div className="relative">
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
-        {/* All Mockups Button */}
-        <button
-          onClick={() => setActiveFolderId(null)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-            activeFolderId === null
-              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/25'
-              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-700/50'
-          }`}
-        >
-          <Folder className="w-3.5 h-3.5 shrink-0" />
-          <span>Tüm Mockup&apos;lar</span>
-          <span
-            className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-              activeFolderId === null
-                ? 'bg-white/20 text-white'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-            }`}
-          >
-            {mockups.length}
-          </span>
-        </button>
-
         {/* Folder Pills */}
         {mockupFolders.map((folder, index) => {
           const folderMockups = mockups.filter((m) => m.folderId === folder.id);

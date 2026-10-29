@@ -4,6 +4,7 @@ import { optimizeMockupImage } from '@/lib/image-optimizer';
 import { optimizeVideoFile } from '@/lib/video-optimizer';
 import { getDurationWithFFmpeg } from '@/lib/ffmpeg-service';
 import { useToast } from '@/components/common/ToastContext';
+import { MAX_FOLDER_PHOTOS, MAX_FOLDER_VIDEOS } from '@/lib/mockup-folders';
 
 interface UseMockupUploadProps {
   mockups: MockupItem[];
@@ -87,7 +88,11 @@ export function useMockupUpload({
       // Seçim hemen sıfırlanır: aynı dosya tekrar seçilebilir, hata olsa bile seçici takılı kalmaz.
       input.value = '';
       if (fileList.length === 0) return;
-      const targetFolder = activeFolderId || mockupFolders[0]?.id || 'folder-women';
+      const targetFolder = activeFolderId || mockupFolders[0]?.id;
+      if (!targetFolder) {
+        toast.warning("Mockup yüklemek için önce bir klasör oluşturun.");
+        return;
+      }
 
       const existingInFolder = mockups.filter((m) => m.folderId === targetFolder);
       let currentImageCount = existingInFolder.filter((m) => !m.isVideo).length;
@@ -114,8 +119,8 @@ export function useMockupUpload({
               );
               continue;
             }
-            if (currentVideoCount >= 1) {
-              toast.warning(`'${file.name}' eklenemedi! Klasörde en fazla 1 video yüklenebilir.`);
+            if (currentVideoCount >= MAX_FOLDER_VIDEOS) {
+              toast.warning(`'${file.name}' eklenemedi! Etsy API'si ilan başına ${MAX_FOLDER_VIDEOS} video yükletir; klasörde zaten video var.`);
               continue;
             }
             try {
@@ -138,9 +143,9 @@ export function useMockupUpload({
               toast.warning(`'${file.name}' çok büyük! Lütfen 20 MB'dan küçük görseller yükleyin.`);
               continue;
             }
-            if (currentImageCount >= 20) {
+            if (currentImageCount >= MAX_FOLDER_PHOTOS) {
               toast.warning(
-                `'${file.name}' eklenemedi! Etsy güncel (2026) kısıtlamalarına göre maksimum 20 görsel sınırına sahiptir.`
+                `'${file.name}' eklenemedi! Etsy bir ilanda en fazla ${MAX_FOLDER_PHOTOS} görsel kabul eder; bu klasör dolu.`
               );
               continue;
             }

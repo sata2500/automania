@@ -21,6 +21,7 @@ import {
 } from '@/lib/storage-service';
 import { get } from 'idb-keyval';
 import { mergeWorkspaceChanges } from '@/lib/workspace-merge';
+import { assignUnsortedMockups, resolveActiveMockupFolder } from '@/lib/mockup-folders';
 import { STORAGE_KEYS, TIMING } from '@/config/constants';
 import { useAuth } from '@/components/common/UserAuthContext';
 
@@ -125,9 +126,12 @@ export function useWorkspace() {
     };
     loadedSnapshotRef.current = snapshot;
     syncedBaseRef.current = snapshot;
-    setMockups(snapshot.mockups);
+    // Klasörü olmayan eski mockup'lar "Klasörsüz mockup'lar" klasörüne alınır ("Tüm Mockup'lar" görünümü
+    // yoktur). Değişiklik varsa dizi kimliği değiştiği için otomatik kayıtla buluta yazılır.
+    const sorted = assignUnsortedMockups(snapshot.mockups, snapshot.folders);
+    setMockups(sorted.mockups);
     setDesigns(snapshot.designs);
-    setFolders(snapshot.folders);
+    setFolders(sorted.folders);
   }, []);
 
   /**
@@ -460,7 +464,8 @@ export function useWorkspace() {
 
   return {
     folders, setFolders,
-    activeFolderId, setActiveFolderId,
+    // Her zaman var olan bir mockup klasörü (hiç klasör yoksa null).
+    activeFolderId: resolveActiveMockupFolder(activeFolderId, folders), setActiveFolderId,
     mockups, setMockups,
     designs, setDesigns,
     selectedMockupId, setSelectedMockupId,

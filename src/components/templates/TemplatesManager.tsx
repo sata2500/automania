@@ -662,24 +662,24 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
 }
 
 /**
- * Zamanlanmış otomasyon varken harici zamanlayıcı hiç çağrılmadıysa veya 3 saatten uzun süredir
- * çağrılmıyorsa uyarır. Uygulama açıkken kaçırılan saatler yine telafi edilir; uyarı bunu da söyler.
+ * Yalnızca gerçek bir sorun varsa uyarır: zamanlanmış otomasyon varken harici zamanlayıcı hiç
+ * çağrılmadıysa veya 12 saatten uzun süredir çağrılmıyorsa. GitHub saatlik işleri yoğunlukta birkaç saat
+ * geciktirebilir; bu gecikmeler uygulamanın 8 saatlik telafisiyle karşılandığı için uyarı gösterilmez.
  */
 function SchedulerHealthNotice({ lastCronAt, hasScheduled }: { lastCronAt: string | null | undefined; hasScheduled: boolean }) {
   // Saat yalnızca yanıt geldiğinde okunur (render sırasında Date.now() kullanılmaz).
   const [now] = useState(() => Date.now());
   if (!hasScheduled || lastCronAt === undefined) return null;
   const last = lastCronAt ? new Date(lastCronAt).getTime() : null;
-  if (last !== null && now - last < 3 * 60 * 60_000) return null;
+  if (last !== null && now - last < 12 * 60 * 60_000) return null;
   return (
     <div role="status" className="rounded-2xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30 p-3.5 text-xs text-amber-900 dark:text-amber-100 space-y-1">
       <p className="font-bold">
-        {last === null ? 'Saatlik zamanlayıcı henüz hiç çalışmadı' : `Saatlik zamanlayıcı en son ${new Date(last).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })} tarihinde çalıştı`}
+        {last === null ? 'Zamanlayıcı henüz hiç çalışmadı' : `Zamanlayıcı 12 saatten uzun süredir çalışmıyor (son: ${new Date(last).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })})`}
       </p>
       <p>
-        Uygulama kapalıyken zamanlanmış otomasyonların çalışması için GitHub deposunun Settings › Secrets and variables › Actions bölümüne
-        {' '}<code className="font-mono">CRON_SECRET</code> eklenmeli (Vercel ortam değişkenlerindeki <code className="font-mono">CRON_SECRET</code> ile aynı, en az 32 karakter).
-        O zamana kadar kaçırılan saatler, uygulamayı her açtığınızda (son 8 saat içinde) otomatik telafi edilir.
+        Uygulama kapalıyken otomasyonlar çalışmaz. GitHub deposunda Settings › Secrets and variables › Actions altındaki
+        {' '}<code className="font-mono">CRON_SECRET</code>&apos;in Vercel&apos;dekiyle aynı olduğunu ve Actions sekmesinde &quot;Scheduled automation&quot; işinin açık olduğunu kontrol edin.
       </p>
     </div>
   );

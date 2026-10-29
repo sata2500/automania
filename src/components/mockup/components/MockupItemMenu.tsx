@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Edit2, Trash2, FolderInput, Folder, Layers, Check, ChevronRight } from 'lucide-react';
+import { Edit2, Trash2, FolderInput, Folder, Check, ChevronRight } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 
 interface MockupItemMenuProps {
@@ -10,7 +10,7 @@ interface MockupItemMenuProps {
   onClose: () => void;
   onRename: (item: MockupItem) => void;
   onDelete: (id: string) => void;
-  onMoveToFolder: (id: string, folderId: string | null) => void;
+  onMoveToFolder: (id: string, folderId: string) => void;
 }
 
 export const MockupItemMenu: React.FC<MockupItemMenuProps> = ({
@@ -82,20 +82,6 @@ export const MockupItemMenu: React.FC<MockupItemMenuProps> = ({
       {/* Folder Submenu List */}
       {showFolderSubmenu && (
         <div className="bg-slate-50 dark:bg-slate-900/80 border-y border-slate-100 dark:border-slate-700/80 py-1 my-0.5 max-h-48 overflow-y-auto">
-          <button
-            onClick={() => {
-              onClose();
-              onMoveToFolder(item.id, null);
-            }}
-            className="w-full px-4 py-1.5 flex items-center justify-between text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 dark:hover:text-indigo-400 text-left transition-colors cursor-pointer text-[11px]"
-          >
-            <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
-              <span>Ana Klasör (Tümü)</span>
-            </div>
-            {!item.folderId && <Check className="w-3 h-3 text-indigo-500 shrink-0" />}
-          </button>
-
           {mockupFolders.map((f) => (
             <button
               key={f.id}
