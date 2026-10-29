@@ -4,7 +4,7 @@ import {
   Sparkles,
   MoreVertical,
 } from 'lucide-react';
-import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
+import { DesignItem, TargetApparel } from '@/types/pod';
 import { DesignItemMenu } from './DesignItemMenu';
 import { activateOnKey } from '@/lib/a11y';
 import { Spinner } from '@/components/common/Spinner';
@@ -13,7 +13,6 @@ interface DesignCardProps {
   design: DesignItem;
   isChecked: boolean;
   isAnalyzing: boolean;
-  designFolders: MockupFolder[];
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
@@ -22,7 +21,6 @@ interface DesignCardProps {
   onRenameClick?: (design: DesignItem) => void;
   onRemoveBgClick?: (design: DesignItem) => void;
   onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
-  onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDeleteClick: (id: string) => void;
 }
 
@@ -30,7 +28,6 @@ export const DesignCard: React.FC<DesignCardProps> = ({
   design,
   isChecked,
   isAnalyzing,
-  designFolders,
   onToggleCheck,
   onToggleProductionActive,
   onSetProductionActive,
@@ -39,7 +36,6 @@ export const DesignCard: React.FC<DesignCardProps> = ({
   onRenameClick,
   onRemoveBgClick,
   onRecolorClick,
-  onMoveToFolder,
   onDeleteClick,
 }) => {
   const isSelected = !!design.isSelected;
@@ -206,7 +202,6 @@ export const DesignCard: React.FC<DesignCardProps> = ({
           design={design}
           isOpen={true}
           position={menuPosition}
-          designFolders={designFolders}
           isAnalyzing={isAnalyzing}
           onClose={() => setMenuPosition(null)}
           onAnalyze={onAnalyzeClick}
@@ -214,7 +209,6 @@ export const DesignCard: React.FC<DesignCardProps> = ({
           onRename={onRenameClick}
           onRemoveBg={onRemoveBgClick}
           onRecolor={onRecolorClick}
-          onMoveToFolder={onMoveToFolder}
           onDelete={onDeleteClick}
         />
       )}

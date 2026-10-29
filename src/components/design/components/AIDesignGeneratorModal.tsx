@@ -25,7 +25,7 @@ import {
   ImagePlus,
   Info,
 } from 'lucide-react';
-import { DesignItem, MockupFolder } from '@/types/pod';
+import { DesignItem } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { activateOnKey } from '@/lib/a11y';
@@ -47,8 +47,6 @@ interface GeneratedPreview {
 interface AIDesignGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activeDesignFolderId: string | null;
-  designFolders: MockupFolder[];
   onDesignsAdded: (designs: DesignItem[]) => void;
 }
 
@@ -67,8 +65,6 @@ function readImageSize(src: string): Promise<{ width: number; height: number }> 
 export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
   isOpen,
   onClose,
-  activeDesignFolderId,
-  designFolders,
   onDesignsAdded,
 }) => {
   const [prompt, setPrompt] = useState('');
@@ -195,7 +191,6 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
           src,
           width: size.width,
           height: size.height,
-          folderId: activeDesignFolderId ?? undefined,
           targetApparel: 'both',
           isSelected: false,
           createdAt: Date.now(),
@@ -298,8 +293,7 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
               </div>
 
               {/* Ayarlar */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+              <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Kaç Görsel
                   </label>
@@ -318,16 +312,8 @@ export const AIDesignGeneratorModal: React.FC<AIDesignGeneratorModalProps> = ({
                       </button>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                    Klasör
-                  </label>
-                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-600 dark:text-slate-400">
-                    {designFolders.find(f => f.id === activeDesignFolderId)?.name ?? 'Tüm Tasarımlar'}
-                  </div>
-                </div>
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">Kaydedilen tasarımlar Tasarımlarım bölümüne eklenir, boşlukları kırpılır ve otomatik analiz edilir.</p>
 
               {error && (
                 <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-700/40 rounded-xl text-xs text-red-600 dark:text-red-400">

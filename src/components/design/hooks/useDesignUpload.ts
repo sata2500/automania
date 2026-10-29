@@ -5,10 +5,9 @@ import { useToast } from '@/components/common/ToastContext';
 
 interface UseDesignUploadProps {
   setDesigns: React.Dispatch<React.SetStateAction<DesignItem[]>>;
-  activeDesignFolderId: string | null;
 }
 
-export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignUploadProps) {
+export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
   const toast = useToast();
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -26,18 +25,17 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
 
       const uploadToastId = toast.progress('Tasarımlar optimize ediliyor...', 10);
       let uploadedCount = 0;
-      let webpImageCount = 0;
-      let fallbackImageCount = 0;
       let savedBytesTotal = 0;
       const newDesigns: DesignItem[] = [];
 
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
         try {
-          // Sunucuda kayıpsız sıkıştırılmış PNG (çözünürlük ve saydamlık korunur)
+          // Sunucuda saydam boşlukları kırpılıp kayıpsız sıkıştırılmış PNG (çözünürlük ve saydamlık korunur)
           const optimized = await optimizeDesignImage(file);
-          if (optimized.mimeType === 'image/webp') webpImageCount++;
-          else fallbackImageCount++;
+          // Dosya doğrudan sunucuda işlendiyse ölçüler kırpılmış hâlindir; tarayıcı yedeğinden geçenler
+          // Tasarımlar sekmesindeki arka plan bakımıyla bir kez daha işlenir (ölçüler de düzelir).
+          const serverProcessed = !optimized.dataUrl && Boolean(optimized.url);
           savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
           newDesigns.push({
             id: 'design-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + i,
@@ -48,7 +46,8 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
             isSelected: false,
             width: optimized.width,
             height: optimized.height,
-            folderId: activeDesignFolderId || undefined,
+            createdAt: Date.now(),
+            ...(serverProcessed ? { optimizedAt: Date.now() } : {}),
           });
           uploadedCount++;
 
@@ -76,16 +75,11 @@ export function useDesignUpload({ setDesigns, activeDesignFolderId }: UseDesignU
       toast.removeToast(uploadToastId);
       if (uploadedCount > 0) {
         const savedMb = (savedBytesTotal / (1024 * 1024)).toFixed(1);
-        toast.success(`${uploadedCount} tasarım başarıyla optimize edildi ve yüklendi! (${savedMb} MB tasarruf) 🚀`);
-        if (fallbackImageCount > 0 && webpImageCount === 0) {
-          toast.info(`Tarayıcınız WebP kodlamayı desteklemediği için ${fallbackImageCount} görsel PNG/JPEG olarak kaydedildi.`);
-        } else if (fallbackImageCount > 0) {
-          toast.info(`${fallbackImageCount} görsel WebP yerine PNG/JPEG olarak kaydedildi.`);
-        }
+        toast.success(`${uploadedCount} tasarım yüklendi; boşlukları kırpıldı ve kayıpsız PNG olarak saklandı (${savedMb} MB tasarruf).`);
       }
       setIsOptimizing(false);
     },
-    [activeDesignFolderId, setDesigns, toast]
+    [setDesigns, toast]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

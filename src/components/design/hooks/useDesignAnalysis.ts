@@ -19,13 +19,15 @@ export function useDesignAnalysis({
   const [analysisModalData, setAnalysisModalData] = useState<DesignItem | null>(null);
 
   const handleAnalyzeDesign = useCallback(
-    // `known`: listeye henüz yansımamış yeni bir tasarım (ör. yapay zekâ ile az önce üretilen).
-    async (designId: string, known?: DesignItem) => {
+    // `known`: listeye henüz yansımamış yeni bir tasarım. `silent`: arka plan analizi (bildirim gösterilmez).
+    // Sonuç: 'ok', 'rate-limited' (Retry-After saniyesiyle) veya 'error'.
+    async (designId: string, known?: DesignItem, options: { silent?: boolean } = {}): Promise<{ status: 'ok' | 'rate-limited' | 'error'; retryAfter?: number }> => {
       const design = known ?? designs.find((d) => d.id === designId);
-      if (!design) return;
+      if (!design) return { status: 'error' };
+      const { silent = false } = options;
 
       setAnalyzingIds((prev) => [...prev, designId]);
-      toast.info(`'${design.name}' görseli, Etsy kelimeleri ve rakip etiketleri taranıyor...`);
+      if (!silent) toast.info(`'${design.name}' görseli, Etsy kelimeleri ve rakip etiketleri taranıyor...`);
       try {
         const res = await fetch('/api/designs/analyze', {
           method: 'POST',
@@ -33,6 +35,10 @@ export function useDesignAnalysis({
           body: JSON.stringify({ src: design.src, name: design.name }),
         });
         
+        if (res.status === 429) {
+          if (!silent) toast.error('Analiz limiti aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.');
+          return { status: 'rate-limited', retryAfter: Number(res.headers.get('Retry-After')) || 60 };
+        }
         let data: { success?: boolean; analysis?: DesignItem['analysis']; error?: string; warning?: string };
         const rawText = await res.text();
         try {
@@ -42,7 +48,7 @@ export function useDesignAnalysis({
         }
 
         if (data.success && data.analysis) {
-          const updatedAnalysis = data.analysis;
+          const updatedAnalysis = { ...data.analysis, source: 'vision' as const };
           setDesigns((prev) =>
             prev.map((d) =>
               d.id === designId ? { ...d, analysis: updatedAnalysis } : d
@@ -51,16 +57,18 @@ export function useDesignAnalysis({
           setAnalysisModalData((prev) =>
             prev && prev.id === designId ? { ...prev, analysis: updatedAnalysis } : prev
           );
-          toast.success(`'${design.name}' analizi ve Etsy kelime havuzu senkronizasyonu tamamlandı!`);
-          if (data.warning) {
-            toast.error(data.warning);
+          if (!silent) {
+            toast.success(`'${design.name}' analizi ve Etsy kelime havuzu senkronizasyonu tamamlandı!`);
+            if (data.warning) toast.error(data.warning);
           }
-        } else {
-          toast.error(`Analiz hatası: ${data.error || 'Bilinmeyen hata'}`);
+          return { status: 'ok' };
         }
+        if (!silent) toast.error(`Analiz hatası: ${data.error || 'Bilinmeyen hata'}`);
+        return { status: 'error' };
       } catch (e) {
         console.error('Tasarım analiz hatası:', e);
-        toast.error(`Analiz hatası: ${getErrorMessage(e) || 'Sunucu hatası oluştu.'}`);
+        if (!silent) toast.error(`Analiz hatası: ${getErrorMessage(e) || 'Sunucu hatası oluştu.'}`);
+        return { status: 'error' };
       } finally {
         setAnalyzingIds((prev) => prev.filter((id) => id !== designId));
       }

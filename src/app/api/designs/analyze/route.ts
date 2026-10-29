@@ -525,6 +525,7 @@ export async function POST(request: Request) {
         productType: parsedResult.productType || '',
         taxonomyId: parsedResult.taxonomyId || null,
         trademarkRemovedKeywords: trademarkRemovedKeywords.map((r) => r.keyword),
+        source: 'vision',
       }
     });
 

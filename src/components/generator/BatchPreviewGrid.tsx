@@ -16,7 +16,6 @@ export interface BatchPreviewGridProps {
   folders: MockupFolder[];
   activeFolderId: string | null;
   setActiveFolderId: (id: string | null) => void;
-  activeDesignFolderId: string | null;
   renderedMatches: RenderedMatch[];
   setRenderedMatches: React.Dispatch<React.SetStateAction<RenderedMatch[]>>;
   hasGenerated: boolean;
@@ -31,7 +30,6 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
   folders,
   activeFolderId,
   setActiveFolderId,
-  activeDesignFolderId,
   renderedMatches,
   setRenderedMatches,
   hasGenerated,
@@ -65,8 +63,7 @@ export const BatchPreviewGrid: React.FC<BatchPreviewGridProps> = ({
     folders,
     activeFolderId,
     setActiveFolderId,
-    activeDesignFolderId,
-    renderedMatches,
+      renderedMatches,
     setRenderedMatches,
     setHasGenerated,
   });

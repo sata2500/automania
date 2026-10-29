@@ -171,19 +171,13 @@ export function generateMatchingPairs(
   mockups: MockupItem[],
   designs: DesignItem[],
   activeFolderId: string | null = null,
-  activeDesignFolderId: string | null = null
 ): { mockup: MockupItem; design: DesignItem }[] {
   const filteredMockups = activeFolderId
     ? mockups.filter((m) => m.folderId === activeFolderId)
     : mockups;
 
-  // Sadece seçili olanları al
-  let activeDesigns = designs.filter((d) => d.isSelected);
-  
-  // Eğer özel bir tasarım klasörü seçildiyse, SADECE o klasördeki seçili tasarımları al
-  if (activeDesignFolderId) {
-    activeDesigns = activeDesigns.filter((d) => d.folderId === activeDesignFolderId);
-  }
+  // Sadece üretime alınmış (seçili) tasarımlar
+  const activeDesigns = designs.filter((d) => d.isSelected);
 
   const pairs: { mockup: MockupItem; design: DesignItem }[] = [];
 

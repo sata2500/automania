@@ -1,6 +1,6 @@
 import { getErrorMessage } from '@/lib/errors';
 import React, { useState } from 'react';
-import { DesignItem, MockupFolder } from '@/types/pod';
+import { DesignItem } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useToast } from '@/components/common/ToastContext';
@@ -12,25 +12,22 @@ import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 import { useDesignUpload } from './hooks/useDesignUpload';
 import { useDesignSelection } from './hooks/useDesignSelection';
 import { useDesignAnalysis } from './hooks/useDesignAnalysis';
+import { useDesignMaintenance } from './hooks/useDesignMaintenance';
+import { designSection, type DesignSection } from '@/lib/design-library';
+import { Spinner } from '@/components/common/Spinner';
 
 // Modular Subcomponents
 import { DesignUploadZone } from './components/DesignUploadZone';
-import { DesignFolderBar } from './components/DesignFolderBar';
 import { DesignToolbar } from './components/DesignToolbar';
 import { DesignGrid } from './components/DesignGrid';
 import { DesignAnalysisModal } from './components/DesignAnalysisModal';
-import { DesignFolderModal } from './components/DesignFolderModal';
 import { AIDesignGeneratorModal } from './components/AIDesignGeneratorModal';
 import { DesignRenameModal } from './components/DesignRenameModal';
-import { Search, X } from 'lucide-react';
+import { Bot, Search, User, X } from 'lucide-react';
 
 interface DesignUploaderProps {
   designs: DesignItem[];
   setDesigns: React.Dispatch<React.SetStateAction<DesignItem[]>>;
-  folders: MockupFolder[];
-  setFolders: React.Dispatch<React.SetStateAction<MockupFolder[]>>;
-  activeDesignFolderId: string | null;
-  setActiveDesignFolderId: (id: string | null) => void;
 }
 
 function readImageDimensions(src: string): Promise<{ width: number; height: number }> {
@@ -45,10 +42,6 @@ function readImageDimensions(src: string): Promise<{ width: number; height: numb
 export const DesignUploader: React.FC<DesignUploaderProps> = ({
   designs,
   setDesigns,
-  folders,
-  setFolders,
-  activeDesignFolderId,
-  setActiveDesignFolderId,
 }) => {
   const toast = useToast();
   const { user, setIsAuthModalOpen } = useAuth();
@@ -63,14 +56,10 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   const [cropTargetDesign, setCropTargetDesign] = useState<DesignItem | null>(null);
   const [renameTarget, setRenameTarget] = useState<DesignItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [section, setSection] = useState<DesignSection>('mine');
 
   // AI Design Generator Modal
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
-
-  // Folder Modals State
-  const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
-  const [editingFolder, setEditingFolder] = useState<MockupFolder | null>(null);
-  const [folderInputName, setFolderInputName] = useState('');
 
   // Confirmation Modal State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -85,9 +74,6 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     onConfirm: () => {},
   });
 
-  // Filter design folders
-  const designFolders = folders.filter((f) => f.type === 'design');
-
   // Custom Hooks
   const {
     isOptimizing,
@@ -96,10 +82,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     handleDragOver,
     handleDragLeave,
     handleDrop,
-  } = useDesignUpload({
-    setDesigns,
-    activeDesignFolderId,
-  });
+  } = useDesignUpload({ setDesigns });
 
   const {
     selectedDesignIds,
@@ -109,14 +92,12 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     handleToggleSelectAll,
     handleToggleProductionActive,
     handleSetProductionActive,
-    handleMoveToFolder,
-    handleBulkMove,
     takenSlots,
     activeSlotsCount,
   } = useDesignSelection({
     designs,
     setDesigns,
-    activeDesignFolderId,
+    section,
     searchQuery,
   });
 
@@ -132,66 +113,17 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     selectedDesignIds,
   });
 
-  // --- Folder Management ---
-  const handleOpenAddFolderModal = () => {
-    setEditingFolder(null);
-    setFolderInputName('');
-    setIsFolderModalOpen(true);
-  };
+  const { activeTask } = useDesignMaintenance({
+    designs,
+    setDesigns,
+    enabled: Boolean(user),
+    analyzingIds,
+    analyze: handleAnalyzeDesign,
+  });
 
-  const handleOpenEditFolderModal = (folder: MockupFolder) => {
-    setEditingFolder(folder);
-    setFolderInputName(folder.name);
-    setIsFolderModalOpen(true);
-  };
-
-  const handleSaveFolder = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = folderInputName.trim();
-    if (!trimmed) {
-      toast.warning('Lütfen bir klasör adı girin.');
-      return;
-    }
-
-    if (editingFolder) {
-      setFolders((prev) =>
-        prev.map((f) => (f.id === editingFolder.id ? { ...f, name: trimmed } : f))
-      );
-      toast.success(`Klasör adı "${trimmed}" olarak güncellendi.`);
-    } else {
-      const newFolder: MockupFolder = {
-        id: 'dfol-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-        name: trimmed,
-        isCustom: true,
-        type: 'design',
-      };
-      setFolders((prev) => [...prev, newFolder]);
-      setActiveDesignFolderId(newFolder.id);
-      toast.success(`"${trimmed}" tasarım klasörü oluşturuldu.`);
-    }
-
-    setIsFolderModalOpen(false);
-    setFolderInputName('');
-    setEditingFolder(null);
-  };
-
-  const handleDeleteFolder = (id: string, name: string) => {
-    setConfirmConfig({
-      isOpen: true,
-      title: 'Klasörü Sil',
-      message: `"${name}" klasörünü silmek istediğinize emin misiniz? (İçindeki tasarımlar 'Tüm Tasarımlar'a taşınacaktır)`,
-      onConfirm: () => {
-        setFolders((prev) => prev.filter((f) => f.id !== id));
-        setDesigns((prev) =>
-          prev.map((d) => (d.folderId === id ? { ...d, folderId: undefined } : d))
-        );
-        if (activeDesignFolderId === id) {
-          setActiveDesignFolderId(null);
-        }
-        toast.info(`"${name}" klasörü silindi.`);
-        setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
-      },
-    });
+  const counts = {
+    mine: designs.filter((d) => designSection(d) === 'mine').length,
+    automation: designs.filter((d) => designSection(d) === 'automation').length,
   };
 
   // --- Deletion Handlers ---
@@ -257,7 +189,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     setDesigns((prev) =>
       prev.map((d) =>
         d.id === cropTargetDesign.id
-          ? { ...d, src: serverUrl, width: size.width, height: size.height }
+          // Sunucu boşlukları yeniden kırpabilir: ölçüler arka plan bakımında güncellenir.
+          ? { ...d, src: serverUrl, width: size.width, height: size.height, optimizedAt: undefined }
           : d
       )
     );
@@ -287,7 +220,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
       setDesigns((prev) =>
         prev.map((d) =>
           d.id === design.id
-            ? { ...d, src: bgSrc }
+            ? { ...d, src: bgSrc, optimizedAt: undefined }
             : d
         )
       );
@@ -339,6 +272,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         targetApparel: mode === 'dark_garment' ? 'light' : 'dark',
         isSelected: false,
         createdAt: Date.now(),
+        optimizedAt: undefined,
       };
 
       setDesigns((prev) => [...prev, newDesign]);
@@ -364,30 +298,38 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         onAIGenerate={() => { if (requireAccount('AI ile tasarım üretimi')) setIsAIModalOpen(true); }}
       />
 
-      {/* Folder Selection Bar */}
-      <DesignFolderBar
-        designFolders={designFolders}
-        setDesignFolders={(newFoldersAction) => {
-          setFolders((prev) => {
-            const currentDesignFolders = prev.filter((f) => f.type === 'design');
-            const otherFolders = prev.filter((f) => f.type !== 'design');
-            const resolvedDesignFolders =
-              typeof newFoldersAction === 'function'
-                ? newFoldersAction(currentDesignFolders)
-                : newFoldersAction;
-            return [...otherFolders, ...resolvedDesignFolders];
-          });
-        }}
-        designs={designs}
-        activeDesignFolderId={activeDesignFolderId}
-        setActiveDesignFolderId={setActiveDesignFolderId}
-        onOpenNewFolderModal={handleOpenAddFolderModal}
-        onOpenRenameFolderModal={handleOpenEditFolderModal}
-        onDeleteFolder={handleDeleteFolder}
-      />
-
       {/* Main Studio Design Cards Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+        {/* Bölümler: kullanıcının tasarımları ve otomasyonların ürettikleri (en yeniden eskiye) */}
+        <div role="tablist" aria-label="Tasarım bölümleri" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80">
+          {([
+            ['mine', 'Tasarımlarım', User],
+            ['automation', 'Otomasyon', Bot],
+          ] as const).map(([key, label, Icon]) => {
+            const active = section === key && !searchQuery.trim();
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => { setSection(key); setSearchQuery(''); }}
+                className={`flex items-center justify-center gap-2 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors ${active ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+              >
+                <Icon className="w-4 h-4" /> {label}
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${active ? 'bg-indigo-50 dark:bg-indigo-500/15' : 'bg-slate-200/70 dark:bg-slate-700/70'}`}>{counts[key]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {activeTask && (
+          <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 -mt-1" role="status">
+            <Spinner className="w-3.5 h-3.5" />
+            {activeTask.kind === 'optimize'
+              ? `Tasarımların boşlukları kırpılıp kayıpsız PNG olarak optimize ediliyor (${activeTask.remaining} kaldı)…`
+              : `Otomasyon ve yapay zekâ tasarımları analiz ediliyor (${activeTask.remaining} kaldı)…`}
+          </p>
+        )}
         {/* Arama: ad, ilan SKU'su, etiket */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -408,7 +350,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           )}
         </div>
         {searchQuery.trim() && (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">{filteredDesigns.length} tasarım bulundu (tüm klasörlerde)</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 -mt-2">{filteredDesigns.length} tasarım bulundu (Tasarımlarım ve Otomasyon)</p>
         )}
 
         {/* Action Toolbar */}
@@ -416,12 +358,10 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           designs={designs}
           filteredDesigns={filteredDesigns}
           selectedDesignIds={selectedDesignIds}
-          designFolders={designFolders}
           takenSlots={takenSlots}
           activeSlotsCount={activeSlotsCount}
           analyzingIds={analyzingIds}
           onToggleSelectAll={handleToggleSelectAll}
-          onBulkMove={handleBulkMove}
           onBulkDelete={handleBulkDelete}
           onBulkAnalyze={handleBulkAnalyze}
         />
@@ -431,7 +371,6 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           designs={filteredDesigns}
           selectedDesignIds={selectedDesignIds}
           analyzingIds={analyzingIds}
-          designFolders={designFolders}
           onToggleCheck={toggleManagementSelection}
           onToggleProductionActive={handleToggleProductionActive}
           onSetProductionActive={handleSetProductionActive}
@@ -445,9 +384,9 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           onCropClick={(design) => setCropTargetDesign(design)}
           onRenameClick={(design) => setRenameTarget(design)}
           searchQuery={searchQuery}
+          section={section}
           onRemoveBgClick={handleRemoveBgClick}
           onRecolorClick={handleRecolorClick}
-          onMoveToFolder={handleMoveToFolder}
           onDeleteClick={requestDeleteDesign}
         />
       </div>
@@ -492,29 +431,16 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         onReAnalyze={(id) => handleAnalyzeDesign(id)}
       />
 
-      {/* Design Folder Create / Rename Modal */}
-      <DesignFolderModal
-        isOpen={isFolderModalOpen}
-        editingFolder={editingFolder}
-        folderInputName={folderInputName}
-        setFolderInputName={setFolderInputName}
-        onClose={() => setIsFolderModalOpen(false)}
-        onSave={handleSaveFolder}
-      />
-
       {/* AI Design Generator Modal */}
       <AIDesignGeneratorModal
         isOpen={isAIModalOpen}
         onClose={() => setIsAIModalOpen(false)}
-        activeDesignFolderId={activeDesignFolderId}
-        designFolders={designFolders}
         onDesignsAdded={(newDesigns) => {
           setDesigns((prev) => [...prev, ...newDesigns]);
-          toast.success(`${newDesigns.length} AI tasarımı kütüphaneye eklendi; analiz ediliyor…`);
-          // Yeni tasarımlar hemen analiz edilir: "Analiz Sonucunu Gör" ayrıca bir adım gerektirmez.
-          void (async () => {
-            for (const design of newDesigns) await handleAnalyzeDesign(design.id, design);
-          })();
+          setSection('mine');
+          setSearchQuery('');
+          // Boşluk kırpma ve görsel analiz arka plan bakımında sırayla yapılır.
+          toast.success(`${newDesigns.length} AI tasarımı Tasarımlarım'a eklendi; arka planda analiz ediliyor.`);
         }}
       />
     </div>

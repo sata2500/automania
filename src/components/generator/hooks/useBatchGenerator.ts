@@ -20,7 +20,6 @@ interface UseBatchGeneratorProps {
   folders: MockupFolder[];
   activeFolderId: string | null;
   setActiveFolderId: (id: string | null) => void;
-  activeDesignFolderId: string | null;
   renderedMatches: RenderedMatch[];
   setRenderedMatches: Dispatch<SetStateAction<RenderedMatch[]>>;
   setHasGenerated: (val: boolean) => void;
@@ -32,7 +31,6 @@ export function useBatchGenerator({
   folders,
   activeFolderId,
   setActiveFolderId,
-  activeDesignFolderId,
   renderedMatches,
   setRenderedMatches,
   setHasGenerated,
@@ -64,13 +62,13 @@ export function useBatchGenerator({
     mockupFolders.forEach((f) => {
       const folderMockups = mockups.filter((m) => m.folderId === f.id);
       const itemCount = folderMockups.length;
-      const pairs = generateMatchingPairs(folderMockups, designs, f.id, activeDesignFolderId);
+      const pairs = generateMatchingPairs(folderMockups, designs, f.id);
       const pairCount = pairs.length;
       const isEligible = fitsEtsyMediaLimits(pairs);
       map.set(f.id, { itemCount, isEligible, pairCount });
     });
     return map;
-  }, [mockupFolders, mockups, designs, activeDesignFolderId]);
+  }, [mockupFolders, mockups, designs]);
 
   // Over limit individual folders
   const overLimitFolders = useMemo(() => {
@@ -84,21 +82,21 @@ export function useBatchGenerator({
   const allFoldersStats = useMemo(() => {
     const allMockups = mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId));
     const itemCount = allMockups.length;
-    const pairs = generateMatchingPairs(allMockups, designs, null, activeDesignFolderId);
+    const pairs = generateMatchingPairs(allMockups, designs, null);
     const pairCount = pairs.length;
     const isEligible = fitsEtsyMediaLimits(pairs);
     return { itemCount, pairCount, isEligible };
-  }, [mockups, mockupFolders, designs, activeDesignFolderId]);
+  }, [mockups, mockupFolders, designs]);
 
   // Current selected scope pairs
   const currentPairs = useMemo(() => {
     if (activeFolderId) {
       const folderMockups = mockups.filter((m) => m.folderId === activeFolderId);
-      return generateMatchingPairs(folderMockups, designs, activeFolderId, activeDesignFolderId);
+      return generateMatchingPairs(folderMockups, designs, activeFolderId);
     }
     const allMockups = mockups.filter((m) => !m.folderId || mockupFolders.some((f) => f.id === m.folderId));
-    return generateMatchingPairs(allMockups, designs, null, activeDesignFolderId);
-  }, [activeFolderId, mockups, mockupFolders, designs, activeDesignFolderId]);
+    return generateMatchingPairs(allMockups, designs, null);
+  }, [activeFolderId, mockups, mockupFolders, designs]);
 
   // Current item count in selected scope
   const currentItemCount = useMemo(() => {

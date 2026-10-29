@@ -2,11 +2,11 @@
 
 /**
  * Görsel kırpma penceresi: görselin tamamı üzerinde sürüklenip köşelerinden boyutlandırılan kırpma çerçevesi,
- * oran seçenekleri (serbest, 1:1, 4:5, 3:4) ve saydam kenar boşluklarını otomatik kırpma. Çıktı, seçilen
- * bölgenin orijinal çözünürlüğündedir (küçültülmez); tasarımlar kayıpsız PNG olarak kaydedilir.
+ * oran seçenekleri (serbest, 1:1, 4:5, 3:4). Çıktı, seçilen bölgenin orijinal çözünürlüğündedir (küçültülmez);
+ * tasarımlar kayıpsız PNG olarak kaydedilir (saydam kenar boşlukları sunucuda zaten otomatik kırpılır).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Crop, Maximize, RotateCcw, ScanLine, X } from 'lucide-react';
+import { Check, Crop, Maximize, RotateCcw, X } from 'lucide-react';
 import { loadImage } from '@/lib/canvas-renderer';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
@@ -58,42 +58,6 @@ function clampRect(rect: Rect, width: number, height: number): Rect {
   return { x: Math.min(Math.max(rect.x, 0), width - w), y: Math.min(Math.max(rect.y, 0), height - h), w, h };
 }
 
-/** Saydam olmayan piksellerin sınırı (görsel küçültülerek hızlı taranır); tamamen opaksa null. */
-function contentBounds(img: HTMLImageElement): Rect | null {
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
-  const scale = Math.min(1, 1024 / Math.max(width, height));
-  const sw = Math.max(1, Math.round(width * scale));
-  const sh = Math.max(1, Math.round(height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = sw;
-  canvas.height = sh;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return null;
-  ctx.drawImage(img, 0, 0, sw, sh);
-  const { data } = ctx.getImageData(0, 0, sw, sh);
-  let minX = sw, minY = sh, maxX = -1, maxY = -1, transparent = 0;
-  for (let y = 0; y < sh; y++) {
-    for (let x = 0; x < sw; x++) {
-      if (data[(y * sw + x) * 4 + 3]! > 12) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      } else {
-        transparent++;
-      }
-    }
-  }
-  if (maxX < 0 || transparent === 0) return null;
-  // Küçültmede kaybolan kenar pikselleri için bir piksel pay.
-  const x0 = Math.max(0, (minX - 1) / scale);
-  const y0 = Math.max(0, (minY - 1) / scale);
-  const x1 = Math.min(width, (maxX + 2) / scale);
-  const y1 = Math.min(height, (maxY + 2) / scale);
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
-
 export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
   imageSrc,
   imageTitle,
@@ -107,7 +71,6 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
   const [aspect, setAspect] = useState<Aspect>(variant === 'design' ? 'free' : '1:1');
   const [rect, setRect] = useState<Rect | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [trimMessage, setTrimMessage] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ mode: DragMode; startX: number; startY: number; start: Rect } | null>(null);
   const [displayScale, setDisplayScale] = useState(1);
@@ -143,25 +106,6 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
     if (!img || !rect) return;
     const nextRatio = ASPECTS.find((a) => a.id === next)?.ratio ?? null;
     setRect(fitAspect(img.naturalWidth, img.naturalHeight, nextRatio, rect));
-  };
-
-  const autoTrim = () => {
-    if (!img) return;
-    const bounds = contentBounds(img);
-    if (!bounds) {
-      setTrimMessage('Görselde saydam kenar boşluğu yok; çerçeveyi elle ayarlayın.');
-      return;
-    }
-    // Tasarımın etrafında %2 pay bırakılır; oran kilitliyse içerik ortada kalacak şekilde genişletilir.
-    const pad = Math.round(Math.max(bounds.w, bounds.h) * 0.02);
-    let next: Rect = clampRect({ x: bounds.x - pad, y: bounds.y - pad, w: bounds.w + pad * 2, h: bounds.h + pad * 2 }, img.naturalWidth, img.naturalHeight);
-    if (ratio) {
-      let w = next.w, h = next.h;
-      if (w / h > ratio) h = w / ratio; else w = h * ratio;
-      next = fitAspect(img.naturalWidth, img.naturalHeight, ratio, { x: next.x + next.w / 2 - w / 2, y: next.y + next.h / 2 - h / 2, w, h });
-    }
-    setRect(next);
-    setTrimMessage(null);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
@@ -277,11 +221,6 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
               </button>
             ))}
           </div>
-          {variant === 'design' && (
-            <button type="button" onClick={autoTrim} disabled={!img} className="px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-500/40 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 disabled:opacity-50">
-              <ScanLine className="w-3.5 h-3.5" /> Boşlukları otomatik kırp
-            </button>
-          )}
           <button type="button" onClick={() => img && setRect(fitAspect(img.naturalWidth, img.naturalHeight, ratio))} disabled={!img} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 disabled:opacity-50">
             <Maximize className="w-3.5 h-3.5" /> Tümü
           </button>
@@ -289,7 +228,6 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
             <RotateCcw className="w-3.5 h-3.5" /> Sıfırla
           </button>
         </div>
-        {trimMessage && <p className="text-[11px] text-amber-700 dark:text-amber-400">{trimMessage}</p>}
 
         <div className="flex justify-center rounded-2xl p-2 sm:p-3 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
           {loadError ? (

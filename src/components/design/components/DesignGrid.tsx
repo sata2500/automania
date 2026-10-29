@@ -1,13 +1,12 @@
 import React from 'react';
 import { Palette } from 'lucide-react';
-import { DesignItem, TargetApparel, MockupFolder } from '@/types/pod';
+import { DesignItem, TargetApparel } from '@/types/pod';
 import { DesignCard } from './DesignCard';
 
 interface DesignGridProps {
   designs: DesignItem[];
   selectedDesignIds: string[];
   analyzingIds: string[];
-  designFolders: MockupFolder[];
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
@@ -16,9 +15,10 @@ interface DesignGridProps {
   onRenameClick?: (design: DesignItem) => void;
   /** Arama yapılıyorsa boş durum mesajı buna göre gösterilir */
   searchQuery?: string;
+  /** Boş durum mesajı için gösterilen bölüm */
+  section?: 'mine' | 'automation';
   onRemoveBgClick?: (design: DesignItem) => void;
   onRecolorClick?: (design: DesignItem, mode: 'light_garment' | 'dark_garment') => void;
-  onMoveToFolder: (designId: string, folderId: string | null) => void;
   onDeleteClick: (id: string) => void;
 }
 
@@ -26,7 +26,6 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
   designs,
   selectedDesignIds,
   analyzingIds,
-  designFolders,
   onToggleCheck,
   onToggleProductionActive,
   onSetProductionActive,
@@ -34,9 +33,9 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
   onCropClick,
   onRenameClick,
   searchQuery,
+  section = 'mine',
   onRemoveBgClick,
   onRecolorClick,
-  onMoveToFolder,
   onDeleteClick,
 }) => {
   if (designs.length === 0) {
@@ -46,13 +45,15 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
         {searchQuery?.trim() ? (
           <>
             <p className="text-sm font-semibold">&quot;{searchQuery.trim()}&quot; ile eşleşen tasarım bulunamadı.</p>
-            <p className="text-xs text-slate-400 mt-1">Arama tüm klasörlerde tasarım adına, SKU&apos;lara ve etiketlere bakar.</p>
+            <p className="text-xs text-slate-400 mt-1">Arama tüm tasarımlarda (Tasarımlarım ve Otomasyon) ada, SKU&apos;lara ve etiketlere bakar.</p>
           </>
         ) : (
           <>
-            <p className="text-sm font-semibold">Bu klasörde henüz tasarım bulunmuyor.</p>
+            <p className="text-sm font-semibold">{section === 'automation' ? 'Otomasyonlar henüz tasarım üretmedi.' : 'Henüz tasarım yok.'}</p>
             <p className="text-xs text-slate-400 mt-1">
-              Yukarıdaki yükleme alanını kullanarak tasarım yükleyebilirsiniz.
+              {section === 'automation'
+                ? 'Mockup klasörlerine otomasyon kurduğunuzda ürettikleri tasarımlar burada en yeniden eskiye listelenir.'
+                : 'Yukarıdaki alandan tasarım yükleyebilir veya yapay zekâ ile üretebilirsiniz.'}
             </p>
           </>
         )}
@@ -68,7 +69,6 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
           design={design}
           isChecked={selectedDesignIds.includes(design.id)}
           isAnalyzing={analyzingIds.includes(design.id)}
-          designFolders={designFolders}
           onToggleCheck={onToggleCheck}
           onToggleProductionActive={onToggleProductionActive}
           onSetProductionActive={onSetProductionActive}
@@ -77,7 +77,6 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
           onRenameClick={onRenameClick}
           onRemoveBgClick={onRemoveBgClick}
           onRecolorClick={onRecolorClick}
-          onMoveToFolder={onMoveToFolder}
           onDeleteClick={onDeleteClick}
         />
       ))}

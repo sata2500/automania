@@ -12,7 +12,8 @@ async function designPng(size: number) {
 describe('optimizeImageForStorage', () => {
   it('stores designs as lossless PNG: smaller, alpha kept, visible pixels identical', async () => {
     const png = await designPng(800);
-    const result = await optimizeImageForStorage(png, 'image/png', 'design');
+    // Kırpma ayrı test edilir; burada piksel birebirliği tüm tuvalde karşılaştırılır.
+    const result = await optimizeImageForStorage(png, 'image/png', 'design', { trim: false });
     expect(result.mimeType).toBe('image/png');
     expect(result.buffer.byteLength).toBeLessThanOrEqual(png.byteLength);
     expect([result.width, result.height]).toEqual([800, 800]);
@@ -42,8 +43,41 @@ describe('optimizeImageForStorage', () => {
   it('keeps the original when re-encoding would not help', async () => {
     // Zaten sıkıştırılmış (kayıplı WebP) görsel PNG'ye çevrilince büyür: orijinal saklanır.
     const lossy = await sharp(await designPng(600)).webp({ quality: 50 }).toBuffer();
-    const result = await optimizeImageForStorage(lossy, 'image/webp', 'design');
+    const result = await optimizeImageForStorage(lossy, 'image/webp', 'design', { trim: false });
     expect(result.optimized).toBe(false);
     expect(result.buffer).toBe(lossy);
+  });
+});
+
+describe('transparent trim', () => {
+  async function paddedDesign() {
+    // 1000×800 tuval, ortada 400×200 opak dikdörtgen (300,300)-(699,499); geri kalanı saydam.
+    const rect = await sharp({ create: { width: 400, height: 200, channels: 4, background: { r: 200, g: 30, b: 30, alpha: 1 } } }).png().toBuffer();
+    return sharp({ create: { width: 1000, height: 800, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: rect, left: 300, top: 300 }]).png().toBuffer();
+  }
+
+  it('trims transparent margins of designs, leaving a 2% pad', async () => {
+    const result = await optimizeImageForStorage(await paddedDesign(), 'image/png', 'design');
+    expect(result.optimized).toBe(true);
+    // Pay: en uzun kenarın %2'si = 8 px.
+    expect([result.width, result.height]).toEqual([416, 216]);
+    const meta = await sharp(result.buffer).metadata();
+    expect([meta.width, meta.height]).toEqual([416, 216]);
+  });
+
+  it('does not trim when disabled (raw AI output) or when the image is opaque', async () => {
+    const raw = await optimizeImageForStorage(await paddedDesign(), 'image/png', 'design', { trim: false });
+    expect([raw.width, raw.height]).toEqual([1000, 800]);
+    const opaque = await sharp({ create: { width: 300, height: 200, channels: 3, background: { r: 255, g: 255, b: 255 } } }).png().toBuffer();
+    const kept = await optimizeImageForStorage(opaque, 'image/png', 'design');
+    expect([kept.width, kept.height]).toEqual([300, 200]);
+  });
+
+  it('is idempotent: an already trimmed design is not changed again', async () => {
+    const first = await optimizeImageForStorage(await paddedDesign(), 'image/png', 'design');
+    const second = await optimizeImageForStorage(first.buffer, 'image/png', 'design');
+    expect(second.optimized).toBe(false);
+    expect([second.width, second.height]).toEqual([416, 216]);
   });
 });

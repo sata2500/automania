@@ -22,6 +22,7 @@ import { MANUAL_TEMPLATE_ID, manualTemplateFor } from '@/lib/manual-listing';
 import { loadListingDefaults } from '@/lib/user-settings';
 import { variationRowsFromDefaults } from '@/lib/listing-defaults';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
+import { AUTOMATION_DESIGN_FOLDER_ID } from '@/lib/design-library';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
 import { loadImageForUser } from '@/lib/media-source';
@@ -93,7 +94,7 @@ export type TemplateRow = typeof podTemplates.$inferSelect;
 class StepSkipped extends Error {}
 
 /** Otomasyonun ürettiği tasarımların Tasarımlar sekmesindeki klasörü. */
-export const AUTOMATION_DESIGN_FOLDER = { id: 'design-folder-automation', name: 'Otomasyon Tasarımları', isCustom: true, type: 'design' as const };
+export const AUTOMATION_DESIGN_FOLDER = { id: AUTOMATION_DESIGN_FOLDER_ID, name: 'Otomasyon Tasarımları', isCustom: true, type: 'design' as const };
 
 async function loadWorkspaceMockups(userId: string): Promise<MockupItem[]> {
   const [workspace] = await db
@@ -143,12 +144,16 @@ async function jpegForListing(buffer: Buffer): Promise<Buffer> {
   return sharp(buffer).flatten({ background: '#ffffff' }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
-/** Tasarım görselini depoya kayıpsız, en yüksek sıkıştırmalı PNG olarak yazar (bkz. media-optimizer). */
-async function storeDesignImage(userId: string, name: string, png: Buffer) {
+/**
+ * Tasarım görselini depoya kayıpsız, en yüksek sıkıştırmalı PNG olarak yazar; saydam kenar boşlukları
+ * kırpılır (bkz. media-optimizer). Mockup'lar da bu kırpılmış görselle hazırlanır.
+ */
+async function storeDesignImage(userId: string, name: string, png: Buffer, size: { width: number; height: number }) {
   const stored = await optimizeImageForStorage(png, 'image/png', 'design').catch(() => null);
   const buffer = stored?.buffer ?? png;
   const mimeType = stored?.mimeType ?? 'image/png';
-  return uploadToR2(buffer, createOwnedUploadName(userId, name, mimeType), mimeType);
+  const { url } = await uploadToR2(buffer, createOwnedUploadName(userId, name, mimeType), mimeType);
+  return { url, buffer, width: stored?.width || size.width, height: stored?.height || size.height };
 }
 
 /** Veo çıktısını (Google Files URI veya data URL) kullanıcının depolamasına kopyalar; ilan bu dosyayı kullanır. */
@@ -254,7 +259,8 @@ type DesignStepOutput = {
  * Sıkıştırma başarısız olursa veya kazanç yoksa özgün dosya saklanır.
  */
 async function storeRawImage(userId: string, name: string, data: Buffer, mimeType: string): Promise<{ url: string; buffer: Buffer; mimeType: string }> {
-  const optimized = await optimizeImageForStorage(data, mimeType, 'design').catch(() => null);
+  // Ham görsel kırpılmaz: zemin rengi ve kompozisyon arka plan kaldırmada olduğu gibi kullanılır.
+  const optimized = await optimizeImageForStorage(data, mimeType, 'design', { trim: false }).catch(() => null);
   const buffer = optimized?.optimized ? optimized.buffer : data;
   const storedMime = optimized?.optimized ? optimized.mimeType : mimeType;
   const { url } = await uploadToR2(buffer, createOwnedUploadName(userId, name, storedMime), storedMime);
@@ -336,19 +342,20 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
   const sku = design.sku || generateListingSku(hints.productType);
   const title = hints.primaryNiche || template.name;
 
-  // Kompozisyon (kare, ortalı, kenar boşlukları) görsel üretiminde istenir; burada kırpma yapılmaz.
+  // Zemin kaldırıldıktan sonra saydam kenar boşlukları depolarken otomatik kırpılır.
   const main = await removeChromaBackground(await loadImageForUser(userId, design.rawUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES }), { keyColor });
-  const upload = await storeDesignImage(userId, `auto-design-${runId}`, main.pngBuffer);
+  const upload = await storeDesignImage(userId, `auto-design-${runId}`, main.pngBuffer, main);
   const newDesign: DesignItem = {
     id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     name: `${sku} · ${title}`,
     folderId: AUTOMATION_DESIGN_FOLDER.id,
     src: upload.url,
-    width: main.width,
-    height: main.height,
+    width: upload.width,
+    height: upload.height,
     targetApparel: 'both',
     isProductionActive: false,
     createdAt: Date.now(),
+    optimizedAt: Date.now(),
     tags: [],
     skus: [sku],
     generatedByAI: true,
@@ -357,7 +364,7 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
   // Atomik ekleme: eşzamanlı çalıştırmalar birbirinin tasarımını silmez; updated_at değiştiği için
   // açık istemciler yeni tasarımı senkronla görür.
   await addAutomationDesign(userId, newDesign);
-  ctx.designPng = main.pngBuffer;
+  ctx.designPng = upload.buffer;
 
   let variantUrl: string | null = null;
   let warning: string | undefined;
@@ -368,22 +375,23 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
       // Desenli zeminde hata fırlar ve o mockup'larda otomatik renk dönüşümü kullanılır.
       const { removeVariantBackground } = await import('@/lib/background-removal');
       const cleaned = await removeVariantBackground(await loadImageForUser(userId, variant.rawUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES }), keyColor);
-      const variantUpload = await storeDesignImage(userId, `auto-design-${runId}-${variant.fabric}`, cleaned.pngBuffer);
+      const variantUpload = await storeDesignImage(userId, `auto-design-${runId}-${variant.fabric}`, cleaned.pngBuffer, cleaned);
       await addAutomationDesign(userId, {
         id: `design-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         name: `${sku} · ${title} · ${variant.fabric === 'dark' ? 'koyu kumaş' : 'açık kumaş'}`,
         folderId: AUTOMATION_DESIGN_FOLDER.id,
         src: variantUpload.url,
-        width: cleaned.width,
-        height: cleaned.height,
+        width: variantUpload.width,
+        height: variantUpload.height,
         targetApparel: variant.fabric,
         isProductionActive: false,
         createdAt: Date.now(),
+        optimizedAt: Date.now(),
         tags: [],
         skus: [sku],
         generatedByAI: true,
       });
-      ctx.variantPng = cleaned.pngBuffer;
+      ctx.variantPng = variantUpload.buffer;
       variantUrl = variantUpload.url;
     } catch (error) {
       const message = describeAiError(error);
@@ -404,16 +412,20 @@ async function runBackgroundRemoval(ctx: StepContext): Promise<StepResult> {
   };
 }
 
-/** Tasarımı Tasarımlar sekmesindeki "Otomasyon Tasarımları" klasörüne atomik olarak ekler. */
 /**
  * Otomasyon tasarımının çalışma alanındaki kaydına analiz ve ilan metnini ekler: Tasarımlar sekmesinde
  * "Analiz Sonucunu Gör" yeniden yapay zekâ çağrısı gerekmeden açılır. Atomik güncelleme (yalnızca o tasarım).
+ * Tasarım bu arada görsel yapay zekâ ile analiz edildiyse (Tasarımlar sekmesi) o analiz korunur.
  */
 async function attachDesignInsights(userId: string, designId: string, patch: Pick<DesignItem, 'analysis' | 'seo'>) {
+  const seoOnly = { seo: patch.seo };
   await sql`
     UPDATE user_workspaces
     SET designs = (
-      SELECT jsonb_agg(CASE WHEN elem ->> 'id' = ${designId} THEN elem || ${JSON.stringify(patch)}::jsonb ELSE elem END ORDER BY ord)
+      SELECT jsonb_agg(CASE
+        WHEN elem ->> 'id' <> ${designId} THEN elem
+        WHEN elem -> 'analysis' ->> 'source' = 'vision' THEN elem || ${JSON.stringify(seoOnly)}::jsonb
+        ELSE elem || ${JSON.stringify(patch)}::jsonb END ORDER BY ord)
       FROM jsonb_array_elements(designs) WITH ORDINALITY AS t(elem, ord)
     ),
     updated_at = CURRENT_TIMESTAMP
@@ -421,6 +433,7 @@ async function attachDesignInsights(userId: string, designId: string, patch: Pic
   `;
 }
 
+/** Tasarımı Tasarımlar sekmesinin "Otomasyon" bölümüne atomik olarak ekler. */
 async function addAutomationDesign(userId: string, design: DesignItem) {
   const folderJson = JSON.stringify([AUTOMATION_DESIGN_FOLDER]);
   await db.insert(userWorkspaces)
@@ -701,6 +714,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
         productType: hints?.productType || undefined,
         userNotes: hints?.customNotes || research?.designBrief || undefined,
         taxonomyId: taxonomyId ?? null,
+        source: 'automation',
       },
       seo: { title: seo.title, description: seo.description, tags: seo.tags, generatedAt: Date.now() },
     }).catch((error: unknown) => console.warn('[Automation] Design insights could not be saved', error instanceof Error ? error.message : error));

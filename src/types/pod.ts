@@ -86,7 +86,14 @@ export interface DesignItem {
   isSelected?: boolean;
   width: number;
   height: number;
-  folderId?: string; // Optional for backward compatibility and "Tüm Tasarımlar"
+  /**
+   * Yalnızca otomasyon tasarımlarını ayırt etmek için kullanılır (AUTOMATION_DESIGN_FOLDER_ID); eski
+   * tasarım klasörü kimlikleri yok sayılır.
+   */
+  folderId?: string;
+
+  /** Saydam boşlukları kırpılıp kayıpsız PNG olarak yeniden işlendiği zaman (eski tasarımlar bir kez işlenir). */
+  optimizedAt?: number;
 
   /** Üretimde aktif mi? (slot sistemi) */
   isProductionActive?: boolean;
@@ -119,6 +126,8 @@ export interface DesignItem {
     userNotes?: string;
     productType?: string;
     taxonomyId?: number | null;
+    /** 'vision': görsel yapay zekâ ile analiz edildi; 'automation': otomasyonun konu ve kelimelerinden derlendi. */
+    source?: 'vision' | 'automation';
   };
 
   /** Generated SEO Listing for the design */

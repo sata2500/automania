@@ -152,7 +152,6 @@ function MainContent() {
     mockups, setMockups,
     designs, setDesigns,
     selectedMockupId, setSelectedMockupId,
-    activeDesignFolderId, setActiveDesignFolderId,
     renderedMatches, setRenderedMatches,
     hasGenerated, setHasGenerated,
     isInitialized,
@@ -498,10 +497,6 @@ function MainContent() {
             <DesignUploader 
               designs={designs} 
               setDesigns={setDesigns}
-              folders={folders}
-              setFolders={setFolders}
-              activeDesignFolderId={activeDesignFolderId}
-              setActiveDesignFolderId={setActiveDesignFolderId}
             />
           )}
 
@@ -540,7 +535,6 @@ function MainContent() {
               folders={folders}
               activeFolderId={activeFolderId}
               setActiveFolderId={setActiveFolderId}
-              activeDesignFolderId={activeDesignFolderId}
               renderedMatches={renderedMatches}
               setRenderedMatches={setRenderedMatches}
               hasGenerated={hasGenerated}
