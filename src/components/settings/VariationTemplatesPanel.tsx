@@ -458,10 +458,10 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
         <table ref={tableRef} className="w-full table-fixed text-xs border-collapse">
           <colgroup>
             {/* Telefonda beden (ürün + beden adı) geniş, renk dar; masaüstünde dengeli */}
-            <col className="w-[3.75rem] sm:w-20" />
+            <col className="w-[3.25rem] sm:w-20" />
             <col />
-            <col className="w-[24%] sm:w-[34%]" />
-            <col className="w-[4.5rem] sm:w-28" />
+            <col className="w-[23%] sm:w-[34%]" />
+            <col className="w-[4rem] sm:w-28" />
           </colgroup>
           <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-800">
             <tr className="text-[10px] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
@@ -471,7 +471,7 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
               <th className="px-1.5 sm:px-2 py-2 text-left">
                 <HeaderFilter label="Beden" options={sizes.map((v) => ({ value: v, label: v }))} selected={sizeFilter} onChange={setSizeFilter} />
               </th>
-              <th className="px-1.5 py-2 text-left">
+              <th className="px-1 sm:px-1.5 py-2 text-left">
                 <HeaderFilter label="Renk" options={colors.map((v) => ({ value: v, label: v }))} selected={colorFilter} onChange={setColorFilter} />
               </th>
               <th className="px-2 py-2 text-right font-bold uppercase tracking-wide">Fiyat</th>
@@ -480,7 +480,7 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
           <tbody>
             {visible.map((row, index) => (
               <tr key={row.id} className={`border-b border-slate-100 dark:border-slate-800 odd:bg-white even:bg-slate-50/60 dark:odd:bg-slate-900 dark:even:bg-slate-900/60 ${row.enabled ? '' : 'text-slate-400'}`}>
-                <td className="px-1.5 sm:px-2 py-1">
+                <td className="px-1 sm:px-2 py-1">
                   <button
                     type="button"
                     role="switch"
@@ -492,8 +492,8 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
                     <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${row.enabled ? 'translate-x-3.5 sm:translate-x-4' : 'translate-x-0.5'}`} />
                   </button>
                 </td>
-                <td className="px-1.5 sm:px-2 py-1 font-bold text-indigo-700 dark:text-indigo-300 leading-tight" title={row.size}><span className="line-clamp-2 break-words">{row.size || '—'}</span></td>
-                <td className="px-1.5 py-1 font-semibold leading-tight" title={row.color}><span className="line-clamp-2 break-words">{row.color || '—'}</span></td>
+                <td className="px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-bold text-indigo-700 dark:text-indigo-300 truncate" title={row.size}>{row.size || '—'}</td>
+                <td className="px-1 sm:px-1.5 py-1 text-[11px] sm:text-xs font-semibold truncate" title={row.color}>{row.color || '—'}</td>
                 <td className="p-0.5">
                   <input
                     type="number"
