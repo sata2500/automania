@@ -33,6 +33,11 @@ export function sortNewestFirst<T extends Pick<DesignItem, 'id' | 'createdAt'>>(
     .map(({ design }) => design);
 }
 
+/** Misafirin bu cihazda (data: URL) duran ve henüz kırpma + kayıpsız sıkıştırmadan geçmemiş tasarımı. */
+export function needsLocalOptimization(design: Pick<DesignItem, 'src' | 'optimizedAt'>): boolean {
+  return !design.optimizedAt && Boolean(design.src?.startsWith('data:image/'));
+}
+
 /** Sunucuda kalıcı adresi olan ve henüz kırpma + kayıpsız sıkıştırmadan geçmemiş tasarım. */
 export function needsOptimization(design: Pick<DesignItem, 'src' | 'optimizedAt'>): boolean {
   return !design.optimizedAt && Boolean(design.src) && !design.src.startsWith('data:') && !design.src.startsWith('blob:');

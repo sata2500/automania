@@ -34,8 +34,7 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
         try {
           // Sunucuda saydam boşlukları kırpılıp kayıpsız sıkıştırılmış PNG (çözünürlük ve saydamlık korunur)
           const optimized = await optimizeDesignImage(file);
-          // Dosya doğrudan sunucuda işlendiyse ölçüler kırpılmış hâlindir; tarayıcı yedeğinden geçenler
-          // Tasarımlar sekmesindeki arka plan bakımıyla bir kez daha işlenir (ölçüler de düzelir).
+          // Sunucuda veya (misafirde) tarayıcıda kırpılıp sıkıştırıldı; ölçüler kırpılmış hâlindir.
           const serverProcessed = !optimized.dataUrl && Boolean(optimized.url);
           if (serverProcessed) serverCount++;
           savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
@@ -49,7 +48,7 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
             width: optimized.width,
             height: optimized.height,
             createdAt: Date.now(),
-            ...(serverProcessed ? { optimizedAt: Date.now() } : {}),
+            optimizedAt: Date.now(),
           });
           uploadedCount++;
 

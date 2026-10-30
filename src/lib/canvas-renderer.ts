@@ -115,11 +115,17 @@ export async function renderMockupWithDesign(
     canvas.height = targetH;
   }
 
+  const format = options.outputFormat || 'image/jpeg';
+  const quality = options.quality ?? 0.95;
+
+  // JPEG saydamlık taşımaz: saydam alanlar (ör. PNG tablo görseli) siyah değil beyaz görünsün.
+  if (format === 'image/jpeg') {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   // 1. Draw base mockup / chart image
   ctx.drawImage(mockupImg, 0, 0, canvas.width, canvas.height);
-
-  const format = options.outputFormat || 'image/webp';
-  const quality = options.quality ?? 0.95;
 
   // If this item is a static visual (size chart, color chart) or has no print area, return base image directly
   const isStaticAsset = mockup.hasPrintArea === false || !mockup.printAreas || mockup.printAreas.length === 0;

@@ -1,6 +1,12 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { MockupItem, ApparelType, PrintArea } from '@/types/pod';
 import { useToast } from '@/components/common/ToastContext';
+
+type DraftSnapshot = { areas: PrintArea[]; apparelType: ApparelType; hasPrintArea: boolean };
+
+/** Bu süre içindeki ardışık küçük değişiklikler (ör. sayı alanına yazmak) tek geri alma adımı sayılır. */
+const UNDO_COALESCE_MS = 700;
+const MAX_UNDO_STEPS = 50;
 
 interface UseMockupDraftProps {
   selectedMockup: MockupItem | null;
@@ -15,6 +21,10 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
   const [draftHasPrintArea, setDraftHasPrintArea] = useState<boolean>(true);
   const [activeAreaIndex, setActiveAreaIndex] = useState<number>(0);
 
+  // Adım adım geri alma: her değişiklikten önceki taslak (kaydet / tümünü geri al / mockup değişimi temizler)
+  const [undoStack, setUndoStack] = useState<DraftSnapshot[]>([]);
+  const lastRememberAtRef = useRef(0);
+
   const [copiedConfig, setCopiedConfig] = useState<{
     printAreas: PrintArea[];
     apparelType: ApparelType;
@@ -25,6 +35,7 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
   const selectedMockupId = selectedMockup?.id ?? null;
   if (selectedMockupId !== draftMockupId) {
     setDraftMockupId(selectedMockupId);
+    setUndoStack([]);
     if (selectedMockup) {
       setDraftAreas(structuredClone(selectedMockup.printAreas || []));
       setDraftApparelType(selectedMockup.apparelType);
@@ -45,6 +56,41 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
     );
   }, [selectedMockup, draftAreas, draftApparelType, draftHasPrintArea]);
 
+  /** Değişiklikten önce çağrılır: mevcut taslağı geri alma yığınına ekler. */
+  const remember = useCallback((coalesce = false) => {
+    const now = Date.now();
+    const recent = now - lastRememberAtRef.current < UNDO_COALESCE_MS;
+    lastRememberAtRef.current = now;
+    if (coalesce && recent) return;
+    const snapshot: DraftSnapshot = { areas: structuredClone(draftAreas), apparelType: draftApparelType, hasPrintArea: draftHasPrintArea };
+    setUndoStack((prev) => [...prev.slice(-(MAX_UNDO_STEPS - 1)), snapshot]);
+  }, [draftAreas, draftApparelType, draftHasPrintArea]);
+
+  const handleUndo = useCallback(() => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last) return;
+    setUndoStack((prev) => prev.slice(0, -1));
+    setDraftAreas(last.areas);
+    setDraftApparelType(last.apparelType);
+    setDraftHasPrintArea(last.hasPrintArea);
+    setActiveAreaIndex((idx) => (idx < last.areas.length ? idx : 0));
+    lastRememberAtRef.current = 0;
+  }, [undoStack]);
+
+  const changeApparelType = useCallback((type: ApparelType) => {
+    if (type === draftApparelType) return;
+    remember();
+    setDraftApparelType(type);
+  }, [draftApparelType, remember]);
+
+  // Kaydedilmemiş değişiklik varken sayfa kapatılır/yenilenirse tarayıcı uyarır.
+  useEffect(() => {
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
   // Save draft changes to main state
   const handleSaveChanges = useCallback(() => {
     if (!selectedMockup) return;
@@ -60,7 +106,8 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
           : m
       )
     );
-    toast.success('Baskı ayarları başarıyla kaydedildi!');
+    setUndoStack([]);
+    toast.success('Baskı ayarları kaydedildi.');
   }, [selectedMockup, draftAreas, draftApparelType, draftHasPrintArea, setMockups, toast]);
 
   // Revert draft changes back to saved mockup state
@@ -69,14 +116,16 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
     setDraftAreas(structuredClone(selectedMockup.printAreas || []));
     setDraftApparelType(selectedMockup.apparelType);
     setDraftHasPrintArea(selectedMockup.hasPrintArea !== false);
-    toast.info('Değişiklikler geri alındı.');
+    setUndoStack([]);
+    toast.info('Kaydedilmemiş değişiklikler geri alındı.');
   }, [selectedMockup, toast]);
 
   const updateActivePrintAreaDraft = useCallback((areaUpdates: Partial<PrintArea>) => {
+    remember(true);
     setDraftAreas((prev) =>
       prev.map((area, idx) => (idx === activeAreaIndex ? { ...area, ...areaUpdates } : area))
     );
-  }, [activeAreaIndex]);
+  }, [activeAreaIndex, remember]);
 
   const handleAddPrintArea = useCallback(() => {
     if (!selectedMockup) return;
@@ -90,11 +139,12 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
       rotation: 0,
     };
     const updated = [...draftAreas, newArea];
+    remember();
     setDraftAreas(updated);
     setDraftHasPrintArea(true);
     setActiveAreaIndex(updated.length - 1);
-    toast.success(`'${newArea.name}' eklendi (Kaydetmek için butona tıklayın).`);
-  }, [selectedMockup, draftAreas, toast]);
+    toast.success(`'${newArea.name}' eklendi.`);
+  }, [selectedMockup, draftAreas, remember, toast]);
 
   const handleRemovePrintArea = useCallback((idx: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -104,13 +154,15 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
     }
     const removedName = draftAreas[idx]?.name || 'Baskı alanı';
     const updated = draftAreas.filter((_, i) => i !== idx);
+    remember();
     setDraftAreas(updated);
     setActiveAreaIndex(0);
-    toast.info(`'${removedName}' kaldırıldı (Kaydetmek için butona tıklayın).`);
-  }, [selectedMockup, draftAreas, toast]);
+    toast.info(`'${removedName}' kaldırıldı.`);
+  }, [selectedMockup, draftAreas, remember, toast]);
 
   const handleTogglePrintAreaMode = useCallback(() => {
     if (!selectedMockup) return;
+    remember();
     if (!draftHasPrintArea) {
       const defaultArea: PrintArea = {
         id: 'area-' + Date.now(),
@@ -129,7 +181,7 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
       setDraftHasPrintArea(false);
       toast.info('Statik Görsel / Chart moduna geçildi.');
     }
-  }, [selectedMockup, draftHasPrintArea, draftAreas, toast]);
+  }, [selectedMockup, draftHasPrintArea, draftAreas, remember, toast]);
 
   const handleCopyConfig = useCallback(() => {
     if (!selectedMockup) return;
@@ -142,24 +194,25 @@ export function useMockupDraft({ selectedMockup, setMockups }: UseMockupDraftPro
 
   const handlePasteConfig = useCallback(() => {
     if (!copiedConfig || !selectedMockup) return;
+    remember();
     setDraftApparelType(copiedConfig.apparelType);
     setDraftAreas(structuredClone(copiedConfig.printAreas));
-    toast.success("Baskı alanları bu mockup'a yapıştırıldı (Kaydetmek için tıklayın)!");
-  }, [copiedConfig, selectedMockup, toast]);
+    toast.success("Baskı alanları bu mockup'a yapıştırıldı.");
+  }, [copiedConfig, selectedMockup, remember, toast]);
 
   const activePrintArea = draftAreas[activeAreaIndex] || draftAreas[0];
 
   return {
     draftAreas,
-    setDraftAreas,
     draftApparelType,
-    setDraftApparelType,
+    setDraftApparelType: changeApparelType,
     draftHasPrintArea,
-    setDraftHasPrintArea,
     activeAreaIndex,
     setActiveAreaIndex,
     activePrintArea,
     isDirty,
+    canUndo: undoStack.length > 0,
+    handleUndo,
     copiedConfig,
     handleSaveChanges,
     handleRevertChanges,

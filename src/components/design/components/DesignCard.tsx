@@ -13,6 +13,7 @@ interface DesignCardProps {
   design: DesignItem;
   isChecked: boolean;
   isAnalyzing: boolean;
+  isHighlighted?: boolean;
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
@@ -29,6 +30,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
   design,
   isChecked,
   isAnalyzing,
+  isHighlighted = false,
   onToggleCheck,
   onToggleProductionActive,
   onSetProductionActive,
@@ -53,12 +55,13 @@ export const DesignCard: React.FC<DesignCardProps> = ({
 
   return (
     <div
+      id={`design-card-${design.id}`}
       role="button" tabIndex={0} onKeyDown={activateOnKey(() => onToggleCheck(design.id))} onClick={() => onToggleCheck(design.id)}
       className={`relative p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group ${
         isChecked
           ? 'bg-gradient-to-b from-indigo-50 dark:from-indigo-950/80 to-white dark:to-slate-900 border-indigo-400 dark:border-indigo-500 shadow-lg ring-1 ring-indigo-400/50 dark:ring-indigo-500/50'
           : 'bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 shadow-xs'
-      }`}
+      } ${isHighlighted ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 scroll-mt-24' : ''}`}
     >
       {/* Top Header Row */}
       <div className="flex items-center justify-between mb-1.5 sm:mb-2">

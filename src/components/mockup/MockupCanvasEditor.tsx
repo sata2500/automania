@@ -134,6 +134,8 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     setActiveAreaIndex,
     activePrintArea,
     isDirty,
+    canUndo,
+    handleUndo,
     copiedConfig,
     handleSaveChanges,
     handleRevertChanges,
@@ -147,6 +149,20 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     selectedMockup,
     setMockups,
   });
+
+  // Tuval kilidi: baskı alanları yalnızca "Düzenle" ile açılınca taşınır (mobilde sekmeler arası kaydırırken
+  // parmak alana değip onu kaydırmasın). Kaydedilmemiş değişiklik varken düzenleme açık kalır.
+  const [editingMockupId, setEditingMockupId] = useState<string | null>(null);
+  const editing = (editingMockupId !== null && editingMockupId === selectedMockup?.id) || isDirty;
+  const startEditing = () => setEditingMockupId(selectedMockup?.id ?? null);
+  const saveAndClose = () => {
+    if (isDirty) handleSaveChanges();
+    setEditingMockupId(null);
+  };
+  const cancelEditing = () => {
+    if (isDirty) handleRevertChanges();
+    setEditingMockupId(null);
+  };
 
   // 2. Transform Math & Drag Handler Hook
   const { containerRef, activeAreaRef, handlePointerDown } = useMockupTransform({
@@ -433,6 +449,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   const handleSelectMockup = (id: string | null) => {
     const select = () => {
       setSelectedMockupId(id);
+      setEditingMockupId(null);
       // On mobile, auto switch to canvas upon picking a mockup
       if (window.innerWidth < 1024) setMobileView('canvas');
     };
@@ -573,12 +590,19 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
             onPointerDown={handlePointerDown}
             onTogglePrintAreaMode={handleTogglePrintAreaMode}
             onOpenMobileSettings={() => setMobileSettingsOpen(true)}
+            editing={editing}
+            onStartEditing={startEditing}
+            isDirty={isDirty}
+            canUndo={canUndo}
+            onUndo={handleUndo}
+            onSave={saveAndClose}
+            onCancel={cancelEditing}
           />
         </div>
 
         {/* Right Column: Desktop Settings Panel */}
         <div className="hidden lg:block lg:col-span-3 xl:col-span-3">
-          <MockupSettingsPanel {...settingsPanelProps} />
+          <MockupSettingsPanel {...settingsPanelProps} showSaveBanner={false} />
         </div>
       </div>
       </>)}

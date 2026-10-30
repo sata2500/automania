@@ -1,5 +1,5 @@
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DesignItem } from '@/types/pod';
 import { InteractiveCropModal } from '@/components/common/InteractiveCropModal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -7,6 +7,7 @@ import { useToast } from '@/components/common/ToastContext';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
+import { processImageInBrowser } from '@/lib/browser-image';
 
 // Modular Hooks
 import { useDesignUpload } from './hooks/useDesignUpload';
@@ -19,6 +20,7 @@ import { Spinner } from '@/components/common/Spinner';
 // Modular Subcomponents
 import { DesignUploadZone } from './components/DesignUploadZone';
 import { DesignToolbar } from './components/DesignToolbar';
+import { ActiveDesignSlots } from './components/ActiveDesignSlots';
 import { DesignGrid } from './components/DesignGrid';
 import { DesignAnalysisModal } from './components/DesignAnalysisModal';
 import { AIDesignGeneratorModal } from './components/AIDesignGeneratorModal';
@@ -92,8 +94,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     handleToggleSelectAll,
     handleToggleProductionActive,
     handleSetProductionActive,
+    deactivate,
     takenSlots,
-    activeSlotsCount,
   } = useDesignSelection({
     designs,
     setDesigns,
@@ -113,7 +115,23 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     selectedDesignIds,
   });
 
-  const { activeTask } = useDesignMaintenance({ designs, setDesigns, enabled: Boolean(user) });
+  const { activeTask } = useDesignMaintenance({ designs, setDesigns, mode: user ? 'server' : 'local' });
+
+  // Üretimdeki tasarım slotuna dokununca: tasarımın bölümü açılır, kartına kaydırılıp kısa süre vurgulanır.
+  const [focusRequest, setFocusRequest] = useState<{ id: string; at: number } | null>(null);
+  const focusDesign = (id: string) => {
+    const design = designs.find((d) => d.id === id);
+    if (!design) return;
+    setSearchQuery('');
+    setSection(designSection(design));
+    setFocusRequest({ id, at: Date.now() });
+  };
+  useEffect(() => {
+    if (!focusRequest) return;
+    document.getElementById(`design-card-${focusRequest.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const timer = setTimeout(() => setFocusRequest(null), 2200);
+    return () => clearTimeout(timer);
+  }, [focusRequest]);
 
   const counts = {
     mine: designs.filter((d) => designSection(d) === 'mine').length,
@@ -198,28 +216,33 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
     const toastId = toast.progress('Arka plan kaldırılıyor...');
     try {
-      const response = await fetch('/api/designs/remove-bg', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: design.src }),
-      });
+      let patch: Partial<DesignItem>;
+      let message: string;
+      if (user) {
+        const response = await fetch('/api/designs/remove-bg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: design.src }),
+        });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Arka plan kaldırılamadı');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Arka plan kaldırılamadı');
 
-      // Sunucu depoya yükleyemediyse (R2 yok) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
-      const bgSrc: string = data.bgRemovedUrl || await uploadMediaToServer(`data:image/png;base64,${data.pngBase64}`, 'image/png', { optimize: 'design' });
+        // Sunucu depoya yükleyemediyse (R2 yok) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
+        const bgSrc: string = data.bgRemovedUrl || await uploadMediaToServer(`data:image/png;base64,${data.pngBase64}`, 'image/png', { optimize: 'design' });
+        patch = { src: bgSrc, optimizedAt: undefined };
+        message = data.qualityMessage || 'Arka plan başarıyla kaldırıldı!';
+      } else {
+        // Misafir: aynı algoritma tarayıcıda çalışır; görsel sunucuya gönderilmez (sonuç kırpılmış, sıkıştırılmış PNG).
+        const result = await processImageInBrowser(design.src, { type: 'remove-bg' });
+        patch = { src: result.dataUrl!, width: result.width, height: result.height, optimizedAt: Date.now() };
+        message = 'Arka plan bu cihazda kaldırıldı.';
+      }
 
-      setDesigns((prev) =>
-        prev.map((d) =>
-          d.id === design.id
-            ? { ...d, src: bgSrc, optimizedAt: undefined }
-            : d
-        )
-      );
+      setDesigns((prev) => prev.map((d) => (d.id === design.id ? { ...d, ...patch } : d)));
 
       toast.removeToast(toastId);
-      toast.success(data.qualityMessage || 'Arka plan başarıyla kaldırıldı!');
+      toast.success(message);
     } catch (err) {
       toast.removeToast(toastId);
       toast.error(getErrorMessage(err) || 'Arka plan kaldırılırken hata oluştu.');
@@ -234,24 +257,41 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     const toastId = toast.progress(actionText);
 
     try {
-      const response = await fetch('/api/designs/recolor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: design.src, mode }),
-      });
+      let recoloredUrl: string;
+      let changedRatio: number;
+      let size: Partial<DesignItem> = {};
+      if (user) {
+        const response = await fetch('/api/designs/recolor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: design.src, mode }),
+        });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Renk dönüşümü yapılamadı');
-      if (data.unchanged) {
-        toast.removeToast(toastId);
-        toast.info(data.message);
-        return;
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Renk dönüşümü yapılamadı');
+        if (data.unchanged) {
+          toast.removeToast(toastId);
+          toast.info(data.message);
+          return;
+        }
+
+        // Sunucu depoya yükleyemediyse (yerel geliştirme) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
+        recoloredUrl = data.recoloredUrl.startsWith('data:')
+          ? await uploadMediaToServer(data.recoloredUrl, 'image/png', { optimize: 'design' })
+          : data.recoloredUrl;
+        changedRatio = data.changedRatio ?? 0;
+      } else {
+        // Misafir: aynı algoritma tarayıcıda çalışır; görsel sunucuya gönderilmez.
+        const result = await processImageInBrowser(design.src, { type: 'recolor', mode });
+        if (!result.dataUrl) {
+          toast.removeToast(toastId);
+          toast.info(`Bu tasarım zaten ${mode === 'dark_garment' ? 'koyu' : 'açık'} kumaşta iyi görünüyor; değiştirilecek renk bulunamadı.`);
+          return;
+        }
+        recoloredUrl = result.dataUrl;
+        changedRatio = result.changedRatio ?? 0;
+        size = { width: result.width, height: result.height, optimizedAt: Date.now() };
       }
-
-      // Sunucu depoya yükleyemediyse (yerel geliştirme) sonuç ayrıca yüklenir; base64 çalışma alanına yazılmaz.
-      const recoloredUrl: string = data.recoloredUrl.startsWith('data:')
-        ? await uploadMediaToServer(data.recoloredUrl, 'image/png', { optimize: 'design' })
-        : data.recoloredUrl;
 
       // Yeni bir tasarım objesi oluştur
       // Yeni kopya hedef kumaşa göre eşleşir ve üretime pasif olarak eklenir (aynı slotta iki aktif
@@ -265,12 +305,13 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         isSelected: false,
         createdAt: Date.now(),
         optimizedAt: undefined,
+        ...size,
       };
 
       setDesigns((prev) => [...prev, newDesign]);
 
       toast.removeToast(toastId);
-      toast.success(`${mode === 'dark_garment' ? 'Koyu' : 'Açık'} kumaş versiyonu kütüphaneye eklendi (renklerin %${Math.max(1, Math.round((data.changedRatio ?? 0) * 100))}'i uyarlandı).`);
+      toast.success(`${mode === 'dark_garment' ? 'Koyu' : 'Açık'} kumaş versiyonu kütüphaneye eklendi (renklerin %${Math.max(1, Math.round(changedRatio * 100))}'i uyarlandı).`);
     } catch (err) {
       toast.removeToast(toastId);
       toast.error(getErrorMessage(err) || 'Renk dönüşümü sırasında hata oluştu.');
@@ -292,6 +333,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       {/* Main Studio Design Cards Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+        <ActiveDesignSlots designs={designs} takenSlots={takenSlots} onFocusDesign={focusDesign} onDeactivate={deactivate} />
+
         {/* Bölümler: kullanıcının tasarımları ve otomasyonların ürettikleri (en yeniden eskiye); misafirde otomasyon yok */}
         {user && <div role="tablist" aria-label="Tasarım bölümleri" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80">
           {([
@@ -345,11 +388,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
         {/* Action Toolbar */}
         <DesignToolbar
-          designs={designs}
           filteredDesigns={filteredDesigns}
           selectedDesignIds={selectedDesignIds}
-          takenSlots={takenSlots}
-          activeSlotsCount={activeSlotsCount}
           analyzingIds={analyzingIds}
           onToggleSelectAll={handleToggleSelectAll}
           onBulkDelete={handleBulkDelete}
@@ -361,6 +401,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           designs={filteredDesigns}
           selectedDesignIds={selectedDesignIds}
           analyzingIds={analyzingIds}
+          highlightedId={focusRequest?.id ?? null}
           onToggleCheck={toggleManagementSelection}
           onToggleProductionActive={handleToggleProductionActive}
           onSetProductionActive={handleSetProductionActive}

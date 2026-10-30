@@ -1,10 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  SlidersHorizontal,
-  RotateCw,
+  Check,
   Layers,
+  Pencil,
+  RotateCw,
+  SlidersHorizontal,
   Sparkles,
+  Undo2,
   Video,
+  X,
 } from 'lucide-react';
 import { MockupItem, PrintArea } from '@/types/pod';
 import { DragMode } from '../hooks/useMockupTransform';
@@ -20,6 +24,16 @@ interface MockupCanvasWorkspaceProps {
   onPointerDown: (e: React.PointerEvent, mode: DragMode) => void;
   onTogglePrintAreaMode: () => void;
   onOpenMobileSettings: () => void;
+  /** Düzenleme açık mı? Kapalıyken baskı alanları kilitlidir (sekmeler arası kaydırırken yanlışlıkla kaymaz). */
+  editing: boolean;
+  onStartEditing: () => void;
+  isDirty: boolean;
+  canUndo: boolean;
+  onUndo: () => void;
+  /** Kaydedip düzenlemeyi kapatır. */
+  onSave: () => void;
+  /** Kaydedilmemiş değişiklikleri atıp düzenlemeyi kapatır. */
+  onCancel: () => void;
 }
 
 /**
@@ -59,6 +73,13 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
   onPointerDown,
   onTogglePrintAreaMode,
   onOpenMobileSettings,
+  editing,
+  onStartEditing,
+  isDirty,
+  canUndo,
+  onUndo,
+  onSave,
+  onCancel,
 }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
   // Görselin gerçek boyutu (kayıtlı width/height kırpma vb. sonrası eski kalabilir).
@@ -115,8 +136,8 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Print Area Mode Toggle */}
-          {!isVideo && (
+          {/* Baskı alanı / tablo modu yalnızca düzenlemede değiştirilir */}
+          {!isVideo && editing && (
             <button
               onClick={onTogglePrintAreaMode}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
@@ -132,6 +153,16 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
               <span className="sm:hidden">
                 {draftHasPrintArea ? 'Chart' : 'Baskı Ekle'}
               </span>
+            </button>
+          )}
+
+          {!isVideo && !editing && (
+            <button
+              onClick={onStartEditing}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white shadow active:scale-95"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Düzenle</span>
             </button>
           )}
 
@@ -151,7 +182,7 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
       <div ref={viewportRef} className="flex-1 min-h-0 relative w-full flex items-center justify-center bg-slate-950/5 dark:bg-slate-950/40 rounded-2xl p-2 sm:p-3 overflow-hidden">
         <div
           ref={containerRef}
-          className="relative select-none rounded-xl overflow-hidden shadow-md bg-slate-900 touch-none shrink-0"
+          className={`relative select-none rounded-xl overflow-hidden shadow-md bg-slate-900 shrink-0 ${editing ? 'touch-none' : 'touch-pan-y'}`}
           style={fitted ? { width: fitted.width, height: fitted.height } : { aspectRatio: String(aspect), maxWidth: '100%', maxHeight: '100%' }}
         >
           {/* Media Player / Image */}
@@ -180,17 +211,18 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
           {!isVideo &&
             draftHasPrintArea &&
             draftAreas.map((area, idx) => {
-              const isActive = idx === activeAreaIndex;
+              // Kilitliyken alanlar yalnızca gösterilir: dokunuş alanı seçmez, taşımaz (sayfa kaydırması çalışır).
+              const isActive = editing && idx === activeAreaIndex;
               const rotation = area.rotation || 0;
 
               return (
                 <div
                   key={area.id || idx}
                   ref={isActive ? activeAreaRef : undefined}
-                  onClick={(e) => {
+                  onClick={editing ? (e) => {
                     e.stopPropagation();
                     setActiveAreaIndex(idx);
-                  }}
+                  } : undefined}
                   onPointerDown={
                     isActive ? (e) => onPointerDown(e, 'move') : undefined
                   }
@@ -202,10 +234,12 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
                     transform: `rotate(${rotation}deg)`,
                     transformOrigin: 'center center',
                   }}
-                  className={`absolute transition-[border-color,background-color,box-shadow] cursor-move select-none touch-none ${
-                    isActive
-                      ? 'border-2 border-amber-400 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.3)] z-30'
-                      : 'border border-dashed border-indigo-400/80 bg-indigo-500/5 hover:border-indigo-400 z-20 cursor-pointer'
+                  className={`absolute transition-[border-color,background-color,box-shadow] select-none ${
+                    !editing
+                      ? 'pointer-events-none border border-dashed border-white/70 bg-white/5 z-20'
+                      : isActive
+                      ? 'cursor-move touch-none border-2 border-amber-400 bg-amber-500/10 shadow-[0_0_15px_rgba(245,158,11,0.3)] z-30'
+                      : 'touch-none border border-dashed border-indigo-400/80 bg-indigo-500/5 hover:border-indigo-400 z-20 cursor-pointer'
                   }`}
                 >
                   {/* Area Label Tag */}
@@ -213,7 +247,9 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
                     className={`absolute -top-6 left-0 px-2 py-0.5 rounded text-[10px] font-bold tracking-wide flex items-center gap-1 shadow-sm whitespace-nowrap overflow-hidden pointer-events-none ${
                       isActive
                         ? 'bg-amber-500 text-white'
-                        : 'bg-indigo-600/90 text-white'
+                        : editing
+                        ? 'bg-indigo-600/90 text-white'
+                        : 'bg-slate-900/70 text-white'
                     }`}
                   >
                     <span className="truncate">{area.name || `Alan ${idx + 1}`}</span>
@@ -251,6 +287,44 @@ export const MockupCanvasWorkspace: React.FC<MockupCanvasWorkspaceProps> = ({
             })}
         </div>
       </div>
+
+      {/* Düzenleme çubuğu: adım adım geri alma, vazgeç, kaydet */}
+      {(editing || isDirty) && (
+        <div className="shrink-0 flex items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+          <span className="flex items-center gap-1.5 min-w-0 flex-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${isDirty ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <span className="truncate">{isDirty ? 'Kaydedilmedi' : 'Düzenleniyor'}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Son değişikliği geri al"
+            aria-label="Son değişikliği geri al"
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>{isDirty ? 'Vazgeç' : 'Kapat'}</span>
+          </button>
+          {isDirty && (
+            <button
+              type="button"
+              onClick={onSave}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow flex items-center gap-1 active:scale-95"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Kaydet</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@
  * Compress and optimize uploaded mockups and design PNGs on client-side canvas
  * without visual quality loss, and persist them via server upload API (Cloudflare R2).
  */
+import { processImageInBrowser } from '@/lib/browser-image';
 
 /**
  * Oturum açılmış mı (yerel oturum kaydına bakar). Misafirin dosyaları sunucuya yüklenmez: tarayıcıda
@@ -311,11 +312,10 @@ export async function optimizeMockupImage(
 /**
  * Tasarım (baskı dosyası) yükleme. Giriş yapılmışsa dosya tarayıcıda yeniden kodlanmadan sunucuya gider,
  * sunucu kayıpsız ve en yüksek sıkıştırmalı PNG olarak saklar (çözünürlük korunur, en uzun kenar en fazla 4500 px).
- * Sunucu kullanılamıyorsa (misafir) tarayıcıda PNG'ye çevrilip yerelde saklanır.
+ * Sunucu kullanılamıyorsa (misafir) aynı işlem tarayıcıda yapılır (bkz. `browser-image`) ve yerelde saklanır.
  */
 export async function optimizeDesignImage(
   fileOrDataUrl: File | string,
-  maxDimension = 4096
 ): Promise<OptimizedImageResult> {
   if (fileOrDataUrl instanceof File && /^image\/(png|jpeg|webp)$/.test(fileOrDataUrl.type)) {
     const info = await uploadOriginalForServerOptimization(fileOrDataUrl, 'design');
@@ -338,50 +338,20 @@ export async function optimizeDesignImage(
     }
   }
 
-  const { img, originalSize } = await loadImageSource(fileOrDataUrl);
-
-  let width = img.naturalWidth || img.width;
-  let height = img.naturalHeight || img.height;
-
-  // Downscale if larger than maxDimension while preserving aspect ratio
-  if (width > maxDimension || height > maxDimension) {
-    if (width > height) {
-      height = Math.round((height * maxDimension) / width);
-      width = maxDimension;
-    } else {
-      width = Math.round((width * maxDimension) / height);
-      height = maxDimension;
-    }
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-
-  if (!ctx) {
-    throw new Error('Canvas context could not be created.');
-  }
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, 0, 0, width, height);
-
-  // Yerel (misafir) yedek: kayıpsız PNG, saydamlık korunur.
-  const optimizedDataUrl = canvas.toDataURL('image/png');
-  const finalMime = 'image/png';
-
-  const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
-  const serverUrl = await uploadMediaToServer(optimizedDataUrl, finalMime, { optimize: 'design' });
+  // Tarayıcıda: saydam boşluklar kırpılır, en yüksek sıkıştırmalı kayıpsız PNG'ye kodlanır (en uzun kenar
+  // 4500 px). Misafirde bu cihazda saklanır; giriş yapılmışsa sunucuya yüklenir.
+  const result = await processImageInBrowser(fileOrDataUrl, { type: 'encode' });
+  const dataUrl = result.dataUrl!;
+  const serverUrl = await uploadMediaToServer(dataUrl, 'image/png', { optimize: 'design' });
 
   return {
-    dataUrl: optimizedDataUrl,
+    dataUrl,
     url: serverUrl,
-    width,
-    height,
-    originalSize,
-    optimizedSize,
-    mimeType: finalMime,
+    width: result.width,
+    height: result.height,
+    originalSize: typeof fileOrDataUrl === 'string' ? Math.round((fileOrDataUrl.length * 3) / 4) : fileOrDataUrl.size,
+    optimizedSize: result.size,
+    mimeType: 'image/png',
   };
 }
 

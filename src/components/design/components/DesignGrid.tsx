@@ -7,6 +7,8 @@ interface DesignGridProps {
   designs: DesignItem[];
   selectedDesignIds: string[];
   analyzingIds: string[];
+  /** Üretim slotundan gidilen, kısa süre vurgulanan tasarım */
+  highlightedId?: string | null;
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
@@ -27,6 +29,7 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
   designs,
   selectedDesignIds,
   analyzingIds,
+  highlightedId,
   onToggleCheck,
   onToggleProductionActive,
   onSetProductionActive,
@@ -70,6 +73,7 @@ export const DesignGrid: React.FC<DesignGridProps> = ({
           design={design}
           isChecked={selectedDesignIds.includes(design.id)}
           isAnalyzing={analyzingIds.includes(design.id)}
+          isHighlighted={highlightedId === design.id}
           onToggleCheck={onToggleCheck}
           onToggleProductionActive={onToggleProductionActive}
           onSetProductionActive={onSetProductionActive}

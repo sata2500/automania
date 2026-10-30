@@ -35,6 +35,8 @@ interface MockupSettingsPanelProps {
   onCopyConfig: () => void;
   onPasteConfig: () => void;
   onOpenCropModal: () => void;
+  /** Kaydet/Vazgeç şeridi (masaüstünde tuvalin altındaki düzenleme çubuğu bu işi görür). */
+  showSaveBanner?: boolean;
 }
 
 export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
@@ -56,6 +58,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
   onCopyConfig,
   onPasteConfig,
   onOpenCropModal,
+  showSaveBanner = true,
 }) => {
   if (!selectedMockup) {
     return (
@@ -71,7 +74,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
   return (
     <div className="space-y-4">
       {/* Unsaved Changes Banner */}
-      {isDirty && (
+      {showSaveBanner && isDirty && (
         <div className="p-3 bg-gradient-to-r from-amber-500/10 to-indigo-500/10 border border-amber-500/30 dark:border-amber-400/30 rounded-2xl flex items-center justify-between gap-2 shadow-sm animate-in fade-in duration-200">
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
@@ -85,7 +88,7 @@ export const MockupSettingsPanel: React.FC<MockupSettingsPanelProps> = ({
               className="px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 transition-colors flex items-center gap-1"
             >
               <Undo2 className="w-3 h-3" />
-              <span>Geri Al</span>
+              <span>Vazgeç</span>
             </button>
             <button
               onClick={onSaveChanges}

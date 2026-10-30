@@ -5,15 +5,11 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { TargetApparel, DesignItem } from '@/types/pod';
-import { SLOT_LABELS } from '../hooks/useDesignSelection';
+import { DesignItem } from '@/types/pod';
 
 interface DesignToolbarProps {
-  designs: DesignItem[];
   filteredDesigns: DesignItem[];
   selectedDesignIds: string[];
-  takenSlots: Record<TargetApparel, string | null>;
-  activeSlotsCount: number;
   analyzingIds: string[];
   onToggleSelectAll: () => void;
   onBulkDelete: () => void;
@@ -22,11 +18,8 @@ interface DesignToolbarProps {
 }
 
 export const DesignToolbar: React.FC<DesignToolbarProps> = ({
-  designs,
   filteredDesigns,
   selectedDesignIds,
-  takenSlots,
-  activeSlotsCount,
   analyzingIds,
   onToggleSelectAll,
   onBulkDelete,
@@ -36,38 +29,8 @@ export const DesignToolbar: React.FC<DesignToolbarProps> = ({
     filteredDesigns.length > 0 &&
     selectedDesignIds.length === filteredDesigns.length;
 
-  const colorMap: Record<TargetApparel, string> = {
-    dark: 'bg-amber-50 dark:bg-amber-500/20 border-amber-300 dark:border-amber-400/50 text-amber-600 dark:text-amber-300',
-    light: 'bg-indigo-50 dark:bg-indigo-600/20 border-indigo-300 dark:border-indigo-400/50 text-indigo-600 dark:text-indigo-300',
-    both: 'bg-purple-50 dark:purple-600/20 border-purple-300 dark:border-purple-400/50 text-purple-600 dark:text-purple-300',
-  };
-
   return (
-    <div className="space-y-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-      {/* Üretimdeki tasarımlar (kumaş slotları) */}
-      {activeSlotsCount > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {(Object.entries(takenSlots) as [TargetApparel, string | null][]).map(
-            ([slot, takenId]) => {
-              if (!takenId) return null;
-              const design = designs.find((d) => d.id === takenId);
-              return (
-                <span
-                  key={slot}
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${colorMap[slot]}`}
-                  title={`${SLOT_LABELS[slot]}: ${design?.name || takenId}`}
-                >
-                  <span className="shrink-0">{SLOT_LABELS[slot]}:</span>
-                  <span className="max-w-[100px] sm:max-w-[140px] truncate font-bold">
-                    {design?.name || takenId}
-                  </span>
-                </span>
-              );
-            }
-          )}
-        </div>
-      )}
-
+    <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
       {/* Bulk Management Action Bar */}
       <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 flex flex-wrap items-center justify-between gap-2 shadow-xs">
         <div className="flex items-center gap-3">

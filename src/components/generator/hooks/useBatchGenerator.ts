@@ -44,8 +44,10 @@ export function useBatchGenerator({
   // Son üretimden ilan oluşturulduysa Hazır İlanlar'a geçiş düğmesi gösterilir.
   const [listingCreated, setListingCreated] = useState(false);
 
-  const exportFormat: ExportFormatType = 'image/webp';
-  const outputQuality = 0.95;
+  // Etsy'ye giden ilan görseli: JPEG (Etsy API'si JPG/PNG/GIF kabul eder; WebP yayında JPEG'e çevrilmek
+  // zorunda kalıyordu, bu da ikinci bir kayıplı sıkıştırma demekti). q0.92 gözle ayırt edilemez kalitededir.
+  const exportFormat: ExportFormatType = 'image/jpeg';
+  const outputQuality = 0.92;
 
   const mockupFolders = useMemo(() => folders.filter((f) => f.type !== 'design'), [folders]);
 
@@ -303,8 +305,9 @@ export function useBatchGenerator({
         if (match.previewUrl.startsWith('blob:') || match.previewUrl.startsWith('data:')) {
           try {
             const blob = await (await fetch(match.previewUrl)).blob();
-            const file = new File([blob], match.exportFileName, { type: match.isVideo ? 'video/mp4' : 'image/webp' });
-            persistentUrl = await uploadMediaToServer(file, match.isVideo ? 'video/mp4' : 'image/webp', { requireDurable: true });
+            const mime = match.isVideo ? 'video/mp4' : blob.type || 'image/jpeg';
+            const file = new File([blob], match.exportFileName, { type: mime });
+            persistentUrl = await uploadMediaToServer(file, mime, { requireDurable: true });
           } catch (e) {
             console.warn(`[Create listing] Mockup #${index + 1} upload failed; durable storage is required:`, e);
             aborted = true; // Diğer işçiler kuyruktaki yeni yüklemelere başlamasın

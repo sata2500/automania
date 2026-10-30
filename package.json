@@ -32,6 +32,7 @@
     "@serwist/next": "^9.5.12",
     "canvas-confetti": "^1.9.4",
     "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
     "idb-keyval": "^6.3.0",
     "jose": "^6.2.13",
     "jszip": "^3.10.2",

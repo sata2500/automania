@@ -61,70 +61,52 @@ export function useDesignSelection({
     }
   }, [filteredDesigns, selectedDesignIds.length]);
 
-  const warnSlot = useCallback(
-    (slot: TargetApparel) => {
-      toast.warning(
-        `"${SLOT_LABELS[slot]}" seçeneğinde zaten aktif bir tasarım var. Önce onu devre dışı bırakın.`
+  /**
+   * Tasarımı bir kumaş slotunda üretime alır. Slotta başka bir tasarım varsa o devre dışı bırakılır (her slotta
+   * tek aktif tasarım); kullanıcıya hangisinin yerine geçtiği söylenir.
+   */
+  const activateInSlot = useCallback(
+    (id: string, slot: TargetApparel) => {
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      const previous = designs.find((d) => d.id !== id && d.isSelected && d.targetApparel === slot);
+      setDesigns((prev) =>
+        prev.map((d) => {
+          if (d.id === id) return { ...d, isSelected: true, targetApparel: slot };
+          if (d.isSelected && d.targetApparel === slot) return { ...d, isSelected: false };
+          return d;
+        })
       );
+      if (previous) toast.info(`"${SLOT_LABELS[slot]}" için "${previous.name}" yerine "${design.name}" üretime alındı.`);
     },
-    [toast]
+    [designs, setDesigns, toast]
   );
 
-  // Toggle Production Active / Passive (Simple toggle on current targetApparel)
+  const deactivate = useCallback(
+    (id: string) => setDesigns((prev) => prev.map((d) => (d.id === id ? { ...d, isSelected: false } : d))),
+    [setDesigns]
+  );
+
+  // Üretim aktif/pasif (tasarımın mevcut kumaş hedefinde)
   const handleToggleProductionActive = useCallback(
     (id: string) => {
-      setDesigns((prev) => {
-        const design = prev.find((d) => d.id === id);
-        if (!design) return prev;
-
-        if (design.isSelected) {
-          return prev.map((d) => (d.id === id ? { ...d, isSelected: false } : d));
-        }
-
-        const slotTaken = prev.some(
-          (d) => d.id !== id && d.isSelected && design.targetApparel && d.targetApparel === design.targetApparel
-        );
-
-        if (slotTaken && design.targetApparel) {
-          warnSlot(design.targetApparel);
-          return prev;
-        }
-
-        return prev.map((d) => (d.id === id ? { ...d, isSelected: true } : d));
-      });
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      if (design.isSelected) deactivate(id);
+      else activateInSlot(id, design.targetApparel || 'both');
     },
-    [setDesigns, warnSlot]
+    [designs, deactivate, activateInSlot]
   );
 
-  // Set Production Target Slot ('dark' | 'light' | 'both')
+  // Kumaş hedefi seçimi ('dark' | 'light' | 'both'); aynı hedefe tekrar basmak devre dışı bırakır.
   const handleSetProductionActive = useCallback(
     (id: string, target: TargetApparel) => {
-      setDesigns((prev) => {
-        const design = prev.find((d) => d.id === id);
-        if (!design) return prev;
-
-        // If clicking the same target that is already active, deactivate it
-        if (design.isSelected && design.targetApparel === target) {
-          return prev.map((d) => (d.id === id ? { ...d, isSelected: false } : d));
-        }
-
-        // Check if this slot is already taken by ANOTHER design
-        const slotTaken = prev.some(
-          (d) => d.id !== id && d.isSelected && d.targetApparel === target
-        );
-
-        if (slotTaken) {
-          warnSlot(target);
-          return prev;
-        }
-
-        // Make it active and set target
-        return prev.map((d) =>
-          d.id === id ? { ...d, isSelected: true, targetApparel: target } : d
-        );
-      });
+      const design = designs.find((d) => d.id === id);
+      if (!design) return;
+      if (design.isSelected && design.targetApparel === target) deactivate(id);
+      else activateInSlot(id, target);
     },
-    [setDesigns, warnSlot]
+    [designs, deactivate, activateInSlot]
   );
 
   // Slot occupancy summary
@@ -141,10 +123,6 @@ export function useDesignSelection({
     };
   }, [designs]);
 
-  const activeSlotsCount = useMemo(() => {
-    return Object.values(takenSlots).filter(Boolean).length;
-  }, [takenSlots]);
-
   return {
     selectedDesignIds,
     setSelectedDesignIds,
@@ -153,7 +131,7 @@ export function useDesignSelection({
     handleToggleSelectAll,
     handleToggleProductionActive,
     handleSetProductionActive,
+    deactivate,
     takenSlots,
-    activeSlotsCount,
   };
 }
