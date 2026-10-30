@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { FolderPlus, Sparkles, Image as ImageIcon } from 'lucide-react';
-import { MockupItem, MockupFolder } from '@/types/pod';
+import type { EtsyVariationTemplate, MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
@@ -16,6 +16,7 @@ import { MockupSettingsPanel } from './components/MockupSettingsPanel';
 import { MockupMobileDrawer } from './components/MockupMobileDrawer';
 import { MockupFolderModal } from './components/MockupFolderModal';
 import type { TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
+import { loadVariationTemplates } from '@/components/settings/VariationTemplatesPanel';
 import { FolderTemplateDialog } from '../templates/FolderTemplateDialog';
 
 // Hooks
@@ -110,23 +111,28 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     folderId: string | null;
     folderName: string;
     taxonomyId: number;
+    variationTemplateId: string;
   }>({
     isOpen: false,
     isEditing: false,
     folderId: null,
     folderName: '',
     taxonomyId: 0,
+    variationTemplateId: '',
   });
-  // Klasörün ürün kategorisi seçenekleri (yalnızca giriş yapılmışken; pencere ilk açıldığında yüklenir).
+  // Klasör ayarlarının seçenekleri: ürün kategorisi ve varyasyon şablonları (yalnızca giriş yapılmışken; pencere ilk
+  // açıldığında yüklenir).
   const [categories, setCategories] = useState<TaxonomyOption[] | null>(null);
-  const categoriesRequested = useRef(false);
+  const [variationTemplates, setVariationTemplates] = useState<EtsyVariationTemplate[] | null>(null);
+  const folderOptionsRequested = useRef(false);
   useEffect(() => {
-    if (!user || !folderModalState.isOpen || categoriesRequested.current) return;
-    categoriesRequested.current = true;
+    if (!user || !folderModalState.isOpen || folderOptionsRequested.current) return;
+    folderOptionsRequested.current = true;
     fetch('/api/etsy/taxonomy')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setCategories(Array.isArray(d?.categories) ? d.categories : []))
       .catch(() => setCategories([]));
+    void loadVariationTemplates().then(setVariationTemplates);
   }, [user, folderModalState.isOpen]);
 
   // Etkin klasördeki mockup'lar ("Tüm Mockup'lar" görünümü yoktur; klasör yoksa liste boştur).
@@ -324,6 +330,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       folderId: null,
       folderName: '',
       taxonomyId: 0,
+      variationTemplateId: '',
     });
   }, []);
 
@@ -334,6 +341,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       folderId: folder.id,
       folderName: folder.name,
       taxonomyId: folder.taxonomyId ?? 0,
+      variationTemplateId: folder.variationTemplateId ?? '',
     });
   }, []);
 
@@ -344,10 +352,15 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       if (!cleanName) return;
       const category = categories?.find((c) => c.id === folderModalState.taxonomyId);
       const categoryFields = category ? { taxonomyId: category.id, categoryName: category.name } : {};
+      // Şablonlar yüklenmediyse (misafir veya hızlı kayıt) klasörün mevcut varyasyon seçimi korunur.
+      const variation = variationTemplates?.find((t) => t.id === folderModalState.variationTemplateId);
+      const variationFields = variationTemplates
+        ? { variationTemplateId: variation?.id, variationTemplateName: variation?.name }
+        : {};
 
       if (folderModalState.isEditing && folderModalState.folderId) {
         setMockupFolders((prev) =>
-          prev.map((f) => (f.id === folderModalState.folderId ? { ...f, name: cleanName, ...categoryFields } : f))
+          prev.map((f) => (f.id === folderModalState.folderId ? { ...f, name: cleanName, ...categoryFields, ...variationFields } : f))
         );
         toast.success('Klasör güncellendi!');
       } else {
@@ -357,6 +370,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           isCustom: true,
           type: 'mockup',
           ...categoryFields,
+          ...variationFields,
         };
         setMockupFolders((prev) => [...prev, newFolder]);
         setActiveFolderId(newFolder.id);
@@ -369,9 +383,10 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         folderId: null,
         folderName: '',
         taxonomyId: 0,
+        variationTemplateId: '',
       });
     },
-    [folderModalState, categories, setMockupFolders, setActiveFolderId, toast]
+    [folderModalState, categories, variationTemplates, setMockupFolders, setActiveFolderId, toast]
   );
 
   const handleDuplicateFolder = useCallback(
@@ -649,6 +664,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         categories={user ? categories : null}
         taxonomyId={folderModalState.taxonomyId}
         setTaxonomyId={(id) => setFolderModalState((prev) => ({ ...prev, taxonomyId: id }))}
+        variationTemplates={user ? variationTemplates : null}
+        variationTemplateId={folderModalState.variationTemplateId}
+        setVariationTemplateId={(id) => setFolderModalState((prev) => ({ ...prev, variationTemplateId: id }))}
       />
 
       {selectedMockup && (

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Folder, X } from 'lucide-react';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { CategoryPicker, type TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
+import type { EtsyVariationTemplate } from '@/types/pod';
 
 interface MockupFolderModalProps {
   isOpen: boolean;
@@ -14,6 +15,10 @@ interface MockupFolderModalProps {
   categories?: TaxonomyOption[] | null;
   taxonomyId?: number;
   setTaxonomyId?: (id: number) => void;
+  /** Kayıtlı varyasyon şablonları (Ayarlar › Varyasyonlar); null: gösterilmez (misafir) */
+  variationTemplates?: EtsyVariationTemplate[] | null;
+  variationTemplateId?: string;
+  setVariationTemplateId?: (id: string) => void;
 }
 
 export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
@@ -26,6 +31,9 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
   categories = null,
   taxonomyId = 0,
   setTaxonomyId,
+  variationTemplates = null,
+  variationTemplateId = '',
+  setVariationTemplateId,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -53,7 +61,7 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 id="mockup-folder-modal-title" className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Folder className="w-4 h-4 text-amber-500" />
-            {isEditing ? 'Klasör: ad ve kategori' : 'Yeni Klasör Oluştur'}
+            {isEditing ? 'Klasör ayarları' : 'Yeni Klasör Oluştur'}
           </h3>
           <button
             onClick={onClose}
@@ -92,6 +100,26 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
               )}
               <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                 Klasör bir Etsy ilanıdır: bu klasörden üretilen ilanlar (elle veya otomasyonla) bu kategoriyle açılır. Her klasörde tek ürün türü önerilir.
+              </p>
+            </div>
+          )}
+
+          {variationTemplates && setVariationTemplateId && (
+            <div>
+              <label htmlFor="folder-variation" className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                Varsayılan varyasyon
+              </label>
+              <select
+                id="folder-variation"
+                value={variationTemplateId}
+                onChange={(e) => setVariationTemplateId(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              >
+                <option value="">Seçilmedi (Hazır İlanlar&apos;da seçilir)</option>
+                {variationTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.variations?.length ?? 0} varyasyon)</option>)}
+              </select>
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                Beden, renk ve fiyatlar bu şablondan gelir (şablonlar Ayarlar › Varyasyonlar&apos;da). Şablonda yapılan fiyat değişiklikleri sonraki ilanlarda geçerli olur.
               </p>
             </div>
           )}

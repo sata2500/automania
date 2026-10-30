@@ -34,7 +34,7 @@ import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
 import { generateBestListing } from '@/lib/listing-pipeline';
-import { loadFolderCategory, pickListingCategory } from '@/lib/listing-category';
+import { loadFolderListingSettings, pickListingCategory, type FolderListingSettings } from '@/lib/listing-category';
 import { loadStoreCopyFacts } from '@/lib/listing-copy';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
@@ -106,6 +106,21 @@ async function loadWorkspaceMockups(userId: string): Promise<MockupItem[]> {
     .from(userWorkspaces)
     .where(eq(userWorkspaces.userId, userId));
   return (workspace?.mockups as MockupItem[] | undefined) ?? [];
+}
+
+/** Klasörün kategori ve varsayılan varyasyonunu çalıştırılacak şablona uygular (taban fiyat en düşük varyasyon fiyatı). */
+export function applyFolderListingSettings(template: TemplateRow, folder: FolderListingSettings): void {
+  if (folder.category) {
+    template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule?.etsy, taxonomyId: folder.category.taxonomyId } } as TemplateRow['automationSchedule'];
+    template.seoHints = { ...template.seoHints, productType: productTypeFromCategory(folder.category.name) } as TemplateRow['seoHints'];
+  }
+  if (folder.variations) {
+    const prices = folder.variations.rows.filter((r) => r.enabled !== false).map((r) => Number(r.price)).filter((p) => p > 0);
+    template.variationConfig = { ...variationConfigFromRows(folder.variations.rows), sourceTemplateId: folder.variations.templateId, sourceTemplateName: folder.variations.templateName } as TemplateRow['variationConfig'];
+    if (prices.length > 0 && template.automationSchedule?.etsy) {
+      template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule.etsy, price: Math.min(...prices) } } as TemplateRow['automationSchedule'];
+    }
+  }
 }
 
 /**
@@ -1014,15 +1029,9 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
       .where(and(eq(podTemplates.id, templateId), eq(podTemplates.userId, userId)));
 
   if (!template || !existing) return { ok: false, runId, reason: 'not_found' };
-  // Otomasyonun kategorisi ve ürün tipi mockup klasöründen (klasör = bir Etsy ilanı); klasörde seçili değilse
-  // şablonda kayıtlı eski kategori kullanılır.
-  if (templateId !== MANUAL_TEMPLATE_ID) {
-    const folderCategory = await loadFolderCategory(userId, template.mockupConfig?.folderId);
-    if (folderCategory) {
-      template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule?.etsy, taxonomyId: folderCategory.taxonomyId } } as typeof template.automationSchedule;
-      template.seoHints = { ...template.seoHints, productType: productTypeFromCategory(folderCategory.name) } as typeof template.seoHints;
-    }
-  }
+  // Otomasyonun kategorisi, ürün tipi ve varyasyonları mockup klasöründen (klasör = bir Etsy ilanı); klasörde
+  // seçili değilse şablonda kayıtlı eski ayarlar kullanılır.
+  if (templateId !== MANUAL_TEMPLATE_ID) applyFolderListingSettings(template, await loadFolderListingSettings(userId, template.mockupConfig?.folderId));
 
   // Aynı run'ın iki kez çalıştırılmasını engelle: yalnızca 'pending' kayıt ya da fonksiyon süre sınırında
   // kesildiği için 'running' durumunda kalmış (uzun süredir dokunulmamış) kayıt sahiplenilebilir.

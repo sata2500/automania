@@ -26,6 +26,9 @@ export interface MockupFolder {
   taxonomyId?: number;
   /** Kategorinin adı (ör. "Hoodies"); ürün tipi ve SKU ön eki buradan */
   categoryName?: string;
+  /** Varsayılan varyasyon şablonu (Ayarlar › Varyasyonlar); manuel ilanlar ve otomasyonlar kullanır */
+  variationTemplateId?: string;
+  variationTemplateName?: string;
 }
 
 export interface MockupItem {

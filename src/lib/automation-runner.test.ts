@@ -109,7 +109,7 @@ vi.mock('@/lib/listing-pipeline', () => ({
   }),
 }));
 vi.mock('@/lib/listing-copy', () => ({ loadStoreCopyFacts: vi.fn(async () => 'None provided') }));
-vi.mock('@/lib/listing-category', () => ({ loadFolderCategory: vi.fn(async () => null), pickListingCategory: vi.fn(async () => null) }));
+vi.mock('@/lib/listing-category', () => ({ loadFolderListingSettings: vi.fn(async () => ({ category: null, variations: null })), pickListingCategory: vi.fn(async () => null) }));
 vi.mock('@/lib/etsy-taxonomy-properties', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/etsy-taxonomy-properties')>()),
   fetchTaxonomyProperties: vi.fn(async () => [
@@ -131,7 +131,7 @@ vi.mock('@/lib/scraper-credentials', () => ({ loadScraperCredentials: vi.fn(asyn
 // Etsy mağaza bölümleri ağ isteği yapılmadan boş döner.
 vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
 
-import { executeAutomationRun } from './automation-runner';
+import { applyFolderListingSettings, executeAutomationRun } from './automation-runner';
 
 const pendingSteps = () => ({
   designGeneration: { status: 'pending' },
@@ -500,5 +500,39 @@ describe('automatic niche research', () => {
     await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
     expect(research).not.toHaveBeenCalled();
     expect((state.run?.steps as Record<string, { status: string }>).nicheResearch.status).toBe('skipped');
+  });
+});
+
+describe('applyFolderListingSettings', () => {
+  it('uses the folder category and default variation, pricing from the cheapest enabled row', () => {
+    const template = {
+      automationSchedule: { etsy: { taxonomyId: 482, price: 30 } },
+      seoHints: { productType: 'T-shirt' },
+      variationConfig: { rows: [], sizes: [], colors: [] },
+    } as unknown as Parameters<typeof applyFolderListingSettings>[0];
+    applyFolderListingSettings(template, {
+      category: { taxonomyId: 2202, name: 'Hoodies' },
+      variations: {
+        templateId: 'vt1',
+        templateName: 'Hoodie sizes',
+        rows: [
+          { id: 'a', size: 'S', color: 'Black', price: 39.99, quantity: 999, sku: '', enabled: true },
+          { id: 'b', size: '2XL', color: 'Black', price: 44.99, quantity: 999, sku: '', enabled: true },
+          { id: 'c', size: 'XS', color: 'Black', price: 9, quantity: 999, sku: '', enabled: false },
+        ],
+      },
+    });
+    expect(template.automationSchedule?.etsy?.taxonomyId).toBe(2202);
+    expect(template.automationSchedule?.etsy?.price).toBe(39.99);
+    expect(template.seoHints?.productType).toBe('Hoodie');
+    expect(template.variationConfig?.sourceTemplateId).toBe('vt1');
+    expect(template.variationConfig?.rows).toHaveLength(3);
+  });
+
+  it('keeps the template settings when the folder has none', () => {
+    const template = { automationSchedule: { etsy: { taxonomyId: 482, price: 30 } }, seoHints: { productType: 'T-shirt' } } as unknown as Parameters<typeof applyFolderListingSettings>[0];
+    applyFolderListingSettings(template, { category: null, variations: null });
+    expect(template.automationSchedule?.etsy?.taxonomyId).toBe(482);
+    expect(template.seoHints?.productType).toBe('T-shirt');
   });
 });

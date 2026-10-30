@@ -473,18 +473,20 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  // Kategori mockup klasöründe seçilir (klasör = bir Etsy ilanı); seçili değilse ilan metni hazırlanırken mockup
-  // fotoğraflarından seçilir (bkz. listing-category). Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
-  // Varyasyonlar Hazır İlanlar'da yayından önce kayıtlı bir şablon seçilerek eklenir.
-  const { loadFolderCategory } = await import('@/lib/listing-category');
-  const folderCategory = await loadFolderCategory(userId, input.folderId);
+  // Kategori ve varsayılan varyasyon mockup klasöründe seçilir (klasör = bir Etsy ilanı). Kategori seçili değilse
+  // ilan metni hazırlanırken mockup fotoğraflarından seçilir (bkz. listing-category); varyasyon seçili değilse
+  // Hazır İlanlar'da yayından önce seçilir. Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
+  const { loadFolderListingSettings } = await import('@/lib/listing-category');
+  const folderSettings = await loadFolderListingSettings(userId, input.folderId);
+  const folderCategory = folderSettings.category;
+  const folderVariations = folderSettings.variations;
   const productType = folderCategory ? productTypeFromCategory(folderCategory.name) : analysis.productType?.trim() || 'T-shirt';
   const sku = generateListingSku(productType);
   const settings: ManualListingSettings = {
     etsy: folderCategory ? { ...defaults.etsy, taxonomyId: folderCategory.taxonomyId } : defaults.etsy,
-    variations: [],
-    variationTemplateId: null,
-    variationTemplateName: null,
+    variations: folderVariations?.rows ?? [],
+    variationTemplateId: folderVariations?.templateId ?? null,
+    variationTemplateName: folderVariations?.templateName ?? null,
     sku,
     productType,
     notes: '',

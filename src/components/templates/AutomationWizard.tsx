@@ -106,7 +106,8 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
   const savedEtsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...template?.automationSchedule?.etsy };
   // Kategori mockup klasöründe seçilir (klasör = bir Etsy ilanı); klasörde yoksa şablonda kayıtlı eski kategori.
   const taxonomyId = folder?.taxonomyId || savedEtsy.taxonomyId;
-  const [variationSourceId, setVariationSourceId] = useState<string>(template?.variationConfig?.sourceTemplateId ?? '');
+  // Varyasyon da mockup klasöründe seçilir; klasörde yoksa şablonda kayıtlı eski varyasyon şablonu.
+  const variationSourceId = folder?.variationTemplateId || template?.variationConfig?.sourceTemplateId || '';
   const [fixedPrice, setFixedPrice] = useState<number>(savedEtsy.price);
 
   // Tasarım: yeni otomasyonlarda konu yapay zekâ araştırmasıyla belirlenir.
@@ -179,8 +180,8 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
       const errors: string[] = [];
       if (!folderId) errors.push('Bir mockup klasörü seçin.');
       else if (counts.print === 0) errors.push('Klasörde baskı alanı ayarlanmış en az bir mockup olmalı.');
-      if (folderId && !folder?.taxonomyId && !(savedEtsy.taxonomyId > 0)) errors.push('Klasörün ürün kategorisini seçin (Mockup\'lar › klasör menüsü › Ad ve kategori).');
-      if (!variationSourceId && !(fixedPrice >= 0.2)) errors.push('Varyasyon şablonu seçin veya en az 0,20 fiyat girin.');
+      if (folderId && !folder?.taxonomyId && !(savedEtsy.taxonomyId > 0)) errors.push('Klasörün ürün kategorisini seçin (Mockup\'lar › klasör menüsü › Klasör ayarları).');
+      if (!variationSourceId && !(fixedPrice >= 0.2)) errors.push('Klasöre varyasyon seçin (Mockup\'lar › klasör menüsü › Klasör ayarları) veya en az 0,20 fiyat girin.');
       return errors;
     }
     if (s === 1 && nicheMode === 'manual' && !niche.trim()) return ['Tasarım konusunu yazın veya konuyu yapay zekâya bırakın.'];
@@ -379,31 +380,24 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                       ? `${category?.path || category?.name || `#${taxonomyId}`} (eski ayar)`
                       : 'Seçilmedi'}
                 </p>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kategori mockup klasöründe seçilir: Mockup&apos;lar › klasör menüsü › Ad ve kategori.</p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kategori mockup klasöründe seçilir: Mockup&apos;lar › klasör menüsü › Klasör ayarları.</p>
               </div>
 
-              <div>
-                <label className={labelClass} htmlFor="aw-variation">Varyasyonlar (ürün, renk, fiyat)</label>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs">
+                <p className="font-bold text-slate-700 dark:text-slate-200">Varyasyonlar (ürün, renk, fiyat)</p>
                 {variationTemplates === null ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Varyasyon şablonları yükleniyor…</div>
-                ) : (
-                  <select id="aw-variation" className={inputClass} value={variationSourceId} onChange={(e) => setVariationSourceId(e.target.value)}>
-                    <option value="">Varyasyon yok (tek fiyat)</option>
-                    {variationTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.variations?.length ?? 0} varyasyon)</option>)}
-                  </select>
-                )}
-                {variationSummary ? (
-                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    {variationSummary.count} varyasyon · {variationSummary.sizes} beden/ürün · {variationSummary.colors} renk · ${variationSummary.min.toFixed(2)}–${variationSummary.max.toFixed(2)}.
-                    {' '}Yeni İlan ekranında bu şablonda yaptığınız fiyat değişiklikleri sonraki çalıştırmalarda otomatik kullanılır.
+                  <div className="mt-1 flex items-center gap-2 text-slate-500"><Spinner className="w-4 h-4" /> Varyasyon şablonları yükleniyor…</div>
+                ) : variationSummary && variationSource ? (
+                  <p className="mt-0.5 text-slate-600 dark:text-slate-300">
+                    {variationSource.name}{!folder?.variationTemplateId && ' (eski ayar)'}: {variationSummary.count} varyasyon · {variationSummary.sizes} beden/ürün · {variationSummary.colors} renk · ${variationSummary.min.toFixed(2)}–${variationSummary.max.toFixed(2)}
                   </p>
-                ) : !variationSourceId && (
+                ) : (
                   <div className="mt-2">
-                    <label className={labelClass} htmlFor="aw-price">Fiyat (USD)</label>
+                    <label className={labelClass} htmlFor="aw-price">Varyasyon yok: tek fiyat (USD)</label>
                     <input id="aw-price" type="number" min={0.2} step={0.01} className={inputClass} value={fixedPrice} onChange={(e) => setFixedPrice(Number(e.target.value) || 0)} />
-                    {variationTemplates?.length === 0 && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Varyasyon şablonları Yeni İlan ekranındaki varyasyon tablosundan kaydedilir.</p>}
                   </div>
                 )}
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Varsayılan varyasyon mockup klasöründe seçilir: Mockup&apos;lar › klasör menüsü › Klasör ayarları. Şablonlar Ayarlar › Varyasyonlar&apos;da; fiyat değişiklikleri sonraki çalıştırmalarda geçerli olur.</p>
               </div>
 
             </>

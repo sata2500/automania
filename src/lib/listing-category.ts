@@ -6,6 +6,7 @@
 import sql from '@/lib/db';
 import { generateVisionJson, type AiImage } from '@/lib/ai-text';
 import { loadImageForUser } from '@/lib/media-source';
+import type { EtsyVariationRow, EtsyVariationTemplate, MockupFolder } from '@/types/pod';
 
 export type ListingCategory = { taxonomyId: number; name: string; productType: string };
 
@@ -67,19 +68,32 @@ export async function pickListingCategory(userId: string, photos: string[]): Pro
   return parseCategoryAnswer(data, categories);
 }
 
+export type FolderListingSettings = {
+  category: { taxonomyId: number; name: string } | null;
+  /** Klasörün varsayılan varyasyon şablonu (güncel satırlarıyla); seçili değilse veya şablon silindiyse null */
+  variations: { templateId: string; templateName: string; rows: EtsyVariationRow[] } | null;
+};
+
 /**
- * Mockup klasörünün Ürün kategorisi (Mockup'lar › klasör › Ad ve kategori). Klasör = bir Etsy ilanı; seçili değilse
- * null (manuel ilanda mockup fotoğraflarından seçilir, otomasyonda şablondaki eski kategori kullanılır).
+ * Mockup klasörünün ilan ayarları (Mockup'lar › klasör menüsü › Klasör ayarları): ürün kategorisi ve varsayılan
+ * varyasyon şablonu. Klasör = bir Etsy ilanı; manuel ilanlar ve otomasyonlar bunları kullanır.
  */
-export async function loadFolderCategory(userId: string, folderId: string | null | undefined): Promise<{ taxonomyId: number; name: string } | null> {
-  if (!folderId) return null;
+export async function loadFolderListingSettings(userId: string, folderId: string | null | undefined): Promise<FolderListingSettings> {
+  const empty: FolderListingSettings = { category: null, variations: null };
+  if (!folderId) return empty;
   const rows = await sql`
-    SELECT f->>'taxonomyId' AS taxonomy_id, f->>'categoryName' AS category_name
+    SELECT f AS folder, etsy_variation_templates AS templates
     FROM user_workspaces, jsonb_array_elements(COALESCE(folders, '[]'::jsonb)) AS f
     WHERE user_id = ${userId} AND f->>'id' = ${folderId}
     LIMIT 1
   `.catch(() => []);
-  const taxonomyId = Number(rows[0]?.taxonomy_id);
-  if (!Number.isInteger(taxonomyId) || taxonomyId <= 0) return null;
-  return { taxonomyId, name: String(rows[0]?.category_name || '') };
+  const folder = (rows[0]?.folder ?? null) as MockupFolder | null;
+  if (!folder) return empty;
+  const taxonomyId = Number(folder.taxonomyId);
+  const templates = (Array.isArray(rows[0]?.templates) ? rows[0]!.templates : []) as EtsyVariationTemplate[];
+  const template = folder.variationTemplateId ? templates.find((t) => t.id === folder.variationTemplateId) : undefined;
+  return {
+    category: Number.isInteger(taxonomyId) && taxonomyId > 0 ? { taxonomyId, name: String(folder.categoryName || '') } : null,
+    variations: template?.variations?.length ? { templateId: template.id, templateName: template.name, rows: template.variations } : null,
+  };
 }
