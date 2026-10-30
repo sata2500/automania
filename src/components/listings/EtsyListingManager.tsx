@@ -206,12 +206,8 @@ export const EtsyListingManager: React.FC = () => {
     // 4. Vision filter
     if (visionFilter !== 'all') {
       result = result.filter(item => {
-        const va = typeof item.vision_analysis === 'string'
-          ? JSON.parse(item.vision_analysis)
-          : (item.vision_analysis || {});
-        const hasVision = Boolean(va && (va.primarySubject || va.description || va.analyzedAt));
-        if (visionFilter === 'analyzed') return hasVision;
-        if (visionFilter === 'not_analyzed') return !hasVision;
+        if (visionFilter === 'analyzed') return Boolean(item.ai_analyzed);
+        if (visionFilter === 'not_analyzed') return !item.ai_analyzed;
         return true;
       });
     }
@@ -332,6 +328,8 @@ export const EtsyListingManager: React.FC = () => {
   };
 
   const selectedListingsList = useMemo(() => listings.filter(l => selectedIds.includes(l.listing_id)), [listings, selectedIds]);
+  // İyileştirme yalnızca analiz edilmiş ilanlarda yapılır (öneri analiz sonucuna dayanır).
+  const selectedAnalyzedCount = selectedListingsList.filter((l) => l.ai_analyzed).length;
 
   const syncLabel = isSyncing
     ? 'Etsy ile güncelleniyor…'
@@ -468,7 +466,7 @@ export const EtsyListingManager: React.FC = () => {
               </select>
             </label>
             <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 space-y-1">
-              <span>Görsel analiz ({stats.analyzedCount}/{stats.total})</span>
+              <span>Analiz ({stats.analyzedCount}/{stats.total})</span>
               <select value={visionFilter} onChange={(e) => setVisionFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-200">
                 <option value="all">Tümü</option>
                 <option value="analyzed">Analiz edilenler</option>
@@ -576,17 +574,16 @@ export const EtsyListingManager: React.FC = () => {
       {selectedIds.length > 0 && (
         <div className="fixed left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+88px)] lg:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-2.5 flex flex-wrap items-center gap-2 text-xs">
           <span className="font-bold text-slate-700 dark:text-slate-200 px-1">{selectedIds.length} seçili</span>
-          <button onClick={() => handleOpenBulkModal('optimize')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" /> AI ile iyileştir
+          <button onClick={() => handleOpenBulkModal('analyze')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" /> Analiz et
           </button>
-          <button onClick={() => handleOpenBulkModal('ai_review')} className="px-3 py-1.5 border border-purple-200 dark:border-purple-500/40 text-purple-700 dark:text-purple-300 rounded-xl font-semibold flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" /> AI ile değerlendir
-          </button>
-          <button onClick={() => handleOpenBulkModal('evaluate_seo')} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1">
-            <TrendingUp className="w-3.5 h-3.5" /> Puanla
-          </button>
-          <button onClick={() => handleOpenBulkModal('vision')} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1">
-            <Eye className="w-3.5 h-3.5" /> Görseli analiz et
+          <button
+            onClick={() => handleOpenBulkModal('optimize')}
+            disabled={selectedAnalyzedCount === 0}
+            title={selectedAnalyzedCount === 0 ? 'Önce seçili ilanları analiz edin' : `${selectedAnalyzedCount} analiz edilmiş ilan iyileştirilir`}
+            className="px-3 py-1.5 border border-purple-200 dark:border-purple-500/40 text-purple-700 dark:text-purple-300 rounded-xl font-semibold flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> AI ile iyileştir{selectedAnalyzedCount > 0 && selectedAnalyzedCount < selectedIds.length ? ` (${selectedAnalyzedCount})` : ''}
           </button>
           <button onClick={() => setSelectedIds([])} aria-label="Seçimi temizle" className="ml-auto p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             <X className="w-4 h-4" />
@@ -617,7 +614,6 @@ export const EtsyListingManager: React.FC = () => {
           }}
           actionType={bulkActionType}
           selectedListings={selectedListingsList}
-          allListings={listings}
           onCompleted={() => {
             fetchListings();
             setSelectedIds([]);

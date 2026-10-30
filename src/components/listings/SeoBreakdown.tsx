@@ -5,15 +5,11 @@
  * Verisi olmayan parça "bilinmiyor" görünür; puan eldeki parçalara oranlandıysa bu açıkça yazılır.
  */
 import React from 'react';
-import { Bot, Database, ListChecks, Sparkles } from 'lucide-react';
+import { Bot, Database, ListChecks } from 'lucide-react';
 import type { SeoEvaluationResult } from '@/lib/etsy-seo-evaluator';
-import { Spinner } from '@/components/common/Spinner';
 
 type Props = {
   evaluation: Partial<SeoEvaluationResult>;
-  /** Yapay zekâ değerlendirmesini başlatır (yoksa düğme gösterilmez) */
-  onRunAiReview?: () => void;
-  aiReviewLoading?: boolean;
   compact?: boolean;
 };
 
@@ -41,11 +37,11 @@ function Bar({ icon, label, source, value, max, color, emptyText }: {
   );
 }
 
-export function SeoBreakdown({ evaluation, onRunAiReview, aiReviewLoading = false, compact = false }: Props) {
+export function SeoBreakdown({ evaluation, compact = false }: Props) {
   if (evaluation.version !== 2 || !evaluation.breakdown) {
     return (
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Bu puan eski yöntemle hesaplanmış. İlanlar yenilendiğinde (veya &quot;Etiketleri havuzda yeniden tara&quot; ile) yeni yöntemle yeniden hesaplanır.
+        Bu puan eski yöntemle hesaplanmış. İlanlar yenilendiğinde veya &quot;Analiz et&quot; ile yeni yöntemle yeniden hesaplanır.
       </p>
     );
   }
@@ -77,25 +73,12 @@ export function SeoBreakdown({ evaluation, onRunAiReview, aiReviewLoading = fals
         value={breakdown.ai}
         max={breakdown.maxAi}
         color="bg-purple-500"
-        emptyText="Bu metin henüz yapay zekâyla değerlendirilmedi."
+        emptyText="Bu metin henüz analiz edilmedi."
       />
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          {confidence ? `${confidence.scoredTags}/${confidence.totalTags} etiket güncel Etsy verisiyle puanlandı` : ''}
-          {partial ? ' · Puan yalnızca bilinen parçalara göre hesaplandı.' : ''}
-        </p>
-        {onRunAiReview && breakdown.ai === null && (
-          <button
-            type="button"
-            onClick={onRunAiReview}
-            disabled={aiReviewLoading}
-            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
-          >
-            {aiReviewLoading ? <Spinner className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
-            {aiReviewLoading ? 'Değerlendiriliyor…' : 'Yapay zekâyla değerlendir'}
-          </button>
-        )}
-      </div>
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+        {confidence ? `${confidence.scoredTags}/${confidence.totalTags} etiket güncel Etsy verisiyle puanlandı` : ''}
+        {partial ? ' · Puan yalnızca bilinen parçalara göre hesaplandı.' : ''}
+      </p>
     </div>
   );
 }

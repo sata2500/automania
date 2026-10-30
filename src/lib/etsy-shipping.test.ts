@@ -23,15 +23,22 @@ describe('isFreeShippingProfile', () => {
 });
 
 describe('listingCopyFacts', async () => {
-  const { listingCopyFacts, normalizeListingCopy } = await import('./listing-defaults');
+  const { listingCopyFacts, normalizeListingCopy, processingTimeText } = await import('./listing-defaults');
 
   it('states free shipping only when known and skips empty fields', () => {
-    const copy = normalizeListingCopy({ productInfo: 'Comfort Colors 1717', freeShipping: null });
-    expect(listingCopyFacts(copy, true)).toContain('FREE shipping');
-    expect(listingCopyFacts(copy, false)).toContain('NOT free');
-    expect(listingCopyFacts(copy, null)).not.toMatch(/shipping/i);
-    expect(listingCopyFacts(normalizeListingCopy({}), null)).toBe('None provided');
-    // Kullanıcının seçimi profilden anlaşılandan önce gelir.
-    expect(listingCopyFacts(normalizeListingCopy({ freeShipping: false }), true)).toContain('NOT free');
+    const copy = normalizeListingCopy({ productInfo: 'Comfort Colors 1717', freeShipping: true, extraNotes: 'old' });
+    expect(copy).toEqual({ productInfo: 'Comfort Colors 1717' });
+    expect(listingCopyFacts(copy, { freeShipping: true })).toContain('FREE shipping');
+    expect(listingCopyFacts(copy, { freeShipping: false })).toContain('NOT free');
+    expect(listingCopyFacts(copy, { freeShipping: null })).not.toMatch(/shipping/i);
+    expect(listingCopyFacts(normalizeListingCopy({}))).toBe('None provided');
+  });
+
+  it('builds the processing time from the Etsy readiness state', () => {
+    expect(processingTimeText({ readiness_state: 'made_to_order', min_processing_time: 1, max_processing_time: 3, processing_time_unit: 'business_days' }))
+      .toBe('Made to order, ships in 1-3 business days');
+    expect(processingTimeText({ readiness_state: 'ready_to_ship', min_processing_time: 1, max_processing_time: 1 })).toBe('Ready to ship, ships in 1 business day');
+    expect(processingTimeText(null)).toBeNull();
+    expect(listingCopyFacts(normalizeListingCopy({}), { processing: 'Made to order, ships in 1-3 business days' })).toContain('Production & shipping time');
   });
 });

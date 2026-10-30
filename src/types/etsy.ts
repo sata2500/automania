@@ -21,6 +21,7 @@ export interface EtsyReadinessState {
   processing_days_display_label?: string;
   min_processing_time?: number;
   max_processing_time?: number;
+  processing_time_unit?: string;
 }
 
 export interface EtsyShopSection {
@@ -84,6 +85,8 @@ export interface EtsyInventoryProduct {
 /** /api/etsy/listings tarafından döndürülen (veritabanından okunan) listing satırı. */
 export interface StoredEtsyListing {
   id?: string;
+  /** Mevcut metin analiz edildi mi (görsel + Etsy verisi + yapay zekâ; liste yanıtında hesaplanır) */
+  ai_analyzed?: boolean;
   listing_id: string;
   title?: string | null;
   description?: string | null;
@@ -114,7 +117,7 @@ export interface StoredEtsyListing {
   [key: string]: unknown;
 }
 
-/** Toplu işlem uç noktalarının (optimize, evaluate-seo, update...) ilan başına sonucu. */
+/** Toplu işlem uç noktalarının (analyze, optimize, update...) ilan başına sonucu. */
 export interface ListingBatchResult {
   listingId?: string;
   success: boolean;

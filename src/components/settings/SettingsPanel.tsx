@@ -19,6 +19,7 @@ import { isFreeShippingProfile } from '@/lib/etsy-shipping';
 import {
   missingListingSettings,
   normalizeListingDefaults,
+  processingTimeText,
   type ListingDefaults,
 } from '@/lib/listing-defaults';
 import type { PodTemplateAutomationSchedule } from '@/types/templates';
@@ -79,6 +80,7 @@ export function SettingsPanel() {
 
   const update = (patch: Partial<ListingDefaults>) => setDefaults({ ...defaults, ...patch });
   const detectedFreeShipping = isFreeShippingProfile(storeOptions.profiles.find((p) => String(p.shipping_profile_id) === String(defaults.etsy.shippingProfileId)));
+  const processing = processingTimeText(storeOptions.readinessStates.find((r) => String(r.readiness_state_id) === String(defaults.etsy.readinessStateId)));
 
   const save = async () => {
     setIsSaving(true);
@@ -174,54 +176,33 @@ export function SettingsPanel() {
         />
       </section>
 
-      {/* İlan metni bilgileri: yapay zekâ açıklamayı yazarken yalnızca bunları ürün bilgisi olarak kullanır */}
+      {/* İlan metni: yapay zekâ açıklamada ürün bilgisi olarak yalnızca bunu kullanır; kargo ve süre Etsy'den gelir */}
       <section className={cardClass} aria-label="İlan metni bilgileri">
-        <SectionTitle icon={FileText} title="İlan metni bilgileri" hint="Yapay zekâ ilan açıklamasını yazarken ürün bilgisi olarak yalnızca bunları kullanır; boş bırakılan bilgi açıklamaya yazılmaz (uydurulmaz). İngilizce yazın." />
+        <SectionTitle icon={FileText} title="İlan metni bilgileri" hint="Yapay zekâ açıklamayı yazarken ürün özelliği olarak yalnızca bunu kullanır (uydurmaz); bakım talimatını da buna göre yazar. İngilizce yazın." />
         <div>
-          <span className={labelClass}>Kargo ücretsiz mi?</span>
-          <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
-            {([
-              [null, 'Otomatik'],
-              [true, 'Ücretsiz'],
-              [false, 'Ücretli'],
-            ] as const).map(([value, label]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => update({ copy: { ...defaults.copy, freeShipping: value } })}
-                className={`py-2 rounded-lg transition-colors ${defaults.copy.freeShipping === value ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-            {defaults.copy.freeShipping === null
-              ? detectedFreeShipping === null
-                ? 'Seçili kargo profilinden anlaşılamadı; açıklamada kargo ücretinden söz edilmez.'
-                : `Seçili kargo profiline göre: ${detectedFreeShipping ? 'ABD\'ye ücretsiz kargo — açıklamada belirtilir.' : 'kargo ücretli — açıklamada ücretsiz kargo yazılmaz.'}`
-              : defaults.copy.freeShipping ? 'Açıklamada ücretsiz kargo belirtilir.' : 'Açıklamada ücretsiz kargo yazılmaz.'}
-          </p>
+          <label className={labelClass} htmlFor="copy-productInfo">Ürün bilgisi</label>
+          <textarea
+            id="copy-productInfo"
+            rows={2}
+            maxLength={300}
+            className={`${inputClass} resize-none`}
+            placeholder="Ör. Comfort Colors 1717, 100% ring-spun cotton, garment-dyed, relaxed fit"
+            value={defaults.copy.productInfo}
+            onChange={(e) => update({ copy: { ...defaults.copy, productInfo: e.target.value } })}
+          />
         </div>
-        {([
-          ['productInfo', 'Ürün bilgisi', 'Ör. Comfort Colors 1717, 100% ring-spun cotton, garment-dyed, relaxed fit', 300],
-          ['careInstructions', 'Bakım talimatı', 'Ör. Machine wash cold inside out, tumble dry low, do not iron the print', 200],
-          ['processingInfo', 'Üretim ve kargo süresi', 'Ör. Made to order in 1-3 business days, ships from the USA', 200],
-          ['extraNotes', 'Mağaza notu', 'Ör. Need a different size or color? Message us — we reply within a day.', 400],
-        ] as const).map(([key, label, placeholder, max]) => (
-          <div key={key}>
-            <label className={labelClass} htmlFor={`copy-${key}`}>{label}</label>
-            <textarea
-              id={`copy-${key}`}
-              rows={2}
-              maxLength={max}
-              className={`${inputClass} resize-none`}
-              placeholder={placeholder}
-              value={defaults.copy[key]}
-              onChange={(e) => update({ copy: { ...defaults.copy, [key]: e.target.value } })}
-            />
-          </div>
-        ))}
+        <ul className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+          <li>
+            <strong className="text-slate-600 dark:text-slate-300">Kargo:</strong>{' '}
+            {detectedFreeShipping === null
+              ? 'kargo profilinden anlaşılamadı; açıklamada kargo ücretinden söz edilmez.'
+              : detectedFreeShipping ? 'ABD\'ye ücretsiz (kargo profilinden) — açıklamada belirtilir.' : 'ücretli (kargo profilinden) — açıklamada ücretsiz kargo yazılmaz.'}
+          </li>
+          <li>
+            <strong className="text-slate-600 dark:text-slate-300">Hazırlık süresi:</strong>{' '}
+            {processing ? `${processing} (Etsy'deki hazırlık süresinden).` : 'hazırlık süresi seçilince açıklamaya eklenir.'}
+          </li>
+        </ul>
       </section>
 
       {/* Varyasyonlar: kayıtlı şablonlar (otomasyonlarda ve Hazır İlanlar'da manuel ilanlar için seçilir) */}

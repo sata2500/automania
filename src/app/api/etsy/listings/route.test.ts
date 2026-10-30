@@ -45,7 +45,7 @@ describe('GET /api/etsy/listings', () => {
         id: 'row-1', user_id: session.id, listing_id: '100', title: 'Sunrise Tee', tags: ['sunrise', 'tee'],
         price: '24.00', currency_code: 'USD', quantity: 3, state: 'active', url: 'https://etsy.test/100',
         views: 120, num_favorers: 9, primary_image_url: 'https://cdn.test/100.png', taxonomy_id: 1,
-        vision_analysis: JSON.stringify({ analyzedAt: '2026-08-22T08:00:00.000Z' }), seo_score: 92,
+        vision_analysis: JSON.stringify({ analyzedAt: '2026-08-22T08:00:00.000Z' }), seo_score: 92, ai_analyzed: true,
         ai_optimized_title: null, ai_optimized_at: null, etsy_updated_timestamp: '2026-08-22T08:00:00.000Z',
         last_synced_at: new Date().toISOString(), created_at: '2026-08-20T08:00:00.000Z', updated_at: '2026-08-22T08:00:00.000Z',
       },

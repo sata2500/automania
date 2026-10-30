@@ -96,7 +96,7 @@ RULES:
    - No single generic words ("gift", "shirt", "funny", "cute") and no repeat of the category name.
 5. DESCRIPTION: plain text (no markdown, no ** or #), 600-1200 characters, natural US English.
    - The first two sentences (about 160 characters) describe the item and who it is for, naturally including the main search phrase; Etsy and Google show this as the preview.
-   - Then short sections with simple headings, one idea per line: "Why you'll love it", "Details" (only from SHOP FACTS and GARMENT OPTIONS; list the garment options copying each name exactly as written — do not rename, shorten or reinterpret them), "Sizing" (refer to the size chart photo; never invent measurements), "Care" (from SHOP FACTS, or "Machine wash cold inside out, tumble dry low" if none is given), "Shipping" (from SHOP FACTS; mention free shipping only if SHOP FACTS says so).
+   - Then short sections with simple headings, one idea per line: "Why you'll love it", "Details" (only from SHOP FACTS and GARMENT OPTIONS; list the garment options copying each name exactly as written — do not rename, shorten or reinterpret them), "Sizing" (refer to the size chart photo; never invent measurements), "Care" (a short, safe care line suited to the garment in SHOP FACTS, e.g. "Machine wash cold inside out, tumble dry low, do not iron the print"; never contradict SHOP FACTS), "Shipping" (from SHOP FACTS; mention free shipping only if SHOP FACTS says so).
    - Never invent fabric blends, weights, certifications, size ranges or delivery times. No keyword lists, no ALL CAPS.
 6. ETSY FIELDS:
    - taxonomy_id: always {{taxonomyId}}.

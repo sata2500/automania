@@ -1,8 +1,9 @@
 /**
- * Etsy'deki (yayında/taslak) ilanların SEO işlemleri: kapak görselinin yapay zekâ analizi, yapay zekâ
- * değerlendirmesi (puanın 40 puanlık kısmı) ve "Yapay zekâ ile iyileştir" (yeni ilanlarla aynı üretim akışı,
- * önce/sonra puanıyla). Sonuçlar `user_etsy_listings` satırında saklanır; Etsy'ye hiçbir şey kendiliğinden
- * gönderilmez (iyileştirme kullanıcı onayıyla Düzenle sekmesinden gönderilir).
+ * Etsy'deki (yayında/taslak) ilanların SEO işlemleri, iki adım:
+ *  1. "Analiz et": kapak görseli yapay zekâyla analiz edilir, etiketler Etsy'den puanlanır (kelime havuzu) ve
+ *     metin yapay zekâyla değerlendirilir; tam SEO puanı (kurallar + Etsy verisi + yapay zekâ) yazılır.
+ *  2. "Yapay zekâ ile iyileştir" (yalnızca analiz edilmiş ilanda): yeni ilanlarla aynı üretim akışı, önce/sonra
+ *     puanıyla öneri. Etsy'ye hiçbir şey kendiliğinden gönderilmez; öneri kullanıcı onayıyla gönderilir.
  */
 import sql, { type DbRow } from '@/lib/db';
 import { analyzeDesignImage } from '@/lib/design-vision';
@@ -71,9 +72,13 @@ const designContext = (vision: VisionAnalysisData) => ({
 });
 
 /** Mevcut metnin puanı (kayıtlı yapay zekâ incelemeleri metne uyuyorsa kullanılır) ve satıra yazılması. */
-export async function reevaluateListing(userId: string, row: DbRow, extra: Partial<Pick<SeoEvaluationResult, 'aiReview'>> & { improvement?: unknown } = {}): Promise<SeoEvaluationResult> {
+export async function reevaluateListing(
+  userId: string,
+  row: DbRow,
+  extra: Partial<Pick<SeoEvaluationResult, 'aiReview'>> & { improvement?: unknown; scoringBudgetMs?: number } = {},
+): Promise<SeoEvaluationResult> {
   const tags = parseListingTags(row);
-  const poolRows = await poolRowsForTags(tags, await scrapeOptions(userId), 0);
+  const poolRows = await poolRowsForTags(tags, await scrapeOptions(userId), extra.scoringBudgetMs ?? 0);
   const previous = parseJson<Record<string, unknown>>(row.seo_evaluation, {});
   const evaluation = evaluateEtsyListingSeo({
     title: row.title, description: row.description, tags, keywordPoolRows: poolRows,
@@ -88,16 +93,25 @@ export async function reevaluateListing(userId: string, row: DbRow, extra: Parti
   return stored as SeoEvaluationResult;
 }
 
-/** Mevcut metni yapay zekâyla değerlendirir (puanın 40 puanlık kısmı) ve puanı günceller. */
-export async function reviewEtsyListing(userId: string, row: DbRow): Promise<{ evaluation: SeoEvaluationResult; aiReview: ListingAiReview }> {
-  const vision = await ensureListingVision(userId, row);
+/** Mevcut metnin incelemesi yapıldı mı (iyileştirme için önce analiz gerekir). */
+export function isListingAnalyzed(row: DbRow): boolean {
+  const evaluation = parseJson<{ aiReview?: { textHash?: string } | null; confidence?: { aiReviewed?: boolean } }>(row.seo_evaluation, {});
+  return Boolean(evaluation.confidence?.aiReviewed && evaluation.aiReview);
+}
+
+/**
+ * "Analiz et": görsel analizi (yoksa veya `refreshVision` ise), etiketlerin Etsy'den puanlanması ve yapay zekâ
+ * değerlendirmesi; tam SEO puanı satıra yazılır.
+ */
+export async function analyzeEtsyListing(userId: string, row: DbRow, { refreshVision = false } = {}): Promise<{ evaluation: SeoEvaluationResult; vision: VisionAnalysisData }> {
+  const vision = refreshVision ? await analyzeListingVision(userId, row) : await ensureListingVision(userId, row);
   const storeFacts = await loadStoreCopyFacts(userId).catch(() => 'None provided');
   const aiReview = await reviewListingWithAi({
     title: String(row.title || ''), tags: parseListingTags(row), description: String(row.description || ''),
     design: designContext(vision), storeFacts,
   });
-  const evaluation = await reevaluateListing(userId, row, { aiReview });
-  return { evaluation, aiReview };
+  const evaluation = await reevaluateListing(userId, { ...row, vision_analysis: vision }, { aiReview, scoringBudgetMs: 25_000 });
+  return { evaluation, vision };
 }
 
 export type ListingImprovement = {

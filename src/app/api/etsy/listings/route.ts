@@ -98,6 +98,8 @@ export async function GET(req: Request) {
         taxonomy_id,
         vision_analysis,
         seo_score,
+        -- "Analiz edildi": mevcut metin yapay zekâyla değerlendirildi (görsel + Etsy verisi + yapay zekâ)
+        COALESCE(seo_evaluation->'confidence'->>'aiReviewed', 'false') = 'true' AS ai_analyzed,
         ai_optimized_title,
         ai_optimized_at,
         etsy_updated_timestamp,
@@ -128,8 +130,7 @@ export async function GET(req: Request) {
       else if (r.state === 'inactive') inactiveCount++;
       else otherCount++; // sold_out, expired
 
-      const va = typeof r.vision_analysis === 'string' ? JSON.parse(r.vision_analysis) : (r.vision_analysis || {});
-      if (va && (va.primarySubject || va.description || va.analyzedAt)) {
+      if (r.ai_analyzed) {
         analyzedCount++;
       }
 
@@ -178,10 +179,9 @@ export async function GET(req: Request) {
       if (scoreFilter === 'excellent' && score < 90) return false;
 
       // Vision filter
-      const va = typeof r.vision_analysis === 'string' ? JSON.parse(r.vision_analysis) : (r.vision_analysis || {});
-      const hasVision = !!(va && (va.primarySubject || va.description || va.analyzedAt));
-      if (visionFilter === 'analyzed' && !hasVision) return false;
-      if (visionFilter === 'not_analyzed' && hasVision) return false;
+      const analyzed = Boolean(r.ai_analyzed);
+      if (visionFilter === 'analyzed' && !analyzed) return false;
+      if (visionFilter === 'not_analyzed' && analyzed) return false;
 
       return true;
     });

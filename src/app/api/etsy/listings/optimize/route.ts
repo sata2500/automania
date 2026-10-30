@@ -2,14 +2,15 @@
  * POST /api/etsy/listings/optimize — "Yapay zekâ ile iyileştir": Etsy'deki bir ilan için yeni ilanlarla aynı
  * akışla (yaz → Etsy'den puanla → yapay zekâyla değerlendir → gerekirse düzelt) yeni başlık, etiket ve açıklama
  * önerir; önce/sonra SEO puanını döner. Etsy'ye gönderilmez: öneri Düzenle sekmesinden kullanıcı onayıyla gider.
- * Body: { listingId } (bir istekte bir ilan; toplu iyileştirmede istemci sırayla çağırır).
+ * Yalnızca analiz edilmiş ilanda çalışır. Body: { listingId } (bir istekte bir ilan; toplu iyileştirmede istemci
+ * sırayla çağırır).
  */
 import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { improveEtsyListing } from '@/lib/etsy-listing-seo';
+import { improveEtsyListing, isListingAnalyzed } from '@/lib/etsy-listing-seo';
 
 export const maxDuration = 300;
 
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
     if (!listingId) return NextResponse.json({ success: false, error: 'İyileştirilecek ilan belirtilmedi.' }, { status: 400 });
     const rows = await sql`SELECT * FROM user_etsy_listings WHERE user_id = ${session.id} AND listing_id = ${String(listingId)} LIMIT 1`;
     if (rows.length === 0) return NextResponse.json({ success: false, error: 'İlan bulunamadı.' }, { status: 404 });
+    if (!isListingAnalyzed(rows[0])) {
+      return NextResponse.json({ success: false, error: 'Önce ilanı analiz edin; iyileştirme analiz sonucuna göre yapılır.', code: 'NOT_ANALYZED' }, { status: 409 });
+    }
 
     const { before, improvement } = await improveEtsyListing(session.id, rows[0]);
     return NextResponse.json({

@@ -1,41 +1,45 @@
 'use client';
 
+/**
+ * Seçili Etsy ilanlarına toplu işlem: "Analiz et" (görsel + etiketlerin Etsy verisi + yapay zekâ değerlendirmesi)
+ * veya "Yapay zekâ ile iyileştir" (yalnızca analiz edilmiş ilanlar; öneriler kaydedilir, Etsy'ye gönderilmez).
+ */
 import { getErrorMessage } from '@/lib/errors';
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  X,
-  Sparkles,
-  Eye,
-  TrendingUp,
-  CheckCircle2,
-} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Sparkles, TrendingUp, X } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
-
-export type BulkActionType = 'vision' | 'evaluate_seo' | 'ai_review' | 'optimize';
-
 import type { StoredEtsyListing } from '@/types/etsy';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
+
+export type BulkActionType = 'analyze' | 'optimize';
 
 interface BulkActionModalProps {
   isOpen: boolean;
   onClose: () => void;
   actionType: BulkActionType;
   selectedListings: StoredEtsyListing[];
-  allListings: StoredEtsyListing[];
   onCompleted: () => void;
 }
 
-export const BulkActionModal: React.FC<BulkActionModalProps> = ({
-  isOpen,
-  onClose,
-  actionType,
-  selectedListings,
-  allListings,
-  onCompleted
-}) => {
+/** Analiz bir istekte en fazla 5 ilan alır; iyileştirme tek tek (her biri 1-2 dk). */
+const CHUNK_SIZE: Record<BulkActionType, number> = { analyze: 5, optimize: 1 };
+
+const COPY: Record<BulkActionType, { title: string; description: string; icon: React.ReactNode }> = {
+  analyze: {
+    title: 'Analiz et',
+    description: 'Her ilanın kapak görseli yapay zekâyla analiz edilir, etiketleri Etsy\'den puanlanır ve başlık, etiket ve açıklama değerlendirilir. Sonunda her ilanın tam SEO puanı görünür (ilan başına yaklaşık 30-60 sn).',
+    icon: <TrendingUp className="w-5 h-5" />,
+  },
+  optimize: {
+    title: 'Yapay zekâ ile iyileştir',
+    description: 'Analiz edilmiş ilanlar için sırayla yeni başlık, etiket ve açıklama önerisi hazırlanır ve puanlanır (ilan başına 1-2 dk). Etsy\'ye hiçbir şey gönderilmez: önerileri ilan penceresinde inceleyip onaylarsınız.',
+    icon: <Sparkles className="w-5 h-5" />,
+  },
+};
+
+export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClose, actionType, selectedListings, onCompleted }) => {
   const { success, error, warning } = useToast();
-  const [scope, setScope] = useState<'selected' | 'all'>('selected');
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentStepText, setCurrentStepText] = useState('');
@@ -43,16 +47,10 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
   const [errorLogs, setErrorLogs] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
   const cancelRef = useRef(false);
-  const selectedCountRef = useRef(selectedListings.length);
-  useEffect(() => {
-    selectedCountRef.current = selectedListings.length;
-  }, [selectedListings.length]);
 
-  // Yalnızca modal açılırken sıfırla. Liste ya da bildirimler yeniden render ettiğinde süren işlemin
-  // ilerlemesi ve bitiş raporu kaybolmamalı.
+  // Yalnızca pencere açılırken sıfırlanır (süren işlemin ilerlemesi yeniden çizimlerde kaybolmasın).
   useEffect(() => {
     if (!isOpen) return;
-    setScope(selectedCountRef.current === 0 ? 'all' : 'selected');
     setIsProcessing(false);
     setProgress(0);
     setProcessedCount(0);
@@ -63,299 +61,130 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const targetListings = scope === 'selected' ? selectedListings : allListings;
-  const totalItems = targetListings.length;
-  // Yapay zekâ işlemleri maliyetlidir: bir seferde en fazla 10 ilan.
-  const AI_BATCH_LIMIT = 10;
-  const isAiAction = actionType === 'vision' || actionType === 'optimize' || actionType === 'ai_review';
+  const targets = actionType === 'optimize' ? selectedListings.filter((l) => l.ai_analyzed) : selectedListings;
+  const skipped = selectedListings.length - targets.length;
+  const copy = COPY[actionType];
 
-  const getActionTitle = () => {
-    if (actionType === 'vision') return 'Toplu Görsel (Vision AI) Analizi';
-    if (actionType === 'evaluate_seo') return 'Toplu SEO Puanı (Etsy verisi)';
-    if (actionType === 'ai_review') return 'Toplu Yapay Zekâ Değerlendirmesi';
-    if (actionType === 'optimize') return 'Toplu Yapay Zekâ ile İyileştirme';
-    return 'Toplu İşlem';
-  };
-
-  const getActionDescription = () => {
-    if (actionType === 'vision') {
-      return 'Seçili ilanların kapak fotoğraflarını Admin panelinde yapılandırılan Vision AI modeli ile tek tek analiz eder; konu, estetik ve renk verilerini kaydeder.';
-    }
-    if (actionType === 'evaluate_seo') {
-      return 'Seçili ilanların etiketlerini kelime havuzunda tarar ve puanı Etsy kuralları ile güncel Etsy verisine göre yeniden hesaplar (yapay zekâ kullanılmaz).';
-    }
-    if (actionType === 'ai_review') {
-      return 'Seçili ilanların başlık, etiket ve açıklamasını görsel analizine göre yapay zekâyla değerlendirir (puanın 40 puanlık kısmı). Görsel analizi olmayan ilan önce analiz edilir.';
-    }
-    if (actionType === 'optimize') {
-      return 'Seçili ilanlar için sırayla yeni başlık, etiket ve açıklama önerisi hazırlanır ve puanlanır (ilan başına 1-2 dk). Etsy\'ye hiçbir şey gönderilmez; önerileri ilan penceresinde inceleyip onaylarsınız.';
-    }
-    return '';
-  };
-
-  const handleStartProcess = async () => {
-    if (totalItems === 0) {
-      warning('İşlem yapılacak ilan bulunamadı.');
+  const handleStart = async () => {
+    if (targets.length === 0) {
+      warning('İşlenecek ilan yok.');
       return;
     }
-
     setIsProcessing(true);
     setProgress(0);
     setProcessedCount(0);
     setErrorLogs([]);
     setIsFinished(false);
+    cancelRef.current = false;
 
     let completed = 0;
     const errors: string[] = [];
     let stoppedReason: string | null = null;
-    cancelRef.current = false;
+    const chunkSize = CHUNK_SIZE[actionType];
 
-    // Process sequentially or in small chunks of 2 to avoid timeout/rate limits
-    const chunkSize = actionType === 'vision' || actionType === 'optimize' ? 1 : actionType === 'ai_review' ? 5 : 10;
-    
-    for (let i = 0; i < targetListings.length; i += chunkSize) {
+    for (let i = 0; i < targets.length; i += chunkSize) {
       if (cancelRef.current) {
-        stoppedReason = `İşlem durduruldu; ${targetListings.length - i} ilan işlenmedi.`;
+        stoppedReason = `İşlem durduruldu; ${targets.length - i} ilan işlenmedi.`;
         break;
       }
-      const chunk = targetListings.slice(i, i + chunkSize);
-      const chunkIds = chunk.map(c => c.listing_id);
-
-      setCurrentStepText(`İşleniyor: ${i + 1} - ${Math.min(i + chunkSize, targetListings.length)} / ${targetListings.length}...`);
-
+      const chunk = targets.slice(i, i + chunkSize);
+      setCurrentStepText(`İşleniyor: ${i + 1}${chunk.length > 1 ? `-${i + chunk.length}` : ''} / ${targets.length}…`);
       try {
-        let endpoint = '';
-        // İyileştirme bir istekte tek ilan alır (her biri 1-2 dk sürer).
-        const body = actionType === 'optimize' ? { listingId: chunkIds[0] } : { listingIds: chunkIds };
-
-        if (actionType === 'vision') {
-          endpoint = '/api/etsy/listings/analyze-vision';
-        } else if (actionType === 'evaluate_seo') {
-          endpoint = '/api/etsy/listings/evaluate-seo';
-        } else if (actionType === 'ai_review') {
-          endpoint = '/api/etsy/listings/ai-review';
-        } else if (actionType === 'optimize') {
-          endpoint = '/api/etsy/listings/optimize';
-        }
-
-        const res = await fetch(endpoint, {
+        const res = await fetch(actionType === 'analyze' ? '/api/etsy/listings/analyze' : '/api/etsy/listings/optimize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify(actionType === 'analyze' ? { listingIds: chunk.map((c) => c.listing_id) } : { listingId: chunk[0]!.listing_id }),
         });
-
         if (res.status === 429) {
-          // Sınır dolduysa kalan istekler de reddedilecek: boşuna denemek yerine dur ve süreyi bildir.
-          const retryAfter = Number(res.headers.get('Retry-After')) || 0;
-          const minutes = Math.max(1, Math.ceil(retryAfter / 60));
-          stoppedReason = `İstek sınırına ulaşıldı; ${targetListings.length - i} ilan işlenmedi. Yaklaşık ${minutes} dakika sonra kalanlar için tekrar çalıştırın.`;
+          const minutes = Math.max(1, Math.ceil((Number(res.headers.get('Retry-After')) || 0) / 60));
+          stoppedReason = `İstek sınırına ulaşıldı; ${targets.length - i} ilan işlenmedi. Yaklaşık ${minutes} dakika sonra kalanlar için tekrar çalıştırın.`;
           break;
         }
-
         const data = await res.json();
-        if (!data.success) {
-          errors.push(`Hata: ${data.error || 'Bilinmeyen hata'}`);
-        } else {
-          const itemErrors: string[] = Array.isArray(data.errors) ? data.errors : [];
-          errors.push(...itemErrors);
-          // Sunucunun hata bildirdiği ilanlar "tamamlandı" sayılmaz.
-          completed += Math.max(0, chunk.length - itemErrors.length);
-        }
+        const itemErrors: string[] = Array.isArray(data.errors) ? data.errors : [];
+        if (!data.success && itemErrors.length === 0) itemErrors.push(data.error || 'Bilinmeyen hata');
+        errors.push(...itemErrors);
+        completed += Math.max(0, chunk.length - itemErrors.length);
       } catch (err) {
-        errors.push(`Ağ Hatası: ${getErrorMessage(err)}`);
+        errors.push(`Ağ hatası: ${getErrorMessage(err)}`);
       }
-
       setProcessedCount(completed);
-      setProgress(Math.round(((i + chunk.length) / targetListings.length) * 100));
-
-      // Small throttle
-      await new Promise(r => setTimeout(r, 200));
+      setProgress(Math.round(((i + chunk.length) / targets.length) * 100));
     }
 
     setIsProcessing(false);
     setIsFinished(true);
     if (stoppedReason) errors.unshift(stoppedReason);
     setErrorLogs(errors);
-    setProgress(stoppedReason ? Math.round((completed / Math.max(1, targetListings.length)) * 100) : 100);
-    if (stoppedReason) {
-      warning(`${stoppedReason} (${completed}/${targetListings.length} tamamlandı)`);
-    } else if (completed === 0) {
-      error(`Toplu işlem başarısız oldu (0/${targetListings.length}). Ayrıntılar için hata kayıtlarına bakın.`);
-    } else if (errors.length > 0) {
-      warning(`Toplu işlem kısmen tamamlandı (${completed}/${targetListings.length}); ${errors.length} hata kaydı var.`);
-    } else {
-      success(`Toplu işlem tamamlandı! (${completed}/${targetListings.length})`);
-    }
+    if (stoppedReason) warning(`${stoppedReason} (${completed}/${targets.length} tamamlandı)`);
+    else if (completed === 0) error(`İşlem başarısız oldu (0/${targets.length}). Ayrıntılar pencerede.`);
+    else if (errors.length > 0) warning(`Kısmen tamamlandı (${completed}/${targets.length}).`);
+    else success(`${copy.title}: ${completed} ilan tamamlandı.`);
   };
 
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <DialogPanel aria-labelledby="bulk-action-title" onClose={isProcessing ? undefined : onClose} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/70">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl border border-purple-500/20">
-              {actionType === 'vision' && <Eye className="w-5 h-5" />}
-              {actionType === 'evaluate_seo' && <TrendingUp className="w-5 h-5" />}
-              {(actionType === 'optimize' || actionType === 'ai_review') && <Sparkles className="w-5 h-5" />}
-            </div>
-            <div>
-              <h3 id="bulk-action-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                {getActionTitle()}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Toplu İlan İşleme Asistanı
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            disabled={isProcessing}
-            className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg bg-slate-100/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
-          >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <DialogPanel aria-labelledby="bulk-action-title" onClose={isProcessing ? undefined : onClose} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+          <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">{copy.icon}</div>
+          <h3 id="bulk-action-title" className="flex-1 text-sm font-bold text-slate-900 dark:text-white">
+            {copy.title} · {targets.length} ilan
+          </h3>
+          <button type="button" onClick={onClose} disabled={isProcessing} aria-label="Kapat" className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg disabled:opacity-40">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-            {getActionDescription()}
-          </p>
-
-          {isAiAction && !isProcessing && !isFinished && totalItems > AI_BATCH_LIMIT && (
-            <p role="note" className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 leading-relaxed">
-              Maliyet koruması nedeniyle bu işlem 10 dakikada en fazla {AI_BATCH_LIMIT} ilan işleyebilir. Sınıra ulaşıldığında işlem durur
-              ve kalan ilanlar için ne zaman tekrar çalıştırabileceğiniz gösterilir.
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{copy.description}</p>
+          {skipped > 0 && !isFinished && (
+            <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5">
+              {skipped} ilan henüz analiz edilmediği için atlanacak. Önce onları analiz edin.
             </p>
           )}
 
-          {/* Scope Selector */}
-          {!isProcessing && !isFinished && (
-            <div className="space-y-2 pt-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">İşlem Kapsamı:</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScope('selected')}
-                  disabled={selectedListings.length === 0}
-                  className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${
-                    scope === 'selected'
-                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  } ${selectedListings.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
-                >
-                  <div>Seçili İlanlar</div>
-                  <div className="text-[11px] font-normal text-purple-700 dark:text-purple-300 mt-0.5">
-                    {selectedListings.length} ilan seçildi
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setScope('all')}
-                  className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${
-                    scope === 'all'
-                      ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
-                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <div>Tüm İlanlar</div>
-                  <div className="text-[11px] font-normal text-purple-700 dark:text-purple-300 mt-0.5">
-                    Toplam {allListings.length} ilan
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Progress Box */}
           {(isProcessing || isFinished) && (
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="text-slate-700 dark:text-slate-300 font-bold flex items-center gap-2">
-                  {isProcessing && <Spinner className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
-                  {isFinished && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
-                  <span>{isFinished ? 'İşlem Tamamlandı' : currentStepText}</span>
+                  {isProcessing ? <Spinner className="w-4 h-4 text-indigo-500" /> : <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  {isFinished ? 'Tamamlandı' : currentStepText}
                 </span>
-                <span className="font-mono text-purple-600 dark:text-purple-400 font-bold">%{progress}</span>
+                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">%{progress}</span>
               </div>
-
-              {/* Progress Bar */}
-              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
+              <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
-
-              <div className="text-[11px] text-slate-400 flex justify-between">
-                <span>İşlenen: {processedCount} / {totalItems}</span>
-                {errorLogs.length > 0 && (
-                  <span className="text-rose-600 dark:text-rose-400 font-bold">{errorLogs.length} hata</span>
-                )}
-              </div>
-
+              <p className="text-[11px] text-slate-500">İşlenen: {processedCount} / {targets.length}{errorLogs.length > 0 ? ` · ${errorLogs.length} hata` : ''}</p>
               {errorLogs.length > 0 && (
-                <div className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 max-h-24 overflow-y-auto">
-                  <ul className="text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
-                    {errorLogs.map((err, i) => (
-                      <li key={i}>• {err}</li>
-                    ))}
-                  </ul>
-                </div>
+                <ul className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 max-h-24 overflow-y-auto text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
+                  {errorLogs.map((err, i) => <li key={i}>• {err}</li>)}
+                </ul>
               )}
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/70 dark:bg-slate-950/70">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
           {!isProcessing && !isFinished && (
             <>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors"
-              >
-                İptal
-              </button>
-
-              <button
-                onClick={handleStartProcess}
-                disabled={totalItems === 0}
-                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                <span>İşlemi Başlat ({totalItems} İlan)</span>
+              <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl">İptal</button>
+              <button type="button" onClick={handleStart} disabled={targets.length === 0} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl disabled:opacity-50">
+                Başlat ({targets.length})
               </button>
             </>
           )}
-
           {isProcessing && (
-            <button
-              type="button"
-              onClick={() => { cancelRef.current = true; }}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors"
-            >
+            <button type="button" onClick={() => { cancelRef.current = true; }} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl">
               Durdur
             </button>
           )}
-
           {isFinished && (
-            <button
-              onClick={() => {
-                onCompleted();
-                onClose();
-              }}
-              className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
-            >
-              Tamamla & Listeyi Yenile
+            <button type="button" onClick={() => { onCompleted(); onClose(); }} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl">
+              Tamam
             </button>
           )}
         </div>
-
       </DialogPanel>
     </div>
   );

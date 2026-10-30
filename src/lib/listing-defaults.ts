@@ -6,6 +6,7 @@
  */
 import type { PodTemplateEtsyListingSettings } from '@/types/templates';
 import type { EtsyVariationRow } from '@/types/pod';
+import type { EtsyReadinessState } from '@/types/etsy';
 
 export type VariationDefaults = {
   sizes: string[];
@@ -18,20 +19,13 @@ export type VariationDefaults = {
 };
 
 /**
- * İlan metni bilgileri: yapay zekâ açıklamayı yazarken kullanır (yalnızca burada ve klasör ayarlarında yazan
- * bilgiler açıklamaya girer; model ürün özelliği uydurmaz).
+ * İlan metni bilgisi: yapay zekâ açıklamayı yazarken ürün bilgisi olarak yalnızca bunu kullanır (model ürün
+ * özelliği uydurmaz). Kargo ücreti ve hazırlık süresi Etsy ayarlarından otomatik alınır; bakım talimatını
+ * yapay zekâ ürün bilgisinden yazar.
  */
 export type ListingCopySettings = {
-  /** Mağazada kargo ücretsiz mi? null: bağlı kargo profilinden anlaşılır (ücret 0 ise ücretsiz). */
-  freeShipping: boolean | null;
   /** Baskı yapılan ürün: marka/model, kumaş, kalıp (ör. "Comfort Colors 1717, 100% ring-spun cotton, relaxed fit") */
   productInfo: string;
-  /** Bakım talimatı (ör. "Machine wash cold inside out, tumble dry low") */
-  careInstructions: string;
-  /** Üretim ve kargo süresi (ör. "Made to order in 1-3 business days, ships from the USA") */
-  processingInfo: string;
-  /** Açıklamaya eklenecek mağaza notu veya üslup (ör. iade politikası, mağaza hikâyesi) */
-  extraNotes: string;
 };
 
 export type ListingDefaults = {
@@ -40,7 +34,7 @@ export type ListingDefaults = {
   copy: ListingCopySettings;
 };
 
-export const EMPTY_LISTING_COPY: ListingCopySettings = { freeShipping: null, productInfo: '', careInstructions: '', processingInfo: '', extraNotes: '' };
+export const EMPTY_LISTING_COPY: ListingCopySettings = { productInfo: '' };
 
 export const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 export const DEFAULT_COLORS = ['White', 'Black', 'Sand', 'Navy', 'Sport Grey'];
@@ -100,24 +94,30 @@ const text = (value: unknown, max: number) => (typeof value === 'string' ? value
 
 export function normalizeListingCopy(input: unknown): ListingCopySettings {
   const raw = (input && typeof input === 'object' ? input : {}) as Partial<ListingCopySettings>;
-  return {
-    freeShipping: typeof raw.freeShipping === 'boolean' ? raw.freeShipping : null,
-    productInfo: text(raw.productInfo, 300),
-    careInstructions: text(raw.careInstructions, 200),
-    processingInfo: text(raw.processingInfo, 200),
-    extraNotes: text(raw.extraNotes, 400),
-  };
+  return { productInfo: text(raw.productInfo, 300) };
 }
 
-/** Yapay zekâya verilecek mağaza bilgileri (boş alanlar yazılmaz; kargo durumu açıkça belirtilir). */
-export function listingCopyFacts(copy: ListingCopySettings, freeShippingDetected: boolean | null = null): string {
-  const freeShipping = copy.freeShipping ?? freeShippingDetected;
+/** Etsy hazırlık süresi tanımından açıklamaya yazılacak süre (ör. "Made to order, ships in 1-3 business days"). */
+export function processingTimeText(state: Partial<EtsyReadinessState> | null | undefined): string | null {
+  if (!state) return null;
+  const min = Number(state.min_processing_time);
+  const max = Number(state.max_processing_time);
+  const unit = state.processing_time_unit === 'weeks' ? 'weeks' : 'business days';
+  const range = min > 0 && max > 0 ? (min === max ? `${min}` : `${min}-${max}`) : max > 0 ? `${max}` : null;
+  const label = range ? `${range} ${range === '1' ? unit.replace(/s$/, '') : unit}` : state.processing_days_display_label?.trim() || null;
+  if (!label) return null;
+  return state.readiness_state === 'ready_to_ship' ? `Ready to ship, ships in ${label}` : `Made to order, ships in ${label}`;
+}
+
+/**
+ * Yapay zekâya verilecek mağaza bilgileri: ürün bilgisi (Ayarlar), kargo ücreti (kargo profilinden) ve hazırlık
+ * süresi (Etsy'den). Bilinmeyenler yazılmaz; kargo durumu biliniyorsa açıkça belirtilir.
+ */
+export function listingCopyFacts(copy: ListingCopySettings, auto: { freeShipping?: boolean | null; processing?: string | null } = {}): string {
   const lines = [
     copy.productInfo && `Product (garment brand/model, fabric, fit): ${copy.productInfo}`,
-    copy.careInstructions && `Care instructions: ${copy.careInstructions}`,
-    copy.processingInfo && `Production & shipping time: ${copy.processingInfo}`,
-    freeShipping === true ? 'Shipping: FREE shipping (mention it in the description)' : freeShipping === false ? 'Shipping: shipping is NOT free (do not claim free shipping)' : '',
-    copy.extraNotes && `Shop note: ${copy.extraNotes}`,
+    auto.processing && `Production & shipping time: ${auto.processing}`,
+    auto.freeShipping === true ? 'Shipping: FREE shipping (mention it in the description)' : auto.freeShipping === false ? 'Shipping: shipping is NOT free (do not claim free shipping)' : '',
   ].filter(Boolean);
   return lines.length > 0 ? lines.join('\n') : 'None provided';
 }
