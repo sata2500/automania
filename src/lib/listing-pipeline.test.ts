@@ -11,6 +11,7 @@ vi.mock('@/lib/keyword-pool', () => ({
   normalizeKeywords: (k: string[]) => k.map((x) => x.toLowerCase()),
   scoreKeywords: vi.fn(async () => ({ evaluated: [], competitorTags: [], pending: [], scraped: 0 })),
 }));
+vi.mock('@/lib/app-settings', () => ({ loadSettingRows: vi.fn(async () => []) }));
 vi.mock('@/lib/scraper-credentials', () => ({ loadScraperCredentials: vi.fn(async () => null) }));
 
 const { generateBestListing, revisionFeedbackFrom } = await import('./listing-pipeline');
@@ -60,6 +61,9 @@ describe('generateBestListing', () => {
     const secondCall = generate.mock.calls[1]![1] as { revisionFeedback: string[]; currentListing: { title: string } };
     expect(secondCall.currentListing.title).toBe(weakTitle);
     expect(secondCall.revisionFeedback.some((f) => /etiket eksik/.test(f))).toBe(true);
+    // Web araması yalnızca ilk taslakta (admin ayarı varsayılan açık).
+    expect((generate.mock.calls[0]![1] as { webSearch?: boolean }).webSearch).toBe(true);
+    expect((secondCall as { webSearch?: boolean }).webSearch).toBe(false);
   });
 
   it('still scores the listing when the AI review fails', async () => {

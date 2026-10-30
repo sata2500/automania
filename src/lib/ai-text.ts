@@ -15,6 +15,10 @@ export type AiJsonOptions = {
   /** 0 = tutarlı (değerlendirme), 0.6-0.8 = yaratıcı (metin yazımı) */
   temperature: number;
   maxOutputTokens?: number;
+  /** Modele birlikte gönderilecek görsel (ör. tasarım). Model görsel kabul etmezse görselsiz denenir. */
+  image?: { buffer: Buffer; mimeType: string } | null;
+  /** Web araması (Google: Google Search aracı; OpenRouter: web eklentisi). Desteklenmezse aramasız denenir. */
+  webSearch?: boolean;
 };
 
 /** Model yanıtından ilk JSON nesnesini ayıklar. */
@@ -36,12 +40,19 @@ export async function generateReasoningJson(prompt: string, options: AiJsonOptio
   if (provider === 'gemini' ? !googleConnection : !apiKey) throw new AiTextConfigError('Sistem API anahtarı (Admin) yapılandırılmamış.');
   const model = requireModel(provider === 'gemini' ? settings.gemini_model_reasoning : settings.openrouter_model_reasoning, 'reasoning');
 
-  const content = await withAiRetry(async () => {
+  const call = (image: AiJsonOptions['image'], webSearch: boolean) => withAiRetry(async () => {
     if (provider === 'gemini') {
       const res = await createGoogleClient(googleConnection!).models.generateContent({
         model,
-        contents: prompt,
-        config: { responseMimeType: 'application/json', temperature: options.temperature, maxOutputTokens: options.maxOutputTokens ?? 8192 },
+        contents: image
+          ? [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.buffer.toString('base64') } }] }]
+          : prompt,
+        config: {
+          temperature: options.temperature,
+          maxOutputTokens: options.maxOutputTokens ?? 8192,
+          // Google Search aracı yapılandırılmış JSON yanıt moduyla birlikte kullanılamaz; JSON metinden ayrıştırılır.
+          ...(webSearch ? { tools: [{ googleSearch: {} }] } : { responseMimeType: 'application/json' }),
+        },
       });
       const text = res.text?.trim();
       if (!text) throw new Error('Model yanıt vermedi.');
@@ -54,13 +65,31 @@ export async function generateReasoningJson(prompt: string, options: AiJsonOptio
         model,
         temperature: options.temperature,
         response_format: { type: 'json_object' },
-        messages: [{ role: 'user', content: prompt }],
+        ...(webSearch ? { plugins: [{ id: 'web', max_results: 5 }] } : {}),
+        messages: [{
+          role: 'user',
+          content: image
+            ? [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString('base64')}` } }]
+            : prompt,
+        }],
       }),
     });
     if (!res.ok) throw new Error(`OpenRouter API hatası: ${res.status} - ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
     return String(data.choices?.[0]?.message?.content || '');
   }, { label: options.label, delaysMs: [4_000, 10_000] });
+
+  const extras = Boolean(options.image) || Boolean(options.webSearch);
+  let content: string;
+  try {
+    content = await call(options.image ?? null, Boolean(options.webSearch));
+    if (extras) extractJsonObject(content);
+  } catch (error) {
+    if (!extras) throw error;
+    // Görsel veya web araması bu modelde/sağlayıcıda desteklenmiyorsa iş durmaz: yalnızca metinle denenir.
+    console.warn(`[AI text] ${options.label}: image/web search call failed; retrying text-only.`, error instanceof Error ? error.message : error);
+    content = await call(null, false);
+  }
 
   return { data: extractJsonObject(content), model };
 }

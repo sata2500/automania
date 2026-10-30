@@ -27,6 +27,7 @@ const ALLOWED_SETTING_KEYS = new Set<string>([
   'gemini_model_video',
   ...PROMPT_KEYS,
   'ai_research_web_search',
+  'ai_listing_web_search',
   'ai_research_model',
 ]);
 

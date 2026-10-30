@@ -44,7 +44,21 @@ export type GenerateListingInput = {
   currentListing?: { title: string; tags: string[]; description: string } | null;
   /** Değerlendirme sonrası düzeltilecek noktalar (ikinci tur) */
   revisionFeedback?: string[];
+  /** Tasarım görseli: model metni gördüğü tasarıma göre yazar */
+  designImage?: { buffer: Buffer; mimeType: string } | null;
+  /** Yazarken web araması (güncel trend ve alıcı ifadeleri; etiketler yine Etsy verisiyle puanlanır) */
+  webSearch?: boolean;
 };
+
+/** Talimatın sonuna eklenen bağlam: görsel ekliyse ve web araması açıksa modele nasıl kullanacağı söylenir. */
+export function listingExtrasNote({ hasImage, webSearch }: { hasImage: boolean; webSearch: boolean }): string {
+  const lines = [
+    hasImage && '- The DESIGN IMAGE is attached. Describe what you actually see (subject, style, colors, text on the design); if the image and the analysis disagree, trust the image.',
+    webSearch && '- You may use web search to check current US trends and how buyers phrase searches for this kind of design (Etsy, Pinterest, Google Trends). Prefer phrases from the KEYWORDS list with real Etsy scores; use a web-found phrase only if it clearly fits this design. Never use brand names, celebrities or copyrighted characters found on the web.',
+    webSearch && '- Reply with the JSON object only (no commentary, no citations).',
+  ].filter(Boolean);
+  return lines.length > 0 ? `\n\nADDITIONAL CONTEXT:\n${lines.join('\n')}` : '';
+}
 
 /**
  * Havuzda gerçek Etsy verisi olmayan kelimeye puan uydurulmaz: puan `null` döner ve AI'ya
@@ -117,7 +131,7 @@ type TaxonomyProperty = {
 };
 
 export async function generateListingContent(userId: string, input: GenerateListingInput) {
-  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments, images, storeFacts, currentListing, revisionFeedback } = input;
+  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments, images, storeFacts, currentListing, revisionFeedback, designImage, webSearch = false } = input;
   if (!Array.isArray(keywords) || keywords.length === 0) {
     throw new ListingGenerationError('İçerik oluşturmak için en az bir kelime gereklidir.', 400);
   }
@@ -235,11 +249,11 @@ export async function generateListingContent(userId: string, input: GenerateList
     ).join('\n   ') : 'None'
   };
 
-  const prompt = fillPrompt(listingPrompt, dynamicValues);
+  const prompt = fillPrompt(listingPrompt, dynamicValues) + listingExtrasNote({ hasImage: Boolean(designImage), webSearch });
 
   let generated: { data: unknown; model: string };
   try {
-    generated = await generateReasoningJson(prompt, { label: 'listing generation', temperature: 0.7 });
+    generated = await generateReasoningJson(prompt, { label: 'listing generation', temperature: 0.7, image: designImage, webSearch });
   } catch (error) {
     if (error instanceof AiTextConfigError) throw new ListingGenerationError(error.message, 500);
     if (error instanceof ModelNotConfiguredError) throw new ListingGenerationError(error.message, 400);

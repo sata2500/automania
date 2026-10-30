@@ -145,6 +145,8 @@ export async function improveEtsyListing(userId: string, row: DbRow): Promise<{ 
   const vision = await ensureListingVision(userId, row);
   const tags = parseListingTags(row);
   const storeFacts = await loadStoreCopyFacts(userId).catch(() => 'None provided');
+  const imageUrl = listingImageUrl(row);
+  const coverImage = imageUrl ? await loadVisionImage(userId, String(imageUrl)).catch(() => null) : null;
   const related = await relatedPoolKeywords([vision.primarySubject ?? '', vision.primaryAesthetic ?? '', ...(vision.keywords ?? []).slice(0, 5)]);
   const keywords = Array.from(new Set([...(vision.keywords ?? []), ...tags, ...related].map((k) => k.toLowerCase().trim()).filter(Boolean))).slice(0, 45);
   const result = await generateBestListing(userId, {
@@ -155,6 +157,7 @@ export async function improveEtsyListing(userId: string, row: DbRow): Promise<{ 
     primaryAesthetic: vision.primaryAesthetic || undefined,
     taxonomyId: Number(row.taxonomy_id) || undefined,
     currentListing: { title: String(row.title || ''), tags, description: String(row.description || '') },
+    designImage: coverImage,
     design: designContext(vision),
     storeFacts,
   });

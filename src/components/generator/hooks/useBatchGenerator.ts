@@ -381,7 +381,7 @@ export function useBatchGenerator({
             url: design && /^\/api\/(r2|uploads)\//.test(design.src) ? design.src : null,
             name: design?.name ?? renderedMatches[0]?.designName ?? 'Tasarım',
             analysis: analysis
-              ? { description: analysis.description, keywords: analysis.keywords?.slice(0, 60), primarySubject: analysis.primarySubject, primaryAesthetic: analysis.primaryAesthetic, productType: analysis.productType }
+              ? { description: analysis.description, keywords: analysis.keywords?.slice(0, 60), primarySubject: analysis.primarySubject, primaryAesthetic: analysis.primaryAesthetic, productType: analysis.productType, taxonomyId: Number(analysis.taxonomyId) > 0 ? Math.trunc(Number(analysis.taxonomyId)) : null }
               : null,
           },
         }),

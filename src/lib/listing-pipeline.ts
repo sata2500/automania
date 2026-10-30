@@ -2,7 +2,7 @@
  * İlan metninin "en iyi hâli": yapay zekâ metni yazar, yeni etiketler Etsy'den puanlanır (kelime havuzu), metin
  * yapay zekâyla değerlendirilir ve SEO puanı (v2) hesaplanır. Puan hedefin altındaysa kurallar, Etsy verisi ve
  * yapay zekâ değerlendirmesinden çıkan geri bildirimle bir kez daha yazdırılır; iki taslaktan puanı yüksek olan
- * seçilir. Otomasyon, Üretim'den gelen ilanlar ve Etsy'deki ilanların iyileştirmesi aynı akışı kullanır.
+ * seçilir. Yazar tasarım görselini görür ve (admin ayarı açıksa) web araması yapabilir. Otomasyon, Üretim'den gelen ilanlar ve Etsy'deki ilanların iyileştirmesi aynı akışı kullanır.
  */
 import sql from '@/lib/db';
 import { generateListingContent, type GenerateListingInput } from '@/lib/listing-generator';
@@ -10,6 +10,7 @@ import { reviewListingWithAi, type ReviewDesignContext } from '@/lib/listing-ai-
 import { evaluateEtsyListingSeo, type KeywordPoolInputRow, type ListingAiReview, type SeoEvaluationResult } from '@/lib/etsy-seo-evaluator';
 import { normalizeKeywords, scoreKeywords } from '@/lib/keyword-pool';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
+import { loadSettingRows } from '@/lib/app-settings';
 import type { ScrapingOptions } from '@/lib/etsy-scraper';
 
 /** Bu puanın altındaki ilk taslak geri bildirimle yeniden yazılır. */
@@ -86,19 +87,27 @@ async function draft(
   return { ...result, evaluation, aiReview };
 }
 
+/** Admin › Yapay zekâ: ilan yazarken web araması (varsayılan açık). */
+async function listingWebSearchEnabled(): Promise<boolean> {
+  const rows = await loadSettingRows(['ai_listing_web_search']).catch(() => []);
+  return rows.find((row) => row.setting_key === 'ai_listing_web_search')?.setting_value !== 'false';
+}
+
 export async function generateBestListing(
   userId: string,
   input: GenerateListingInput & { design: ReviewDesignContext; storeFacts: string },
   { scoringBudgetMs = 25_000, revise = true }: { scoringBudgetMs?: number; revise?: boolean } = {},
 ): Promise<BestListingResult> {
   const { design, storeFacts, ...generatorInput } = input;
-  const scrape = await scrapeOptionsFor(userId);
-  const first = await draft(userId, generatorInput, design, storeFacts, scrape, scoringBudgetMs);
+  const [scrape, webSearch] = await Promise.all([scrapeOptionsFor(userId), listingWebSearchEnabled()]);
+  // İlk taslak web araştırmasıyla yazılır; düzeltme turu geri bildirime göre yazdığı için aramaya gerek duymaz.
+  const first = await draft(userId, { ...generatorInput, webSearch }, design, storeFacts, scrape, scoringBudgetMs);
   if (!revise || first.evaluation.score >= TARGET_SEO_SCORE) return { ...first, attempts: 1 };
 
   try {
     const second = await draft(userId, {
       ...generatorInput,
+      webSearch: false,
       revisionFeedback: revisionFeedbackFrom(first.evaluation),
       currentListing: { title: first.listing.title, tags: first.listing.selectedTags, description: first.listing.description },
     }, design, storeFacts, scrape, Math.round(scoringBudgetMs / 2));

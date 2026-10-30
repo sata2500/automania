@@ -1,7 +1,7 @@
 /**
  * POST /api/listing-review/from-production — Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir.
  * Görseller depoya yüklenmiş olarak gelir; ilan metni yanıt döndükten sonra arka planda üretilir
- * (Ayarlar'daki ilan varsayılanları ve varyasyonlarla). Kuyrukta "hazırlanıyor" olarak görünür.
+ * (kategori tasarımın analizinden, mağaza ayarları Ayarlar'dan; varyasyon Hazır İlanlar'da seçilir). Kuyrukta "hazırlanıyor" olarak görünür.
  */
 import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
@@ -33,6 +33,7 @@ const schema = z.object({
       primarySubject: z.string().max(300).optional(),
       primaryAesthetic: z.string().max(300).optional(),
       productType: z.string().max(100).optional(),
+      taxonomyId: z.number().int().positive().nullable().optional(),
     }).nullable().optional(),
   }),
 });

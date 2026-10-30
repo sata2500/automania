@@ -160,6 +160,7 @@ export const AdminAiSettingsSection: React.FC = () => {
   const [geminiModelGeneration, setGeminiModelGeneration] = useState('');
   const [geminiModelVideo, setGeminiModelVideo] = useState('');
   const [researchWebSearch, setResearchWebSearch] = useState(true);
+  const [listingWebSearch, setListingWebSearch] = useState(true);
   const [researchModel, setResearchModel] = useState('');
   // Aktif Google bağlantısının (API anahtarı veya Vertex AI) Google'dan çekilen güncel model listesi
   const [googleModels, setGoogleModels] = useState<GoogleModelInfo[] | null>(null);
@@ -282,6 +283,7 @@ export const AdminAiSettingsSection: React.FC = () => {
             if (data.settings.gemini_model_generation) setGeminiModelGeneration(data.settings.gemini_model_generation);
             if (data.settings.gemini_model_video) setGeminiModelVideo(normalizeVideoModel(data.settings.gemini_model_video));
             setResearchWebSearch(data.settings.ai_research_web_search !== 'false');
+            setListingWebSearch(data.settings.ai_listing_web_search !== 'false');
             if (data.settings.ai_research_model) setResearchModel(data.settings.ai_research_model);
             
             if (data.settings.openrouter_model_video) setModelVideo(data.settings.openrouter_model_video);
@@ -321,6 +323,7 @@ export const AdminAiSettingsSection: React.FC = () => {
       if (geminiModelGeneration) settingsToSave.gemini_model_generation = geminiModelGeneration;
       if (geminiModelVideo) settingsToSave.gemini_model_video = geminiModelVideo;
       settingsToSave.ai_research_web_search = researchWebSearch ? 'true' : 'false';
+      settingsToSave.ai_listing_web_search = listingWebSearch ? 'true' : 'false';
       settingsToSave.ai_research_model = researchModel;
       if (modelVideo) settingsToSave.openrouter_model_video = modelVideo;
 
@@ -961,6 +964,25 @@ export const AdminAiSettingsSection: React.FC = () => {
                         Bu Modeli Test Et
                       </button>
                     )}
+                  </div>
+                </div>
+
+                {/* İlan metni yazımı: tasarım görseli her zaman gönderilir; web araması isteğe bağlı */}
+                <div className="mt-4 p-4 bg-violet-50/50 dark:bg-violet-950/30 rounded-2xl border border-violet-100 dark:border-violet-900/50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Search className="w-4 h-4 text-violet-500" />
+                        İlan Metni Yazımı
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        SEO metin modeli başlık, etiket ve açıklamayı tasarım görselini görerek tek çağrıda yazar. Web araması açıkken güncel trendleri ve alıcı ifadelerini de tarar; etiketler yine Etsy verisiyle puanlanır (Google araması ücretlendirmesi uygulanabilir).
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 shrink-0 text-[11px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-violet-600" checked={listingWebSearch} onChange={(e) => setListingWebSearch(e.target.checked)} />
+                      Web araması
+                    </label>
                   </div>
                 </div>
 

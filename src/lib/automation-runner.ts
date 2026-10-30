@@ -668,24 +668,37 @@ async function generateAiVideo(ctx: StepContext): Promise<StepResult> {
 }
 
 /**
+ * Yapay zekâya gönderilecek tasarım görseli: analiz ve ilan yazımı için 4K baskı dosyası gerekmez; küçük kopya
+ * daha hızlı ve ucuzdur (küçültülemezse özgünü). Tasarım yoksa veya okunamazsa null.
+ */
+async function designImageForAi(ctx: StepContext): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const { userId, run } = ctx;
+  if (!ctx.designPng && !run.generatedDesignUrl) return null;
+  try {
+    const source = ctx.designPng ?? await loadImageForUser(userId, run.generatedDesignUrl!, { maxBytes: GENERATED_IMAGE_MAX_BYTES });
+    try {
+      const sharp = (await import('sharp')).default;
+      return { buffer: await sharp(source).resize(1536, 1536, { fit: 'inside', withoutEnlargement: true }).png().toBuffer(), mimeType: 'image/png' };
+    } catch {
+      return { buffer: source, mimeType: 'image/png' };
+    }
+  } catch (error) {
+    console.warn('[Automation] Design image could not be loaded for AI', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
  * Otomasyon tasarımının görsel yapay zekâ analizi ve anahtar kelimelerin havuz puanları (taze puan havuzdan,
  * eski/yeni kelimeler Etsy'den; süreye sığmayanlar havuza sıraya alınır). Manuel ilanda tasarım zaten
  * analiz edilmiştir. Başarısız olursa otomasyon durmaz (null): ilan metni araştırma kelimeleriyle yazılır.
  */
-async function analyzeRunDesign(ctx: StepContext): Promise<{ vision: DesignVisionResult; scored: ScoreResult } | null> {
+async function analyzeRunDesign(ctx: StepContext, image: { buffer: Buffer; mimeType: string } | null): Promise<{ vision: DesignVisionResult; scored: ScoreResult } | null> {
   const { template, userId, run } = ctx;
   if (template.id === MANUAL_TEMPLATE_ID || !run.generatedDesignUrl) return null;
   try {
-    const source = ctx.designPng ?? await loadImageForUser(userId, run.generatedDesignUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES });
-    // Analiz için 4K baskı dosyası gerekmez; küçük kopya daha hızlı ve ucuzdur (küçültülemezse özgünü gönderilir).
-    let buffer = source;
-    try {
-      const sharp = (await import('sharp')).default;
-      buffer = await sharp(source).resize(1536, 1536, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
-    } catch {
-      buffer = source;
-    }
-    const vision = await analyzeDesignImage({ buffer, mimeType: 'image/png' });
+    if (!image) return null;
+    const vision = await analyzeDesignImage(image);
     const creds = await loadScraperCredentials(userId).catch(() => null);
     const scored = await scoreKeywords(vision.keywords, {
       etsyAccessToken: creds?.etsyAccessToken, etsyApiKey: creds?.etsyApiKey, etsySharedSecret: creds?.etsySharedSecret,
@@ -714,7 +727,9 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   if (template.automationSchedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: SEO ve ilan adımları kapalı.');
   const hints = runHints(ctx);
   const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
-  const [insight, poolKeywords] = await Promise.all([analyzeRunDesign(ctx), loadRelatedPoolKeywords(topicSearchTerms(hints))]);
+  // Tasarım görseli bir kez yüklenir: otomasyonda analiz edilir, ilan metnini yazan modele de gönderilir.
+  const designImage = await designImageForAi(ctx);
+  const [insight, poolKeywords] = await Promise.all([analyzeRunDesign(ctx, designImage), loadRelatedPoolKeywords(topicSearchTerms(hints))]);
   // Tasarımın kendi analizinden çıkan (Etsy puanına göre sıralı) kelimeler önce, sonra araştırma ve havuz.
   const keywords = buildAutomationKeywords(hints, [...rankedInsightKeywords(insight), ...(research?.keywords ?? []), ...poolKeywords]);
   if (keywords.length === 0) throw new StepSkipped('Şablonda niş veya hedef kitle bilgisi yok; SEO üretilemedi.');
@@ -753,6 +768,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     shopSections: shopSections.length > 0 ? shopSections : undefined,
     taxonomyProperties: taxonomyProperties.length > 0 ? taxonomyProperties : undefined,
     images,
+    designImage,
     design,
     storeFacts,
   });

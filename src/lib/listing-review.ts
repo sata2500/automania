@@ -456,35 +456,11 @@ export type ProductionDraftInput = {
     id?: string | null;
     url?: string | null;
     name: string;
-    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string; productType?: string } | null;
+    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string; productType?: string; taxonomyId?: number | null } | null;
   };
   folderId?: string | null;
   folderName?: string;
 };
-
-/** Mockup klasörüne bağlı otomasyonun ilan ayarları (kategori, ürün tipi, notlar, varyasyonlar). */
-async function loadFolderAutomation(userId: string, folderId: string) {
-  const [template] = await db.select().from(podTemplates)
-    .where(and(eq(podTemplates.userId, userId), drizzleSql`${podTemplates.mockupConfig} ->> 'folderId' = ${folderId}`))
-    .limit(1);
-  if (!template) return null;
-  let rows = template.variationConfig?.rows?.length ? template.variationConfig.rows : null;
-  // Otomasyon kayıtlı bir varyasyon şablonuna bağlıysa şablonun güncel satırları kullanılır.
-  const sourceId = template.variationConfig?.sourceTemplateId;
-  if (sourceId) {
-    const [workspace] = await db.select({ templates: userWorkspaces.etsyVariationTemplates }).from(userWorkspaces).where(eq(userWorkspaces.userId, userId));
-    const source = ((workspace?.templates as Array<{ id: string; variations?: EtsyVariationRow[] }> | null) ?? []).find((t) => t.id === sourceId);
-    if (source?.variations?.length) rows = source.variations;
-  }
-  return {
-    taxonomyId: Number(template.automationSchedule?.etsy?.taxonomyId) || null,
-    productType: template.seoHints?.productType?.trim() || null,
-    notes: template.seoHints?.customNotes?.trim() || null,
-    variations: rows,
-    variationTemplateId: sourceId ?? null,
-    variationTemplateName: template.variationConfig?.sourceTemplateName ?? null,
-  };
-}
 
 /**
  * Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir: görseller hazırdır; ilan metni (SEO)
@@ -497,20 +473,20 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  // Kategori, ürün tipi ve (seçildiyse) varyasyonlar mockup klasörünün otomasyonundan gelir;
-  // mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan. Klasörün otomasyonu yoksa varsayılanlar kullanılır.
-  const folder = input.folderId ? await loadFolderAutomation(userId, input.folderId) : null;
-  const productType = folder?.productType || analysis.productType || 'T-shirt';
+  // Kategori ve ürün tipi tasarımın analizinden gelir (yapay zekâ admin panelindeki aktif Etsy kategorilerinden
+  // seçer; analizde yoksa Ayarlar'daki kategori). Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
+  // Varyasyonlar Hazır İlanlar'da yayından önce kayıtlı bir şablon seçilerek eklenir.
+  const productType = analysis.productType?.trim() || 'T-shirt';
   const sku = generateListingSku(productType);
+  const taxonomyId = Number(analysis.taxonomyId) > 0 ? Math.trunc(Number(analysis.taxonomyId)) : null;
   const settings: ManualListingSettings = {
-    etsy: { ...defaults.etsy, ...(folder?.taxonomyId ? { taxonomyId: folder.taxonomyId } : {}) },
-    // Klasörün otomasyonunda varyasyon yoksa ilan Hazır İlanlar'da yayından önce şablon seçilerek tamamlanır.
-    variations: folder?.variations ?? [],
-    variationTemplateId: folder?.variations?.length ? folder.variationTemplateId : null,
-    variationTemplateName: folder?.variations?.length ? folder.variationTemplateName : null,
+    etsy: { ...defaults.etsy, ...(taxonomyId ? { taxonomyId } : {}) },
+    variations: [],
+    variationTemplateId: null,
+    variationTemplateName: null,
     sku,
     productType,
-    notes: folder?.notes ?? '',
+    notes: '',
     subject,
   };
   const now = new Date();
