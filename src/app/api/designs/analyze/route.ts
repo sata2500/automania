@@ -1,45 +1,33 @@
-import { filterSafeKeywords } from '@/lib/trademark-shield';
-import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
-import { fillPrompt } from '@/lib/prompt-registry';
-import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
-import { requireModel } from '@/lib/ai-models';
-import { scrapeEtsyKeywordData, ScrapingOptions } from '@/lib/etsy-scraper';
-import { getValidEtsyToken } from '@/lib/etsy-token-manager';
+/**
+ * POST /api/designs/analyze — tasarım görselinin yapay zekâ analizi ve anahtar kelimelerin Etsy puanları.
+ *
+ * Zaman aşımını önlemek için iş ikiye ayrılır:
+ *  1. Görsel analizi + havuzda taze puanı olan kelimeler hemen döner; eski/yeni kelimeler süre bütçesi içinde
+ *     Etsy'den puanlanır (bkz. keyword-pool).
+ *  2. Bütçeye sığmayan kelimeler havuza "Taranacak" olarak eklenir ve yanıt döndükten sonra (after) puanlanır;
+ *     kalanları zamanlayıcının havuz yenilemesi tamamlar. Analiz penceresi puanları havuzdan güncel okur.
+ */
+import { NextResponse, after } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
-import type { EvaluatedKeyword } from '@/types/pod';
-import { loadSettingRows } from '@/lib/app-settings';
 import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
+import { analyzeDesignImage, DesignVisionConfigError } from '@/lib/design-vision';
+import { normalizeKeywords, scoreKeywords } from '@/lib/keyword-pool';
+import { loadScraperCredentials } from '@/lib/scraper-credentials';
+import { filterSafeKeywords } from '@/lib/trademark-shield';
+import type { ScrapingOptions } from '@/lib/etsy-scraper';
 
-export const maxDuration = 60; // Allow up to 60s for vision AI + synchronous Etsy keyword & competitor tag evaluation
+export const maxDuration = 120;
 
-type ParsedAnalysisResult = {
-  description: string;
-  keywords: string[];
-  primarySubject?: string;
-  primaryAesthetic?: string;
-  niche?: string;
-  userNotes?: string;
-  productType?: string;
-  taxonomyId?: number | null;
-};
-
-type KeywordPoolRow = EvaluatedKeyword & {
-  usage_count?: number | null;
-  last_evaluated_at?: string | Date | null;
-};
+/** Yanıttan önce kelime puanlamaya ayrılan süre (görsel analizi ayrıca ~10-30 sn sürer). */
+const SYNC_SCORING_BUDGET_MS = 35_000;
+/** Yanıttan sonra kalan kelimelerin puanlanması için süre. */
+const BACKGROUND_SCORING_BUDGET_MS = 70_000;
 
 export async function POST(request: Request) {
   try {
     const session = await getAuthoritativeSession();
-
-    const clientIp =
-      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-      request.headers.get('x-real-ip') ||
-      'guest';
-
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || 'guest';
     const rateLimitKey = session ? `ai:design-analyze:${session.id}` : `ai:design-analyze:guest:${clientIp}`;
     const rateLimit = await checkRateLimit(rateLimitKey, 15, 10 * 60_000);
     if (!rateLimit.allowed) {
@@ -49,488 +37,66 @@ export async function POST(request: Request) {
       });
     }
 
-    const { src } = await request.json();
-
-    if (!src) {
-      return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
-    }
+    const { src } = await request.json().catch(() => ({}));
+    if (!src) return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
 
     // Görseli sahiplik doğrulamasıyla yükle (misafirler yalnızca data URL / demo görselleri)
-    let resolvedImage: { buffer: Buffer; mimeType: string };
+    let image: { buffer: Buffer; mimeType: string };
     try {
-      resolvedImage = await loadVisionImage(session?.id ?? null, String(src), { appOrigin: new URL(request.url).origin });
+      image = await loadVisionImage(session?.id ?? null, String(src), { appOrigin: new URL(request.url).origin });
     } catch (error) {
-      if (error instanceof MediaSourceError) {
-        return NextResponse.json({ success: false, error: error.message }, { status: error.status });
-      }
+      if (error instanceof MediaSourceError) return NextResponse.json({ success: false, error: error.message }, { status: error.status });
       console.error('[Analyze API] Image load failed:', error);
-      return NextResponse.json({
-        success: false,
-        error: 'Görsel dosyası depolama alanından okunamadı veya yükleme henüz tamamlanmadı. Lütfen görseli kontrol edip tekrar deneyin.'
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Görsel dosyası okunamadı veya yükleme henüz tamamlanmadı. Lütfen tekrar deneyin.' }, { status: 400 });
     }
 
-
-    // 1. Session varsa mevcut kullanıcıya ait workspace ayarlarını çek
-    let workspaceRows: Array<{
-      user_id: string;
-      etsy_shop_id: string | null;
-      openrouter_model: string | null;
-      scraping_provider: string | null;
-      cloudflare_worker_url: string | null;
-    }> = [];
-
-    if (session) {
-      workspaceRows = (await sql`
-        SELECT user_id, etsy_shop_id, openrouter_model, scraping_provider, cloudflare_worker_url 
-        FROM user_workspaces
-        WHERE user_id = ${session.id}
-        LIMIT 1
-      `) as unknown as typeof workspaceRows;
-    }
-
-    // 2. Global Sistem Ayarlarını Çek (API Anahtarları, Vision Modelleri, Prompts, Etsy API Key)
-    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision', 'etsy_keystring', 'etsy_shared_secret', 'scraping_api_key']);
-    
-    let activeAiProvider = 'openrouter';
-    let dbApiKey = null;
-    let dbVisionModel = null;
-    let dbGeminiVisionModel = null;
-    let etsyApiKey = process.env.ETSY_API_KEY;
-    let etsySharedSecret = process.env.ETSY_SHARED_SECRET;
-    let scrapingApiKey = process.env.SCRAPER_API_KEY || '';
-    const scrapingProvider = workspaceRows[0]?.scraping_provider || 'scraperapi';
-    const workerUrl = (workspaceRows.length > 0 ? workspaceRows[0].cloudflare_worker_url : null) || process.env.CLOUDFLARE_WORKER_URL;
-    
-    for (const row of settingsRows) {
-      if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
-      if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
-      if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
-      if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
-      if (row.setting_key === 'etsy_keystring' && row.setting_value) etsyApiKey = row.setting_value;
-      if (row.setting_key === 'etsy_shared_secret' && row.setting_value) etsySharedSecret = row.setting_value;
-      if (row.setting_key === 'scraping_api_key' && row.setting_value) scrapingApiKey = row.setting_value;
-    }
-
-    // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
-    const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
-    const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
-
-    if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
-      return NextResponse.json({ success: false, error: 'Sistem Vision AI API anahtarı (Admin) yapılandırılmamış.' }, { status: 500 });
-    }
-
-    // 3. Etsy Resmi API OAuth Token Çözümleme (Kullanıcı Oturumu Varsa)
-    let etsyAccessToken: string | undefined = undefined;
-    if (session) {
-      try {
-        const tokenRes = await getValidEtsyToken(session.id);
-        if (tokenRes.success && tokenRes.access_token) {
-          etsyAccessToken = tokenRes.access_token;
-          etsyApiKey = tokenRes.api_key || etsyApiKey;
-          etsySharedSecret = tokenRes.shared_secret || etsySharedSecret;
-        }
-      } catch (e) {
-        console.warn('[Design Analyze] Etsy token lookup failed:', e instanceof Error ? e.message : 'unknown error');
-      }
-    }
-    
-    // Model yalnızca admin panelindeki seçimdir (yedek model yok).
-    const visionModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiVisionModel : dbVisionModel, 'vision');
-
-    // Etsy Taxonomy aktif kategorilerini al
-    // Talimat admin panelindeki "Tasarım görsel analizi" prompt'udur (boşsa varsayılanı).
-    const prompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint: await loadTaxonomyHint() });
-
-    const { buffer, mimeType } = resolvedImage;
-    const base64Data = buffer.toString('base64');
-    const aiImageUrl = `data:${mimeType};base64,${base64Data}`;
-
-    // Gemini API'nin desteklediği saf MIME türlerini kontrol et
-    let geminiMimeType = mimeType.toLowerCase();
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(geminiMimeType)) {
-      geminiMimeType = 'image/png';
-    }
-
-    // 4. Vision AI Analizini Çalıştır
-    let content = '';
-
-    if (activeAiProvider === 'gemini') {
-      const ai = createGoogleClient(googleConnection!);
-      const candidates = [visionModel] // Yalnızca admin panelinde seçilen model;
-
-      let lastErr: unknown = null;
-      for (const m of candidates) {
-        try {
-          const res = await ai.models.generateContent({
-            model: m,
-            contents: [
-              {
-                role: 'user',
-                parts: [
-                  { text: prompt },
-                  {
-                    inlineData: {
-                      mimeType: geminiMimeType,
-                      data: base64Data
-                    }
-                  }
-                ]
-              }
-            ],
-            config: {
-              responseMimeType: 'application/json',
-              temperature: 0.7,
-            }
-          });
-          const txt = res.text?.trim();
-          if (txt) {
-            content = txt;
-            break;
-          }
-        } catch (err: unknown) {
-          lastErr = err;
-          console.warn(`[Design Analyze] Model '${m}' failed:`, err instanceof Error ? err.message : err);
-          continue;
-        }
-      }
-
-      if (!content) {
-        throw lastErr || new Error('Gemini görsel analiz modeli yanıt vermedi.');
-      }
-    } else {
-      const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'X-Title': 'Automania POD Studio',
-        },
-        body: JSON.stringify({
-          model: visionModel,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: aiImageUrl } }
-              ]
-            }
-          ]
-        })
-      });
-
-      if (!openRouterRes.ok) {
-        const err = await openRouterRes.text();
-        throw new Error(`OpenRouter API hatası: ${openRouterRes.status} - ${err}`);
-      }
-
-      const aiData = await openRouterRes.json();
-      content = aiData.choices?.[0]?.message?.content || '{}';
-    }
-    
-    // JSON Temizleme
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      content = jsonMatch[0];
-    }
-
-    let parsedResult: Partial<ParsedAnalysisResult>;
-    try {
-      parsedResult = JSON.parse(content) as Partial<ParsedAnalysisResult>;
-    } catch {
-      throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
-    }
-
-    if (
-      typeof parsedResult.description !== 'string' ||
-      !Array.isArray(parsedResult.keywords) ||
-      !parsedResult.keywords.every((keyword): keyword is string => typeof keyword === 'string')
-    ) {
-      throw new Error('Yapay zeka eksik veri döndürdü.');
-    }
-
-    const { description, keywords } = parsedResult;
-
-    // 5. Anahtar Kelimeleri Temizle ve Etsy 20 Karakter Kuralına Göre Filtrele
-    // Marka riski taşıyan kelimeler havuza yazılmaz ve öneri olarak gösterilmez.
-    const { safe: trademarkSafeKeywords, removed: trademarkRemovedKeywords } = filterSafeKeywords(
-      keywords.map((k: string) => k.toLowerCase().trim()),
-    );
-    const uniqueKeywords = (Array.from(new Set(
-      trademarkSafeKeywords.filter((k: string) => k.length > 0 && k.length <= 20)
-    )) as string[]);
-    
-    // 6. Kelime Havuzundaki Mevcut Kayıtları Çek
-    let existingRows: KeywordPoolRow[] = [];
-    const existingMap = new Map<string, KeywordPoolRow>();
-    if (uniqueKeywords.length > 0) {
-      existingRows = await sql`
-        SELECT * FROM keyword_pool WHERE keyword = ANY(${uniqueKeywords})
-      ` as unknown as KeywordPoolRow[];
-      for (const r of existingRows) {
-        existingMap.set(r.keyword.toLowerCase(), r);
-      }
-    }
-
+    const [vision, credentials] = await Promise.all([
+      analyzeDesignImage(image),
+      loadScraperCredentials(session?.id ?? null).catch(() => null),
+    ]);
     const scrapeOptions: ScrapingOptions = {
-      etsyAccessToken,
-      etsyApiKey,
-      etsySharedSecret,
+      etsyAccessToken: credentials?.etsyAccessToken,
+      etsyApiKey: credentials?.etsyApiKey,
+      etsySharedSecret: credentials?.etsySharedSecret,
       userId: session?.id,
-      apiKey: scrapingApiKey,
-      provider: scrapingProvider,
-      workerUrl,
-      fastMode: true
+      apiKey: credentials?.scrapingApiKey,
+      provider: credentials?.scrapingProvider,
+      workerUrl: credentials?.workerUrl,
     };
 
-    // 7. Hızlı & Paralel Etsy Kelime Puanlama & Havuz Kayıt Pipeline'ı
-    const discoveredTopTagsMap = new Map<string, number>();
-
-    const freshKeywords: string[] = [];
-    const staleKeywords: string[] = [];
-
-    for (const kw of uniqueKeywords) {
-      const existing = existingMap.get(kw);
-      let existingMetrics: Record<string, unknown> = {};
-      if (existing?.raw_metrics) {
-        try {
-          existingMetrics = typeof existing.raw_metrics === 'string'
-            ? JSON.parse(existing.raw_metrics) as Record<string, unknown>
-            : existing.raw_metrics as Record<string, unknown>;
-        } catch {
-          existingMetrics = {};
-        }
-      }
-      const evaluatedAt = existing?.last_evaluated_at ? new Date(existing.last_evaluated_at).getTime() : 0;
-      const ageMs = evaluatedAt > 0 ? Date.now() - evaluatedAt : Number.POSITIVE_INFINITY;
-      const isFresh = existing &&
-                      Boolean(existing.last_evaluated_at) &&
-                      ageMs < 7 * 24 * 60 * 60 * 1000 &&
-                      (existing.opportunity_score || 0) > 0 &&
-                      existing.competition_level !== 'Engellendi / Hata' &&
-                      existing.competition_level !== 'Taranacak' &&
-                      existing.competition_level !== 'Henüz Taranmadı';
-
-      if (isFresh) {
-        freshKeywords.push(kw);
-        const rm = existingMetrics;
-        if (Array.isArray(rm.topTags)) {
-          for (const t of rm.topTags) {
-            const cleanT = String(t).toLowerCase().trim();
-            if (cleanT && cleanT !== kw && cleanT.length <= 20 && !uniqueKeywords.includes(cleanT)) {
-              discoveredTopTagsMap.set(cleanT, (discoveredTopTagsMap.get(cleanT) || 0) + 1);
-            }
-          }
-        }
-      } else {
-        staleKeywords.push(kw);
-      }
-    }
-
-    // Taze kelimelerin kullanım sayısını topluca artır
-    if (freshKeywords.length > 0) {
-      try {
-        await sql`
-          UPDATE keyword_pool 
-          SET usage_count = COALESCE(usage_count, 0) + 1 
-          WHERE keyword = ANY(${freshKeywords})
-        `;
-      } catch {}
-    }
-
-    // 7. Kelime Havuzu Kontrolü & Sadece Taranmamış Kelimeleri Kontrollü Paralel Puanlama
-    if (staleKeywords.length > 0) {
-      const CHUNK_SIZE = 3;
-      for (let i = 0; i < staleKeywords.length; i += CHUNK_SIZE) {
-        const chunk = staleKeywords.slice(i, i + CHUNK_SIZE);
-        await Promise.allSettled(
-          chunk.map(async (kw) => {
-            const existing = existingMap.get(kw);
-            try {
-              const scraped = await scrapeEtsyKeywordData(kw, scrapeOptions);
-              const charLen = kw.length;
-              const tagOk = charLen <= 20;
-              const id = existing?.id || crypto.randomUUID();
-
-              await sql`
-                INSERT INTO keyword_pool (
-                  id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-                  competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-                  char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-                  last_evaluated_at, created_at
-                )
-                VALUES (
-                  ${id}, ${kw}, ${existing ? (existing.usage_count || 1) + 1 : 1},
-                  ${scraped.opportunityScore}, ${scraped.opportunityScore}, ${scraped.totalListings},
-                  ${scraped.competitionLevel}, ${scraped.bestsellerCount}, ${scraped.isEtsySuggested},
-                  ${scraped.autocompleteRank}, ${charLen}, ${tagOk}, ${scraped.avgPrice},
-                  ${scraped.scrapeError},
-                  ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-                ON CONFLICT (keyword) DO UPDATE
-                SET 
-                  usage_count = keyword_pool.usage_count + 1,
-                  etsy_score = ${scraped.opportunityScore},
-                  opportunity_score = ${scraped.opportunityScore},
-                  total_listings = ${scraped.totalListings},
-                  competition_level = ${scraped.competitionLevel},
-                  bestseller_count = ${scraped.bestsellerCount},
-                  is_etsy_suggested = ${scraped.isEtsySuggested},
-                  autocomplete_rank = ${scraped.autocompleteRank},
-                  char_length = ${charLen},
-                  tag_eligible = ${tagOk},
-                  avg_price = ${scraped.avgPrice},
-                  last_scrape_error = ${scraped.scrapeError},
-                  raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                  last_evaluated_at = CURRENT_TIMESTAMP
-              `;
-
-              if (scraped.rawMetrics?.topTags && Array.isArray(scraped.rawMetrics.topTags)) {
-                for (const topTag of scraped.rawMetrics.topTags) {
-                  const cleanTag = String(topTag).toLowerCase().trim();
-                  if (cleanTag && cleanTag !== kw && cleanTag.length <= 20 && !uniqueKeywords.includes(cleanTag)) {
-                    discoveredTopTagsMap.set(cleanTag, (discoveredTopTagsMap.get(cleanTag) || 0) + 1);
-                  }
-                }
-              }
-            } catch (scrapeErr: unknown) {
-              console.warn(`Evaluation error for keyword "${kw}":`, scrapeErr instanceof Error ? scrapeErr.message : 'unknown error');
-            }
-          })
-        );
-      }
-    }
-
-    // 8. Birlikte Kullanılan Rakip Alt Kelimeleri (Co-Occurring Competitor Tags) Topla ve Puanla
-    const topDiscoveredTags = filterSafeKeywords(
-      Array.from(discoveredTopTagsMap.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([tag]) => tag),
-    ).safe.slice(0, 8);
-
-    if (topDiscoveredTags.length > 0) {
-      // Check which competitor tags already exist in keyword_pool
-      let coTagRows: KeywordPoolRow[] = [];
-      try {
-        coTagRows = await sql`
-          SELECT * FROM keyword_pool WHERE keyword = ANY(${topDiscoveredTags})
-        ` as unknown as KeywordPoolRow[];
-      } catch {}
-
-      const coTagMap = new Map<string, KeywordPoolRow>();
-      for (const r of coTagRows) {
-        coTagMap.set(r.keyword.toLowerCase(), r);
-      }
-
-      const unscoredCoTags = topDiscoveredTags.filter((tag) => {
-        const existing = coTagMap.get(tag.toLowerCase());
-        return !existing || !existing.last_evaluated_at || (existing.opportunity_score || 0) === 0 || existing.competition_level === 'Taranacak' || existing.competition_level === 'Henüz Taranmadı';
+    const trademarkRemoved = filterSafeKeywords(vision.keywords.map((k) => k.toLowerCase().trim())).removed.map((r) => r.keyword);
+    const keywords = normalizeKeywords(vision.keywords);
+    const scored = await scoreKeywords(keywords, scrapeOptions, { budgetMs: SYNC_SCORING_BUDGET_MS });
+    if (scored.pending.length > 0) {
+      after(async () => {
+        await scoreKeywords(scored.pending, scrapeOptions, { budgetMs: BACKGROUND_SCORING_BUDGET_MS, countUsage: false })
+          .catch((error: unknown) => console.warn('[Analyze API] Background keyword scoring failed', error instanceof Error ? error.message : error));
       });
-
-      // Score unscored competitor tags in controlled small batches of 3
-      if (unscoredCoTags.length > 0) {
-        const CHUNK_SIZE = 3;
-        for (let i = 0; i < unscoredCoTags.length; i += CHUNK_SIZE) {
-          const chunk = unscoredCoTags.slice(i, i + CHUNK_SIZE);
-          await Promise.allSettled(
-            chunk.map(async (coTag) => {
-              const existing = coTagMap.get(coTag.toLowerCase());
-              try {
-                const scraped = await scrapeEtsyKeywordData(coTag, scrapeOptions);
-                const charLen = coTag.length;
-                const tagOk = charLen <= 20;
-                const id = existing?.id || crypto.randomUUID();
-
-                await sql`
-                  INSERT INTO keyword_pool (
-                    id, keyword, usage_count, etsy_score, opportunity_score, total_listings,
-                    competition_level, bestseller_count, is_etsy_suggested, autocomplete_rank,
-                    char_length, tag_eligible, avg_price, last_scrape_error, raw_metrics,
-                    last_evaluated_at, created_at
-                  )
-                  VALUES (
-                    ${id}, ${coTag}, 1,
-                    ${scraped.opportunityScore}, ${scraped.opportunityScore}, ${scraped.totalListings},
-                    ${scraped.competitionLevel}, ${scraped.bestsellerCount}, ${scraped.isEtsySuggested},
-                    ${scraped.autocompleteRank}, ${charLen}, ${tagOk}, ${scraped.avgPrice},
-                    ${scraped.scrapeError},
-                    ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                  )
-                  ON CONFLICT (keyword) DO UPDATE
-                  SET 
-                    etsy_score = ${scraped.opportunityScore},
-                    opportunity_score = ${scraped.opportunityScore},
-                    total_listings = ${scraped.totalListings},
-                    competition_level = ${scraped.competitionLevel},
-                    bestseller_count = ${scraped.bestsellerCount},
-                    is_etsy_suggested = ${scraped.isEtsySuggested},
-                    autocomplete_rank = ${scraped.autocompleteRank},
-                    char_length = ${charLen},
-                    tag_eligible = ${tagOk},
-                    avg_price = ${scraped.avgPrice},
-                    last_scrape_error = ${scraped.scrapeError},
-                    raw_metrics = ${JSON.stringify(scraped.rawMetrics)}::jsonb,
-                    last_evaluated_at = CURRENT_TIMESTAMP
-                `;
-              } catch (coErr) {
-                console.warn(`Competitor tag scrape error "${coTag}":`, coErr);
-              }
-            })
-          );
-        }
-      }
-    }
-
-    // 9. Güncellenen ve Puanlanan Tüm Kelimeleri Çekerek Yanıta Ekle
-    const allTrackedKeywords = [...uniqueKeywords, ...topDiscoveredTags];
-    let evaluatedKeywords: EvaluatedKeyword[] = [];
-    if (allTrackedKeywords.length > 0) {
-      evaluatedKeywords = await sql`
-        SELECT 
-          id, 
-          keyword, 
-          etsy_score, 
-          opportunity_score, 
-          total_listings, 
-          competition_level, 
-          bestseller_count, 
-          is_etsy_suggested, 
-          autocomplete_rank, 
-          avg_price, 
-          char_length, 
-          tag_eligible, 
-          raw_metrics,
-          last_scrape_error
-        FROM keyword_pool
-        WHERE keyword = ANY(${allTrackedKeywords})
-      ` as unknown as EvaluatedKeyword[];
     }
 
     return NextResponse.json({
       success: true,
-      hasEtsyApi: !!etsyAccessToken,
+      hasEtsyApi: Boolean(credentials?.etsyAccessToken),
+      pendingKeywords: scored.pending.length,
       analysis: {
-        description,
-        keywords: uniqueKeywords,
-        evaluatedKeywords,
-        discoveredCompetitorTags: topDiscoveredTags,
+        description: vision.description,
+        keywords,
+        evaluatedKeywords: scored.evaluated,
+        discoveredCompetitorTags: scored.competitorTags,
         analyzedAt: Date.now(),
-        primarySubject: parsedResult.primarySubject || '',
-        primaryAesthetic: parsedResult.primaryAesthetic || '',
-        niche: parsedResult.primarySubject ? (parsedResult.primaryAesthetic ? `${parsedResult.primarySubject} (${parsedResult.primaryAesthetic})` : parsedResult.primarySubject) : (parsedResult.niche || ''),
-        userNotes: parsedResult.userNotes || '',
-        productType: parsedResult.productType || '',
-        taxonomyId: parsedResult.taxonomyId || null,
-        trademarkRemovedKeywords: trademarkRemovedKeywords.map((r) => r.keyword),
+        primarySubject: vision.primarySubject,
+        primaryAesthetic: vision.primaryAesthetic,
+        niche: vision.niche,
+        userNotes: vision.userNotes,
+        productType: vision.productType,
+        taxonomyId: vision.taxonomyId,
+        trademarkRemovedKeywords: trademarkRemoved,
         source: 'vision',
-      }
+      },
     });
-
   } catch (error) {
     console.error('[Design Analyze] Request failed:', error instanceof Error ? error.message : 'unknown error');
-    return NextResponse.json({ success: false, error: 'Tasarım analizi başarısız oldu.' }, { status: 500 });
+    const message = error instanceof DesignVisionConfigError ? error.message : 'Tasarım analizi başarısız oldu. Lütfen tekrar deneyin.';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

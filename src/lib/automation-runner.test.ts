@@ -111,6 +111,12 @@ const research = vi.hoisted(() => vi.fn(async () => ({
   occasion: "Father's Day", keywords: ['camping dad shirt'], reasoning: 'Babalar günü yaklaşıyor.', sources: [], searchedWeb: true, model: 'm',
 })));
 vi.mock('@/lib/niche-research', () => ({ researchNiche: research }));
+// Tasarımın görsel analizi varsayılan olarak kullanılamaz (null); ilgili testte etkinleştirilir.
+const designVision = vi.hoisted(() => vi.fn(async (): Promise<unknown> => { throw new Error('vision disabled in tests'); }));
+vi.mock('@/lib/design-vision', () => ({ analyzeDesignImage: designVision }));
+const poolScore = vi.hoisted(() => vi.fn(async () => ({ evaluated: [], competitorTags: [], pending: [], scraped: 0 })));
+vi.mock('@/lib/keyword-pool', () => ({ KEYWORD_MAX_SCORE_AGE_DAYS: 14, scoreKeywords: poolScore }));
+vi.mock('@/lib/scraper-credentials', () => ({ loadScraperCredentials: vi.fn(async () => ({ scrapingApiKey: '', scrapingProvider: 'scraperapi' })) }));
 // Etsy mağaza bölümleri ağ isteği yapılmadan boş döner.
 vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
 
@@ -253,6 +259,25 @@ describe('executeAutomationRun', () => {
     expect(input).toMatchObject({ shipping_profile_id: '77', readiness_state_id: '88' });
     // Şablonda varyasyon yoksa ilan tek fiyatla açılır (eski varsayılan varyasyonlar kullanılmaz).
     expect(input.variations ?? []).toEqual([]);
+  });
+
+  it('analyzes the generated design and leads the listing keywords with its best-scoring keywords', async () => {
+    designVision.mockResolvedValueOnce({
+      description: 'A ghost in a leopard hat holding coffee', keywords: ['spooky ghost', 'leopard ghost', 'fall vibes'],
+      primarySubject: 'ghost', primaryAesthetic: 'retro', niche: 'ghost (retro)', userNotes: '', productType: 'T-shirt', taxonomyId: null,
+    });
+    poolScore.mockResolvedValueOnce({
+      evaluated: [{ id: '1', keyword: 'leopard ghost', opportunity_score: 80 }, { id: '2', keyword: 'spooky ghost', opportunity_score: 20 }],
+      competitorTags: ['halloween shirt'], pending: ['fall vibes'], scraped: 2,
+    } as never);
+    await executeAutomationRun({ runId: 'run1', templateId: 't1', userId: 'u1' });
+    const [, listingInput] = generateListing.mock.calls[0] as unknown as [string, { keywords: string[]; designDescription: string; primarySubject?: string }];
+    expect(listingInput.designDescription).toBe('A ghost in a leopard hat holding coffee');
+    expect(listingInput.primarySubject).toBe('ghost');
+    expect(listingInput.keywords).toEqual(expect.arrayContaining(['leopard ghost', 'spooky ghost', 'halloween shirt']));
+    expect(listingInput.keywords.indexOf('leopard ghost')).toBeLessThan(listingInput.keywords.indexOf('spooky ghost'));
+    const seoOutput = (state.run?.steps as Record<string, { output?: Record<string, unknown> }>).seoGeneration.output;
+    expect(seoOutput?.designAnalysis).toEqual({ keywords: 3, scored: 2, pending: 1 });
   });
 
   it('refuses to run a record that is not pending', async () => {

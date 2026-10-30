@@ -1,4 +1,5 @@
 import sql from '@/lib/db';
+import { KEYWORD_MAX_SCORE_AGE_DAYS } from '@/lib/keyword-pool';
 import { fillPrompt } from '@/lib/prompt-registry';
 import { withAiRetry } from '@/lib/ai-retry';
 import { ModelNotConfiguredError, requireModel } from '@/lib/ai-models';
@@ -156,6 +157,7 @@ export async function generateListingContent(userId: string, input: GenerateList
                autocomplete_rank, tag_eligible, avg_price, raw_metrics
         FROM keyword_pool
         WHERE LOWER(keyword) = ANY(${uniqueInputKeywords})
+          AND last_evaluated_at > NOW() - make_interval(days => ${KEYWORD_MAX_SCORE_AGE_DAYS}::int)
       `;
 
       for (const row of dbKeywords) {
@@ -199,6 +201,7 @@ export async function generateListingContent(userId: string, input: GenerateList
                autocomplete_rank, tag_eligible, avg_price
         FROM keyword_pool
         WHERE LOWER(keyword) = ANY(${rankedCoOccurringTags})
+          AND last_evaluated_at > NOW() - make_interval(days => ${KEYWORD_MAX_SCORE_AGE_DAYS}::int)
       `;
       for (const row of dbCoRows) {
         dbCoOccurringMap.set(String(row.keyword).toLowerCase(), row as KeywordMetricsRow);

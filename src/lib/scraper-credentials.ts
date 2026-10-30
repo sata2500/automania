@@ -17,9 +17,10 @@ export type ScraperCredentials = {
   workerUrl?: string;
 };
 
-export async function loadScraperCredentials(userId: string): Promise<ScraperCredentials> {
+/** `userId` yoksa (ör. zamanlayıcı) yalnızca global anahtarlar kullanılır (kullanıcı Etsy token'ı olmadan). */
+export async function loadScraperCredentials(userId: string | null): Promise<ScraperCredentials> {
   const [workspaceRows, settings] = await Promise.all([
-    sql`
+    !userId ? Promise.resolve([]) : sql`
       SELECT etsy_shop_id, scraping_provider, cloudflare_worker_url
       FROM user_workspaces
       WHERE user_id = ${userId}
@@ -40,7 +41,7 @@ export async function loadScraperCredentials(userId: string): Promise<ScraperCre
     etsyShopId: workspace?.etsy_shop_id || undefined,
   };
 
-  if (workspace) {
+  if (workspace && userId) {
     const tokenRes = await getValidEtsyToken(userId);
     if (tokenRes.success && tokenRes.access_token) {
       credentials.etsyAccessToken = tokenRes.access_token;

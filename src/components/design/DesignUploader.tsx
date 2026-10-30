@@ -113,13 +113,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
     selectedDesignIds,
   });
 
-  const { activeTask } = useDesignMaintenance({
-    designs,
-    setDesigns,
-    enabled: Boolean(user),
-    analyzingIds,
-    analyze: handleAnalyzeDesign,
-  });
+  const { activeTask } = useDesignMaintenance({ designs, setDesigns, enabled: Boolean(user) });
 
   const counts = {
     mine: designs.filter((d) => designSection(d) === 'mine').length,
@@ -325,9 +319,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
         {activeTask && (
           <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 -mt-1" role="status">
             <Spinner className="w-3.5 h-3.5" />
-            {activeTask.kind === 'optimize'
-              ? `Tasarımların boşlukları kırpılıp kayıpsız PNG olarak optimize ediliyor (${activeTask.remaining} kaldı)…`
-              : `Otomasyon ve yapay zekâ tasarımları analiz ediliyor (${activeTask.remaining} kaldı)…`}
+            {`Tasarımların boşlukları kırpılıp kayıpsız PNG olarak optimize ediliyor (${activeTask.remaining} kaldı)…`}
           </p>
         )}
         {/* Arama: ad, ilan SKU'su, etiket */}
@@ -439,8 +431,11 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           setDesigns((prev) => [...prev, ...newDesigns]);
           setSection('mine');
           setSearchQuery('');
-          // Boşluk kırpma ve görsel analiz arka plan bakımında sırayla yapılır.
-          toast.success(`${newDesigns.length} AI tasarımı Tasarımlarım'a eklendi; arka planda analiz ediliyor.`);
+          toast.success(`${newDesigns.length} AI tasarımı Tasarımlarım'a eklendi; analiz ediliyor…`);
+          // Yapay zekâ ile üretilen tasarımlar kaydedilince bir kez analiz edilir (sırayla).
+          void (async () => {
+            for (const design of newDesigns) await handleAnalyzeDesign(design.id, design, { silent: true });
+          })();
         }}
       />
     </div>

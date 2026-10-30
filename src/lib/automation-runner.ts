@@ -22,6 +22,9 @@ import { MANUAL_TEMPLATE_ID, manualTemplateFor } from '@/lib/manual-listing';
 import { loadListingDefaults } from '@/lib/user-settings';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { AUTOMATION_DESIGN_FOLDER_ID } from '@/lib/design-library';
+import { KEYWORD_MAX_SCORE_AGE_DAYS, scoreKeywords, type ScoreResult } from '@/lib/keyword-pool';
+import { analyzeDesignImage, type DesignVisionResult } from '@/lib/design-vision';
+import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { createOwnedUploadName } from '@/lib/upload-security';
 import { getConfiguredSecret } from '@/lib/internal-auth';
 import { loadImageForUser } from '@/lib/media-source';
@@ -195,7 +198,7 @@ async function loadShopSections(userId: string): Promise<Array<{ shop_section_id
   }
 }
 
-/** Havuzdan şablonun nişiyle ilgili, Etsy verisi olan anahtar kelimeler. */
+/** Havuzdan şablonun nişiyle ilgili, güncel (14 günden yeni) Etsy verisi olan anahtar kelimeler. */
 async function loadRelatedPoolKeywords(terms: string[]): Promise<string[]> {
   if (terms.length === 0) return [];
   try {
@@ -203,6 +206,7 @@ async function loadRelatedPoolKeywords(terms: string[]): Promise<string[]> {
     const rows = await sql`
       SELECT keyword FROM keyword_pool
       WHERE LOWER(keyword) LIKE ANY(${patterns})
+        AND COALESCE(opportunity_score, etsy_score, 0) > 0 AND last_evaluated_at > NOW() - make_interval(days => ${KEYWORD_MAX_SCORE_AGE_DAYS}::int)
       ORDER BY COALESCE(opportunity_score, etsy_score, 0) DESC
       LIMIT 10
     `;
@@ -662,14 +666,56 @@ async function generateAiVideo(ctx: StepContext): Promise<StepResult> {
   return { patch: { generatedVideoUrl: url }, output: { source: 'ai', model, referenceImages: referenceImages.length } };
 }
 
+/**
+ * Otomasyon tasarımının görsel yapay zekâ analizi ve anahtar kelimelerin havuz puanları (taze puan havuzdan,
+ * eski/yeni kelimeler Etsy'den; süreye sığmayanlar havuza sıraya alınır). Manuel ilanda tasarım zaten
+ * analiz edilmiştir. Başarısız olursa otomasyon durmaz (null): ilan metni araştırma kelimeleriyle yazılır.
+ */
+async function analyzeRunDesign(ctx: StepContext): Promise<{ vision: DesignVisionResult; scored: ScoreResult } | null> {
+  const { template, userId, run } = ctx;
+  if (template.id === MANUAL_TEMPLATE_ID || !run.generatedDesignUrl) return null;
+  try {
+    const source = ctx.designPng ?? await loadImageForUser(userId, run.generatedDesignUrl, { maxBytes: GENERATED_IMAGE_MAX_BYTES });
+    // Analiz için 4K baskı dosyası gerekmez; küçük kopya daha hızlı ve ucuzdur (küçültülemezse özgünü gönderilir).
+    let buffer = source;
+    try {
+      const sharp = (await import('sharp')).default;
+      buffer = await sharp(source).resize(1536, 1536, { fit: 'inside', withoutEnlargement: true }).png().toBuffer();
+    } catch {
+      buffer = source;
+    }
+    const vision = await analyzeDesignImage({ buffer, mimeType: 'image/png' });
+    const creds = await loadScraperCredentials(userId).catch(() => null);
+    const scored = await scoreKeywords(vision.keywords, {
+      etsyAccessToken: creds?.etsyAccessToken, etsyApiKey: creds?.etsyApiKey, etsySharedSecret: creds?.etsySharedSecret,
+      apiKey: creds?.scrapingApiKey, provider: creds?.scrapingProvider, workerUrl: creds?.workerUrl, userId,
+    }, { budgetMs: 40_000 });
+    return { vision, scored };
+  } catch (error) {
+    console.warn('[Automation] Design vision analysis failed; continuing without it.', describeAiError(error));
+    return null;
+  }
+}
+
+/** Analiz kelimeleri Etsy fırsat puanına göre (puansızlar sonda) ve rakip etiketleri. */
+function rankedInsightKeywords(insight: { vision: DesignVisionResult; scored: ScoreResult } | null): string[] {
+  if (!insight) return [];
+  const score = new Map(insight.scored.evaluated.map((row) => [row.keyword.toLowerCase(), Number(row.opportunity_score) || 0]));
+  const visionKeywords = insight.vision.keywords.map((k) => k.toLowerCase().trim());
+  return [...visionKeywords, ...insight.scored.competitorTags]
+    .map((keyword, index) => ({ keyword, index, score: score.get(keyword) ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ keyword }) => keyword);
+}
+
 async function runSeo(ctx: StepContext): Promise<StepResult> {
   const { template, userId, run } = ctx;
   if (template.automationSchedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: SEO ve ilan adımları kapalı.');
   const hints = runHints(ctx);
   const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
-  const poolKeywords = await loadRelatedPoolKeywords(topicSearchTerms(hints));
-  // Araştırmanın önerdiği arama ifadeleri havuz kelimelerinden önce gelir.
-  const keywords = buildAutomationKeywords(hints, [...(research?.keywords ?? []), ...poolKeywords]);
+  const [insight, poolKeywords] = await Promise.all([analyzeRunDesign(ctx), loadRelatedPoolKeywords(topicSearchTerms(hints))]);
+  // Tasarımın kendi analizinden çıkan (Etsy puanına göre sıralı) kelimeler önce, sonra araştırma ve havuz.
+  const keywords = buildAutomationKeywords(hints, [...rankedInsightKeywords(insight), ...(research?.keywords ?? []), ...poolKeywords]);
   if (keywords.length === 0) throw new StepSkipped('Şablonda niş veya hedef kitle bilgisi yok; SEO üretilemedi.');
 
   const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignConcept(hints));
@@ -684,11 +730,11 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
   const images = photoUrls.map((_, i) => photoLabels[i] ?? 'listing photo of the product');
   const result = await generateListingContent(userId, {
-    designDescription: designPrompt,
+    designDescription: insight?.vision.description || designPrompt,
     keywords,
     productType: hints?.productType || undefined,
     userNotes: hints?.customNotes || undefined,
-    primarySubject: subject?.subject || hints?.primaryNiche || undefined,
+    primarySubject: insight?.vision.primarySubject || subject?.subject || hints?.primaryNiche || undefined,
     audienceGroup: audienceGroupLabel(hints?.audienceGroup),
     garments: garmentsLabel(hints?.garments),
     taxonomyId,
@@ -723,6 +769,25 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     const keepAnalysis = template.id === MANUAL_TEMPLATE_ID;
     await attachDesignInsights(userId, run.generatedDesignId, keepAnalysis
       ? { seo: { title: seo.title, description: seo.description, tags: seo.tags, generatedAt: Date.now() } }
+      : insight
+      ? {
+      // Görsel analiz: Tasarımlar sekmesinde ayrıca analiz gerekmez.
+      analysis: {
+        description: insight.vision.description,
+        keywords: Array.from(new Set(insight.vision.keywords.map((k) => k.toLowerCase().trim()))).slice(0, 30),
+        evaluatedKeywords: insight.scored.evaluated,
+        discoveredCompetitorTags: insight.scored.competitorTags,
+        analyzedAt: Date.now(),
+        primarySubject: insight.vision.primarySubject,
+        primaryAesthetic: insight.vision.primaryAesthetic,
+        niche: insight.vision.niche || hints?.primaryNiche || undefined,
+        productType: insight.vision.productType || hints?.productType || undefined,
+        userNotes: insight.vision.userNotes || undefined,
+        taxonomyId: taxonomyId ?? insight.vision.taxonomyId,
+        source: 'vision',
+      },
+      seo: { title: seo.title, description: seo.description, tags: seo.tags, generatedAt: Date.now() },
+    }
       : {
       analysis: {
         description: designPrompt,
@@ -743,6 +808,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     patch: { generatedSeo: seo },
     output: {
       model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount,
+      designAnalysis: insight ? { keywords: insight.vision.keywords.length, scored: insight.scored.scraped, pending: insight.scored.pending.length } : null,
       altTexts: seo.imageAltTexts?.filter(Boolean).length ?? 0,
     },
     warning: propertiesError ? `Kategori özellikleri alınamadı, bu alanlar boş kaldı: ${propertiesError}` : undefined,

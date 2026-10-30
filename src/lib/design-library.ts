@@ -37,16 +37,3 @@ export function sortNewestFirst<T extends Pick<DesignItem, 'id' | 'createdAt'>>(
 export function needsOptimization(design: Pick<DesignItem, 'src' | 'optimizedAt'>): boolean {
   return !design.optimizedAt && Boolean(design.src) && !design.src.startsWith('data:') && !design.src.startsWith('blob:');
 }
-
-/**
- * Otomasyonun ve yapay zekânın ürettiği tasarımlar görsel analizden kendiliğinden geçer; kullanıcının
- * yüklediği tasarımlar elle analiz edilir. Otomasyonun konu/kelimelerden derlediği analiz görsel analizle
- * değiştirilir (eski kayıtlarda kaynak yazmaz; görsel analiz her zaman puanlanmış kelime listesi içerir).
- */
-export function needsAutoAnalysis(design: Pick<DesignItem, 'folderId' | 'generatedByAI' | 'analysis'>): boolean {
-  if (!isAutomationDesign(design) && !design.generatedByAI) return false;
-  const analysis = design.analysis;
-  if (!analysis) return true;
-  if (analysis.source) return analysis.source !== 'vision';
-  return !Array.isArray(analysis.evaluatedKeywords);
-}

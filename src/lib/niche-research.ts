@@ -11,6 +11,7 @@
  *  - Tekrar önleme: aynı otomasyonun son çalıştırmalarında kullanılan nişler
  */
 import { sql } from '@/lib/db';
+import { KEYWORD_MAX_SCORE_AGE_DAYS } from '@/lib/keyword-pool';
 import { loadSettings } from '@/lib/app-settings';
 import { withAiRetry } from '@/lib/ai-retry';
 import { requireModel } from '@/lib/ai-models';
@@ -176,7 +177,7 @@ async function loadOpportunityKeywords(): Promise<ResearchContext['poolKeywords'
   try {
     const rows = await sql`
       SELECT keyword, COALESCE(opportunity_score, etsy_score) AS score, total_listings FROM keyword_pool
-      WHERE COALESCE(opportunity_score, etsy_score, 0) > 0
+      WHERE COALESCE(opportunity_score, etsy_score, 0) > 0 AND last_evaluated_at > NOW() - make_interval(days => ${KEYWORD_MAX_SCORE_AGE_DAYS}::int)
       ORDER BY COALESCE(opportunity_score, etsy_score, 0) DESC
       LIMIT 15
     `;

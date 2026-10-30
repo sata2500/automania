@@ -39,7 +39,11 @@ export function useDesignAnalysis({
           if (!silent) toast.error('Analiz limiti aşıldı. Lütfen birkaç dakika sonra tekrar deneyin.');
           return { status: 'rate-limited', retryAfter: Number(res.headers.get('Retry-After')) || 60 };
         }
-        let data: { success?: boolean; analysis?: DesignItem['analysis']; error?: string; warning?: string };
+        if (res.status === 504) {
+          if (!silent) toast.error('Analiz zaman aşımına uğradı (sunucu yoğun). Lütfen birazdan tekrar deneyin.');
+          return { status: 'error' };
+        }
+        let data: { success?: boolean; analysis?: DesignItem['analysis']; error?: string; warning?: string; pendingKeywords?: number };
         const rawText = await res.text();
         try {
           data = JSON.parse(rawText);
@@ -58,7 +62,9 @@ export function useDesignAnalysis({
             prev && prev.id === designId ? { ...prev, analysis: updatedAnalysis } : prev
           );
           if (!silent) {
-            toast.success(`'${design.name}' analizi ve Etsy kelime havuzu senkronizasyonu tamamlandı!`);
+            toast.success(data.pendingKeywords
+              ? `'${design.name}' analiz edildi; ${data.pendingKeywords} kelimenin Etsy puanı arka planda hesaplanıyor (analiz penceresinde güncel görünür).`
+              : `'${design.name}' analizi ve Etsy kelime puanları tamamlandı.`);
             if (data.warning) toast.error(data.warning);
           }
           return { status: 'ok' };
