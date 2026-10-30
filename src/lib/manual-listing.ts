@@ -21,6 +21,8 @@ export type ManualListingSettings = {
   notes?: string;
   /** İlan metni için tasarımın ana konusu */
   subject?: string;
+  /** Kategori mockup klasöründe seçili (yapay zekâya sorulmaz) */
+  categoryFromFolder?: boolean;
 };
 
 /** Elle hazırlanan ilanın ayarları (eski stüdyo kayıtları `listingCreation`, üretim kayıtları `mockupRender` altında). */

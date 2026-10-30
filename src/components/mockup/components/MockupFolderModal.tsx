@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Folder, X } from 'lucide-react';
 import { DialogPanel } from '@/components/common/DialogPanel';
+import { CategoryPicker, type TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
 
 interface MockupFolderModalProps {
   isOpen: boolean;
@@ -9,6 +10,10 @@ interface MockupFolderModalProps {
   folderName: string;
   setFolderName: (name: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  /** Ürün kategorisi seçenekleri (admin panelinde aktif Etsy kategorileri); null: gösterilmez (misafir) */
+  categories?: TaxonomyOption[] | null;
+  taxonomyId?: number;
+  setTaxonomyId?: (id: number) => void;
 }
 
 export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
@@ -18,6 +23,9 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
   folderName,
   setFolderName,
   onSubmit,
+  categories = null,
+  taxonomyId = 0,
+  setTaxonomyId,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,7 +53,7 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 id="mockup-folder-modal-title" className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Folder className="w-4 h-4 text-amber-500" />
-            {isEditing ? 'Klasörü Yeniden Adlandır' : 'Yeni Klasör Oluştur'}
+            {isEditing ? 'Klasör: ad ve kategori' : 'Yeni Klasör Oluştur'}
           </h3>
           <button
             onClick={onClose}
@@ -71,6 +79,22 @@ export const MockupFolderModal: React.FC<MockupFolderModalProps> = ({
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
             />
           </div>
+
+          {categories && setTaxonomyId && (
+            <div>
+              <label htmlFor="folder-category" className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                Ürün kategorisi
+              </label>
+              {categories.length > 0 ? (
+                <CategoryPicker id="folder-category" categories={categories} value={taxonomyId} onChange={setTaxonomyId} />
+              ) : (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Admin panelinde (Etsy Kategorileri) kategori etkinleştirilince burada seçilir.</p>
+              )}
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                Klasör bir Etsy ilanıdır: bu klasörden üretilen ilanlar (elle veya otomasyonla) bu kategoriyle açılır. Her klasörde tek ürün türü önerilir.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <button

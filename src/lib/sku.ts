@@ -19,6 +19,12 @@ const PRODUCT_PREFIXES: Array<[RegExp, string]> = [
   [/shirt|tee|tişört|tshirt/i, 'TSH'],
 ];
 
+/** Etsy kategori adından ürün tipi ("T-shirts" → "T-shirt", "Hoodies & Sweatshirts" olduğu gibi). */
+export function productTypeFromCategory(name: string | null | undefined): string {
+  const clean = (name || '').trim();
+  return clean.endsWith('s') && !clean.endsWith('ss') && !clean.includes('&') ? clean.slice(0, -1) : clean || 'T-shirt';
+}
+
 export function skuPrefix(productType: string | null | undefined): string {
   const text = productType ?? '';
   return PRODUCT_PREFIXES.find(([pattern]) => pattern.test(text))?.[1] ?? 'POD';

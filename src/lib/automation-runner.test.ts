@@ -109,6 +109,7 @@ vi.mock('@/lib/listing-pipeline', () => ({
   }),
 }));
 vi.mock('@/lib/listing-copy', () => ({ loadStoreCopyFacts: vi.fn(async () => 'None provided') }));
+vi.mock('@/lib/listing-category', () => ({ loadFolderCategory: vi.fn(async () => null), pickListingCategory: vi.fn(async () => null) }));
 vi.mock('@/lib/etsy-taxonomy-properties', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/etsy-taxonomy-properties')>()),
   fetchTaxonomyProperties: vi.fn(async () => [

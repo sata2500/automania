@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateListingSku, sanitizeSku, skuPrefix } from './sku';
+import { generateListingSku, productTypeFromCategory, sanitizeSku, skuPrefix } from './sku';
 
 describe('listing sku', () => {
   it('builds PRODUCT-YYMMDD-XXXX with an unambiguous suffix', () => {
@@ -23,5 +23,15 @@ describe('listing sku', () => {
   it('sanitizes user input to Etsy-safe SKU characters', () => {
     expect(sanitizeSku('  tsh 261029 k7qd! ')).toBe('TSH-261029-K7QD');
     expect(sanitizeSku('x'.repeat(40))).toHaveLength(32);
+  });
+});
+
+describe('productTypeFromCategory', () => {
+  it('turns the Etsy category name into a product type for the SKU prefix', () => {
+    expect(productTypeFromCategory('T-shirts')).toBe('T-shirt');
+    expect(productTypeFromCategory('Hoodies')).toBe('Hoodie');
+    expect(productTypeFromCategory('Hoodies & Sweatshirts')).toBe('Hoodies & Sweatshirts');
+    expect(productTypeFromCategory('')).toBe('T-shirt');
+    expect(skuPrefix(productTypeFromCategory('Sweatshirts'))).toBe('SWT');
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { FolderPlus, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
@@ -15,6 +15,7 @@ import { MockupCanvasWorkspace } from './components/MockupCanvasWorkspace';
 import { MockupSettingsPanel } from './components/MockupSettingsPanel';
 import { MockupMobileDrawer } from './components/MockupMobileDrawer';
 import { MockupFolderModal } from './components/MockupFolderModal';
+import type { TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
 import { FolderTemplateDialog } from '../templates/FolderTemplateDialog';
 
 // Hooks
@@ -108,12 +109,25 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
     isEditing: boolean;
     folderId: string | null;
     folderName: string;
+    taxonomyId: number;
   }>({
     isOpen: false,
     isEditing: false,
     folderId: null,
     folderName: '',
+    taxonomyId: 0,
   });
+  // Klasörün ürün kategorisi seçenekleri (yalnızca giriş yapılmışken; pencere ilk açıldığında yüklenir).
+  const [categories, setCategories] = useState<TaxonomyOption[] | null>(null);
+  const categoriesRequested = useRef(false);
+  useEffect(() => {
+    if (!user || !folderModalState.isOpen || categoriesRequested.current) return;
+    categoriesRequested.current = true;
+    fetch('/api/etsy/taxonomy')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCategories(Array.isArray(d?.categories) ? d.categories : []))
+      .catch(() => setCategories([]));
+  }, [user, folderModalState.isOpen]);
 
   // Etkin klasördeki mockup'lar ("Tüm Mockup'lar" görünümü yoktur; klasör yoksa liste boştur).
   const filteredMockups = mockups.filter((m) => activeFolderId !== null && m.folderId === activeFolderId);
@@ -309,6 +323,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       isEditing: false,
       folderId: null,
       folderName: '',
+      taxonomyId: 0,
     });
   }, []);
 
@@ -318,6 +333,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       isEditing: true,
       folderId: folder.id,
       folderName: folder.name,
+      taxonomyId: folder.taxonomyId ?? 0,
     });
   }, []);
 
@@ -326,18 +342,21 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
       e.preventDefault();
       const cleanName = folderModalState.folderName.trim();
       if (!cleanName) return;
+      const category = categories?.find((c) => c.id === folderModalState.taxonomyId);
+      const categoryFields = category ? { taxonomyId: category.id, categoryName: category.name } : {};
 
       if (folderModalState.isEditing && folderModalState.folderId) {
         setMockupFolders((prev) =>
-          prev.map((f) => (f.id === folderModalState.folderId ? { ...f, name: cleanName } : f))
+          prev.map((f) => (f.id === folderModalState.folderId ? { ...f, name: cleanName, ...categoryFields } : f))
         );
-        toast.success('Klasör adı güncellendi!');
+        toast.success('Klasör güncellendi!');
       } else {
         const newFolder: MockupFolder = {
           id: 'folder-' + Date.now(),
           name: cleanName,
           isCustom: true,
           type: 'mockup',
+          ...categoryFields,
         };
         setMockupFolders((prev) => [...prev, newFolder]);
         setActiveFolderId(newFolder.id);
@@ -349,9 +368,10 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         isEditing: false,
         folderId: null,
         folderName: '',
+        taxonomyId: 0,
       });
     },
-    [folderModalState, setMockupFolders, setActiveFolderId, toast]
+    [folderModalState, categories, setMockupFolders, setActiveFolderId, toast]
   );
 
   const handleDuplicateFolder = useCallback(
@@ -626,6 +646,9 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
           setFolderModalState((prev) => ({ ...prev, isOpen: false }))
         }
         onSubmit={handleFolderModalSubmit}
+        categories={user ? categories : null}
+        taxonomyId={folderModalState.taxonomyId}
+        setTaxonomyId={(id) => setFolderModalState((prev) => ({ ...prev, taxonomyId: id }))}
       />
 
       {selectedMockup && (

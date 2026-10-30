@@ -66,3 +66,20 @@ export async function pickListingCategory(userId: string, photos: string[]): Pro
   const { data } = await generateVisionJson(buildCategoryPrompt(categories), images, { label: 'listing category', temperature: 0, maxOutputTokens: 1024 });
   return parseCategoryAnswer(data, categories);
 }
+
+/**
+ * Mockup klasörünün Ürün kategorisi (Mockup'lar › klasör › Ad ve kategori). Klasör = bir Etsy ilanı; seçili değilse
+ * null (manuel ilanda mockup fotoğraflarından seçilir, otomasyonda şablondaki eski kategori kullanılır).
+ */
+export async function loadFolderCategory(userId: string, folderId: string | null | undefined): Promise<{ taxonomyId: number; name: string } | null> {
+  if (!folderId) return null;
+  const rows = await sql`
+    SELECT f->>'taxonomyId' AS taxonomy_id, f->>'categoryName' AS category_name
+    FROM user_workspaces, jsonb_array_elements(COALESCE(folders, '[]'::jsonb)) AS f
+    WHERE user_id = ${userId} AND f->>'id' = ${folderId}
+    LIMIT 1
+  `.catch(() => []);
+  const taxonomyId = Number(rows[0]?.taxonomy_id);
+  if (!Number.isInteger(taxonomyId) || taxonomyId <= 0) return null;
+  return { taxonomyId, name: String(rows[0]?.category_name || '') };
+}

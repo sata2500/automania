@@ -16,9 +16,9 @@ import { loadAIConfig, generateImage } from '@/lib/ai-provider';
 import { removeChromaBackground } from '@/lib/chroma-key';
 import { KEY_COLORS, keyColorPromptValues, pickKeyBackground, type KeyBackground } from '@/lib/key-background';
 import { uploadToR2, isR2Configured, deleteFromR2 } from '@/lib/r2';
-import { generateListingSku } from '@/lib/sku';
+import { generateListingSku, productTypeFromCategory } from '@/lib/sku';
 import { runSkuOf } from '@/lib/run-sku';
-import { MANUAL_TEMPLATE_ID, manualTemplateFor } from '@/lib/manual-listing';
+import { MANUAL_TEMPLATE_ID, manualSettingsOf, manualTemplateFor } from '@/lib/manual-listing';
 import { loadListingDefaults } from '@/lib/user-settings';
 import { optimizeImageForStorage } from '@/lib/media-optimizer';
 import { AUTOMATION_DESIGN_FOLDER_ID } from '@/lib/design-library';
@@ -34,7 +34,7 @@ import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
 import { generateBestListing } from '@/lib/listing-pipeline';
-import { pickListingCategory } from '@/lib/listing-category';
+import { loadFolderCategory, pickListingCategory } from '@/lib/listing-category';
 import { loadStoreCopyFacts } from '@/lib/listing-copy';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
@@ -729,9 +729,9 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   // Fotoğraf alt metinleri için mockup adımının fotoğraf tanımları (eski çalıştırmalarda yalnızca sıra).
   const photoUrls = (run.generatedMockupUrls as string[] | null) ?? [];
   const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
-  // Manuel ilanda kategoriyi ürünü gösteren mockup'lar belirler (tasarım dosyası ürün türünü bilemez; aynı ilanda
-  // farklı ürünler olabilir). Otomasyonda kategori şablonda seçilidir.
-  const category = template.id === MANUAL_TEMPLATE_ID
+  // Kategori mockup klasöründe seçilir. Manuel ilanın klasöründe seçili değilse ürünü gösteren mockup'lardan
+  // seçilir (tasarım dosyası ürün türünü bilemez).
+  const category = template.id === MANUAL_TEMPLATE_ID && !manualSettingsOf(run.steps)?.categoryFromFolder
     ? await pickListingCategory(userId, photoUrls.filter((_, i) => !/static info image/.test(photoLabels[i] ?? '')))
       .catch((error: unknown) => { console.warn('[Automation] Listing category could not be picked', describeAiError(error)); return null; })
     : null;
@@ -1014,6 +1014,15 @@ export async function executeAutomationRun({ runId, templateId, userId }: Automa
       .where(and(eq(podTemplates.id, templateId), eq(podTemplates.userId, userId)));
 
   if (!template || !existing) return { ok: false, runId, reason: 'not_found' };
+  // Otomasyonun kategorisi ve ürün tipi mockup klasöründen (klasör = bir Etsy ilanı); klasörde seçili değilse
+  // şablonda kayıtlı eski kategori kullanılır.
+  if (templateId !== MANUAL_TEMPLATE_ID) {
+    const folderCategory = await loadFolderCategory(userId, template.mockupConfig?.folderId);
+    if (folderCategory) {
+      template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule?.etsy, taxonomyId: folderCategory.taxonomyId } } as typeof template.automationSchedule;
+      template.seoHints = { ...template.seoHints, productType: productTypeFromCategory(folderCategory.name) } as typeof template.seoHints;
+    }
+  }
 
   // Aynı run'ın iki kez çalıştırılmasını engelle: yalnızca 'pending' kayıt ya da fonksiyon süre sınırında
   // kesildiği için 'running' durumunda kalmış (uzun süredir dokunulmamış) kayıt sahiplenilebilir.

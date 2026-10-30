@@ -25,7 +25,8 @@ import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
 import { ScheduleSection } from './sections/ScheduleSection';
 import { DEFAULT_ETSY_LISTING_SETTINGS, EtsyListingSection, getEtsyListingSettingsErrors } from './sections/EtsyListingSection';
-import { CategoryPicker, type TaxonomyOption } from './sections/CategoryPicker';
+import type { TaxonomyOption } from './sections/CategoryPicker';
+import { productTypeFromCategory } from '@/lib/sku';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 const STEPS: { label: string; icon: React.ElementType }[] = [
@@ -80,11 +81,6 @@ function mockupKind(m: MockupItem): 'video' | 'static' | 'print' | 'unset' {
 }
 
 /** Kategori adından ürün tipi (SEO ve video prompt'u için): "T-shirts" → "T-shirt". */
-function productTypeFromCategory(name: string | undefined): string {
-  const clean = (name || '').trim();
-  return clean.endsWith('s') && !clean.endsWith('ss') ? clean.slice(0, -1) : clean || 'T-shirt';
-}
-
 interface AutomationWizardProps {
   folders: MockupFolder[];
   mockups: MockupItem[];
@@ -108,7 +104,8 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
 
   // Ürün
   const savedEtsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...template?.automationSchedule?.etsy };
-  const [taxonomyId, setTaxonomyId] = useState<number>(savedEtsy.taxonomyId);
+  // Kategori mockup klasöründe seçilir (klasör = bir Etsy ilanı); klasörde yoksa şablonda kayıtlı eski kategori.
+  const taxonomyId = folder?.taxonomyId || savedEtsy.taxonomyId;
   const [variationSourceId, setVariationSourceId] = useState<string>(template?.variationConfig?.sourceTemplateId ?? '');
   const [fixedPrice, setFixedPrice] = useState<number>(savedEtsy.price);
 
@@ -182,7 +179,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
       const errors: string[] = [];
       if (!folderId) errors.push('Bir mockup klasörü seçin.');
       else if (counts.print === 0) errors.push('Klasörde baskı alanı ayarlanmış en az bir mockup olmalı.');
-      if (!(taxonomyId > 0)) errors.push('Etsy kategorisini seçin.');
+      if (folderId && !folder?.taxonomyId && !(savedEtsy.taxonomyId > 0)) errors.push('Klasörün ürün kategorisini seçin (Mockup\'lar › klasör menüsü › Ad ve kategori).');
       if (!variationSourceId && !(fixedPrice >= 0.2)) errors.push('Varyasyon şablonu seçin veya en az 0,20 fiyat girin.');
       return errors;
     }
@@ -205,7 +202,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
         primaryNiche: nicheMode === 'manual' ? niche.trim() : '',
         targetAudience: nicheMode === 'manual' ? audience.trim() : '',
         customNotes: nicheMode === 'manual' ? notes.trim() : '',
-        productType: productTypeFromCategory(category?.name),
+        productType: productTypeFromCategory(folder?.categoryName || category?.name),
         nicheMode,
         researchFocus: nicheMode === 'auto' ? researchFocus.trim() : '',
         audienceGroup,
@@ -373,18 +370,16 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Her satıra bir model. İlk satır ilk görseldeki üründür ve videoda kullanılır; hepsi ilan açıklamasında seçenek olarak yazılır (başlık ve etiketlerde marka kullanılmaz).</p>
               </div>
 
-              <div>
-                <label className={labelClass} htmlFor="aw-category">Etsy kategorisi</label>
-                {categories === null ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-500"><Spinner className="w-4 h-4" /> Kategoriler yükleniyor…</div>
-                ) : categories.length > 0 ? (
-                  <CategoryPicker id="aw-category" categories={categories} value={taxonomyId} onChange={setTaxonomyId} />
-                ) : (
-                  <>
-                    <input id="aw-category" type="number" min={1} className={inputClass} value={taxonomyId || ''} onChange={(e) => setTaxonomyId(Number(e.target.value) || 0)} placeholder="Kategori kimliği (ör. 482 T-shirt)" />
-                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Admin panelinde (Etsy Kategorileri) kategori etkinleştirilirse burada listeden seçilir.</p>
-                  </>
-                )}
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs">
+                <p className="font-bold text-slate-700 dark:text-slate-200">Etsy kategorisi</p>
+                <p className="mt-0.5 text-slate-600 dark:text-slate-300">
+                  {folder?.taxonomyId
+                    ? (category?.path || category?.name || folder.categoryName || `#${folder.taxonomyId}`)
+                    : taxonomyId > 0
+                      ? `${category?.path || category?.name || `#${taxonomyId}`} (eski ayar)`
+                      : 'Seçilmedi'}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kategori mockup klasöründe seçilir: Mockup&apos;lar › klasör menüsü › Ad ve kategori.</p>
               </div>
 
               <div>

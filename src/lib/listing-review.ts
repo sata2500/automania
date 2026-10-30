@@ -468,18 +468,20 @@ export type ProductionDraftInput = {
  */
 export async function createProductionDraft(userId: string, input: ProductionDraftInput): Promise<{ runId: string }> {
   const { loadListingDefaults } = await import('@/lib/user-settings');
-  const { generateListingSku } = await import('@/lib/sku');
+  const { generateListingSku, productTypeFromCategory } = await import('@/lib/sku');
   const defaults = await loadListingDefaults(userId);
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  // Kategori ilan metni hazırlanırken mockup fotoğraflarından seçilir (bkz. listing-category); buradaki
-  // Ayarlar'daki kategori yalnızca seçilemezse kullanılır. Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
+  // Kategori mockup klasöründe seçilir (klasör = bir Etsy ilanı); seçili değilse ilan metni hazırlanırken mockup
+  // fotoğraflarından seçilir (bkz. listing-category). Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
   // Varyasyonlar Hazır İlanlar'da yayından önce kayıtlı bir şablon seçilerek eklenir.
-  const productType = analysis.productType?.trim() || 'T-shirt';
+  const { loadFolderCategory } = await import('@/lib/listing-category');
+  const folderCategory = await loadFolderCategory(userId, input.folderId);
+  const productType = folderCategory ? productTypeFromCategory(folderCategory.name) : analysis.productType?.trim() || 'T-shirt';
   const sku = generateListingSku(productType);
   const settings: ManualListingSettings = {
-    etsy: defaults.etsy,
+    etsy: folderCategory ? { ...defaults.etsy, taxonomyId: folderCategory.taxonomyId } : defaults.etsy,
     variations: [],
     variationTemplateId: null,
     variationTemplateName: null,
@@ -487,6 +489,7 @@ export async function createProductionDraft(userId: string, input: ProductionDra
     productType,
     notes: '',
     subject,
+    categoryFromFolder: Boolean(folderCategory),
   };
   const now = new Date();
   const runId = `run_${now.getTime()}_${Math.random().toString(36).slice(2, 9)}`;

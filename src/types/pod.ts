@@ -22,6 +22,10 @@ export interface MockupFolder {
   name: string;
   isCustom?: boolean;
   type?: 'mockup' | 'design'; // if undefined, assume 'mockup'
+  /** Mockup klasörü = bir Etsy ilanı: ürünün Etsy kategorisi (admin panelindeki aktif kategorilerden) */
+  taxonomyId?: number;
+  /** Kategorinin adı (ör. "Hoodies"); ürün tipi ve SKU ön eki buradan */
+  categoryName?: string;
 }
 
 export interface MockupItem {
