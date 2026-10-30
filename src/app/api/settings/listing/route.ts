@@ -21,6 +21,13 @@ const schema = z.object({
     sizePrices: z.record(shortText, z.number().min(0.2).max(50_000)).default({}),
     quantity: z.number().int().min(1).max(999),
   }).refine((v) => v.sizes.length * v.colors.length <= 400, 'Etsy en fazla 400 beden × renk kombinasyonuna izin verir.'),
+  copy: z.object({
+    freeShipping: z.boolean().nullable(),
+    productInfo: z.string().max(300),
+    careInstructions: z.string().max(200),
+    processingInfo: z.string().max(200),
+    extraNotes: z.string().max(400),
+  }).optional(),
 });
 
 export async function GET() {

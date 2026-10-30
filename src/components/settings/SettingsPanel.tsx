@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Layers, Monitor, Moon, Package, Save, Store, Sun, User } from 'lucide-react';
+import { FileText, Layers, Monitor, Moon, Package, Save, Store, Sun, User } from 'lucide-react';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useToast } from '@/components/common/ToastContext';
@@ -15,6 +15,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { EtsyListingSection, loadEtsyStoreOptions, type StoreOptions } from '@/components/templates/sections/EtsyListingSection';
 import { TabSkeleton } from '@/components/common/LoadingScreens';
 import type { EtsyVariationTemplate } from '@/types/pod';
+import { isFreeShippingProfile } from '@/lib/etsy-shipping';
 import {
   missingListingSettings,
   normalizeListingDefaults,
@@ -77,6 +78,7 @@ export function SettingsPanel() {
   }
 
   const update = (patch: Partial<ListingDefaults>) => setDefaults({ ...defaults, ...patch });
+  const detectedFreeShipping = isFreeShippingProfile(storeOptions.profiles.find((p) => String(p.shipping_profile_id) === String(defaults.etsy.shippingProfileId)));
 
   const save = async () => {
     setIsSaving(true);
@@ -170,6 +172,56 @@ export function SettingsPanel() {
           preloadedOptions={storeOptions}
           onChange={(next) => update({ etsy: { ...defaults.etsy, ...next.etsy } })}
         />
+      </section>
+
+      {/* İlan metni bilgileri: yapay zekâ açıklamayı yazarken yalnızca bunları ürün bilgisi olarak kullanır */}
+      <section className={cardClass} aria-label="İlan metni bilgileri">
+        <SectionTitle icon={FileText} title="İlan metni bilgileri" hint="Yapay zekâ ilan açıklamasını yazarken ürün bilgisi olarak yalnızca bunları kullanır; boş bırakılan bilgi açıklamaya yazılmaz (uydurulmaz). İngilizce yazın." />
+        <div>
+          <span className={labelClass}>Kargo ücretsiz mi?</span>
+          <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">
+            {([
+              [null, 'Otomatik'],
+              [true, 'Ücretsiz'],
+              [false, 'Ücretli'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => update({ copy: { ...defaults.copy, freeShipping: value } })}
+                className={`py-2 rounded-lg transition-colors ${defaults.copy.freeShipping === value ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+            {defaults.copy.freeShipping === null
+              ? detectedFreeShipping === null
+                ? 'Seçili kargo profilinden anlaşılamadı; açıklamada kargo ücretinden söz edilmez.'
+                : `Seçili kargo profiline göre: ${detectedFreeShipping ? 'ABD\'ye ücretsiz kargo — açıklamada belirtilir.' : 'kargo ücretli — açıklamada ücretsiz kargo yazılmaz.'}`
+              : defaults.copy.freeShipping ? 'Açıklamada ücretsiz kargo belirtilir.' : 'Açıklamada ücretsiz kargo yazılmaz.'}
+          </p>
+        </div>
+        {([
+          ['productInfo', 'Ürün bilgisi', 'Ör. Comfort Colors 1717, 100% ring-spun cotton, garment-dyed, relaxed fit', 300],
+          ['careInstructions', 'Bakım talimatı', 'Ör. Machine wash cold inside out, tumble dry low, do not iron the print', 200],
+          ['processingInfo', 'Üretim ve kargo süresi', 'Ör. Made to order in 1-3 business days, ships from the USA', 200],
+          ['extraNotes', 'Mağaza notu', 'Ör. Need a different size or color? Message us — we reply within a day.', 400],
+        ] as const).map(([key, label, placeholder, max]) => (
+          <div key={key}>
+            <label className={labelClass} htmlFor={`copy-${key}`}>{label}</label>
+            <textarea
+              id={`copy-${key}`}
+              rows={2}
+              maxLength={max}
+              className={`${inputClass} resize-none`}
+              placeholder={placeholder}
+              value={defaults.copy[key]}
+              onChange={(e) => update({ copy: { ...defaults.copy, [key]: e.target.value } })}
+            />
+          </div>
+        ))}
       </section>
 
       {/* Varyasyonlar: kayıtlı şablonlar (otomasyonlarda ve Hazır İlanlar'da manuel ilanlar için seçilir) */}

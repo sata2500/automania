@@ -33,7 +33,8 @@ import { getValidEtsyToken } from '@/lib/etsy-token-manager';
 import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
-import { generateListingContent } from '@/lib/listing-generator';
+import { generateBestListing } from '@/lib/listing-pipeline';
+import { loadStoreCopyFacts } from '@/lib/listing-copy';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
 import { fetchTaxonomyProperties, selectableTaxonomyProperties, validateTaxonomyPropertyValues, type EtsyTaxonomyProperty } from '@/lib/etsy-taxonomy-properties';
@@ -729,18 +730,31 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   const photoUrls = (run.generatedMockupUrls as string[] | null) ?? [];
   const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
   const images = photoUrls.map((_, i) => photoLabels[i] ?? 'listing photo of the product');
-  const result = await generateListingContent(userId, {
-    designDescription: insight?.vision.description || designPrompt,
+  // Tasarımın görsel analizi (otomasyonda bu adımda yapılır; Üretim'den gelen ilanda tasarımın kendi analizi).
+  const design = {
+    description: insight?.vision.description || designPrompt,
+    primarySubject: insight?.vision.primarySubject || subject?.subject || research?.niche || hints?.primaryNiche || null,
+    primaryAesthetic: insight?.vision.primaryAesthetic || research?.style || null,
+    productType: insight?.vision.productType || hints?.productType || null,
+  };
+  const storeFacts = await loadStoreCopyFacts(userId, template.automationSchedule?.etsy?.shippingProfileId)
+    .catch(() => 'None provided');
+  // Yaz → etiketleri Etsy'den puanla → yapay zekâyla değerlendir → puan düşükse geri bildirimle yeniden yaz.
+  const result = await generateBestListing(userId, {
+    designDescription: design.description,
     keywords,
     productType: hints?.productType || undefined,
     userNotes: hints?.customNotes || undefined,
-    primarySubject: insight?.vision.primarySubject || subject?.subject || hints?.primaryNiche || undefined,
+    primarySubject: design.primarySubject || undefined,
+    primaryAesthetic: design.primaryAesthetic || undefined,
     audienceGroup: audienceGroupLabel(hints?.audienceGroup),
     garments: garmentsLabel(hints?.garments),
     taxonomyId,
     shopSections: shopSections.length > 0 ? shopSections : undefined,
     taxonomyProperties: taxonomyProperties.length > 0 ? taxonomyProperties : undefined,
     images,
+    design,
+    storeFacts,
   });
   const listing = result.listing as {
     title: string; description: string; selectedTags: string[]; shop_section_id?: unknown;
@@ -761,6 +775,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     imageAltTexts: Array.isArray(listing.image_alt_texts)
       ? listing.image_alt_texts.slice(0, images.length).map((alt) => (typeof alt === 'string' ? alt.trim() : ''))
       : [],
+    evaluation: result.evaluation,
   };
   const propertyCount = Object.keys(seo.taxonomyProperties).length;
   if (run.generatedDesignId) {
@@ -808,6 +823,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     patch: { generatedSeo: seo },
     output: {
       model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount,
+      seoScore: result.evaluation.score, seoAttempts: result.attempts, aiReviewed: Boolean(result.aiReview),
       designAnalysis: insight ? { keywords: insight.vision.keywords.length, scored: insight.scored.scraped, pending: insight.scored.pending.length } : null,
       altTexts: seo.imageAltTexts?.filter(Boolean).length ?? 0,
     },

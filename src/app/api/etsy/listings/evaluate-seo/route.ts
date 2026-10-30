@@ -2,7 +2,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql, { type DbRow } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
-import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { evaluateEtsyListingSeo, storedAiReview } from '@/lib/etsy-seo-evaluator';
 import { scrapeEtsyKeywordData } from '@/lib/etsy-scraper';
 import { loadScraperCredentials } from '@/lib/scraper-credentials';
 import { checkRateLimit } from '@/lib/request-rate-limit';
@@ -189,7 +189,8 @@ export async function POST(req: Request) {
         description: item.description,
         tags,
         visionAnalysis: vision,
-        keywordPoolRows
+        keywordPoolRows,
+        aiReview: storedAiReview(item.seo_evaluation),
       });
 
       await sql`

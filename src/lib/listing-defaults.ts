@@ -17,10 +17,30 @@ export type VariationDefaults = {
   quantity: number;
 };
 
+/**
+ * İlan metni bilgileri: yapay zekâ açıklamayı yazarken kullanır (yalnızca burada ve klasör ayarlarında yazan
+ * bilgiler açıklamaya girer; model ürün özelliği uydurmaz).
+ */
+export type ListingCopySettings = {
+  /** Mağazada kargo ücretsiz mi? null: bağlı kargo profilinden anlaşılır (ücret 0 ise ücretsiz). */
+  freeShipping: boolean | null;
+  /** Baskı yapılan ürün: marka/model, kumaş, kalıp (ör. "Comfort Colors 1717, 100% ring-spun cotton, relaxed fit") */
+  productInfo: string;
+  /** Bakım talimatı (ör. "Machine wash cold inside out, tumble dry low") */
+  careInstructions: string;
+  /** Üretim ve kargo süresi (ör. "Made to order in 1-3 business days, ships from the USA") */
+  processingInfo: string;
+  /** Açıklamaya eklenecek mağaza notu veya üslup (ör. iade politikası, mağaza hikâyesi) */
+  extraNotes: string;
+};
+
 export type ListingDefaults = {
   etsy: PodTemplateEtsyListingSettings;
   variations: VariationDefaults;
+  copy: ListingCopySettings;
 };
+
+export const EMPTY_LISTING_COPY: ListingCopySettings = { freeShipping: null, productInfo: '', careInstructions: '', processingInfo: '', extraNotes: '' };
 
 export const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
 export const DEFAULT_COLORS = ['White', 'Black', 'Sand', 'Navy', 'Sport Grey'];
@@ -36,6 +56,7 @@ export const EMPTY_LISTING_DEFAULTS: ListingDefaults = {
     shouldAutoRenew: false,
   },
   variations: { sizes: DEFAULT_SIZES, colors: DEFAULT_COLORS, basePrice: 24.99, sizePrices: { '2XL': 26.99, '3XL': 28.99 }, quantity: 999 },
+  copy: EMPTY_LISTING_COPY,
 };
 
 /** Etsy, bir ilanda en fazla bu kadar varyasyon kombinasyonuna izin verir. */
@@ -71,7 +92,34 @@ export function normalizeListingDefaults(input: unknown): ListingDefaults {
       sizePrices,
       quantity: Math.max(1, Math.min(999, Math.trunc(Number(v.quantity) || base.variations.quantity))),
     },
+    copy: normalizeListingCopy(raw.copy),
   };
+}
+
+const text = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+export function normalizeListingCopy(input: unknown): ListingCopySettings {
+  const raw = (input && typeof input === 'object' ? input : {}) as Partial<ListingCopySettings>;
+  return {
+    freeShipping: typeof raw.freeShipping === 'boolean' ? raw.freeShipping : null,
+    productInfo: text(raw.productInfo, 300),
+    careInstructions: text(raw.careInstructions, 200),
+    processingInfo: text(raw.processingInfo, 200),
+    extraNotes: text(raw.extraNotes, 400),
+  };
+}
+
+/** Yapay zekâya verilecek mağaza bilgileri (boş alanlar yazılmaz; kargo durumu açıkça belirtilir). */
+export function listingCopyFacts(copy: ListingCopySettings, freeShippingDetected: boolean | null = null): string {
+  const freeShipping = copy.freeShipping ?? freeShippingDetected;
+  const lines = [
+    copy.productInfo && `Product (garment brand/model, fabric, fit): ${copy.productInfo}`,
+    copy.careInstructions && `Care instructions: ${copy.careInstructions}`,
+    copy.processingInfo && `Production & shipping time: ${copy.processingInfo}`,
+    freeShipping === true ? 'Shipping: FREE shipping (mention it in the description)' : freeShipping === false ? 'Shipping: shipping is NOT free (do not claim free shipping)' : '',
+    copy.extraNotes && `Shop note: ${copy.extraNotes}`,
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join('\n') : 'None provided';
 }
 
 /** Beden × renk kombinasyonlarından Etsy varyasyon satırları (beden fiyatı yoksa temel fiyat). */

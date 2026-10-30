@@ -33,6 +33,7 @@ import { parseJsonObject } from '@/lib/json-utils';
 import { isLivePublishEnabled, LIVE_PUBLISH_CONFIRMATION } from '@/lib/etsy-publish-mode';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
+import { SeoBreakdown } from './SeoBreakdown';
 import { formatListingState } from '@/lib/etsy-format';
 
 interface ListingDetailModalProps {
@@ -80,6 +81,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   // Loading states
   const [isVisionLoading, setIsVisionLoading] = useState(false);
   const [isOptimizeLoading, setIsOptimizeLoading] = useState(false);
+  const [isAiReviewLoading, setIsAiReviewLoading] = useState(false);
   const [isUpdatingEtsy, setIsUpdatingEtsy] = useState(false);
   const [isSeoScraping, setIsSeoScraping] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -143,7 +145,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   if (editDescription.trim() !== (listing.description || '').trim()) changedFields.push('açıklama');
   if (JSON.stringify(editTags) !== JSON.stringify(originalTags)) changedFields.push('etiketler');
 
-  const evaluation: Partial<SeoEvaluationResult> = parseJsonObject<Partial<SeoEvaluationResult>>(listing.seo_evaluation, {});
+  const evaluation = parseJsonObject<Partial<SeoEvaluationResult> & { improvement?: { evaluation?: Partial<SeoEvaluationResult>; createdAt?: string } }>(listing.seo_evaluation, {});
+  const improvementScore = typeof evaluation.improvement?.evaluation?.score === 'number' ? evaluation.improvement.evaluation.score : null;
   const vision: Partial<VisionAnalysisData> & Record<string, unknown> = parseJsonObject(listing.vision_analysis, {});
 
   const aiOptimizedTags: string[] = Array.isArray(listing.ai_optimized_tags)
@@ -229,7 +232,28 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   };
 
-  // Trigger AI SEO Optimization
+  // Yapay zekâ değerlendirmesi (puanın 40 puanlık kısmı); metin değişmedikçe yeniden ücret ödenmez.
+  const handleRunAiReview = async () => {
+    setIsAiReviewLoading(true);
+    try {
+      const res = await fetch('/api/etsy/listings/ai-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listingIds: [listing.listing_id] }),
+      });
+      const data = await res.json();
+      const result = data.results?.[0];
+      if (!result) throw new Error(data.error || 'Yapay zekâ değerlendirmesi yapılamadı.');
+      onListingUpdated({ ...listing, seo_score: result.seoScore, seo_evaluation: result.seoEvaluation });
+      success(`Yapay zekâ değerlendirmesi tamamlandı: SEO puanı ${result.seoScore}.`);
+    } catch (err) {
+      error(getErrorMessage(err) || 'Yapay zekâ değerlendirmesi yapılamadı.');
+    } finally {
+      setIsAiReviewLoading(false);
+    }
+  };
+
+  // "Yapay zekâ ile iyileştir": yeni ilanlarla aynı akış; öneri önce/sonra puanıyla döner, Etsy'ye gönderilmez.
   const handleRunAiOptimize = async () => {
     setIsOptimizeLoading(true);
     try {
@@ -239,22 +263,19 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
         body: JSON.stringify({ listingId: listing.listing_id })
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'AI Optimizasyonu başarısız oldu.');
-
-      const result = data.results?.[0];
-      if (result) {
-        const updated = {
-          ...listing,
-          ai_optimized_title: result.aiOptimizedTitle,
-          ai_optimized_tags: result.aiOptimizedTags,
-          ai_optimized_description: result.aiOptimizedDescription,
-          ai_optimized_at: result.aiOptimizedAt
-        };
-        onListingUpdated(updated);
-        success('AI SEO başlık, etiket ve açıklama başarıyla üretildi!');
-      }
+      if (!data.success) throw new Error(data.error || 'Yapay zekâ iyileştirmesi yapılamadı.');
+      onListingUpdated({
+        ...listing,
+        ai_optimized_title: data.suggestion.title,
+        ai_optimized_tags: data.suggestion.tags,
+        ai_optimized_description: data.suggestion.description,
+        ai_optimized_at: data.suggestion.createdAt,
+        seo_score: data.before.score,
+        seo_evaluation: { ...data.before.evaluation, improvement: { evaluation: data.after.evaluation, createdAt: data.suggestion.createdAt } },
+      });
+      success(`Öneri hazır: SEO puanı ${data.before.score} → ${data.after.score}. Beğenirseniz "Forma uygula" ile düzenleyip Etsy'ye gönderin.`);
     } catch (err) {
-      error(getErrorMessage(err) || 'AI optimizasyonunda hata oluştu.');
+      error(getErrorMessage(err) || 'Yapay zekâ iyileştirmesi yapılamadı.');
     } finally {
       setIsOptimizeLoading(false);
     }
@@ -426,7 +447,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>3. AI SEO Optimizasyonu {listing.ai_optimized_title ? '✓' : ''}</span>
+            <span>3. Yapay zekâ ile iyileştir {listing.ai_optimized_title ? '✓' : ''}</span>
           </button>
 
           <button
@@ -471,48 +492,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
                 <div className="md:col-span-3 p-5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-3">
                   <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">SEO Puan Dağılımı</h4>
-                  
-                  {/* Breakdown Bars */}
-                  <div className="space-y-2.5">
-                    <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        <span>13 Etiket & Kelime Havuzu Kalitesi</span>
-                        <span>{evaluation.breakdown?.tagsScore ?? 0} / 40 Puan</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.tagsScore ?? 0) / 40) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        <span>Başlık Uzunluğu & Odak Kelimeler</span>
-                        <span>{evaluation.breakdown?.titleScore ?? 0} / 35 Puan</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.titleScore ?? 0) / 35) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        <span>Açıklama & Bölüm Zenginliği</span>
-                        <span>{evaluation.breakdown?.descriptionScore ?? 0} / 25 Puan</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-purple-500 rounded-full transition-all duration-500"
-                          style={{ width: `${((evaluation.breakdown?.descriptionScore ?? 0) / 25) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <SeoBreakdown evaluation={evaluation} onRunAiReview={handleRunAiReview} aiReviewLoading={isAiReviewLoading} />
                 </div>
               </div>
 
@@ -531,7 +511,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                         </span>
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        Kelime Havuzu verileriyle 7 günlük tazelik kontrolü ve doğrudan matematiksel puanlama.
+                        Kelime havuzundaki gerçek Etsy verisi; yalnızca son 14 gün içinde ölçülen puanlar sayılır.
                       </p>
                     </div>
                   </div>
@@ -554,7 +534,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {evaluation.tagBreakdown.map((t, idx) => {
-                      const scoreVal = Number(t.opportunityScore || 0);
+                      const scoreVal = t.status === 'unknown' ? 0 : Number(t.opportunityScore || 0);
                       const isHigh = scoreVal >= 70;
                       const isMid = scoreVal >= 45 && scoreVal < 70;
                       const isLow = scoreVal > 0 && scoreVal < 45;
@@ -580,10 +560,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                                 ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/30'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'
                             }`}>
-                              {scoreVal > 0 ? `${scoreVal} Puan` : 'Taranmamış'}
+                              {scoreVal > 0 ? `${scoreVal} Puan` : t.inPool ? 'Puan eski' : 'Taranmamış'}
                             </span>
                           </div>
 
+                          {t.irrelevant && (
+                            <span className="self-start text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">Yapay zekâ: tasarımla ilgisiz</span>
+                          )}
                           <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200 dark:border-slate-800/80 pt-1.5 mt-0.5">
                             <span className="truncate text-[10px]">
                               {t.competitionLevel || (t.totalListings ? `${t.totalListings.toLocaleString()} İlan` : 'Havuzda Mevcut')}
@@ -819,11 +802,18 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                    <span>Yapay Zeka SEO Yenileme & Karşılaştırma</span>
+                    <span>Yapay zekâ ile iyileştir</span>
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Admin panelinizdeki SEO metin yazarı AI modeli, kelime havuzunuz ve görsel analiziniz ile en yüksek arama hacimli başlık, etiket ve açıklamayı üretir.
+                    Görsel analizi, kelime havuzundaki gerçek Etsy puanları ve mağaza bilgilerinizle yeni başlık, etiket ve açıklama yazılır, puanlanır; puan düşükse bir kez daha düzeltilir. Etsy&apos;ye yalnızca siz onaylayınca gider.
                   </p>
+                  {improvementScore !== null && listing.ai_optimized_title && (
+                    <p className="mt-2 inline-flex items-center gap-2 text-xs font-bold">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200">Şimdi {score}</span>
+                      <span className="text-slate-400">→</span>
+                      <span className={`px-2 py-0.5 rounded-lg ${improvementScore > score ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>Öneri {improvementScore}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -833,7 +823,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
                   >
                     {isOptimizeLoading ? <Spinner className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-                    {isOptimizeLoading ? 'AI SEO Üretiyor...' : 'AI SEO Üret'}
+                    {isOptimizeLoading ? 'Yazılıyor ve puanlanıyor (1-2 dk)…' : listing.ai_optimized_title ? 'Yeniden öner' : 'Öneri oluştur'}
                   </button>
 
                   {listing.ai_optimized_title && (
@@ -842,7 +832,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 shrink-0"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Forma Uygula</span>
+                      <span>Forma uygula</span>
                     </button>
                   )}
                 </div>
@@ -853,9 +843,9 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                   <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
                     <Sparkles className="w-6 h-6" />
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Henüz AI Optimizasyon Önerisi Üretilmedi</h4>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Henüz öneri yok</h4>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Yukarıdaki &quot;AI SEO Üret&quot; butonuna tıklayarak bu ilan için optimize edilmiş 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama hazırlatabilirsiniz.
+                    &quot;Öneri oluştur&quot; ile bu ilan için kısa ve net bir başlık, 13 farklı aramayı yakalayan etiket ve açıklama hazırlanır; mevcut metinle puanı karşılaştırılır.
                   </p>
                 </div>
               ) : (

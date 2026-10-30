@@ -1,24 +1,20 @@
+/**
+ * POST /api/etsy/listings/analyze-vision — Etsy ilanlarının kapak görselini yapay zekâyla analiz eder
+ * (tasarım analiziyle aynı talimat) ve SEO puanını günceller. Body: { listingId } veya { listingIds } (en fazla 10).
+ */
 import { getErrorMessage } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
-import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
-import { loadSettingRows } from '@/lib/app-settings';
-import { loadVisionImage } from '@/lib/media-source';
-import { fillPrompt } from '@/lib/prompt-registry';
-import { loadPrompt, loadTaxonomyHint } from '@/lib/prompt-settings';
-import { requireModel } from '@/lib/ai-models';
+import { analyzeListingVision, reevaluateListing } from '@/lib/etsy-listing-seo';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
     const session = await getAuthoritativeSession();
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
-    }
+    if (!session) return NextResponse.json({ success: false, error: 'Oturum açmanız gerekiyor.' }, { status: 401 });
 
     const rateLimit = await checkRateLimit(`ai:etsy-vision:${session.id}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
@@ -28,231 +24,27 @@ export async function POST(req: Request) {
       });
     }
 
-    const body = await req.json();
-    const { listingId, listingIds } = body;
+    const { listingId, listingIds } = await req.json().catch(() => ({}));
+    const targetIds = Array.from(new Set([listingId, ...(Array.isArray(listingIds) ? listingIds : [])].filter(Boolean).map(String)));
+    if (targetIds.length === 0) return NextResponse.json({ success: false, error: 'Analiz edilecek listing ID belirtilmedi.' }, { status: 400 });
+    if (targetIds.length > 10) return NextResponse.json({ success: false, error: 'Tek istekte en fazla 10 listing analiz edilebilir.' }, { status: 400 });
 
-    const targetIds: string[] = [];
-    if (listingId) targetIds.push(String(listingId));
-    if (Array.isArray(listingIds)) {
-      for (const id of listingIds) {
-        if (id && !targetIds.includes(String(id))) targetIds.push(String(id));
-      }
-    }
-
-    if (targetIds.length === 0) {
-      return NextResponse.json({ success: false, error: 'Analiz edilecek listing ID belirtilmedi.' }, { status: 400 });
-    }
-    if (targetIds.length > 10) {
-      return NextResponse.json({ success: false, error: 'Tek istekte en fazla 10 listing analiz edilebilir.' }, { status: 400 });
-    }
-
-    // Talimat admin panelindeki "Görsel analizi" prompt'udur (boşsa varsayılanı); tasarım analiziyle ortaktır.
-    const visionPrompt = fillPrompt(await loadPrompt('ai_prompt_analyze_design'), { taxonomyHint: await loadTaxonomyHint() });
-
-    // 1. Fetch AI Model Settings from app_settings
-    const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_vision', 'gemini_api_key', 'gemini_model_vision']);
-
-    let activeAiProvider = 'openrouter';
-    let dbApiKey = null;
-    let dbVisionModel = null;
-    let dbGeminiVisionModel = null;
-
-    for (const row of settingsRows) {
-      if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
-      if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
-      if (row.setting_key === 'openrouter_model_vision') dbVisionModel = row.setting_value;
-      if (row.setting_key === 'gemini_model_vision') dbGeminiVisionModel = row.setting_value;
-    }
-
-    // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
-    const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
-    const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
-
-    if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
-      return NextResponse.json({ success: false, error: 'Admin panelinde Vision AI anahtarı yapılandırılmamış.' }, { status: 500 });
-    }
-
-    // Model yalnızca admin panelindeki seçimdir (yedek model yok).
-    const visionModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiVisionModel : dbVisionModel, 'vision');
-
-    // 2. Fetch target listings from DB
-    const listings = await sql`
-      SELECT * FROM user_etsy_listings 
-      WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})
-    `;
-
-    if (listings.length === 0) {
-      return NextResponse.json({ success: false, error: 'Belirtilen ilanlar veritabanında bulunamadı.' }, { status: 404 });
-    }
-
-    // 3. Load keyword pool rows for SEO score re-calculation
-    const keywordPoolRows = await sql`
-      SELECT keyword, opportunity_score, etsy_score, total_listings, bestseller_count, is_etsy_suggested 
-      FROM keyword_pool
-      WHERE opportunity_score > 0 OR etsy_score > 0
-    `;
+    const listings = await sql`SELECT * FROM user_etsy_listings WHERE user_id = ${session.id} AND listing_id = ANY(${targetIds})`;
+    if (listings.length === 0) return NextResponse.json({ success: false, error: 'Belirtilen ilanlar veritabanında bulunamadı.' }, { status: 404 });
 
     const results: Array<Record<string, unknown>> = [];
     const errors: string[] = [];
-
     for (const listing of listings) {
-      const listingIdStr = String(listing.listing_id);
-      let imageUrl = listing.primary_image_url;
-
-      if (!imageUrl && Array.isArray(listing.images) && listing.images.length > 0) {
-        imageUrl = listing.images[0]?.url_570xN || listing.images[0]?.url_fullxfull || listing.images[0]?.url_170x135;
-      }
-
-      if (!imageUrl) {
-        errors.push(`İlan #${listingIdStr}: Kapak görseli URL'si bulunamadı.`);
-        continue;
-      }
-
       try {
-        const resolvedImage = await loadVisionImage(session.id, String(imageUrl));
-
-        const { buffer, mimeType } = resolvedImage;
-        const base64Data = buffer.toString('base64');
-        const dataUrl = `data:${mimeType};base64,${base64Data}`;
-
-        let rawAiContent = '';
-
-        if (activeAiProvider === 'gemini') {
-          const ai = createGoogleClient(googleConnection!);
-          let geminiMimeType = mimeType.toLowerCase();
-          if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(geminiMimeType)) {
-            geminiMimeType = 'image/jpeg';
-          }
-
-          const candidates = [visionModel] // Yalnızca admin panelinde seçilen model;
-
-          for (const m of candidates) {
-            try {
-              const result = await ai.models.generateContent({
-                model: m,
-                contents: [
-                  {
-                    role: 'user',
-                    parts: [
-                      { text: visionPrompt },
-                      {
-                        inlineData: {
-                          mimeType: geminiMimeType,
-                          data: base64Data
-                        }
-                      }
-                    ]
-                  }
-                ],
-                config: {
-                  responseMimeType: 'application/json',
-                  temperature: 0.7,
-                }
-              });
-              const txt = result.text?.trim();
-              if (txt) {
-                rawAiContent = txt;
-                break;
-              }
-            } catch (err: unknown) {
-              console.warn(`[Listing Vision] Model '${m}' failed:`, err instanceof Error ? err.message : err);
-              continue;
-            }
-          }
-        } else {
-          const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-              'X-Title': 'Automania Listing Vision Analyzer',
-            },
-            body: JSON.stringify({
-              model: visionModel,
-              messages: [
-                {
-                  role: 'user',
-                  content: [
-                    { type: 'text', text: visionPrompt },
-                    { type: 'image_url', image_url: { url: dataUrl } }
-                  ]
-                }
-              ]
-            })
-          });
-
-          if (!openRouterRes.ok) {
-            const err = await openRouterRes.text();
-            throw new Error(`OpenRouter Hatası: ${openRouterRes.status} - ${err}`);
-          }
-
-          const aiData = await openRouterRes.json();
-          rawAiContent = aiData.choices?.[0]?.message?.content || '{}';
-        }
-
-        // Clean JSON
-        const jsonMatch = rawAiContent.match(/\{[\s\S]*\}/);
-        const cleanedJson = jsonMatch ? jsonMatch[0] : rawAiContent;
-        const parsedAnalysis = JSON.parse(cleanedJson);
-
-        const visionData = {
-          primarySubject: parsedAnalysis.primarySubject || '',
-          primaryAesthetic: parsedAnalysis.primaryAesthetic || '',
-          detectedStyle: parsedAnalysis.detectedStyle || '',
-          detectedColors: Array.isArray(parsedAnalysis.detectedColors) ? parsedAnalysis.detectedColors : [],
-          productType: parsedAnalysis.productType || '',
-          description: parsedAnalysis.description || '',
-          keywords: Array.isArray(parsedAnalysis.keywords) ? parsedAnalysis.keywords : [],
-          visionModel,
-          analyzedAt: new Date().toISOString()
-        };
-
-        // Re-evaluate SEO score with updated vision data
-        const tags = Array.isArray(listing.tags) ? listing.tags : (typeof listing.tags === 'string' ? JSON.parse(listing.tags) : []);
-        const newEvaluation = evaluateEtsyListingSeo({
-          title: listing.title,
-          description: listing.description,
-          tags,
-          visionAnalysis: visionData,
-          keywordPoolRows
-        });
-
-        // Update DB
-        await sql`
-          UPDATE user_etsy_listings 
-          SET 
-            vision_analysis = ${JSON.stringify(visionData)}::jsonb,
-            seo_score = ${newEvaluation.score},
-            seo_evaluation = ${JSON.stringify(newEvaluation)}::jsonb,
-            updated_at = CURRENT_TIMESTAMP
-          WHERE user_id = ${session.id} AND listing_id = ${listingIdStr}
-        `;
-
-        results.push({
-          listingId: listingIdStr,
-          visionAnalysis: visionData,
-          seoScore: newEvaluation.score,
-          seoEvaluation: newEvaluation
-        });
-
-        // Short pause between images to prevent provider rate limiting
-        if (listings.length > 1) {
-          await new Promise(r => setTimeout(r, 200));
-        }
-
+        const visionAnalysis = await analyzeListingVision(session.id, listing);
+        const evaluation = await reevaluateListing(session.id, { ...listing, vision_analysis: visionAnalysis });
+        results.push({ listingId: String(listing.listing_id), visionAnalysis, seoScore: evaluation.score, seoEvaluation: evaluation });
       } catch (err) {
-        console.error(`Vision analysis error on listing ${listingIdStr}:`, err);
-        errors.push(`İlan #${listingIdStr}: ${getErrorMessage(err)}`);
+        console.error(`Vision analysis error on listing ${listing.listing_id}:`, err);
+        errors.push(`İlan #${listing.listing_id}: ${getErrorMessage(err)}`);
       }
     }
-
-    return NextResponse.json({
-      success: true,
-      analyzedCount: results.length,
-      results,
-      errors: errors.length > 0 ? errors : undefined
-    });
-
+    return NextResponse.json({ success: true, analyzedCount: results.length, results, errors: errors.length > 0 ? errors : undefined });
   } catch (error) {
     console.error('Vision Analyze API Error:', error);
     return NextResponse.json({ success: false, error: getErrorMessage(error) }, { status: 500 });

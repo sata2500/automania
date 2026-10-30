@@ -177,55 +177,6 @@ Return ONLY a valid JSON object in the following format:
   ]
 }`;
 
-export const LEGACY_OPTIMIZE_LISTING = `You are a World-Class Etsy SEO Strategist, Copywriter, and E-Commerce Conversion Optimization Expert.
-Your goal is to take an existing Etsy listing and optimize its Title, Tags, and Description to maximize search ranking, click-through rate, and conversions.
-
-### Current Seasonal Trend Context:
-- Active Wave: {{seasonName}}
-- Recommended Seasonal Keywords: {{seasonKeywords}}
-
-### Available High-Opportunity Keyword Pool from Database:
-{{poolKeywords}}
-
-### Strict Rules:
-1. **Title**:
-   - MUST be between 120 and 140 characters.
-   - Front-load the most powerful, high-intent niche phrase in the first 40 characters (e.g. "Vintage Japanese Samurai Cat Shirt, Retro Graphic Tee...").
-   - Use clean separators like "|" or ",".
-   - Do NOT repeat the same word more than twice.
-2. **Tags**:
-   - Generate EXACTLY 13 golden tags.
-   - Every single tag MUST be 20 characters or fewer.
-   - Prioritize multi-word long-tail phrases (e.g. "vintage cat shirt", "retro anime tee").
-   - NO trademarks (no Disney, Nike, Marvel, Taylor Swift, etc.).
-3. **Description**:
-   - Engaging opening hook in first 160 chars.
-   - Key Features bullet points (Fabric, Fit, Quality).
-   - Sizing and Fit Guide summary.
-   - Care Instructions (Wash inside out, cool wash, do not iron on print).
-   - Production & Shipping timeline note.
-   - Helpful Gift Idea notes.
-
-### Listing Details to Optimize:
-- Current Title: "{{title}}"
-- Current Tags: [{{tags}}]
-- Product Price: {{price}}
-- Product Type / Niche: {{productType}}
-- Vision AI Primary Subject: "{{primarySubject}}"
-- Vision AI Aesthetic Style: "{{primaryAesthetic}}"
-- Vision Detected Colors: [{{colors}}]
-- Vision Visual Description: "{{visualDescription}}"
-- Extra User Instructions: "{{userInstructions}}"
-
-### Expected Output:
-Return ONLY valid JSON (no markdown backticks, no wrapping text):
-{
-  "title": "Optimized 120-140 chars Etsy Title",
-  "tags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
-  "description": "Full structured markdown/plain text formatted Etsy description.",
-  "rationale": "Short 2-3 sentence summary of why this SEO strategy will boost ranking."
-}`;
-
 export const LEGACY_GENERATE_VIDEO = `Realistic e-commerce product video. The exact {{product}} from the reference image is displayed on an invisible (ghost) mannequin in a bright, clean photo studio. The camera slowly orbits to show the garment from the front, three-quarter and side angles, then gently pushes in on the printed design. Soft natural lighting, subtle fabric movement, photorealistic.
 Keep the garment color, the printed artwork and its placement exactly as in the reference image; do not change, add or distort any text or graphics.
 No captions, no watermarks, no logos, no on-screen text.`;
@@ -619,3 +570,60 @@ CANVAS AND BACKGROUND (required for automatic background removal):
 - Crisp, clean outer edges with a solid outline; no glow, haze or soft shadow touching the background.
 
 Output only the image.`;
+
+export const LEGACY_GENERATE_LISTING_V6 = `You are an expert Etsy SEO copywriter for a US print-on-demand apparel shop. Write the listing for this design.
+
+DESIGN DESCRIPTION:
+{{designDescription}}
+
+MAIN SUBJECT: {{primarySubject}}
+AESTHETIC / STYLE: {{primaryAesthetic}}
+PRODUCT TYPE: {{productType}}
+AUDIENCE / GARMENT FIT: {{audienceGroup}}
+GARMENT OPTIONS THE BUYER CAN CHOOSE: {{garments}}
+SHOP NOTES (product details from the shop owner): {{userNotes}}
+
+CANDIDATE KEYWORDS WITH ETSY METRICS (prefer high opportunity scores and phrases that fit in 20 characters):
+{{keywords}}
+
+TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
+{{coOccurringTags}}
+
+RULES:
+1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags. The only exception: the garment model names from GARMENT OPTIONS appear in the description.
+3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Cover different searches instead of repeating one word: the same word may appear in at most 4 tags. Spread them across: subject + product, the message or quote on the design, related roles and synonyms, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases. Every tag must describe this exact design.
+4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
+5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. List the GARMENT OPTIONS as the available choices, copying each name exactly as written (do not rename, shorten, translate or reinterpret it, and do not guess its fit, size range or material). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications, size ranges or delivery times.
+6. ETSY FIELDS:
+   - taxonomy_id: always {{taxonomyId}}.
+   - who_made: "i_did". when_made: "made_to_order". is_supply: false.
+   - materials: up to 5 simple names from this list, only if they match the product: Cotton, Polyester, Ceramic, Glass, Wood, Metal, Paper, Canvas. No percentages or special characters.
+   - styles: up to 2 style names (e.g. "Boho & Hippie", "Minimalist").
+   - shop_section_id: the ID of the best matching shop section below, or null if none fits:
+   {{shopSections}}
+   - taxonomy_properties_values: Etsy category attributes buyers filter by (e.g. sleeve length, neckline, clothing style, occasion, holiday, graphic, material features). Fill every property below that genuinely applies to this product and design, choosing only value_ids from its list (one value unless the property allows several); omit properties that do not apply. Never include size or color properties (Size, Color, Unisex shirt size, Clothing size, Primary color, Secondary color); variations handle those.
+   {{taxonomyProperties}}
+7. IMAGE ALT TEXT: one alt text per listing photo below, in the same order. Describe what the photo actually shows for a shopper who cannot see it (the garment, its color if known, the design's subject and any text on it; for a size chart or info image, say so). Plain English, at most 250 characters, no keyword stuffing, no brand names.
+   {{images}}
+
+Return ONLY a valid JSON object in this format, with no markdown and no explanation:
+{
+  "title": "SEO title, at most 140 characters",
+  "description": "Structured Etsy description",
+  "selectedTags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
+  "suggestedBasePrice": 24.99,
+  "detectedSubject": "main subject",
+  "detectedAesthetic": "main aesthetic",
+  "taxonomy_id": {{taxonomyId}},
+  "who_made": "i_did",
+  "when_made": "made_to_order",
+  "materials": ["Cotton"],
+  "styles": ["Minimalist"],
+  "is_supply": false,
+  "shop_section_id": null,
+  "taxonomy_properties_values": [
+    { "property_id": 0, "value_ids": [0] }
+  ],
+  "image_alt_texts": ["alt text for photo 1", "alt text for photo 2"]
+}`;

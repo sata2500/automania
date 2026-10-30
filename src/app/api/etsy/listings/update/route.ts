@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import sql from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
-import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { evaluateEtsyListingSeo, storedAiReview } from '@/lib/etsy-seo-evaluator';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { sanitizeEtsyTags } from '@/lib/etsy-format';
@@ -149,7 +149,9 @@ export async function PATCH(req: Request) {
       description: finalDesc,
       tags: finalTags,
       visionAnalysis: vision,
-      keywordPoolRows
+      keywordPoolRows,
+      // Onaylanan yapay zekâ iyileştirmesi gönderildiyse onun incelemesi geçerli olur.
+      aiReview: storedAiReview(existingRows[0]?.seo_evaluation),
     });
 
     // Update database cache

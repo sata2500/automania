@@ -73,8 +73,9 @@ describe('single SEO grade scale', () => {
       description: 'A shirt for cat moms.',
       tags: ['cat mom'],
       keywordPoolRows: [
-        { keyword: 'cat lover gift', opportunity_score: 90 },
-        { keyword: 'fishing dad', opportunity_score: 95 },
+        // Yalnızca güncel (son 14 gün) puanlar önerilir.
+        { keyword: 'cat lover gift', opportunity_score: 90, last_evaluated_at: new Date().toISOString() },
+        { keyword: 'fishing dad', opportunity_score: 95, last_evaluated_at: new Date().toISOString() },
       ],
     });
     const suggested = result.missingPoolKeywords.map((k) => k.keyword);

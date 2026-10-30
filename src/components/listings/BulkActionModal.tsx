@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 
-export type BulkActionType = 'vision' | 'evaluate_seo' | 'optimize';
+export type BulkActionType = 'vision' | 'evaluate_seo' | 'ai_review' | 'optimize';
 
 import type { StoredEtsyListing } from '@/types/etsy';
 import { DialogPanel } from '@/components/common/DialogPanel';
@@ -65,14 +65,15 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
   const targetListings = scope === 'selected' ? selectedListings : allListings;
   const totalItems = targetListings.length;
-  // Vision ve AI optimizasyonu sunucuda 10 dakikada 10 ilanla sınırlı (maliyet koruması).
+  // Yapay zekâ işlemleri maliyetlidir: bir seferde en fazla 10 ilan.
   const AI_BATCH_LIMIT = 10;
-  const isAiAction = actionType === 'vision' || actionType === 'optimize';
+  const isAiAction = actionType === 'vision' || actionType === 'optimize' || actionType === 'ai_review';
 
   const getActionTitle = () => {
     if (actionType === 'vision') return 'Toplu Görsel (Vision AI) Analizi';
-    if (actionType === 'evaluate_seo') return 'Toplu SEO Değerlendirme & Skorlama';
-    if (actionType === 'optimize') return 'Toplu AI SEO Optimizasyonu';
+    if (actionType === 'evaluate_seo') return 'Toplu SEO Puanı (Etsy verisi)';
+    if (actionType === 'ai_review') return 'Toplu Yapay Zekâ Değerlendirmesi';
+    if (actionType === 'optimize') return 'Toplu Yapay Zekâ ile İyileştirme';
     return 'Toplu İşlem';
   };
 
@@ -81,10 +82,13 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
       return 'Seçili ilanların kapak fotoğraflarını Admin panelinde yapılandırılan Vision AI modeli ile tek tek analiz eder; konu, estetik ve renk verilerini kaydeder.';
     }
     if (actionType === 'evaluate_seo') {
-      return 'Seçili ilanların başlık, 13 etiket ve açıklamalarını Kelime Havuzu metriği ve SEO kurallarına göre 0-100 arasında yeniden puanlar.';
+      return 'Seçili ilanların etiketlerini kelime havuzunda tarar ve puanı Etsy kuralları ile güncel Etsy verisine göre yeniden hesaplar (yapay zekâ kullanılmaz).';
+    }
+    if (actionType === 'ai_review') {
+      return 'Seçili ilanların başlık, etiket ve açıklamasını görsel analizine göre yapay zekâyla değerlendirir (puanın 40 puanlık kısmı). Görsel analizi olmayan ilan önce analiz edilir.';
     }
     if (actionType === 'optimize') {
-      return 'Seçili ilanlar için SEO/Reasoning AI modelini kullanarak optimize 140 karakterlik başlık, 13 altın etiket ve dönüşüm odaklı açıklama üretir.';
+      return 'Seçili ilanlar için sırayla yeni başlık, etiket ve açıklama önerisi hazırlanır ve puanlanır (ilan başına 1-2 dk). Etsy\'ye hiçbir şey gönderilmez; önerileri ilan penceresinde inceleyip onaylarsınız.';
     }
     return '';
   };
@@ -107,7 +111,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
     cancelRef.current = false;
 
     // Process sequentially or in small chunks of 2 to avoid timeout/rate limits
-    const chunkSize = actionType === 'vision' ? 1 : actionType === 'optimize' ? 1 : 10;
+    const chunkSize = actionType === 'vision' || actionType === 'optimize' ? 1 : actionType === 'ai_review' ? 5 : 10;
     
     for (let i = 0; i < targetListings.length; i += chunkSize) {
       if (cancelRef.current) {
@@ -121,12 +125,15 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
 
       try {
         let endpoint = '';
-        const body = { listingIds: chunkIds };
+        // İyileştirme bir istekte tek ilan alır (her biri 1-2 dk sürer).
+        const body = actionType === 'optimize' ? { listingId: chunkIds[0] } : { listingIds: chunkIds };
 
         if (actionType === 'vision') {
           endpoint = '/api/etsy/listings/analyze-vision';
         } else if (actionType === 'evaluate_seo') {
           endpoint = '/api/etsy/listings/evaluate-seo';
+        } else if (actionType === 'ai_review') {
+          endpoint = '/api/etsy/listings/ai-review';
         } else if (actionType === 'optimize') {
           endpoint = '/api/etsy/listings/optimize';
         }
@@ -192,7 +199,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({
             <div className="p-2.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl border border-purple-500/20">
               {actionType === 'vision' && <Eye className="w-5 h-5" />}
               {actionType === 'evaluate_seo' && <TrendingUp className="w-5 h-5" />}
-              {actionType === 'optimize' && <Sparkles className="w-5 h-5" />}
+              {(actionType === 'optimize' || actionType === 'ai_review') && <Sparkles className="w-5 h-5" />}
             </div>
             <div>
               <h3 id="bulk-action-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">

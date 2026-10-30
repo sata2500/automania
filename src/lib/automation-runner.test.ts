@@ -99,6 +99,16 @@ const generateListing = vi.hoisted(() => vi.fn(async () => ({
   modelUsed: 'test-model',
 })));
 vi.mock('@/lib/listing-generator', () => ({ generateListingContent: generateListing }));
+// Değerlendirme ve düzeltme turu ayrı test edilir (listing-pipeline); burada yalnızca üretici çağrılır.
+vi.mock('@/lib/listing-pipeline', () => ({
+  generateBestListing: vi.fn(async (userId: string, input: Record<string, unknown>) => {
+    const { design: _design, storeFacts: _facts, ...generatorInput } = input;
+    void _design; void _facts;
+    const generate = generateListing as unknown as (...args: unknown[]) => Promise<Record<string, unknown>>;
+    return { ...(await generate(userId, generatorInput)), evaluation: { score: 90 }, aiReview: null, attempts: 1 };
+  }),
+}));
+vi.mock('@/lib/listing-copy', () => ({ loadStoreCopyFacts: vi.fn(async () => 'None provided') }));
 vi.mock('@/lib/etsy-taxonomy-properties', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/etsy-taxonomy-properties')>()),
   fetchTaxonomyProperties: vi.fn(async () => [

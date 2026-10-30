@@ -13,6 +13,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/ToastContext';
 import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } from './format';
 import type { ReviewItemView } from './types';
+import { SeoBreakdown } from '@/components/listings/SeoBreakdown';
 
 type PhotoRow = { url: string; included: boolean; alt: string };
 type EditorTab = 'photos' | 'text' | 'variations';
@@ -198,6 +199,7 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
     { key: 'description', label: 'Açıklama', ok: description.trim().length >= 160, tab: 'text' },
     ...(item.variations ? [{ key: 'variations', label: variationsMissing ? 'Varyasyon yok' : `${item.variations.enabled} varyasyon`, ok: !variationsMissing, tab: 'variations' as const }] : []),
   ];
+  const seoEvaluation = item.seo?.evaluation;
   const current = photos[Math.min(activePhoto, photos.length - 1)];
   const currentIndex = Math.min(activePhoto, photos.length - 1);
 
@@ -234,6 +236,19 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
           </div>
 
           <div className="flex gap-1.5 px-4 sm:px-5 pb-3 overflow-x-auto no-scrollbar" aria-label="İlanın hazırlık durumu">
+            {seoEvaluation && (
+              <button
+                type="button"
+                onClick={() => setTab('text')}
+                className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ${seoEvaluation.score >= 80
+                  ? 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                  : seoEvaluation.score >= 60 ? 'border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                  : 'border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300'}`}
+                title="SEO puanı (kurallar, Etsy verisi ve yapay zekâ değerlendirmesi)"
+              >
+                SEO {seoEvaluation.score}{dirty ? '*' : ''}
+              </button>
+            )}
             {checks.map((check) => (
               <button
                 key={check.key}
@@ -347,6 +362,18 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
 
           {tab === 'text' && (
             <div className="space-y-4">
+              {seoEvaluation && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100">SEO puanı: {seoEvaluation.score}/100</span>
+                    {dirty && <span className="text-[10px] text-amber-700 dark:text-amber-300">Kaydedince yeniden hesaplanır</span>}
+                  </div>
+                  <SeoBreakdown evaluation={seoEvaluation} compact />
+                  {seoEvaluation.issues.filter((i) => i.severity !== 'tip').slice(0, 4).map((issue, i) => (
+                    <p key={i} className="text-[11px] text-amber-800 dark:text-amber-300 flex gap-1.5"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{issue.message}</p>
+                  ))}
+                </div>
+              )}
               <div>
                 <label className={labelClass} htmlFor="review-title">Başlık <span className="font-normal text-slate-400">({title.length}/140)</span></label>
                 <textarea id="review-title" rows={2} className={`${inputClass} resize-none`} value={title} maxLength={140} disabled={!editable} onChange={(e) => change(setTitle)(e.target.value.replace(/\n/g, ' '))} />

@@ -13,7 +13,7 @@ import {
   DEFAULT_GENERATE_LISTING_PROMPT,
   DEFAULT_GENERATE_VIDEO_PROMPT,
   DEFAULT_NICHE_RESEARCH_PROMPT,
-  DEFAULT_OPTIMIZE_LISTING_PROMPT,
+  DEFAULT_REVIEW_LISTING_PROMPT,
 } from '@/lib/default-prompts';
 import {
   LEGACY_ANALYZE_DESIGN_V1,
@@ -33,10 +33,10 @@ import {
   LEGACY_GENERATE_LISTING_V3,
   LEGACY_GENERATE_LISTING_V4,
   LEGACY_GENERATE_LISTING_V5,
+  LEGACY_GENERATE_LISTING_V6,
   LEGACY_GENERATE_VIDEO,
   LEGACY_GENERATE_VIDEO_V2,
   LEGACY_NICHE_RESEARCH_V1,
-  LEGACY_OPTIMIZE_LISTING,
 } from '@/lib/legacy-prompts';
 
 export type PromptKey =
@@ -44,7 +44,7 @@ export type PromptKey =
   | 'ai_prompt_generate_design'
   | 'ai_prompt_design_variant'
   | 'ai_prompt_generate_listing'
-  | 'ai_prompt_optimize_listing'
+  | 'ai_prompt_review_listing'
   | 'ai_prompt_niche_research'
   | 'ai_prompt_generate_video';
 
@@ -123,9 +123,9 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     key: 'ai_prompt_generate_listing',
     group: 'listing',
     title: 'İlan metni üretimi',
-    description: 'Yeni ilan için başlık, 13 etiket, açıklama, kategori nitelikleri, mağaza bölümü ve fotoğraf alt metinlerini üretir (SEO stüdyosu ve otomasyon). JSON alan adlarını değiştirmeyin.',
+    description: 'İlan için başlık, 13 etiket, açıklama, kategori nitelikleri, mağaza bölümü ve fotoğraf alt metinlerini üretir. Otomasyon, Üretim\'den gelen ilanlar ve Etsy\'deki ilanların "Yapay zekâ ile iyileştir" özelliği bu talimatı kullanır; değerlendirme puanı düşükse geri bildirimle bir kez daha yazdırılır. JSON alan adlarını değiştirmeyin.',
     defaultValue: DEFAULT_GENERATE_LISTING_PROMPT,
-    legacyDefaults: [LEGACY_GENERATE_LISTING, LEGACY_GENERATE_LISTING_V2, LEGACY_GENERATE_LISTING_V3, LEGACY_GENERATE_LISTING_V4, LEGACY_GENERATE_LISTING_V5],
+    legacyDefaults: [LEGACY_GENERATE_LISTING, LEGACY_GENERATE_LISTING_V2, LEGACY_GENERATE_LISTING_V3, LEGACY_GENERATE_LISTING_V4, LEGACY_GENERATE_LISTING_V5, LEGACY_GENERATE_LISTING_V6],
     variables: [
       v('audienceGroup', 'Kitle', 'Otomasyonun hedef kitlesi (ör. "men\'s t-shirt").', '👥'),
       v('garments', 'Ürün modelleri', 'Otomasyonda yazılan ürün modelleri (ör. Comfort Colors 1717, Bella+Canvas 3001).', '👕'),
@@ -134,6 +134,9 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
       v('primaryAesthetic', 'Stil & estetik', 'Tasarımın görsel stili.', '✨'),
       v('productType', 'Ürün tipi', 'Ürün tipi (girilmemişse "Not specified").', '👕'),
       v('userNotes', 'Mağaza notları', 'Kullanıcının ürün/kumaş/beden notları (girilmemişse "None provided").', '📌'),
+      v('storeFacts', 'Mağaza bilgileri', 'Ayarlar › İlan metni bilgileri: ürün, bakım, üretim/kargo süresi, ücretsiz kargo, mağaza notu (girilmemişse "None provided").', '🏷️'),
+      v('currentListing', 'Mevcut ilan', 'Etsy\'deki bir ilan iyileştirilirken şu anki başlık, etiketler ve açıklama (yeni ilanda "None").', '📄'),
+      v('revisionFeedback', 'Düzeltme geri bildirimi', 'İlk taslak değerlendirildikten sonra düzeltilecek noktalar (ilk taslakta "None").', '🔁'),
       v('keywords', 'Aday anahtar kelimeler', 'Kelime havuzundan metriklerle zenginleştirilmiş aday etiketler.', '🔑'),
       v('coOccurringTags', 'Rakip etiketleri', 'Çok satan rakiplerde bu kelimelerle birlikte kullanılan etiketler.', '🔗'),
       v('taxonomyId', 'Kategori ID', 'Seçilen Etsy kategori numarası.', '🆔'),
@@ -143,24 +146,21 @@ export const PROMPT_DEFINITIONS: PromptDefinition[] = [
     ],
   },
   {
-    key: 'ai_prompt_optimize_listing',
+    key: 'ai_prompt_review_listing',
     group: 'listing',
-    title: 'Mevcut ilanı iyileştirme',
-    description: 'İlanlarım sayfasında mevcut bir Etsy ilanının başlık, etiket ve açıklamasını iyileştirir (tekil ve toplu "SEO optimize"). JSON alan adlarını değiştirmeyin.',
-    defaultValue: DEFAULT_OPTIMIZE_LISTING_PROMPT,
-    legacyDefaults: [LEGACY_OPTIMIZE_LISTING],
+    title: 'İlan değerlendirme (SEO puanı)',
+    description: 'Başlık, etiket ve açıklamayı tasarımın görsel analizine göre 0-10 ölçütlerle puanlar (SEO puanının 40 puanlık yapay zekâ kısmı). Yeni ilanlarda otomatik, Etsy\'deki ilanlarda düğmeyle çalışır. JSON alan adlarını değiştirmeyin.',
+    defaultValue: DEFAULT_REVIEW_LISTING_PROMPT,
     variables: [
-      v('title', 'Mevcut başlık', 'İlanın şu anki başlığı.', '🏷️'),
-      v('tags', 'Mevcut etiketler', 'İlanın şu anki etiketleri.', '🔖'),
-      v('description', 'Mevcut açıklama', 'İlanın şu anki açıklaması.', '📄'),
-      v('price', 'Fiyat', 'İlan fiyatı ve para birimi.', '💲'),
-      v('productType', 'Ürün tipi', 'Görsel analizindeki ürün tipi.', '👕'),
+      v('designDescription', 'Tasarım açıklaması', 'Görsel analizindeki açıklama.', '📝'),
       v('primarySubject', 'Ana konu', 'Görsel analizindeki ana konu.', '🎯'),
       v('primaryAesthetic', 'Stil', 'Görsel analizindeki stil.', '✨'),
-      v('colors', 'Renkler', 'Görsel analizinde bulunan baskın renkler.', '🎨'),
-      v('visualDescription', 'Görsel açıklaması', 'Görsel analizindeki açıklama.', '🖼️'),
-      v('poolKeywords', 'Havuz kelimeleri', 'Kelime havuzundaki yüksek fırsatlı kelimeler.', '🔑'),
-      v('userInstructions', 'Kullanıcı talimatı', 'Optimizasyon sırasında yazılan ek talimat (yoksa "None").', '💬'),
+      v('productType', 'Ürün tipi', 'Görsel analizindeki ürün tipi.', '👕'),
+      v('storeFacts', 'Mağaza bilgileri', 'Ayarlar › İlan metni bilgileri.', '🏷️'),
+      v('title', 'Başlık', 'Değerlendirilen başlık.', '🏷️'),
+      v('titleLength', 'Başlık uzunluğu', 'Başlığın karakter sayısı.', '📏'),
+      v('tags', 'Etiketler', 'Değerlendirilen 13 etiket.', '🔖'),
+      v('description', 'Açıklama', 'Değerlendirilen açıklama.', '📄'),
     ],
   },
   {

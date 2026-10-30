@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import sql, { type DbRow } from '@/lib/db';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
-import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { evaluateEtsyListingSeo, isCurrentSeoEvaluation, storedAiReview } from '@/lib/etsy-seo-evaluator';
 import { etsyFetch, listingsToMarkRemoved } from '@/lib/etsy-api';
 
 export const maxDuration = 120;
@@ -446,13 +446,14 @@ export async function POST(req: Request) {
       let seoEvaluation = existing?.seo_evaluation || {};
 
       // Only run SEO calculation if content changed or it is a new listing
-      if (!isContentIdentical || !existing?.seo_evaluation || Object.keys(existing.seo_evaluation).length === 0) {
+      if (!isContentIdentical || !isCurrentSeoEvaluation(existing?.seo_evaluation)) {
         const evaluation = evaluateEtsyListingSeo({
           title,
           description,
           tags,
           visionAnalysis: typeof visionAnalysis === 'string' ? JSON.parse(visionAnalysis) : visionAnalysis,
-          keywordPoolRows
+          keywordPoolRows,
+          aiReview: storedAiReview(existing?.seo_evaluation),
         });
         seoScore = evaluation.score;
         seoEvaluation = evaluation;

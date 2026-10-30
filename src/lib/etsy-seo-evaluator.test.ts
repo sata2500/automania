@@ -1,85 +1,93 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateEtsyListingSeo } from './etsy-seo-evaluator';
+import { evaluateEtsyListingSeo, listingTextHash, repeatedTagWords, wordRoot, type ListingAiReview } from './etsy-seo-evaluator';
 
-describe('evaluateEtsyListingSeo', () => {
-  it('calculates accurate mathematical grade and tag breakdown with keyword pool data', () => {
-    const tags = [
-      'retro cat shirt',
-      'vintage kitten tee',
-      'cat mom gift',
-      'funny animal shirt',
-      'cottagecore tee',
-      'aesthetic cat top',
-      'retro graphic tee',
-      'cat lover apparel',
-      'cute kitten shirt',
-      'japanese cat shirt',
-      'cat lady gift tee',
-      'whimsical cat top',
-      'pet lover tshirt'
-    ];
+const fresh = new Date().toISOString();
+const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
 
-    const keywordPoolRows = [
-      {
-        keyword: 'retro cat shirt',
-        opportunity_score: 88,
-        total_listings: 1200,
-        competition_level: 'Düşük (<5K İlan)',
-        bestseller_count: 3,
-        is_etsy_suggested: true,
-        last_evaluated_at: new Date().toISOString(),
-      },
-      {
-        keyword: 'vintage kitten tee',
-        opportunity_score: 75,
-        total_listings: 800,
-        competition_level: 'Altın Niş (<1K İlan)',
-        bestseller_count: 1,
-        is_etsy_suggested: true,
-        last_evaluated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        keyword: 'cat mom gift',
-        opportunity_score: 92,
-        total_listings: 3400,
-        competition_level: 'Düşük (<5K İlan)',
-        bestseller_count: 4,
-        is_etsy_suggested: true,
-        last_evaluated_at: new Date().toISOString(),
-      }
-    ];
+const goodTags = [
+  'retro cat lover', 'vintage kitten top', 'cat mom gift', 'cottagecore animal', 'whimsical feline art',
+  'japanese neko style', 'cat lady present', 'pet owner apparel', 'kawaii kitty', 'cozy reading nook',
+  'black kitty art', 'mothers day idea', 'graphic tee',
+];
+const goodTitle = 'Retro Cat Lover Shirt, Vintage Kitten Graphic Tee for Cat Moms';
+const goodDescription = 'This retro cat lover shirt features a vintage kitten illustration made for cat moms and anyone who loves cozy feline art. '
+  + 'Product details: soft 100% cotton fabric with a relaxed fit. Sizing: unisex sizes, see the size chart in the photos. '
+  + 'Care: machine wash cold inside out, tumble dry low. Shipping: free shipping in the US.';
 
+describe('evaluateEtsyListingSeo v2', () => {
+  it('uses only fresh pool scores and reports a partial score without AI review', () => {
     const result = evaluateEtsyListingSeo({
-      title: 'Retro Cat Shirt Vintage Kitten Tee Aesthetic Cat Mom Gift Cute Japanese Graphic Apparel',
-      description: 'Super soft retro cat shirt and vintage kitten tee. Made with 100% ring-spun cotton. Check sizing chart and care instructions in the description below.',
-      tags,
-      keywordPoolRows,
+      title: goodTitle,
+      description: goodDescription,
+      tags: goodTags,
+      keywordPoolRows: [
+        { keyword: 'retro cat lover', opportunity_score: 88, last_evaluated_at: fresh },
+        { keyword: 'cat mom gift', opportunity_score: 92, last_evaluated_at: fresh },
+        { keyword: 'vintage kitten top', opportunity_score: 95, last_evaluated_at: old },
+      ],
     });
-
-    expect(result.score).toBeGreaterThanOrEqual(75);
-    expect(['A+', 'A', 'B']).toContain(result.grade);
-    expect(result.tagBreakdown).toHaveLength(13);
-
-    const firstTag = result.tagBreakdown[0];
-    expect(firstTag.keyword).toBe('retro cat shirt');
-    expect(firstTag.opportunityScore).toBe(88);
-    expect(firstTag.bestsellerCount).toBe(3);
-    expect(firstTag.isFresh).toBe(true);
-    expect(firstTag.inPool).toBe(true);
-    expect(firstTag.isValidLength).toBe(true);
+    expect(result.version).toBe(2);
+    expect(result.partial).toBe(true);
+    expect(result.breakdown.ai).toBeNull();
+    expect(result.confidence).toEqual({ scoredTags: 2, totalTags: 13, aiReviewed: false });
+    const oldTag = result.tagBreakdown.find((t) => t.keyword === 'vintage kitten top')!;
+    expect(oldTag.status).toBe('unknown');
+    expect(oldTag.opportunityScore).toBe(0);
+    expect(result.breakdown.rules).toBe(25);
+    // Başlık en güçlü ifadeyle başlıyor + ortalama 90 → 23 + 10
+    expect(result.breakdown.demand).toBe(33);
+    expect(result.score).toBe(Math.round((58 / 60) * 100));
   });
 
-  it('penalizes listings with missing tags or short titles without failing', () => {
+  it('flags repeated words across tags and in the title', () => {
+    const tags = ['cute cat shirt', 'funny cat shirt', 'cat lover shirt', 'cat mom tee', 'black cat t-shirt'];
     const result = evaluateEtsyListingSeo({
-      title: 'Cat',
-      description: 'Short',
-      tags: ['cat'],
-      keywordPoolRows: [],
+      title: 'Cat Shirt Cat Tee Cat Gift',
+      description: 'short',
+      tags,
     });
+    expect(result.repeatedWords[0]).toEqual({ word: 'cat', count: 5 });
+    expect(result.repeatedWords.find((r) => r.word === 'shirt')?.count).toBe(5);
+    expect(result.issues.some((i) => i.field === 'tags' && /tekrarlanıyor/.test(i.message))).toBe(true);
+    expect(result.issues.some((i) => i.field === 'title' && /3\+ kez/.test(i.message))).toBe(true);
+    expect(result.breakdown.demand).toBeNull();
+    expect(result.breakdown.rules).toBeLessThan(10);
+  });
 
-    expect(result.score).toBeLessThan(45);
-    expect(['D', 'F']).toContain(result.grade);
-    expect(result.tagBreakdown).toHaveLength(1);
-    expect(result.issues.length).toBeGreaterThan(0);
+  it('applies the AI review only when it belongs to the current text', () => {
+    const review: ListingAiReview = {
+      textHash: listingTextHash(goodTitle, goodTags, goodDescription),
+      scores: { relevance: 9, title: 8, tags: 7, description: 9 },
+      notes: { tags: 'Etiketler çoğunlukla iyi.' },
+      irrelevantTags: ['graphic tee'],
+      reviewedAt: fresh,
+    };
+    const base = { title: goodTitle, description: goodDescription, tags: goodTags, keywordPoolRows: [{ keyword: 'retro cat lover', opportunity_score: 80, last_evaluated_at: fresh }] };
+    const reviewed = evaluateEtsyListingSeo({ ...base, aiReview: review });
+    expect(reviewed.partial).toBe(false);
+    expect(reviewed.breakdown.ai).toBe(33);
+    expect(reviewed.tagBreakdown.find((t) => t.keyword === 'graphic tee')?.irrelevant).toBe(true);
+
+    const stale = evaluateEtsyListingSeo({ ...base, title: `${goodTitle} New`, aiReview: review });
+    expect(stale.breakdown.ai).toBeNull();
+    expect(stale.aiReview).toBeNull();
+  });
+
+  it('treats product word spellings as one root', () => {
+    expect(wordRoot('T-Shirt')).toBe('shirt');
+    expect(wordRoot('tees')).toBe('shirt');
+    expect(wordRoot('puppies')).toBe('puppy');
+    expect(repeatedTagWords(['retro tee', 'funny t-shirt', 'cat shirt'])).toEqual([{ word: 'shirt', count: 3 }]);
+  });
+
+  it('penalizes missing tags, over-long tags and long titles without failing', () => {
+    const result = evaluateEtsyListingSeo({
+      title: 'x'.repeat(150),
+      description: '',
+      tags: ['this tag is way too long for etsy', 'ok tag'],
+    });
+    expect(result.score).toBeLessThan(40);
+    expect(result.issues.some((i) => i.severity === 'critical' && i.field === 'tags')).toBe(true);
+    expect(result.issues.some((i) => /140/.test(i.message))).toBe(true);
   });
 });

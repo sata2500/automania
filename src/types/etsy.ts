@@ -8,6 +8,11 @@ import type { SeoEvaluationResult, VisionAnalysisData } from '@/lib/etsy-seo-eva
 export interface EtsyShippingProfile {
   shipping_profile_id: number | string;
   title: string;
+  shipping_profile_destinations?: Array<{
+    destination_country_iso?: string | null;
+    destination_region?: string | null;
+    primary_cost?: { amount: number; divisor: number; currency_code?: string } | null;
+  }>;
 }
 
 export interface EtsyReadinessState {

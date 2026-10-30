@@ -14,6 +14,9 @@ import { writeAuditLog } from '@/lib/audit-log';
 import { runSkuOf } from '@/lib/run-sku';
 import { hasManualVariations, MANUAL_TEMPLATE_ID, manualSettingsOf, withManualSettings, type ManualListingSettings } from '@/lib/manual-listing';
 import { sanitizeSku } from '@/lib/sku';
+import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
+import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
+import { poolRowsForTags } from '@/lib/listing-pipeline';
 import type {
   AutomationRunSteps,
   GeneratedSeoData,
@@ -225,7 +228,7 @@ export async function updateReviewItem(userId: string, runId: string, edits: Rev
   if (edits.photos !== undefined) {
     const photos = edits.photos.filter((url, i, list) => allPhotos.includes(url) && list.indexOf(url) === i);
     if (photos.length === 0) throw new ListingReviewError('En az bir fotoğraf seçin.');
-    if (photos.length > 10) throw new ListingReviewError('Etsy en fazla 10 fotoğraf kabul eder.');
+    if (photos.length > MAX_ETSY_PHOTOS) throw new ListingReviewError(`Etsy en fazla ${MAX_ETSY_PHOTOS} fotoğraf kabul eder.`);
     next.photos = photos;
   }
   if (edits.includeVideo !== undefined) next.includeVideo = edits.includeVideo;
@@ -235,6 +238,12 @@ export async function updateReviewItem(userId: string, runId: string, edits: Rev
     next.sku = sku;
     // Tasarım da yeni SKU ile aranabilsin.
     if (run.generatedDesignUrl) await tagDesignWithSku(userId, run.generatedDesignUrl, sku);
+  }
+  // Metin değiştiyse SEO puanı yeniden hesaplanır (kurallar + kelime havuzu; yapay zekâ incelemesi yalnızca metin
+  // aynı kaldıysa geçerli kalır).
+  if (edits.title !== undefined || edits.tags !== undefined || edits.description !== undefined) {
+    const poolRows = await poolRowsForTags(seo.tags ?? [], {}, 0).catch(() => []);
+    seo.evaluation = evaluateEtsyListingSeo({ title: seo.title, description: seo.description, tags: seo.tags, keywordPoolRows: poolRows, aiReview: seo.evaluation?.aiReview ?? null });
   }
   await saveReview(runId, steps, next, { generatedSeo: seo });
 }

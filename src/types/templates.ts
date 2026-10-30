@@ -4,6 +4,8 @@
  * POD şablonları, otomasyon çalıştırmaları ve Etsy mağaza yönetimi için tip tanımları.
  */
 
+import type { SeoEvaluationResult } from '@/lib/etsy-seo-evaluator';
+
 
 // ─── Şablon Yapılandırma Tipleri ─────────────────────────────────────────────
 
@@ -216,6 +218,8 @@ export interface GeneratedSeoData {
   styles?: string[];
   /** İlan fotoğraflarının alt metinleri (sırayla) */
   imageAltTexts?: string[];
+  /** Üretim anındaki SEO değerlendirmesi (v2: kurallar, Etsy verisi, yapay zekâ incelemesi) */
+  evaluation?: SeoEvaluationResult;
 }
 
 /** Hazır İlanlar (inceleme kuyruğu) durumu */

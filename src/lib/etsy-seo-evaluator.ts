@@ -1,6 +1,14 @@
 /**
- * Etsy SEO Evaluation Engine (0-100 Score & In-Depth Diagnostic)
- * Analyzes Title, 13 Golden Tags, Description, Keyword Pool metrics, and Vision AI Consistency.
+ * Etsy ilan SEO puanı (v2, 0-100). Üç parça; her biri kaynağıyla gösterilir:
+ *  - Kurallar (25): Etsy sınırları (13 etiket, 20 / 140 karakter), tekrar ve marka; başlık ve açıklamanın biçimi.
+ *    Etsy'nin güncel önerileri: başlık kısa ve net (ürün bir kez söylenir, doldurma yok); etiketler başlığı
+ *    tekrarlamaz, onun sığdıramadığı aramaları yakalar; aynı kelimeyi birçok etikette tekrarlamak etiket israfıdır.
+ *  - Etsy verisi (35): etiketlerin kelime havuzundaki güncel (≤14 gün) fırsat puanları ve başlığın başında
+ *    güçlü bir aranan ifade olması. Puanı olmayan etiket puan almaz, hesaba katılmaz; güven göstergesini düşürür.
+ *  - Yapay zekâ (40): görsel analizine göre başlık/etiket/açıklamanın tasarıma uygunluğu ve kalitesi
+ *    (bkz. listing-ai-review). Yalnızca değerlendirme mevcut metinle yapıldıysa (aynı metin özeti) kullanılır.
+ * Verisi olmayan parça "bilinmiyor" sayılır: puan eldeki parçaların en yüksek değerine oranlanır ve `partial` döner.
+ * Saf fonksiyon (istemci ve sunucu ortak).
  */
 
 export interface VisionAnalysisData {
@@ -14,11 +22,14 @@ export interface VisionAnalysisData {
   analyzedAt?: number | string;
 }
 
+export type SeoSource = 'rules' | 'etsy' | 'ai';
+
 export interface SeoIssue {
   severity: 'critical' | 'warning' | 'tip';
   field: 'title' | 'tags' | 'description' | 'vision';
   message: string;
   fixSuggestion?: string;
+  source?: SeoSource;
 }
 
 export interface KeywordPoolMetric {
@@ -44,27 +55,58 @@ export interface TagMetricBreakdown {
   isEtsySuggested?: boolean;
   inPool: boolean;
   isFresh?: boolean;
-  status: 'excellent' | 'good' | 'average' | 'poor' | 'invalid';
+  /** Yapay zekâ değerlendirmesine göre tasarımla ilgisiz */
+  irrelevant?: boolean;
+  status: 'excellent' | 'good' | 'average' | 'poor' | 'invalid' | 'unknown';
+}
+
+/** Yapay zekâ değerlendirmesi (bkz. listing-ai-review): her ölçüt 0-10. */
+export interface ListingAiReview {
+  /** Değerlendirilen metnin özeti; metin değişince değerlendirme geçersiz olur. */
+  textHash: string;
+  scores: {
+    /** Başlık ve etiketler tasarımdaki konu/stili doğru anlatıyor mu */
+    relevance: number;
+    /** Başlık kısa, net, okunur mu; ürün ve ana ifade başta mı */
+    title: number;
+    /** Etiketler farklı alıcı aramalarını kapsıyor mu, tekrar/doldurma yok mu */
+    tags: number;
+    /** Açıklama ürünü ve alıcıyı anlatıyor mu; bilgiler doğru ve eksiksiz mi */
+    description: number;
+  };
+  notes: { title?: string; tags?: string; description?: string; overall?: string };
+  irrelevantTags: string[];
+  reviewedAt: string;
+  model?: string;
 }
 
 export interface SeoEvaluationResult {
+  version: 2;
   score: number;
-  grade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+  grade: SeoGrade;
+  /** Bir parça (Etsy verisi veya yapay zekâ) eksikse puan eldekilere oranlanmıştır. */
+  partial: boolean;
   breakdown: {
-    titleScore: number;
-    tagsScore: number;
-    descriptionScore: number;
-    consistencyScore?: number;
-    maxTitle: number;
-    maxTags: number;
-    maxDesc: number;
-    maxConsistency?: number;
+    rules: number;
+    demand: number | null;
+    ai: number | null;
+    maxRules: 25;
+    maxDemand: 35;
+    maxAi: 40;
+  };
+  confidence: {
+    scoredTags: number;
+    totalTags: number;
+    aiReviewed: boolean;
   };
   tagBreakdown: TagMetricBreakdown[];
+  /** Birden çok etikette geçen kelimeler (kelime → etiket sayısı) */
+  repeatedWords: Array<{ word: string; count: number }>;
   strengths: string[];
   issues: SeoIssue[];
   matchedPoolKeywords: KeywordPoolMetric[];
   missingPoolKeywords: KeywordPoolMetric[];
+  aiReview: ListingAiReview | null;
   evaluatedAt: string;
 }
 
@@ -97,451 +139,319 @@ export function gradeForSeoScore(score: number): SeoGrade {
   return 'F';
 }
 
-const GENERIC_WORDS = new Set(['the', 'and', 'for', 'with', 'shirt', 'tee', 'tshirt', 't-shirt', 'gift', 'gifts', 'unisex', 'women', 'men', 'womens', 'mens']);
+/** Puanların kullanıldığı en uzun süre (kelime havuzuyla aynı: daha eski puanlar güncel sayılmaz). */
+const MAX_SCORE_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-/** Eşleşme için anlamlı kelimeler (kısa ve çok genel kelimeler hariç). */
-function significantWords(text: string): Set<string> {
-  return new Set(
-    text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 3 && !GENERIC_WORDS.has(word)),
-  );
+const STOPWORDS = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'of', 'with', 'in', 'on', 'to', 'my', 'your', 'our', 'is', 'it', 'by', 'at', 'as', '&']);
+/** Aynı ürün kelimesinin yazım biçimleri tek kök sayılır. */
+const WORD_ALIASES: Record<string, string> = {
+  tshirt: 'shirt', 't-shirt': 'shirt', tee: 'shirt', tees: 'shirt', shirts: 'shirt', tshirts: 'shirt', 't-shirts': 'shirt',
+  sweatshirts: 'sweatshirt', hoodies: 'hoodie', gifts: 'gift',
+};
+const GENERIC_WORDS = new Set(['shirt', 'gift', 'unisex', 'women', 'men', 'womens', 'mens']);
+/** Ürün kelimeleri: başlık ve kategoride zaten geçer; etiketlerde tekrarı daha sıkı değerlendirilir. */
+const PRODUCT_ROOTS = new Set(['shirt', 'sweatshirt', 'hoodie', 'top', 'apparel', 'clothing', 'crewneck', 'tank']);
+
+/** Kelimenin kökü: küçük harf, eş yazımlar birleşir, basit çoğul eki atılır. */
+export function wordRoot(word: string): string {
+  const lower = word.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  if (WORD_ALIASES[lower]) return WORD_ALIASES[lower];
+  if (lower.length > 4 && lower.endsWith('ies')) return `${lower.slice(0, -3)}y`;
+  if (lower.length > 3 && lower.endsWith('s') && !lower.endsWith('ss')) return lower.slice(0, -1);
+  return lower;
 }
 
-/**
- * Calculates a comprehensive 0-100 SEO score for an Etsy listing.
- */
+/** Metnin anlamlı kelime kökleri (bağlaçlar hariç; "t-shirt" tek kelime sayılır). */
+export function contentWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}-]+/u)
+    .map((w) => w.replace(/^-+|-+$/g, ''))
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w))
+    .map(wordRoot);
+}
+
+/** Birden çok etikette geçen kökler (en çok geçen önce). */
+export function repeatedTagWords(tags: string[]): Array<{ word: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const tag of tags) for (const root of new Set(contentWords(tag))) counts.set(root, (counts.get(root) ?? 0) + 1);
+  return [...counts.entries()].filter(([, n]) => n >= 2).map(([word, count]) => ({ word, count })).sort((a, b) => b.count - a.count);
+}
+
+/** Değerlendirilen metnin kısa özeti (yapay zekâ değerlendirmesinin hangi metne ait olduğunu bilmek için). */
+export function listingTextHash(title: string, tags: string[], description: string): string {
+  const text = `${title.trim()}\u0000${tags.map((t) => t.trim().toLowerCase()).join('|')}\u0000${description.trim()}`;
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
+  }
+  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
+
+function significantWords(text: string): Set<string> {
+  return new Set(contentWords(text).filter((w) => w.length >= 3 && !GENERIC_WORDS.has(w)));
+}
+
+function poolMetric(row: KeywordPoolInputRow, now: number): KeywordPoolMetric | null {
+  if (!row.keyword) return null;
+  const lastEval = row.last_evaluated_at || row.lastEvaluatedAt || null;
+  const age = lastEval ? now - new Date(lastEval).getTime() : Infinity;
+  return {
+    keyword: String(row.keyword),
+    opportunityScore: Number(row.opportunity_score || row.etsy_score || 0),
+    totalListings: Number(row.total_listings || row.totalListings || 0),
+    competitionLevel: String(row.competition_level || row.competitionLevel || 'Bilinmiyor'),
+    bestsellerCount: Number(row.bestseller_count || row.bestsellerCount || 0),
+    isEtsySuggested: Boolean(row.is_etsy_suggested || row.isEtsySuggested),
+    lastEvaluatedAt: lastEval,
+    isFresh: age <= MAX_SCORE_AGE_MS,
+  };
+}
+
 export function evaluateEtsyListingSeo(params: {
   title?: string | null;
   description?: string | null;
   tags?: string[] | null;
+  /** Geriye dönük uyumluluk: puana katılmaz (görsel uyumu yapay zekâ değerlendirmesi ölçer). */
   visionAnalysis?: VisionAnalysisData | null;
   keywordPoolRows?: KeywordPoolInputRow[];
+  /** Mevcut metne ait olan (textHash eşleşen) inceleme kullanılır; birden çok aday verilebilir. */
+  aiReview?: ListingAiReview | Array<ListingAiReview | null> | null;
+  now?: number;
 }): SeoEvaluationResult {
+  const now = params.now ?? Date.now();
   const title = (params.title || '').trim();
   const description = (params.description || '').trim();
-  const rawTags = (params.tags || []).map(t => String(t).trim()).filter(Boolean);
-  const poolRows = params.keywordPoolRows || [];
-
+  const tags = (params.tags || []).map((t) => String(t).trim()).filter(Boolean);
   const issues: SeoIssue[] = [];
   const strengths: string[] = [];
+  const issue = (source: SeoSource, field: SeoIssue['field'], severity: SeoIssue['severity'], message: string, fixSuggestion?: string) =>
+    issues.push({ source, field, severity, message, fixSuggestion });
 
-  // Map keyword pool for fast lookup
   const poolMap = new Map<string, KeywordPoolMetric>();
-  for (const row of poolRows) {
-    if (row.keyword) {
-      const lastEval = row.last_evaluated_at || row.lastEvaluatedAt;
-      const isFresh = Boolean(
-        lastEval && (Date.now() - new Date(lastEval).getTime() <= 7 * 24 * 60 * 60 * 1000)
-      );
-
-      poolMap.set(String(row.keyword).toLowerCase().trim(), {
-        keyword: String(row.keyword),
-        opportunityScore: Number(row.opportunity_score || row.etsy_score || 0),
-        totalListings: Number(row.total_listings || row.totalListings || 0),
-        competitionLevel: String(row.competition_level || row.competitionLevel || 'Bilinmiyor'),
-        bestsellerCount: Number(row.bestseller_count || row.bestsellerCount || 0),
-        isEtsySuggested: Boolean(row.is_etsy_suggested || row.isEtsySuggested),
-        lastEvaluatedAt: lastEval,
-        isFresh,
-      });
-    }
+  for (const row of params.keywordPoolRows || []) {
+    const metric = poolMetric(row, now);
+    if (metric) poolMap.set(metric.keyword.toLowerCase().trim(), metric);
   }
 
-  // ==========================================
-  // 1. TAGS & KEYWORD POOL EVALUATION (Max 40 Points)
-  // ==========================================
-  let tagsScore = 0;
-  const tagCount = rawTags.length;
+  const currentHash = listingTextHash(title, tags, description);
+  const candidates = Array.isArray(params.aiReview) ? params.aiReview : [params.aiReview];
+  const aiReview = candidates.find((r): r is ListingAiReview => Boolean(r && r.textHash === currentHash)) ?? null;
+  const irrelevant = new Set((aiReview?.irrelevantTags ?? []).map((t) => t.toLowerCase().trim()));
 
-  // A. Tag Count (Max 15 pts)
-  if (tagCount === 13) {
-    tagsScore += 15;
-    strengths.push('Etsy 13 etiket limitinin tamamı (13/13) eksiksiz kullanılmış.');
-  } else if (tagCount >= 10) {
-    tagsScore += 10;
-    issues.push({
-      severity: 'warning',
-      field: 'tags',
-      message: `${13 - tagCount} adet etiket eksik (${tagCount}/13).`,
-      fixSuggestion: 'Etsy arama görünürlüğünüzü maksimize etmek için tam 13 etiket kullanın.'
-    });
-  } else if (tagCount >= 5) {
-    tagsScore += 5;
-    issues.push({
-      severity: 'critical',
-      field: 'tags',
-      message: `Çok az etiket kullanılmış (${tagCount}/13).`,
-      fixSuggestion: 'En az 13 adet niş ve aranma hacmi yüksek etiket ekleyin.'
-    });
-  } else {
-    tagsScore += 0;
-    issues.push({
-      severity: 'critical',
-      field: 'tags',
-      message: 'Neredeyse hiç etiket bulunmuyor!',
-      fixSuggestion: '13 adet etiket ekleyerek listelemenizi hemen güçlendirin.'
-    });
-  }
-
-  // B. Tag Character Length & Long-Tail Usage (Max 10 pts)
-  let overLengthCount = 0;
-
-  const tagBreakdown: TagMetricBreakdown[] = [];
-  const matchedPoolKeywords: KeywordPoolMetric[] = [];
-  let totalOppScore = 0;
-  let scoredTagCount = 0;
-
-  for (const tag of rawTags) {
-    const cleanTag = tag.trim();
-    const lower = cleanTag.toLowerCase();
-    const len = cleanTag.length;
-    const isValidLength = len <= 20;
-    const isMultiWord = cleanTag.includes(' ') || cleanTag.includes('-');
-
-    if (!isValidLength) {
-      overLengthCount++;
-    }
-
-    const poolItem = poolMap.get(lower);
-    const inPool = Boolean(poolItem);
-    const opportunityScore = poolItem?.opportunityScore || 0;
-    const totalListings = poolItem?.totalListings;
-    const competitionLevel = poolItem?.competitionLevel;
-    const bestsellerCount = poolItem?.bestsellerCount;
-    const isEtsySuggested = poolItem?.isEtsySuggested;
-    const isFresh = poolItem?.isFresh;
-
-    let status: TagMetricBreakdown['status'] = 'average';
-    if (!isValidLength) {
-      status = 'invalid';
-    } else if (opportunityScore >= 75) {
-      status = 'excellent';
-    } else if (opportunityScore >= 55) {
-      status = 'good';
-    } else if (opportunityScore > 0 && opportunityScore < 40) {
-      status = 'poor';
-    } else if (!inPool) {
-      status = 'average';
-    }
-
-    if (inPool && opportunityScore > 0) {
-      matchedPoolKeywords.push(poolItem!);
-      totalOppScore += opportunityScore;
-      scoredTagCount++;
-    }
-
-    tagBreakdown.push({
-      keyword: cleanTag,
-      charLength: len,
+  // ── Etiket dökümü ────────────────────────────────────────────────────────────
+  const tagBreakdown: TagMetricBreakdown[] = tags.map((tag) => {
+    const metric = poolMap.get(tag.toLowerCase());
+    const fresh = Boolean(metric?.isFresh && metric.opportunityScore > 0);
+    const score = fresh ? metric!.opportunityScore : 0;
+    const isValidLength = tag.length <= 20;
+    const status: TagMetricBreakdown['status'] = !isValidLength ? 'invalid'
+      : !fresh ? 'unknown'
+      : score >= 75 ? 'excellent' : score >= 55 ? 'good' : score >= 40 ? 'average' : 'poor';
+    return {
+      keyword: tag,
+      charLength: tag.length,
       isValidLength,
-      isMultiWord,
-      opportunityScore,
-      totalListings,
-      competitionLevel,
-      bestsellerCount,
-      isEtsySuggested,
-      inPool,
-      isFresh,
+      isMultiWord: /[\s-]/.test(tag),
+      opportunityScore: score,
+      totalListings: metric?.totalListings,
+      competitionLevel: metric?.competitionLevel,
+      bestsellerCount: metric?.bestsellerCount,
+      isEtsySuggested: metric?.isEtsySuggested,
+      inPool: Boolean(metric),
+      isFresh: metric?.isFresh,
+      irrelevant: irrelevant.has(tag.toLowerCase()),
       status,
-    });
-  }
+    };
+  });
 
-  if (overLengthCount > 0) {
-    issues.push({
-      severity: 'critical',
-      field: 'tags',
-      message: `${overLengthCount} adet etiket 20 karakter sınırını aşıyor.`,
-      fixSuggestion: 'Etsy 20 karakterden uzun etiketleri reddeder. 20 karaktere kısaltın.'
-    });
-  }
+  // ── 1. Kurallar (25) ─────────────────────────────────────────────────────────
+  let rules = 0;
 
-  if (tagCount > 0) {
-    const longTailCount = tagBreakdown.filter(t => t.isMultiWord && t.isValidLength).length;
-    const longTailRatio = longTailCount / tagCount;
-    if (longTailRatio >= 0.7) {
-      tagsScore += 10;
-      strengths.push('Etiketlerin çoğu yüksek dönüşümlü çok kelimeli (long-tail) öbeklerden oluşuyor.');
-    } else if (longTailRatio >= 0.4) {
-      tagsScore += 6;
-      issues.push({
-        severity: 'tip',
-        field: 'tags',
-        message: 'Etiketlerinizde daha fazla çok kelimeli (long-tail) kalıp kullanabilirsiniz.',
-        fixSuggestion: 'Tek kelimelik jenerik etiketler yerine 14-20 karakterlik spesifik alıcı öbekleri tercih edin.'
-      });
-    } else {
-      tagsScore += 3;
-      issues.push({
-        severity: 'warning',
-        field: 'tags',
-        message: 'Etiketlerin çoğu çok kısa veya tek kelimelik.',
-        fixSuggestion: 'Daha spesifik niş kelime öbekleri kullanın (Örn: "shirt" yerine "retro cat shirt").'
-      });
-    }
-  }
-
-  // C. Keyword Pool Opportunity Quality (Max 15 pts)
-  if (scoredTagCount > 0) {
-    const avgOpp = totalOppScore / scoredTagCount;
-    const highOppCount = matchedPoolKeywords.filter(m => m.opportunityScore >= 70).length;
-
-    if (avgOpp >= 75 || highOppCount >= 6) {
-      tagsScore += 15;
-      strengths.push(`Kelime havuzundaki yüksek fırsat puanlı ${highOppCount} kelime doğrudan etiketlerde kullanılmış (Ort. Fırsat: ${Math.round(avgOpp)}).`);
-    } else if (avgOpp >= 60 || highOppCount >= 3) {
-      tagsScore += 12;
-      strengths.push(`Etiketler kelime havuzu ile uyumlu ve iyi fırsat puanlarına sahip (Ort. Fırsat: ${Math.round(avgOpp)}).`);
-    } else if (avgOpp >= 45) {
-      tagsScore += 8;
-      issues.push({
-        severity: 'tip',
-        field: 'tags',
-        message: 'Kelime havuzundaki yüksek fırsat puanlı kelimelerden daha fazla ekleyebilirsiniz.',
-        fixSuggestion: 'Havuzda 70+ fırsat puanına sahip anahtar kelimeleri etiketlere dahil edin.'
-      });
-    } else {
-      tagsScore += 4;
-      issues.push({
-        severity: 'warning',
-        field: 'tags',
-        message: 'Etiketlerin ortalama fırsat puanı düşük veya yüksek rekabetli.',
-        fixSuggestion: 'Daha az rekabetli ve yüksek talep gören altın niş kelimeleri tercih edin.'
-      });
-    }
-  } else if (tagCount > 0) {
-    // Unscored tags in pool
-    tagsScore += 7;
-    issues.push({
-      severity: 'tip',
-      field: 'tags',
-      message: 'Etiketler henüz kelime havuzunda taranmamış veya puanlanmamış.',
-      fixSuggestion: '"Etiketleri Havuzda Güncelle" butonuna tıklayarak etiketlerin güncel fırsat puanlarını taratın.'
-    });
-  }
-
-  // ==========================================
-  // 2. TITLE EVALUATION (Max 35 Points)
-  // ==========================================
-  let titleScore = 0;
-  const titleLen = title.length;
-
-  // A. Title Length (Max 12 pts)
-  if (titleLen >= 110 && titleLen <= 140) {
-    titleScore += 12;
-    strengths.push(`Başlık uzunluğu ideal Etsy standardında (${titleLen}/140 karakter).`);
-  } else if (titleLen >= 80 && titleLen < 110) {
-    titleScore += 9;
-    issues.push({
-      severity: 'tip',
-      field: 'title',
-      message: `Başlık biraz daha zenginleştirilebilir (${titleLen}/140 karakter).`,
-      fixSuggestion: '110-140 karakter aralığında tamamlayıcı niş kelimeler ve ürün tipi ekleyin.'
-    });
-  } else if (titleLen > 140) {
-    titleScore += 4;
-    issues.push({
-      severity: 'warning',
-      field: 'title',
-      message: `Başlık 140 karakter Etsy sınırını aşıyor (${titleLen} karakter).`,
-      fixSuggestion: 'Başlığı 140 karakterin altına indirin.'
-    });
-  } else if (titleLen >= 40) {
-    titleScore += 5;
-    issues.push({
-      severity: 'warning',
-      field: 'title',
-      message: `Başlık çok kısa (${titleLen} karakter).`,
-      fixSuggestion: 'Ürününüzün konusunu, stilini, alıcı kitlesini ve hediyelik özelliklerini başlığa ekleyin.'
-    });
+  // Etiket sayısı (6)
+  if (tags.length === 13) {
+    rules += 6;
+    strengths.push('13 etiketin tamamı kullanılmış.');
   } else {
-    titleScore += 1;
-    issues.push({
-      severity: 'critical',
-      field: 'title',
-      message: 'Başlık çok yetersiz veya boş!',
-      fixSuggestion: '120-140 karakterlik açıklayıcı ve arama odaklı bir başlık girin.'
-    });
+    rules += tags.length >= 10 ? 4 : tags.length >= 5 ? 2 : 0;
+    issue('rules', 'tags', tags.length >= 10 ? 'warning' : 'critical', `${13 - tags.length} etiket eksik (${tags.length}/13).`, 'Her etiket ayrı bir arama yakalar; 13 etiketin tamamını kullanın.');
   }
 
-  // B. Frontloading in first 40 characters (Max 10 pts)
-  const first40 = title.slice(0, 40).toLowerCase();
-  const hasGenericStart = first40.startsWith('custom') || first40.startsWith('unisex') || first40.startsWith('best');
-  
-  if (titleLen >= 40) {
-    if (!hasGenericStart && (first40.includes('shirt') || first40.includes('sweatshirt') || first40.includes('gift') || first40.includes('tee') || first40.includes('hoodie') || first40.includes('vintage') || first40.includes('retro') || first40.includes('mug') || first40.includes('poster'))) {
-      titleScore += 10;
-      strengths.push('Başlığın ilk 40 karakterinde mobil aramalarda hemen görünen ana niyet kelimeleri öne çıkarılmış.');
-    } else {
-      titleScore += 6;
-      issues.push({
-        severity: 'tip',
-        field: 'title',
-        message: 'İlk 40 karakter mobilde kesilmeden önce en önemli arama terimlerini içermelidir.',
-        fixSuggestion: 'En çok aranan anahtar kelimenizi başlığın ilk 3 kelimesi olarak konumlandırın.'
-      });
-    }
+  // Geçerlilik (4): 20 karakter sınırı ve aynı etiketin tekrarı
+  const overLength = tags.filter((t) => t.length > 20);
+  const duplicates = tags.length - new Set(tags.map((t) => t.toLowerCase())).size;
+  rules += Math.max(0, 4 - overLength.length * 2 - duplicates * 2);
+  if (overLength.length > 0) issue('rules', 'tags', 'critical', `${overLength.length} etiket 20 karakteri aşıyor: ${overLength.map((t) => `"${t}"`).join(', ')}.`, 'Etsy 20 karakterden uzun etiketi kabul etmez; kısaltın.');
+  if (duplicates > 0) issue('rules', 'tags', 'warning', `${duplicates} etiket birebir tekrar ediyor.`, 'Her etiket farklı bir arama olmalı.');
+
+  // Kelime tekrarı (6): aynı kök çok etikette geçerse etiketler aynı aramayı tekrar yakalar. Tasarımın konusu
+  // ("cat mom gift", "retro cat lover") birkaç etikette doğal olarak geçer; ürün kelimesi ise (shirt, tee, hoodie)
+  // başlıkta ve kategoride zaten var, etiketlerde en fazla iki kez kullanılmalı.
+  const repeatedWords = repeatedTagWords(tags);
+  const productRepeat = repeatedWords.filter((r) => PRODUCT_ROOTS.has(r.word) && r.count >= 3);
+  const subjectRepeat = repeatedWords.filter((r) => !PRODUCT_ROOTS.has(r.word) && r.count >= 4);
+  const maxSubject = subjectRepeat[0]?.count ?? 0;
+  const repeatPenalty = (maxSubject >= 6 ? 4 : maxSubject === 5 ? 3 : maxSubject === 4 ? 1 : 0) + (productRepeat.length > 0 ? 2 + (productRepeat[0]!.count >= 5 ? 1 : 0) : 0);
+  rules += Math.max(0, 6 - repeatPenalty);
+  if (productRepeat.length > 0) {
+    issue('rules', 'tags', productRepeat[0]!.count >= 5 ? 'warning' : 'tip',
+      `Ürün kelimesi çok etikette tekrarlanıyor: ${productRepeat.map((r) => `"${r.word}" (${r.count})`).join(', ')}.`,
+      'Etsy başlık, kategori ve etiketlerdeki kelimeleri birleştirerek eşleştirir; "shirt/tee" gibi ürün kelimesini her etikete yazmak etiket israfıdır. Bu etiketleri farklı aramalara (konu, stil, alıcı, özel gün) ayırın.');
+  }
+  if (subjectRepeat.length > 0) {
+    issue('rules', 'tags', maxSubject >= 5 ? 'warning' : 'tip',
+      `Bazı kelimeler çok etikette tekrarlanıyor: ${subjectRepeat.map((r) => `"${r.word}" (${r.count})`).join(', ')}.`,
+      'Aynı kelimeyi taşıyan etiketler benzer aramaları yakalar; bir kısmını eş anlamlılara veya farklı alıcı niyetlerine çevirin.');
+  }
+  if (productRepeat.length === 0 && subjectRepeat.length === 0 && tags.length >= 10) {
+    strengths.push('Etiketler aynı kelimeyi tekrarlamadan farklı aramaları kapsıyor.');
+  }
+
+  // Başlık biçimi (5): kısa ve net başlık; büyük harf ve kelime tekrarı yok.
+  const titleWords = contentWords(title);
+  const titleCounts = new Map<string, number>();
+  for (const w of titleWords) titleCounts.set(w, (titleCounts.get(w) ?? 0) + 1);
+  const titleRepeats = [...titleCounts.entries()].filter(([, n]) => n >= 3).map(([w]) => w);
+  let titleForm = 0;
+  if (title.length === 0) {
+    issue('rules', 'title', 'critical', 'Başlık boş.');
+  } else if (title.length > 140) {
+    issue('rules', 'title', 'critical', `Başlık 140 karakter sınırını aşıyor (${title.length}).`, 'Başlığı 140 karakterin altına indirin.');
+  } else if (title.length < 30) {
+    titleForm = 2;
+    issue('rules', 'title', 'warning', `Başlık çok kısa (${title.length} karakter).`, 'Ürünü, konusunu ve ana özelliğini (stil, alıcı) anlatan net bir başlık yazın.');
+  } else if (title.length <= 110) {
+    titleForm = 5;
+    strengths.push(`Başlık kısa ve net (${title.length} karakter).`);
   } else {
-    titleScore += 2;
+    titleForm = 3;
+    issue('rules', 'title', 'tip', `Başlık uzun (${title.length} karakter).`, 'Etsy kısa ve okunur başlıkları öneriyor: ürünü bir kez söyleyin, aynı anlamdaki ifadeleri etiketlere taşıyın.');
   }
-
-  // C. Title & Tag Match Ratio (Max 8 pts)
-  let matchingTagCount = 0;
-  const lowerTitle = title.toLowerCase();
-  for (const tag of rawTags) {
-    const cleanTag = tag.toLowerCase().trim();
-    if (cleanTag.length > 3 && lowerTitle.includes(cleanTag)) {
-      matchingTagCount++;
-    }
+  if (title.length > 20 && title === title.toUpperCase()) {
+    titleForm = Math.max(0, titleForm - 2);
+    issue('rules', 'title', 'warning', 'Başlık tamamen büyük harfle yazılmış.', 'Normal büyük-küçük harf kullanın.');
   }
-
-  if (matchingTagCount >= 4) {
-    titleScore += 8;
-    strengths.push(`${matchingTagCount} adet etiket başlık ile birebir eşleşiyor (Etsy algoritması için güçlü eşleşme sinyali).`);
-  } else if (matchingTagCount >= 2) {
-    titleScore += 6;
-    strengths.push(`${matchingTagCount} adet etiket başlıkla uyumlu.`);
-  } else if (matchingTagCount === 1) {
-    titleScore += 4;
-    issues.push({
-      severity: 'tip',
-      field: 'title',
-      message: 'Başlık ile etiketler arasında daha fazla anahtar kelime eşleşmesi sağlayın.',
-      fixSuggestion: 'En önemli 3-4 etiketinizi başlıktaki ana öbeklerle aynı yapın.'
-    });
-  } else {
-    titleScore += 1;
-    issues.push({
-      severity: 'warning',
-      field: 'title',
-      message: 'Başlık kelimeleri ile etiketler neredeyse hiç eşleşmiyor.',
-      fixSuggestion: 'Etsy algoritması başlıkta ve etikette aynı anda geçen terimlere en yüksek arama alaka puanını verir.'
-    });
+  if (titleRepeats.length > 0) {
+    titleForm = Math.max(0, titleForm - 2);
+    issue('rules', 'title', 'warning', `Başlıkta aynı kelime 3+ kez geçiyor: ${titleRepeats.map((w) => `"${w}"`).join(', ')}.`, 'Kelime tekrarı doldurma gibi görünür; her ifadeyi bir kez kullanın.');
   }
+  rules += titleForm;
 
-  // D. Readability & Formatting (Max 5 pts)
-  const isAllUpper = titleLen > 20 && title === title.toUpperCase();
-  const delimiterCount = (title.match(/[|,•-]/g) || []).length;
-
-  if (isAllUpper) {
-    issues.push({
-      severity: 'warning',
-      field: 'title',
-      message: 'Başlık tamamen BÜYÜK HARFLERLE yazılmış.',
-      fixSuggestion: 'Etsy kurallarına göre Title Case (Her Kelimenin İlk Harfi Büyük) formatını kullanın.'
-    });
-    titleScore += 1;
-  } else if (delimiterCount >= 1 && delimiterCount <= 6) {
-    titleScore += 5;
-    strengths.push('Başlıkta temiz ve okunabilir ayrım işaretleri (| veya ,) kullanılmış.');
-  } else {
-    titleScore += 3;
-  }
-
-  // ==========================================
-  // 3. DESCRIPTION & STRUCTURE EVALUATION (Max 25 Points)
-  // ==========================================
-  let descriptionScore = 0;
-  const descLen = description.length;
+  // Açıklama temeli (4): yeterli uzunluk + ilk cümlelerde ürün; beden/kumaş/bakım bilgisi.
   const lowerDesc = description.toLowerCase();
-
-  // A. Opening 160 chars Hook (Max 8 pts)
-  const first160 = description.slice(0, 160).toLowerCase();
-  if (descLen >= 160 && (first160.includes('shirt') || first160.includes('gift') || first160.includes('hoodie') || first160.includes('quality') || first160.includes('cotton') || first160.includes('handmade') || first160.includes('printed') || first160.includes('designed'))) {
-    descriptionScore += 8;
-    strengths.push('Açıklamanın ilk 160 karakteri Google ve Etsy arama snippet önizlemesi için zenginleştirilmiş.');
-  } else if (descLen >= 50) {
-    descriptionScore += 5;
+  const opening = lowerDesc.slice(0, 200);
+  const leadWords = significantWords(title.slice(0, 60));
+  const openingMentionsProduct = [...leadWords].some((w) => opening.includes(w));
+  if (description.length >= 300 && openingMentionsProduct) {
+    rules += 2;
   } else {
-    descriptionScore += 2;
-    issues.push({
-      severity: 'warning',
-      field: 'description',
-      message: 'Açıklama girişi arama motoru önizlemesi için çok zayıf.',
-      fixSuggestion: 'İlk 2 cümlede ürünün ne olduğunu ve ana arama kelimelerini geçirin.'
-    });
+    issue('rules', 'description', description.length < 150 ? 'critical' : 'tip',
+      description.length < 300 ? `Açıklama kısa (${description.length} karakter).` : 'Açıklamanın ilk cümleleri başlıktaki ürünü ve konuyu anmıyor.',
+      'İlk 1-2 cümlede ürünün ne olduğunu ve kimin için olduğunu anlatın; ardından ürün bilgilerini verin.');
+  }
+  const sections = [
+    /\b(size|sizing|fit)\b/.test(lowerDesc),
+    /\b(wash|care|dry)\b/.test(lowerDesc),
+    /\b(cotton|fabric|material|polyester|blend)\b/.test(lowerDesc),
+  ].filter(Boolean).length;
+  if (sections >= 2) {
+    rules += 2;
+  } else {
+    issue('rules', 'description', 'tip', 'Açıklamada beden, kumaş veya bakım bilgisi eksik.', 'Ayarlar › İlan metni bilgileri doluysa yapay zekâ bunları ekler.');
   }
 
-  // B. Structure, Care & Sizing Sections (Max 10 pts)
-  const hasSizing = lowerDesc.includes('size') || lowerDesc.includes('sizing') || lowerDesc.includes('ölçü') || lowerDesc.includes('beden');
-  const hasCare = lowerDesc.includes('wash') || lowerDesc.includes('care') || lowerDesc.includes('yıkama') || lowerDesc.includes('bakım');
-  const hasMaterial = lowerDesc.includes('cotton') || lowerDesc.includes('fabric') || lowerDesc.includes('material') || lowerDesc.includes('kumaş');
-
-  const sectionCount = (hasSizing ? 1 : 0) + (hasCare ? 1 : 0) + (hasMaterial ? 1 : 0);
-  if (sectionCount >= 2) {
-    descriptionScore += 10;
-    strengths.push('Açıklamada beden tablosu, kumaş özellikleri ve yıkama talimatları detaylandırılmış.');
-  } else if (sectionCount === 1) {
-    descriptionScore += 6;
-    issues.push({
-      severity: 'tip',
-      field: 'description',
-      message: 'Açıklamaya beden ölçüleri veya yıkama/bakım talimatları ekleyebilirsiniz.',
-      fixSuggestion: 'Alıcıların iadelerini önlemek için beden tablosu ve kumaş detaylarını listeleyin.'
+  // ── 2. Etsy verisi (35) ──────────────────────────────────────────────────────
+  const scored = tagBreakdown.filter((t) => t.status !== 'unknown' && t.status !== 'invalid');
+  let demand: number | null = null;
+  if (scored.length > 0) {
+    const avg = scored.reduce((sum, t) => sum + t.opportunityScore, 0) / scored.length;
+    const tagDemand = Math.round((Math.min(100, avg) / 100) * 25);
+    // Başlığın başı (ilk ~50 karakter): en güçlü puanlı ifadelerden birini içeriyor mu?
+    const head = significantWords(title.slice(0, 50));
+    const strong = [...scored].sort((a, b) => b.opportunityScore - a.opportunityScore).slice(0, 4);
+    const leads = strong.some((t) => {
+      const words = significantWords(t.keyword);
+      return words.size > 0 && [...words].every((w) => head.has(w));
     });
-  } else {
-    descriptionScore += 3;
-    issues.push({
-      severity: 'warning',
-      field: 'description',
-      message: 'Açıklama şablonunda ürün detayları (kumaş, beden, kargo) eksik.',
-      fixSuggestion: 'Müşteri güvenini artırmak için madde madde ürün özellikleri ekleyin.'
-    });
+    demand = tagDemand + (leads ? 10 : strong.some((t) => [...significantWords(t.keyword)].some((w) => head.has(w))) ? 5 : 0);
+    if (avg >= 65) strengths.push(`Etiketlerin Etsy fırsat puanı yüksek (ortalama ${Math.round(avg)}).`);
+    else issue('etsy', 'tags', avg < 45 ? 'warning' : 'tip', `Etiketlerin Etsy fırsat puanı ortalaması ${Math.round(avg)}.`, 'Kelime havuzunda bu tasarımla ilgili daha yüksek puanlı ifadeler varsa onları kullanın.');
+    if (leads) strengths.push('Başlık, en güçlü aranan ifadelerden biriyle başlıyor.');
+    else issue('etsy', 'title', 'tip', 'Başlığın başında en yüksek puanlı aranan ifade yok.', `Ör. "${strong[0]?.keyword}" ifadesini başlığın başına yakın kullanın.`);
+  }
+  const unknownTags = tagBreakdown.filter((t) => t.status === 'unknown').length;
+  if (unknownTags > 0) {
+    issue('etsy', 'tags', 'tip', `${unknownTags} etiketin güncel Etsy puanı yok; puana katılmadı.`, 'Bu etiketler kelime havuzunda taranınca puan kesinleşir.');
   }
 
-  // C. Length & Depth (Max 7 pts)
-  if (descLen >= 500) {
-    descriptionScore += 7;
-  } else if (descLen >= 250) {
-    descriptionScore += 5;
-  } else {
-    descriptionScore += 2;
-    issues.push({
-      severity: 'critical',
-      field: 'description',
-      message: 'Açıklama çok kısa.',
-      fixSuggestion: 'En az 400-600 karakterlik profesyonel bir açıklama metni hazırlayın.'
-    });
-  }
-
-  // ==========================================
-  // CALCULATE TOTAL & GRADE (Direct Mathematical Formula)
-  // ==========================================
-  const totalScore = Math.min(100, Math.max(0, Math.round(tagsScore + titleScore + descriptionScore)));
-
-  const grade = gradeForSeoScore(totalScore);
-
-  // Find missing high-opportunity keywords from pool — yalnızca ilanla ortak bir kelimesi olanlar
-  // (aksi halde kedi tişörtüne havuzdaki alakasız popüler kelimeler önerilir).
-  const missingPoolKeywords: KeywordPoolMetric[] = [];
-  const existingTagsSet = new Set(rawTags.map(t => t.toLowerCase().trim()));
-  const listingWords = significantWords(`${title} ${rawTags.join(' ')}`);
-
-  for (const poolItem of Array.from(poolMap.values())) {
-    if (
-      poolItem.opportunityScore >= 65 &&
-      !existingTagsSet.has(poolItem.keyword.toLowerCase().trim()) &&
-      [...significantWords(poolItem.keyword)].some((word) => listingWords.has(word))
-    ) {
-      missingPoolKeywords.push(poolItem);
+  // ── 3. Yapay zekâ (40) ───────────────────────────────────────────────────────
+  let ai: number | null = null;
+  if (aiReview) {
+    const clamp = (n: number) => Math.min(10, Math.max(0, Number(n) || 0));
+    const s = aiReview.scores;
+    ai = Math.round(clamp(s.relevance) + clamp(s.title) + clamp(s.tags) + clamp(s.description));
+    const fields: Array<[keyof ListingAiReview['notes'], SeoIssue['field'], number]> = [
+      ['title', 'title', clamp(s.title)], ['tags', 'tags', clamp(s.tags)], ['description', 'description', clamp(s.description)],
+    ];
+    for (const [key, field, value] of fields) {
+      const note = aiReview.notes[key];
+      if (!note) continue;
+      if (value >= 8) strengths.push(note);
+      else issue('ai', field, value < 5 ? 'warning' : 'tip', note);
+    }
+    if (aiReview.irrelevantTags.length > 0) {
+      issue('ai', 'tags', 'warning', `Tasarımla ilgisiz görünen etiketler: ${aiReview.irrelevantTags.map((t) => `"${t}"`).join(', ')}.`, 'Bu etiketler yanlış aramalara çıkarır; tasarımın konusu ve stiliyle değiştirin.');
     }
   }
-  missingPoolKeywords.sort((a, b) => b.opportunityScore - a.opportunityScore);
+
+  // ── Toplam ───────────────────────────────────────────────────────────────────
+  const available = 25 + (demand !== null ? 35 : 0) + (ai !== null ? 40 : 0);
+  const raw = rules + (demand ?? 0) + (ai ?? 0);
+  const score = Math.min(100, Math.max(0, Math.round((raw / available) * 100)));
+
+  // Havuzda bu ilanla ortak kelimesi olan, kullanılmamış yüksek puanlı ifadeler
+  const used = new Set(tags.map((t) => t.toLowerCase()));
+  const listingWords = significantWords(`${title} ${tags.join(' ')}`);
+  const missingPoolKeywords = [...poolMap.values()]
+    .filter((m) => m.isFresh && m.opportunityScore >= 65 && m.keyword.length <= 20 && !used.has(m.keyword.toLowerCase()) && [...significantWords(m.keyword)].some((w) => listingWords.has(w)))
+    .sort((a, b) => b.opportunityScore - a.opportunityScore)
+    .slice(0, 10);
 
   return {
-    score: totalScore,
-    grade,
-    breakdown: {
-      titleScore,
-      tagsScore,
-      descriptionScore,
-      maxTitle: 35,
-      maxTags: 40,
-      maxDesc: 25,
-    },
+    version: 2,
+    score,
+    grade: gradeForSeoScore(score),
+    partial: demand === null || ai === null,
+    breakdown: { rules, demand, ai, maxRules: 25, maxDemand: 35, maxAi: 40 },
+    confidence: { scoredTags: scored.length, totalTags: tags.length, aiReviewed: Boolean(aiReview) },
     tagBreakdown,
+    repeatedWords,
     strengths,
     issues,
-    matchedPoolKeywords,
-    missingPoolKeywords: missingPoolKeywords.slice(0, 10),
-    evaluatedAt: new Date().toISOString(),
+    matchedPoolKeywords: scored.map((t) => poolMap.get(t.keyword.toLowerCase())!).filter(Boolean),
+    missingPoolKeywords,
+    aiReview,
+    evaluatedAt: new Date(now).toISOString(),
   };
+}
+
+/** Kayıtlı değerlendirme eski sürümse (v1) yeniden hesaplanmalı. */
+export function isCurrentSeoEvaluation(value: unknown): value is SeoEvaluationResult {
+  return Boolean(value && typeof value === 'object' && (value as { version?: unknown }).version === 2);
+}
+
+const isReview = (value: unknown): value is ListingAiReview =>
+  Boolean(value && typeof value === 'object' && typeof (value as ListingAiReview).textHash === 'string' && (value as ListingAiReview).scores);
+
+/**
+ * Kayıtlı değerlendirmedeki yapay zekâ incelemeleri: mevcut metnin incelemesi ve (varsa) onay bekleyen yapay zekâ
+ * iyileştirmesinin incelemesi. Puan hesaplanırken yalnızca metne uyan kullanılır.
+ */
+export function storedAiReview(value: unknown): ListingAiReview[] {
+  const parsed = typeof value === 'string' ? (() => { try { return JSON.parse(value); } catch { return null; } })() : value;
+  if (!parsed || typeof parsed !== 'object') return [];
+  const record = parsed as { aiReview?: unknown; improvement?: { aiReview?: unknown } };
+  return [record.aiReview, record.improvement?.aiReview].filter(isReview);
 }

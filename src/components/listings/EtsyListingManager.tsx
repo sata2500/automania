@@ -579,6 +579,9 @@ export const EtsyListingManager: React.FC = () => {
           <button onClick={() => handleOpenBulkModal('optimize')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5" /> AI ile iyileştir
           </button>
+          <button onClick={() => handleOpenBulkModal('ai_review')} className="px-3 py-1.5 border border-purple-200 dark:border-purple-500/40 text-purple-700 dark:text-purple-300 rounded-xl font-semibold flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" /> AI ile değerlendir
+          </button>
           <button onClick={() => handleOpenBulkModal('evaluate_seo')} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-semibold flex items-center gap-1">
             <TrendingUp className="w-3.5 h-3.5" /> Puanla
           </button>

@@ -1,19 +1,18 @@
 import sql from '@/lib/db';
 import { KEYWORD_MAX_SCORE_AGE_DAYS } from '@/lib/keyword-pool';
 import { fillPrompt } from '@/lib/prompt-registry';
-import { withAiRetry } from '@/lib/ai-retry';
-import { ModelNotConfiguredError, requireModel } from '@/lib/ai-models';
+import { ModelNotConfiguredError } from '@/lib/ai-models';
 import { loadPrompt } from '@/lib/prompt-settings';
-import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-client';
+import { AiTextConfigError, generateReasoningJson } from '@/lib/ai-text';
 import { filterSafeKeywords, sanitizeTrademarkText, sanitizeEtsyTags } from '@/lib/trademark-shield';
 import { getCurrentSeasonInfo, applySeasonalBonus } from '@/lib/seasonality';
-import { loadSettingRows } from '@/lib/app-settings';
 import { containsWord, filterContaminatedTerms } from '@/lib/listing-subject';
 
 /**
- * Etsy ilan metni (başlık, açıklama, etiketler) üretimi. Hem SEO stüdyosu (`/api/designs/generate-listing`)
- * hem de otomasyon hattı bu servisi kullanır; anahtar kelime zenginleştirme, sezon bağlamı, marka (trademark)
- * temizliği ve konu kirliliği filtresi tek yerde uygulanır.
+ * Etsy ilan metni (başlık, açıklama, etiketler) üretimi: otomasyon, Üretim'den gelen ilanlar ve Etsy'deki
+ * ilanların iyileştirmesi bu servisi kullanır (bkz. listing-pipeline: değerlendirme ve düzeltme turu). Anahtar
+ * kelime zenginleştirme (gerçek Etsy puanları), sezon bağlamı, marka (trademark) temizliği ve konu kirliliği
+ * filtresi tek yerde uygulanır.
  */
 
 export class ListingGenerationError extends Error {
@@ -39,6 +38,12 @@ export type GenerateListingInput = {
   garments?: string;
   /** İlan fotoğraflarının sıralı tanımları (alt metin yazılması için) */
   images?: string[];
+  /** Ayarlar › İlan metni bilgileri (bkz. listing-copy); açıklamadaki ürün bilgilerinin tek kaynağı */
+  storeFacts?: string;
+  /** Etsy'deki bir ilan iyileştirilirken şu anki metin */
+  currentListing?: { title: string; tags: string[]; description: string } | null;
+  /** Değerlendirme sonrası düzeltilecek noktalar (ikinci tur) */
+  revisionFeedback?: string[];
 };
 
 /**
@@ -90,6 +95,21 @@ type KeywordMetricsRow = {
   raw_metrics?: unknown;
 };
 type ShopSection = { shop_section_id: number | string; title: string };
+
+/** Modelin döndürdüğü ilan (bkz. "İlan metni üretimi" talimatının JSON biçimi). */
+export type GeneratedListingJson = {
+  title: string;
+  description: string;
+  selectedTags: string[];
+  detectedSubject?: string;
+  detectedAesthetic?: string;
+  image_alt_texts?: unknown;
+  shop_section_id?: unknown;
+  taxonomy_properties_values?: unknown;
+  materials?: unknown;
+  styles?: unknown;
+  [key: string]: unknown;
+};
 type TaxonomyProperty = {
   name: string;
   property_id: number;
@@ -97,44 +117,13 @@ type TaxonomyProperty = {
 };
 
 export async function generateListingContent(userId: string, input: GenerateListingInput) {
-  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments, images } = input;
+  const { designDescription, keywords, productType, userNotes, primarySubject, primaryAesthetic, shopSections, taxonomyId, taxonomyProperties, audienceGroup, garments, images, storeFacts, currentListing, revisionFeedback } = input;
   if (!Array.isArray(keywords) || keywords.length === 0) {
     throw new ListingGenerationError('İçerik oluşturmak için en az bir kelime gereklidir.', 400);
   }
 
   // Seasonality Context & Current Active Shopping Wave
   const currentSeason = getCurrentSeasonInfo();
-
-  // Get API Key and Models from app_settings or env
-  const settingsRows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_api_key', 'gemini_model_reasoning']);
-  
-  let activeAiProvider = 'openrouter';
-  let dbApiKey = null;
-  let dbReasoningModel = null;
-  let dbGeminiReasoningModel = null;
-  
-  for (const row of settingsRows) {
-    if (row.setting_key === 'active_ai_provider') activeAiProvider = row.setting_value;
-    if (row.setting_key === 'openrouter_api_key') dbApiKey = row.setting_value;
-    if (row.setting_key === 'openrouter_model_reasoning') dbReasoningModel = row.setting_value;
-    if (row.setting_key === 'gemini_model_reasoning') dbGeminiReasoningModel = row.setting_value;
-  }
-
-  // Google için API anahtarı veya Vertex AI hizmet hesabı (admin panelinde seçilir) kullanılır.
-  const googleConnection = activeAiProvider === 'gemini' ? await loadGoogleConnection() : null;
-  const apiKey = activeAiProvider === 'gemini' ? null : (dbApiKey || process.env.OPENROUTER_API_KEY);
-
-  if (activeAiProvider === 'gemini' ? !googleConnection : !apiKey) {
-    throw new ListingGenerationError('Sistem API anahtarı (Admin) yapılandırılmamış.', 500);
-  }
-  
-  // Model yalnızca admin panelindeki seçimdir (yedek model yok).
-  let seoModel: string;
-  try {
-    seoModel = requireModel(activeAiProvider === 'gemini' ? dbGeminiReasoningModel : dbReasoningModel, 'reasoning');
-  } catch (error) {
-    throw new ListingGenerationError(error instanceof ModelNotConfiguredError ? error.message : 'Model seçilemedi.', 400);
-  }
 
   // Talimat admin panelindeki "İlan metni üretimi" prompt'udur (boşsa varsayılanı).
   const listingPrompt = await loadPrompt('ai_prompt_generate_listing');
@@ -236,6 +225,11 @@ export async function generateListingContent(userId: string, input: GenerateList
     audienceGroup: typeof audienceGroup === 'string' && audienceGroup.trim() ? audienceGroup.trim() : 'not specified',
     garments: typeof garments === 'string' && garments.trim() ? garments.trim() : 'not specified',
     images: images && images.length > 0 ? images.map((label, i) => `- Photo ${i + 1}: ${label}`).join('\n   ') : 'None',
+    storeFacts: storeFacts?.trim() || 'None provided',
+    currentListing: currentListing
+      ? `Title: ${currentListing.title}\nTags: ${currentListing.tags.join(', ')}\nDescription:\n${currentListing.description}`
+      : 'None',
+    revisionFeedback: revisionFeedback && revisionFeedback.length > 0 ? revisionFeedback.map((f) => `- ${f}`).join('\n') : 'None',
     taxonomyProperties: taxonomyProperties && Array.isArray(taxonomyProperties) ? (taxonomyProperties as TaxonomyProperty[]).map((p) => 
       `- Property "${p.name}" (ID: ${p.property_id}): \n     Values: ${(p.possible_values || []).map((v) => `${v.name} (ID: ${v.value_id})`).join(', ')}`
     ).join('\n   ') : 'None'
@@ -243,77 +237,18 @@ export async function generateListingContent(userId: string, input: GenerateList
 
   const prompt = fillPrompt(listingPrompt, dynamicValues);
 
-  let content = '';
-
-  if (activeAiProvider === 'gemini') {
-    const ai = createGoogleClient(googleConnection!);
-    const candidates = [seoModel] // Yalnızca admin panelinde seçilen model;
-
-    let lastErr: unknown = null;
-    for (const m of candidates) {
-      try {
-        const res = await withAiRetry(() => ai.models.generateContent({
-          model: m,
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            maxOutputTokens: 8192,
-            temperature: 0.7,
-          }
-        }), { label: 'listing generation', delaysMs: [4_000, 10_000] });
-        const txt = res.text?.trim();
-        if (txt) {
-          content = txt;
-          break;
-        }
-      } catch (err: unknown) {
-        lastErr = err;
-        console.warn(`[Generate Listing] Model '${m}' failed:`, err instanceof Error ? err.message : err);
-        continue;
-      }
-    }
-
-    if (!content) {
-      throw lastErr || new Error('Gemini model yanıt vermedi.');
-    }
-  } else {
-    const openRouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'X-Title': 'Automania POD Studio Listing Generator',
-      },
-      body: JSON.stringify({
-        model: seoModel,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
-
-    if (!openRouterRes.ok) {
-      const err = await openRouterRes.text();
-      throw new Error(`OpenRouter SEO API Hatası: ${openRouterRes.status} - ${err}`);
-    }
-
-    const aiData = await openRouterRes.json();
-    content = aiData.choices?.[0]?.message?.content || '{}';
-  }
-
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    content = jsonMatch[0];
-  }
-
-  let parsedResult;
+  let generated: { data: unknown; model: string };
   try {
-    parsedResult = JSON.parse(content);
-  } catch {
-    throw new Error('Yapay zeka geçerli bir JSON formatı döndürmedi.');
+    generated = await generateReasoningJson(prompt, { label: 'listing generation', temperature: 0.7 });
+  } catch (error) {
+    if (error instanceof AiTextConfigError) throw new ListingGenerationError(error.message, 500);
+    if (error instanceof ModelNotConfiguredError) throw new ListingGenerationError(error.message, 400);
+    throw error;
   }
+  const seoModel = generated.model;
+  const parsedResult = (generated.data && typeof generated.data === 'object' ? generated.data : {}) as GeneratedListingJson;
 
-  if (!parsedResult.title || !parsedResult.description || !parsedResult.selectedTags || !Array.isArray(parsedResult.selectedTags)) {
+  if (typeof parsedResult.title !== 'string' || typeof parsedResult.description !== 'string' || !Array.isArray(parsedResult.selectedTags)) {
     throw new Error('Yapay zeka eksik veri döndürdü.');
   }
 

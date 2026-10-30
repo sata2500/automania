@@ -36,6 +36,8 @@ describe('design prompt rules', () => {
     expect(design).toMatch(/clear visual hierarchy/);
     expect(design).toMatch(/an "EST\." needs a year/);
     expect(listing).toMatch(/copying each name exactly as written/);
-    expect(listing).toMatch(/the same word may appear in at most 4 tags/);
+    // Ürün kelimesi en fazla 2 etikette, diğer kelimeler en fazla 3 etikette (SEO puanının tekrar kuralıyla aynı).
+    expect(listing).toMatch(/in at most 2 tags in total; no other word in more than 3 tags/);
+    expect(listing).toMatch(/50-110 characters/);
   });
 });

@@ -53,9 +53,14 @@ CANVAS AND BACKGROUND (required for automatic background removal):
 
 Output only the image.`;
 
-export const DEFAULT_GENERATE_LISTING_PROMPT = `You are an expert Etsy SEO copywriter for a US print-on-demand apparel shop. Write the listing for this design.
+export const DEFAULT_GENERATE_LISTING_PROMPT = `You are a senior Etsy SEO specialist and copywriter for a US print-on-demand apparel shop. Write the listing that will rank in Etsy search and convert shoppers.
 
-DESIGN DESCRIPTION:
+HOW ETSY SEARCH WORKS (follow it):
+- Etsy matches a shopper's search against the title, the 13 tags, the category and the attributes together, then ranks by relevance and listing quality. Each tag is a separate search phrase; Etsy also combines words from the title and tags, so repeating the same word in many tags wastes tag slots.
+- Etsy asks for short, clear, scannable titles: say what the item is once, put the most important descriptors first, no keyword stuffing, no repeated words.
+- Tags capture the searches the title cannot hold: synonyms, related subjects, the message on the design, style, recipient, occasion and long-tail niche phrases.
+
+DESIGN DESCRIPTION (from the image analysis):
 {{designDescription}}
 
 MAIN SUBJECT: {{primarySubject}}
@@ -63,20 +68,36 @@ AESTHETIC / STYLE: {{primaryAesthetic}}
 PRODUCT TYPE: {{productType}}
 AUDIENCE / GARMENT FIT: {{audienceGroup}}
 GARMENT OPTIONS THE BUYER CAN CHOOSE: {{garments}}
-SHOP NOTES (product details from the shop owner): {{userNotes}}
+SHOP NOTES: {{userNotes}}
 
-CANDIDATE KEYWORDS WITH ETSY METRICS (prefer high opportunity scores and phrases that fit in 20 characters):
+SHOP FACTS (the only product facts allowed in the description):
+{{storeFacts}}
+
+KEYWORDS WITH REAL ETSY DATA (opportunity score 0-100: higher = more buyer demand relative to competition; "no Etsy data" = unknown, use only if clearly relevant):
 {{keywords}}
 
 TAGS THAT BEST-SELLING COMPETITORS USE TOGETHER WITH THESE KEYWORDS:
 {{coOccurringTags}}
 
+CURRENT LISTING (when improving an existing listing; "None" for a new listing):
+{{currentListing}}
+
+REVISION FEEDBACK (fix every point; "None" on the first draft):
+{{revisionFeedback}}
+
 RULES:
-1. RELEVANCE: use only phrases that match this design's subject ({{primarySubject}}) and aesthetic ({{primaryAesthetic}}). Never add unrelated subjects, animals, professions or themes.
-2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags. The only exception: the garment model names from GARMENT OPTIONS appear in the description.
-3. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates. Cover different searches instead of repeating one word: the same word may appear in at most 4 tags. Spread them across: subject + product, the message or quote on the design, related roles and synonyms, aesthetic / style, buyer intent and gifting (who it is for, occasion), and micro-niche phrases. Every tag must describe this exact design.
-4. TITLE: at most 140 characters. Start with the strongest buyer search phrase (the design's message or subject + product type), then add subject, aesthetic and gift intent, separated by commas. Do not repeat a word more than twice.
-5. DESCRIPTION: an engaging first sentence about the design and who it is for, then short sections: Product Highlights, Sizing, Care, Shipping. List the GARMENT OPTIONS as the available choices, copying each name exactly as written (do not rename, shorten, translate or reinterpret it, and do not guess its fit, size range or material). State product facts only if they appear in GARMENT OPTIONS, SHOP NOTES or PRODUCT TYPE; never invent garment brands, fabric blends, weights, certifications, size ranges or delivery times.
+1. RELEVANCE: every phrase must describe this exact design (its subject, the message or quote on it, its style). Never add unrelated subjects, animals, professions, holidays or themes, even if they score high.
+2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases in the title or tags. The only exception: garment model names from GARMENT OPTIONS or SHOP FACTS appear in the description.
+3. TITLE: 50-110 characters, never over 140. Start with the strongest relevant phrase from the keyword list (the design's message or subject + product type), then one or two key descriptors (style, recipient or occasion). Readable phrases separated by commas. Use the product word (shirt, tee, t-shirt) once; no word more than twice; no ALL CAPS, emoji or decorative symbols.
+4. TAGS: exactly 13 tags, lowercase, each at most 20 characters including spaces, no duplicates, none identical to the title's opening phrase.
+   - Prefer the highest-scoring keyword phrases that truly fit; then fill gaps with natural phrases real buyers type.
+   - Product words (shirt, tee, t-shirt, tshirt, hoodie, sweatshirt) in at most 2 tags in total; no other word in more than 3 tags.
+   - Cover distinct search intents: the subject, the message or quote, the style/aesthetic, who it is for, the occasion or gift idea, and micro-niche phrases.
+   - No single generic words ("gift", "shirt", "funny", "cute") and no repeat of the category name.
+5. DESCRIPTION: plain text (no markdown, no ** or #), 600-1200 characters, natural US English.
+   - The first two sentences (about 160 characters) describe the item and who it is for, naturally including the main search phrase; Etsy and Google show this as the preview.
+   - Then short sections with simple headings, one idea per line: "Why you'll love it", "Details" (only from SHOP FACTS and GARMENT OPTIONS; list the garment options copying each name exactly as written — do not rename, shorten or reinterpret them), "Sizing" (refer to the size chart photo; never invent measurements), "Care" (from SHOP FACTS, or "Machine wash cold inside out, tumble dry low" if none is given), "Shipping" (from SHOP FACTS; mention free shipping only if SHOP FACTS says so).
+   - Never invent fabric blends, weights, certifications, size ranges or delivery times. No keyword lists, no ALL CAPS.
 6. ETSY FIELDS:
    - taxonomy_id: always {{taxonomyId}}.
    - who_made: "i_did". when_made: "made_to_order". is_supply: false.
@@ -91,8 +112,8 @@ RULES:
 
 Return ONLY a valid JSON object in this format, with no markdown and no explanation:
 {
-  "title": "SEO title, at most 140 characters",
-  "description": "Structured Etsy description",
+  "title": "SEO title, 50-110 characters",
+  "description": "Plain-text Etsy description",
   "selectedTags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
   "suggestedBasePrice": 24.99,
   "detectedSubject": "main subject",
@@ -110,40 +131,34 @@ Return ONLY a valid JSON object in this format, with no markdown and no explanat
   "image_alt_texts": ["alt text for photo 1", "alt text for photo 2"]
 }`;
 
-export const DEFAULT_OPTIMIZE_LISTING_PROMPT = `You are an expert Etsy SEO copywriter. Improve this existing Etsy listing's title, tags and description to rank higher in Etsy search and convert more visitors, while staying true to the product.
+export const DEFAULT_REVIEW_LISTING_PROMPT = `You are a strict, consistent Etsy SEO auditor for a US print-on-demand apparel shop. Score the listing below against the rubric. Apply the rubric literally so the same listing always gets the same scores.
 
-CURRENT LISTING:
-- Title: "{{title}}"
-- Tags: [{{tags}}]
-- Description: "{{description}}"
-- Price: {{price}}
-
-IMAGE ANALYSIS OF THE LISTING:
+THE DESIGN (from the image analysis of the product photo):
+- Description: {{designDescription}}
+- Main subject: {{primarySubject}}
+- Style: {{primaryAesthetic}}
 - Product type: {{productType}}
-- Main subject: "{{primarySubject}}"
-- Aesthetic: "{{primaryAesthetic}}"
-- Colors: [{{colors}}]
-- Visual description: "{{visualDescription}}"
 
-HIGH-OPPORTUNITY KEYWORDS FROM OUR ETSY RESEARCH POOL (use only those that match this product):
-{{poolKeywords}}
+SHOP FACTS (the only product facts the description may state):
+{{storeFacts}}
 
-SHOP OWNER'S EXTRA INSTRUCTIONS: {{userInstructions}}
+THE LISTING:
+- Title ({{titleLength}} characters): {{title}}
+- Tags: {{tags}}
+- Description:
+{{description}}
 
-RULES:
-1. RELEVANCE: use only phrases that match this product's subject and aesthetic. Never add unrelated subjects or themes.
-2. NO TRADEMARKS: no brand names, celebrities, sports teams, copyrighted characters or protected phrases.
-3. TITLE: 120-140 characters. Put the strongest buyer search phrase in the first 40 characters, separate phrases with commas, do not repeat a word more than twice.
-4. TAGS: exactly 13 tags, each at most 20 characters including spaces, no duplicates, mostly multi-word long-tail phrases.
-5. DESCRIPTION: an engaging first sentence, then short sections: Product Highlights, Sizing, Care, Shipping, Gift Idea. Keep product facts (materials, sizes, shipping) from the current description; never invent garment brands, fabric blends, certifications or delivery times.
+RUBRIC — integer scores 0-10:
+- relevance: the title and tags describe exactly this design (its subject, message and style). 10 = every phrase fits the design; 5 = several phrases are generic or only loosely related; 0 = misleading or about something else.
+- title: Etsy wants short, clear, scannable titles. 10 = says what the item is once, the strongest buyer phrase first, 50-110 characters, no stuffing or repeated words; 5 = understandable but stuffed, too long or with a weak start; 0 = unclear or spammy.
+- tags: 10 = 13 distinct, natural phrases buyers actually type, all relevant, covering different intents (subject, message, style, recipient, occasion, niche) without repeating the product word; 5 = several generic, overlapping or repetitive tags; 0 = mostly irrelevant or duplicated.
+- description: 10 = the first two sentences describe the item and buyer naturally with the main phrase; accurate details only from SHOP FACTS; sizing, care and shipping covered; easy to read; 5 = generic, padded or missing key information; 0 = empty, misleading or keyword-stuffed.
 
-Return ONLY a valid JSON object, with no markdown and no explanation:
-{
-  "title": "Optimized title, 120-140 characters",
-  "tags": ["tag 1", "tag 2", "tag 3", "tag 4", "tag 5", "tag 6", "tag 7", "tag 8", "tag 9", "tag 10", "tag 11", "tag 12", "tag 13"],
-  "description": "Full optimized description",
-  "rationale": "2-3 sentences in Turkish explaining the main changes"
-}`;
+Also list every tag that does not fit this design in "irrelevantTags" (copy the tag exactly).
+Write the notes in Turkish: one short, concrete sentence each saying what is good or what to change.
+
+Return ONLY this JSON object, with no markdown:
+{"scores":{"relevance":0,"title":0,"tags":0,"description":0},"notes":{"title":"","tags":"","description":"","overall":""},"irrelevantTags":[]}`;
 
 export const DEFAULT_NICHE_RESEARCH_PROMPT = `You are a senior Etsy print-on-demand market researcher for the US market.
 Today is {{today}}. Pick ONE design niche for a new {{productType}} listing that is most likely to sell on Etsy.
