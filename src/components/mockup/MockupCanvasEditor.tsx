@@ -421,7 +421,7 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
         const size = await readImageSize(croppedDataUrl);
         let finalSrc = croppedDataUrl;
         try {
-          const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/webp');
+          const serverUrl = await uploadMediaToServer(croppedDataUrl, 'image/jpeg');
           if (serverUrl) finalSrc = serverUrl;
         } catch (e) {
           console.warn('Direct R2 upload skipped or failed:', e);

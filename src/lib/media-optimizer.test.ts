@@ -80,4 +80,16 @@ describe('transparent trim', () => {
     expect(second.optimized).toBe(false);
     expect([second.width, second.height]).toEqual([416, 216]);
   });
+
+  it('stores mockup photos as JPEG on a white background, max 3000 px', async () => {
+    const photo = await sharp({ create: { width: 4000, height: 3000, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: await designPng(1500), top: 750, left: 1250 }])
+      .png()
+      .toBuffer();
+    const result = await optimizeImageForStorage(photo, 'image/png', 'photo');
+    expect(result.mimeType).toBe('image/jpeg');
+    expect([result.width, result.height]).toEqual([3000, 2250]);
+    const { data } = await sharp(result.buffer).raw().toBuffer({ resolveWithObject: true });
+    expect([data[0], data[1], data[2]]).toEqual([255, 255, 255]); // saydam köşe beyaz
+  });
 });

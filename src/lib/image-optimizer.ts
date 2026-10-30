@@ -45,7 +45,7 @@ export function blobToDataUrl(blob: Blob | File): Promise<string> {
  */
 export interface UploadMediaOptions {
   requireDurable?: boolean;
-  /** Sunucuda sıkıştırma: 'design' kayıpsız sıkıştırılmış PNG (baskı dosyası), 'photo' yüksek kaliteli WebP. */
+  /** Sunucuda sıkıştırma: 'design' kayıpsız sıkıştırılmış PNG (baskı dosyası), 'photo' yüksek kaliteli JPEG (mockup). */
   optimize?: 'design' | 'photo';
 }
 
@@ -249,29 +249,44 @@ export async function uploadMediaToServer(
 }
 
 /**
- * Optimizes mockup garment/background photos.
- * Converts heavy JPEGs/PNGs into compressed WebP/JPEG (max 2000px dimension).
+ * Mockup fotoğrafı yükleme: tek seferlik sıkıştırma ile JPEG (Etsy'ye giden üretim görselleri de JPEG'dir;
+ * WebP ara biçimi gereksiz bir kayıplı adım ekliyordu). Giriş yapılmışsa orijinal dosya sunucuya gider ve
+ * sunucuda mozjpeg ile sıkıştırılır; misafirde tarayıcıda JPEG'e çevrilir. Saydam alanlar beyaz zemine oturur.
+ * En uzun kenar en fazla 3000 px.
  */
 export async function optimizeMockupImage(
   fileOrDataUrl: File | string,
-  maxDimension = 2000,
-  quality = 0.9
+  maxDimension = 3000,
+  quality = 0.92
 ): Promise<OptimizedImageResult> {
+  if (fileOrDataUrl instanceof File && /^image\/(png|jpeg|webp)$/.test(fileOrDataUrl.type)) {
+    const info = await uploadOriginalForServerOptimization(fileOrDataUrl, 'photo');
+    if (info) {
+      let { width, height } = info;
+      if (!width || !height) {
+        const { img } = await loadImageSource(fileOrDataUrl);
+        width = img.naturalWidth;
+        height = img.naturalHeight;
+      }
+      return {
+        dataUrl: '',
+        url: info.url,
+        width,
+        height,
+        originalSize: fileOrDataUrl.size,
+        optimizedSize: info.size ?? fileOrDataUrl.size,
+        mimeType: info.mimeType ?? fileOrDataUrl.type,
+      };
+    }
+  }
+
   const { img, originalSize } = await loadImageSource(fileOrDataUrl);
 
   let width = img.naturalWidth || img.width;
   let height = img.naturalHeight || img.height;
-
-  // Downscale if larger than maxDimension while preserving aspect ratio
-  if (width > maxDimension || height > maxDimension) {
-    if (width > height) {
-      height = Math.round((height * maxDimension) / width);
-      width = maxDimension;
-    } else {
-      width = Math.round((width * maxDimension) / height);
-      height = maxDimension;
-    }
-  }
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  width = Math.max(1, Math.round(width * scale));
+  height = Math.max(1, Math.round(height * scale));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -282,20 +297,18 @@ export async function optimizeMockupImage(
     throw new Error('Canvas context could not be created.');
   }
 
+  // JPEG saydamlık taşımaz: saydam alanlar (ör. PNG beden tablosu) siyah değil beyaz görünsün.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  let mime = 'image/webp';
-  let optimizedDataUrl = canvas.toDataURL(mime, quality);
-  if (!optimizedDataUrl.startsWith('data:image/webp')) {
-    mime = 'image/jpeg';
-    optimizedDataUrl = canvas.toDataURL(mime, quality);
-  }
-
+  const mime = 'image/jpeg';
+  const optimizedDataUrl = canvas.toDataURL(mime, quality);
   const optimizedSize = Math.round((optimizedDataUrl.length * 3) / 4);
 
-  // Upload optimized binary image to server API (or fallback to local dataUrl if guest/offline)
+  // Giriş yapılmışsa (dosya biçimi sunucuya doğrudan gönderilemediyse) sunucuya, misafirde bu cihaza kaydedilir.
   const serverUrl = await uploadMediaToServer(optimizedDataUrl, mime);
 
   return {

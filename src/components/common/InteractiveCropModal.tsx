@@ -17,7 +17,7 @@ interface InteractiveCropModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCropComplete: (croppedDataUrl: string) => void | Promise<void>;
-  /** 'design': varsayılan serbest oran, otomatik kenar kırpma ve PNG; 'photo': varsayılan 1:1 ve WebP (mockup fotoğrafları) */
+  /** 'design': varsayılan serbest oran, otomatik kenar kırpma ve PNG; 'photo': varsayılan 1:1 ve JPEG (mockup fotoğrafları) */
   variant?: 'design' | 'photo';
 }
 
@@ -168,10 +168,14 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('Tuval oluşturulamadı.');
+        if (variant !== 'design') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+        }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
-        return variant === 'design' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/webp', 0.92);
+        return variant === 'design' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.92);
       };
       let { w, h } = outputSize;
       let dataUrl = render(w, h);
@@ -267,7 +271,7 @@ export const InteractiveCropModal: React.FC<InteractiveCropModalProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Çerçeveyi sürükleyin, köşelerinden boyutlandırın.
-            {outputSize && <> Çıktı: <strong className="font-mono">{outputSize.w}×{outputSize.h}px</strong> {variant === 'design' ? '(kayıpsız kalitede)' : '(WebP)'}</>}
+            {outputSize && <> Çıktı: <strong className="font-mono">{outputSize.w}×{outputSize.h}px</strong> {variant === 'design' ? '(kayıpsız kalitede)' : '(JPEG)'}</>}
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={isSaving} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl">

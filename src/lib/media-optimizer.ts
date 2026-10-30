@@ -6,7 +6,8 @@
  *    kullanılabilir. En uzun kenar 4500 px ile sınırlı. Saydam kenar boşlukları otomatik kırpılır (içeriğin
  *    çevresinde %2 pay bırakılır; opak görsellere dokunulmaz). Hiç saydam pikseli olmayan görsel alfa kanalı
  *    olmadan saklanır.
- *  - 'photo' (mockup fotoğrafı): yüksek kaliteli WebP (q90, keskin renk alt örneklemesi), en uzun kenar 3000 px.
+ *  - 'photo' (mockup fotoğrafı): yüksek kaliteli JPEG (mozjpeg q90, renk alt örneklemesi yok), en uzun kenar 3000 px.
+ *    Üretim görselleri de JPEG olarak Etsy'ye gider; saydam alanlar beyaz zemine oturur.
  * Sonuç orijinalden büyükse orijinal korunur. Hareketli GIF'lere dokunulmaz.
  */
 import sharp from 'sharp';
@@ -71,8 +72,11 @@ export async function optimizeImageForStorage(input: Buffer, mimeType: string, k
     info = { width: outWidth, height: outHeight };
     outMime = 'image/png';
   } else {
-    ({ data, info } = await pipeline.webp({ quality: 90, smartSubsample: true, effort: 4 }).toBuffer({ resolveWithObject: true }));
-    outMime = 'image/webp';
+    ({ data, info } = await pipeline
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: '4:4:4' })
+      .toBuffer({ resolveWithObject: true }));
+    outMime = 'image/jpeg';
   }
   const resized = info.width !== width || info.height !== height;
   // Kırpılan görsel her zaman yeni hâliyle saklanır; aksi hâlde büyüyen sonuç yerine orijinal korunur.

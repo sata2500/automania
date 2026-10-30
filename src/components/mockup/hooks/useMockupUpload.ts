@@ -100,8 +100,6 @@ export function useMockupUpload({
 
       let addedCount = 0;
       let optimizedImageCount = 0;
-      let webpImageCount = 0;
-      let fallbackImageCount = 0;
       let savedBytesTotal = 0;
       const uploadToastId = toast.progress('Görseller yükleniyor ve işleniyor...', 10);
 
@@ -155,7 +153,7 @@ export function useMockupUpload({
           let srcUrl: string;
           let imgWidth = 2000;
           let imgHeight = 2000;
-          let mimeType = isVideo ? 'video/mp4' : 'image/webp';
+          let mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
 
           if (isVideo) {
             const optimizedVideo = await optimizeVideoFile(file);
@@ -171,10 +169,9 @@ export function useMockupUpload({
               }
             }
           } else {
-            const optimized = await optimizeMockupImage(file, 2000, 0.90);
+            const optimized = await optimizeMockupImage(file);
             optimizedImageCount++;
-            if (optimized.mimeType === 'image/webp') webpImageCount++;
-            else fallbackImageCount++;
+            mimeType = optimized.mimeType;
             savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
             srcUrl = optimized.url || optimized.dataUrl;
             imgWidth = optimized.width;
@@ -227,10 +224,7 @@ export function useMockupUpload({
       toast.removeToast(uploadToastId);
       if (optimizedImageCount > 0) {
         const savedMb = (savedBytesTotal / (1024 * 1024)).toFixed(1);
-        const formatMessage = fallbackImageCount > 0
-          ? `${webpImageCount} WebP, ${fallbackImageCount} tarayıcı fallback formatı`
-          : 'WebP';
-        toast.success(`${optimizedImageCount} mockup optimize edildi (${formatMessage}); toplam ${savedMb} MB tasarruf.`);
+        toast.success(`${optimizedImageCount} mockup JPEG olarak optimize edildi; toplam ${savedMb} MB tasarruf.`);
       }
       if (addedCount > 0) {
         toast.success(`${addedCount} dosya başarıyla klasöre yüklendi!`);
