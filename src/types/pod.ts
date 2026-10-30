@@ -113,6 +113,11 @@ export interface DesignItem {
   /** Üretimde kullanılan prompt */
   promptUsed?: string;
 
+  /** Sunucuda süren yapay zekâ analizinin başlangıcı (sekme kapansa da sürer; bitince silinir). */
+  analysisPendingAt?: number;
+  /** Son sunucu analizinin hatası (yeni analizde silinir). */
+  analysisError?: string;
+
   /** AI Analysis results for the design */
   analysis?: {
     description: string;

@@ -1,28 +1,40 @@
 /**
- * POST /api/designs/analyze — tasarım görselinin yapay zekâ analizi ve anahtar kelimelerin Etsy puanları.
+ * /api/designs/analyze — tasarım görselinin yapay zekâ analizi ve anahtar kelimelerin Etsy puanları
+ * (bkz. design-analysis).
  *
- * Zaman aşımını önlemek için iş ikiye ayrılır:
- *  1. Görsel analizi + havuzda taze puanı olan kelimeler hemen döner; eski/yeni kelimeler süre bütçesi içinde
- *     Etsy'den puanlanır (bkz. keyword-pool).
- *  2. Bütçeye sığmayan kelimeler havuza "Taranacak" olarak eklenir ve yanıt döndükten sonra (after) puanlanır;
- *     kalanları zamanlayıcının havuz yenilemesi tamamlar. Analiz penceresi puanları havuzdan güncel okur.
+ * POST { src, designId? }
+ *  - Giriş yapılmışsa ve tasarım çalışma alanında kayıtlıysa analiz sunucuda arka planda (after) yürür ve sonuç
+ *    doğrudan tasarıma yazılır: sekme/tarayıcı kapansa da tamamlanır. Yanıt hemen döner (202, queued). Tasarımda
+ *    `analysisPendingAt` analiz sürerken durur; hata olursa `analysisError` yazılır.
+ *  - Aksi hâlde (misafir, henüz kaydedilmemiş tasarım) analiz yanıtta döner.
+ * GET ?designId= — arka plan analizinin durumu: pending | done | error | none.
+ *
+ * Zaman aşımını önlemek için kelime puanlaması süre bütçesiyle sınırlıdır; bütçeye sığmayan kelimeler havuza
+ * "Taranacak" olarak eklenir ve kalan sürede (ya da zamanlayıcının havuz yenilemesinde) puanlanır.
  */
 import { NextResponse, after } from 'next/server';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
-import { loadVisionImage, MediaSourceError } from '@/lib/media-source';
-import { analyzeDesignImage, DesignVisionConfigError } from '@/lib/design-vision';
-import { normalizeKeywords, scoreKeywords } from '@/lib/keyword-pool';
-import { loadScraperCredentials } from '@/lib/scraper-credentials';
-import { filterSafeKeywords } from '@/lib/trademark-shield';
-import type { ScrapingOptions } from '@/lib/etsy-scraper';
+import { MediaSourceError } from '@/lib/media-source';
+import { DesignVisionConfigError } from '@/lib/design-vision';
+import { runDesignAnalysis, scorePendingKeywords } from '@/lib/design-analysis';
+import { patchWorkspaceDesign, readWorkspaceDesign } from '@/lib/workspace-designs';
 
 export const maxDuration = 120;
 
-/** Yanıttan önce kelime puanlamaya ayrılan süre (görsel analizi ayrıca ~10-30 sn sürer). */
+/** Yanıttan önce (veya arka plan analizinde sonuç yazılmadan önce) kelime puanlamaya ayrılan süre. */
 const SYNC_SCORING_BUDGET_MS = 35_000;
-/** Yanıttan sonra kalan kelimelerin puanlanması için süre. */
+/** Sonuç döndükten sonra kalan kelimelerin puanlanması için süre. */
 const BACKGROUND_SCORING_BUDGET_MS = 70_000;
+/** Arka planda: sonuç yazıldıktan sonra kalan kelimeler için süre (toplam 120 sn sınırının içinde kalır). */
+const QUEUED_REST_BUDGET_MS = 30_000;
+/** Bu süreden eski "sürüyor" işareti (ör. sunucu kesildi) artık sürmüyor sayılır. */
+const ANALYSIS_STALE_MS = 3 * 60_000;
+
+function errorMessage(error: unknown): string {
+  if (error instanceof DesignVisionConfigError || error instanceof MediaSourceError) return error.message;
+  return 'Tasarım analizi başarısız oldu. Lütfen tekrar deneyin.';
+}
 
 export async function POST(request: Request) {
   try {
@@ -37,66 +49,62 @@ export async function POST(request: Request) {
       });
     }
 
-    const { src } = await request.json().catch(() => ({}));
+    const { src, designId } = await request.json().catch(() => ({}));
     if (!src) return NextResponse.json({ success: false, error: 'Görsel URL veya base64 gerekli.' }, { status: 400 });
+    const appOrigin = new URL(request.url).origin;
 
-    // Görseli sahiplik doğrulamasıyla yükle (misafirler yalnızca data URL / demo görselleri)
-    let image: { buffer: Buffer; mimeType: string };
+    // Arka plan: sonuç tasarıma yazılır, sekme kapansa da tamamlanır.
+    if (session && typeof designId === 'string' && designId) {
+      const userId = session.id;
+      const queued = await patchWorkspaceDesign(userId, designId, { analysisPendingAt: Date.now() }, ['analysisError']);
+      if (queued) {
+        after(async () => {
+          try {
+            const result = await runDesignAnalysis(userId, String(src), { appOrigin, scoringBudgetMs: SYNC_SCORING_BUDGET_MS });
+            await patchWorkspaceDesign(userId, designId, { analysis: result.analysis }, ['analysisPendingAt', 'analysisError']);
+            await scorePendingKeywords(result, QUEUED_REST_BUDGET_MS);
+          } catch (error) {
+            console.error('[Design Analyze] Background analysis failed:', error instanceof Error ? error.message : 'unknown error');
+            await patchWorkspaceDesign(userId, designId, { analysisError: errorMessage(error) }, ['analysisPendingAt'])
+              .catch(() => undefined);
+          }
+        });
+        return NextResponse.json({ success: true, queued: true }, { status: 202 });
+      }
+    }
+
+    let result;
     try {
-      image = await loadVisionImage(session?.id ?? null, String(src), { appOrigin: new URL(request.url).origin });
+      result = await runDesignAnalysis(session?.id ?? null, String(src), { appOrigin, scoringBudgetMs: SYNC_SCORING_BUDGET_MS });
     } catch (error) {
       if (error instanceof MediaSourceError) return NextResponse.json({ success: false, error: error.message }, { status: error.status });
-      console.error('[Analyze API] Image load failed:', error);
-      return NextResponse.json({ success: false, error: 'Görsel dosyası okunamadı veya yükleme henüz tamamlanmadı. Lütfen tekrar deneyin.' }, { status: 400 });
+      throw error;
     }
-
-    const [vision, credentials] = await Promise.all([
-      analyzeDesignImage(image),
-      loadScraperCredentials(session?.id ?? null).catch(() => null),
-    ]);
-    const scrapeOptions: ScrapingOptions = {
-      etsyAccessToken: credentials?.etsyAccessToken,
-      etsyApiKey: credentials?.etsyApiKey,
-      etsySharedSecret: credentials?.etsySharedSecret,
-      userId: session?.id,
-      apiKey: credentials?.scrapingApiKey,
-      provider: credentials?.scrapingProvider,
-      workerUrl: credentials?.workerUrl,
-    };
-
-    const trademarkRemoved = filterSafeKeywords(vision.keywords.map((k) => k.toLowerCase().trim())).removed.map((r) => r.keyword);
-    const keywords = normalizeKeywords(vision.keywords);
-    const scored = await scoreKeywords(keywords, scrapeOptions, { budgetMs: SYNC_SCORING_BUDGET_MS });
-    if (scored.pending.length > 0) {
-      after(async () => {
-        await scoreKeywords(scored.pending, scrapeOptions, { budgetMs: BACKGROUND_SCORING_BUDGET_MS, countUsage: false })
-          .catch((error: unknown) => console.warn('[Analyze API] Background keyword scoring failed', error instanceof Error ? error.message : error));
-      });
-    }
+    if (result.pendingKeywords.length > 0) after(() => scorePendingKeywords(result, BACKGROUND_SCORING_BUDGET_MS));
 
     return NextResponse.json({
       success: true,
-      hasEtsyApi: Boolean(credentials?.etsyAccessToken),
-      pendingKeywords: scored.pending.length,
-      analysis: {
-        description: vision.description,
-        keywords,
-        evaluatedKeywords: scored.evaluated,
-        discoveredCompetitorTags: scored.competitorTags,
-        analyzedAt: Date.now(),
-        primarySubject: vision.primarySubject,
-        primaryAesthetic: vision.primaryAesthetic,
-        niche: vision.niche,
-        userNotes: vision.userNotes,
-        productType: vision.productType,
-        taxonomyId: vision.taxonomyId,
-        trademarkRemovedKeywords: trademarkRemoved,
-        source: 'vision',
-      },
+      hasEtsyApi: result.hasEtsyApi,
+      pendingKeywords: result.pendingKeywords.length,
+      analysis: result.analysis,
     });
   } catch (error) {
     console.error('[Design Analyze] Request failed:', error instanceof Error ? error.message : 'unknown error');
-    const message = error instanceof DesignVisionConfigError ? error.message : 'Tasarım analizi başarısız oldu. Lütfen tekrar deneyin.';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: errorMessage(error) }, { status: 500 });
   }
+}
+
+export async function GET(request: Request) {
+  const session = await getAuthoritativeSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const designId = new URL(request.url).searchParams.get('designId');
+  if (!designId) return NextResponse.json({ error: 'designId zorunludur.' }, { status: 400 });
+  const design = await readWorkspaceDesign(session.id, designId);
+  if (!design) return NextResponse.json({ status: 'none' });
+  if (design.analysisPendingAt && Date.now() - design.analysisPendingAt < ANALYSIS_STALE_MS) {
+    return NextResponse.json({ status: 'pending', startedAt: design.analysisPendingAt });
+  }
+  if (design.analysisError) return NextResponse.json({ status: 'error', error: design.analysisError });
+  if (design.analysisPendingAt) return NextResponse.json({ status: 'error', error: 'Analiz yarıda kaldı. Lütfen tekrar deneyin.' });
+  return NextResponse.json({ status: design.analysis ? 'done' : 'none', analysis: design.analysis ?? null });
 }

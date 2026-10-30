@@ -88,9 +88,23 @@ export function filterUnreferencedUrls(urls: Iterable<string>, remaining: Partia
 
 const sameItem = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** İki tarafta da değişen öğe: sunucu sürümüne bu cihazda değişen alanlar (silinenler dahil) uygulanır. */
+function mergeFields<T extends { id: string }>(base: T, local: T, server: T): T {
+  const merged: Record<string, unknown> = { ...server };
+  const baseRecord = base as Record<string, unknown>;
+  const localRecord = local as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(baseRecord), ...Object.keys(localRecord)])) {
+    if (sameItem(baseRecord[key], localRecord[key])) continue;
+    if (key in localRecord) merged[key] = localRecord[key];
+    else delete merged[key];
+  }
+  return merged as T;
+}
+
 /**
  * Üç yönlü birleştirme (ortak taban, bu cihaz, sunucu) — öğeler kimliğe göre eşleştirilir.
- * - Yalnızca bir tarafta değişen öğe o taraftan alınır; iki tarafta da değiştiyse bu cihazdaki düzenleme kazanır.
+ * - Yalnızca bir tarafta değişen öğe o taraftan alınır. İki tarafta da değiştiyse alan düzeyinde birleşir: bu
+ *   cihazda değişen alanlar bu cihazdan, diğerleri sunucudan (ör. sunucunun yazdığı analiz korunur).
  * - Bu cihazda silinen öğe silinmiş kalır; sunucuda silinen öğe, burada düzenlenmediyse silinir.
  * - Sunucuya eklenen öğeler (ör. otomasyonun ürettiği tasarım) eklenir; sıra bu cihazdaki sıradır.
  */
@@ -110,7 +124,9 @@ export function threeWayMergeById<T extends { id: string }>(base: T[], local: T[
       continue;
     }
     const changedHere = !before || !sameItem(before, item);
-    result.push(changedHere ? item : remote);
+    if (!changedHere) result.push(remote);
+    else if (!before || sameItem(before, remote)) result.push(item);
+    else result.push(mergeFields(before, item, remote));
   }
   for (const item of server) {
     if (localIds.has(item.id)) continue;

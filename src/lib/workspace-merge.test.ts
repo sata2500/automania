@@ -88,4 +88,15 @@ describe('threeWayMergeById', () => {
     const merged = threeWayMergeById([a, b], [b, { id: 'a', v: 5 }], [{ id: 'a', v: 9 }, b]);
     expect(merged).toEqual([b, { id: 'a', v: 5 }]);
   });
+  it('merges field by field when both sides changed different fields (server analysis kept)', () => {
+    const base = { id: 'd', name: 'x', isSelected: false } as { id: string; name: string; isSelected: boolean; analysis?: string; analysisPendingAt?: number };
+    const local = { ...base, isSelected: true };
+    const server = { ...base, analysis: 'done' };
+    expect(threeWayMergeById([base], [local], [server])).toEqual([{ id: 'd', name: 'x', isSelected: true, analysis: 'done' }]);
+    // Bu cihazda silinen alan sunucu sürümünden de silinir.
+    const pending = { ...base, analysisPendingAt: 1 };
+    const { analysisPendingAt: _removed, ...cleared } = pending;
+    void _removed;
+    expect(threeWayMergeById([pending], [cleared], [{ ...pending, name: 'y' }])).toEqual([{ id: 'd', name: 'y', isSelected: false }]);
+  });
 });
