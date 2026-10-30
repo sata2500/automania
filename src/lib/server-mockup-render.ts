@@ -52,9 +52,8 @@ export async function renderMockupJpeg(mockupBuffer: Buffer, designBuffer: Buffe
       const drawH = Math.max(1, Math.round(dH * scale));
       let pipeline = sharp(designBuffer).ensureAlpha().resize(drawW, drawH, { fit: 'fill', kernel: 'lanczos3' });
       if (area.rotation) pipeline = sharp(await pipeline.png().toBuffer()).rotate(area.rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
-      let { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
+      const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
       if (opacity < 1) {
-        data = Buffer.from(data);
         for (let i = 3; i < data.length; i += 4) data[i] = Math.round(data[i]! * opacity);
       }
       const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
