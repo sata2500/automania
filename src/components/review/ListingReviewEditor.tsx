@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * Hazır İlanlar › ilan penceresi: fotoğraf seçimi ve sırası, video, başlık, etiketler, açıklama ve alt metinler
- * düzenlenir; ilan hemen yayınlanır, zamanlanır veya reddedilir.
+ * Hazır İlanlar › ilan penceresi. Üstte ilanın hazırlık durumu (fotoğraf, başlık, etiket, açıklama, varyasyon),
+ * üç sekme: Görseller (sıra, kapak, alt metin, video), İlan metni (SKU, başlık, etiketler, açıklama) ve
+ * Varyasyonlar. Alttaki sabit çubukta kaydet, zamanla, yayınla ve reddet bulunur. Telefonda tam ekran açılır.
  */
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, CalendarClock, ExternalLink, Layers, Rocket, RotateCcw, Save, Settings, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, ExternalLink, Eye, EyeOff, Images, Layers, Rocket, RotateCcw, Save, Settings, Star, Trash2, Type, X } from 'lucide-react';
 import { openAppTab } from '@/lib/app-navigation';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
@@ -14,6 +15,7 @@ import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } fro
 import type { ReviewItemView } from './types';
 
 type PhotoRow = { url: string; included: boolean; alt: string };
+type EditorTab = 'photos' | 'text' | 'variations';
 
 const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30';
 const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
@@ -115,6 +117,9 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
   const [scheduleAt, setScheduleAt] = useState(() => toLocalInputValue(item.review.scheduledAt ? new Date(item.review.scheduledAt) : new Date(Date.now() + 60 * 60_000)));
   const [busy, setBusy] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [tab, setTab] = useState<EditorTab>(() => (item.variations?.enabled === 0 ? 'variations' : 'photos'));
+  const [activePhoto, setActivePhoto] = useState(0);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const change = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setDirty(true); };
 
   const addTags = (raw: string) => {
@@ -126,11 +131,13 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
     change(setTags)(next);
     setTagInput('');
   };
-  const movePhoto = (index: number, delta: number) => {
+  const movePhoto = (index: number, target: number) => {
+    if (target < 0 || target >= photos.length || target === index) return;
     const next = [...photos];
     const [row] = next.splice(index, 1);
-    next.splice(index + delta, 0, row!);
+    next.splice(target, 0, row!);
     change(setPhotos)(next);
+    setActivePhoto(target);
   };
   const updatePhoto = (index: number, patch: Partial<PhotoRow>) => change(setPhotos)(photos.map((p, i) => (i === index ? { ...p, ...patch } : p)));
 
@@ -174,190 +181,284 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
     onClose();
     return `İlan ${formatDateTime(date.toISOString())} için zamanlandı.`;
   };
+  const requestClose = () => {
+    if (busy) return;
+    if (dirty && !window.confirm('Kaydedilmemiş değişiklikler var. Kaydetmeden kapatılsın mı?')) return;
+    onClose();
+  };
 
   const badge = STATUS_BADGES[status];
   const includedCount = photos.filter((p) => p.included).length;
+  const variationsMissing = item.variations?.enabled === 0;
+  // Hazırlık durumu: Etsy'nin kurallarına ve iyi bir ilanın gereklerine göre
+  const checks: Array<{ key: string; label: string; ok: boolean; tab: EditorTab }> = [
+    { key: 'photos', label: `${includedCount}/20 fotoğraf`, ok: includedCount >= 1, tab: 'photos' },
+    { key: 'title', label: `Başlık ${title.length}/140`, ok: title.trim().length >= 20 && title.length <= 140, tab: 'text' },
+    { key: 'tags', label: `${tags.length}/13 etiket`, ok: tags.length === 13, tab: 'text' },
+    { key: 'description', label: 'Açıklama', ok: description.trim().length >= 160, tab: 'text' },
+    ...(item.variations ? [{ key: 'variations', label: variationsMissing ? 'Varyasyon yok' : `${item.variations.enabled} varyasyon`, ok: !variationsMissing, tab: 'variations' as const }] : []),
+  ];
+  const current = photos[Math.min(activePhoto, photos.length - 1)];
+  const currentIndex = Math.min(activePhoto, photos.length - 1);
+
+  const tabs: Array<{ key: EditorTab; label: string; icon: typeof Images; alert?: boolean }> = [
+    { key: 'photos', label: 'Görseller', icon: Images },
+    { key: 'text', label: 'İlan metni', icon: Type, alert: checks.some((c) => c.tab === 'text' && !c.ok) },
+    ...(item.variations ? [{ key: 'variations' as const, label: 'Varyasyonlar', icon: Layers, alert: variationsMissing }] : []),
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6" onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-      <DialogPanel aria-labelledby="review-editor-title" onClose={busy ? undefined : onClose} className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 my-4">
-        <div className="flex items-start justify-between gap-3 p-5 border-b border-slate-200 dark:border-slate-800">
-          <div className="min-w-0">
-            <h2 id="review-editor-title" className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-              İlanı incele <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-              {item.templateName} · {formatDateTime(item.createdAt)}{item.price != null ? ` · ${item.price.toFixed(2)}` : ''}
-            </p>
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-start justify-center bg-black/60 backdrop-blur-sm sm:overflow-y-auto sm:p-6" onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
+      <DialogPanel aria-labelledby="review-editor-title" onClose={busy ? undefined : requestClose} className="w-full max-w-3xl bg-white dark:bg-slate-900 sm:rounded-3xl shadow-2xl sm:border border-slate-200 dark:border-slate-700 flex flex-col h-full sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:my-0">
+        {/* Başlık + hazırlık durumu + sekmeler */}
+        <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-0">
+          <div className="flex items-center gap-3 px-4 sm:px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <h2 id="review-editor-title" className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="truncate">{title.trim() || 'İlanı incele'}</span>
+              </h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap mt-0.5">
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${badge.className}`}>{badge.label}</span>
+                {sku && <span className="font-mono">{sku}</span>}
+                <span className="truncate">{item.templateName} · {formatDateTime(item.createdAt)}{item.price != null ? ` · ${item.price.toFixed(2)}` : ''}</span>
+              </p>
+            </div>
+            {item.review.listingUrl && (
+              <a href={item.review.listingUrl} target="_blank" rel="noopener noreferrer" aria-label="İlanı Etsy'de aç" className="p-2 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl">
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            <button type="button" onClick={requestClose} disabled={Boolean(busy)} aria-label="Kapat" className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button type="button" onClick={onClose} disabled={Boolean(busy)} aria-label="Kapat" className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white bg-slate-100 dark:bg-slate-800 rounded-xl">
-            <X className="w-4 h-4" />
-          </button>
+
+          <div className="flex gap-1.5 px-4 sm:px-5 pb-3 overflow-x-auto no-scrollbar" aria-label="İlanın hazırlık durumu">
+            {checks.map((check) => (
+              <button
+                key={check.key}
+                type="button"
+                onClick={() => setTab(check.tab)}
+                className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border ${check.ok
+                  ? 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                  : 'border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300'}`}
+              >
+                {check.ok ? <Check className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />} {check.label}
+              </button>
+            ))}
+          </div>
+
+          <div role="tablist" className="grid gap-1 px-4 sm:px-5" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+            {tabs.map(({ key, label, icon: Icon, alert }) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`relative flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold border-b-2 transition-colors ${tab === key
+                  ? 'border-indigo-600 text-indigo-700 dark:text-indigo-300'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
+              >
+                <Icon className="w-3.5 h-3.5" /> {label}
+                {alert && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" aria-label="eksik" />}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="p-5 space-y-5">
-          {item.review.error && (status === 'failed') && (
+        {/* İçerik */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-4">
+          {item.review.error && status === 'failed' && (
             <p className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 text-xs text-red-700 dark:text-red-300">{item.review.error}</p>
           )}
           {item.warning && status === 'awaiting' && (
             <p className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 text-xs text-amber-800 dark:text-amber-300">{item.warning}</p>
           )}
-          {item.review.listingUrl && (
-            <a href={item.review.listingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline">
-              <ExternalLink className="w-3.5 h-3.5" /> İlanı Etsy&apos;de aç
-            </a>
-          )}
 
-          {/* Fotoğraflar */}
-          <section>
-            <span className={labelClass}>Fotoğraflar ({includedCount} seçili, sırayla gönderilir; ilki kapak)</span>
-            <div className="space-y-2">
-              {photos.map((photo, index) => (
-                <div key={photo.url} className={`flex gap-3 p-2 rounded-xl border ${photo.included ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-200 dark:border-slate-800 opacity-60'}`}>
-                  <img src={photo.url} alt={photo.alt || `Fotoğraf ${index + 1}`} loading="lazy" className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-lg bg-slate-100 dark:bg-slate-800 shrink-0" />
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                        <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={photo.included} disabled={!editable} onChange={(e) => updatePhoto(index, { included: e.target.checked })} />
-                        İlana ekle
-                      </label>
-                      {editable && (
-                        <span className="flex gap-1 ml-auto">
-                          <button type="button" aria-label="Yukarı taşı" disabled={index === 0} onClick={() => movePhoto(index, -1)} className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                          <button type="button" aria-label="Aşağı taşı" disabled={index === photos.length - 1} onClick={() => movePhoto(index, 1)} className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                        </span>
-                      )}
-                    </div>
-                    <textarea
-                      aria-label={`Fotoğraf ${index + 1} alt metni`}
-                      value={photo.alt}
-                      disabled={!editable}
-                      maxLength={250}
-                      rows={2}
-                      placeholder="Alt metin (görmeyen alıcılar ve arama için)"
-                      onChange={(e) => updatePhoto(index, { alt: e.target.value })}
-                      className={`${inputClass} resize-none`}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            {item.videoUrl && (
-              <div className="mt-3 flex flex-col sm:flex-row gap-3 items-start">
-                <video src={item.videoUrl} controls muted playsInline className="w-full max-w-[220px] rounded-xl border border-slate-200 dark:border-slate-700" />
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={includeVideo} disabled={!editable} onChange={(e) => change(setIncludeVideo)(e.target.checked)} />
-                  Videoyu ilana ekle
-                </label>
-              </div>
-            )}
-          </section>
-
-          {item.variations && <VariationPicker item={item} editable={editable} onChanged={onChanged} />}
-
-          {/* Metinler */}
-          <section className="space-y-4">
-            <div>
-              <label className={labelClass} htmlFor="review-sku">SKU (siparişte görünür; tasarım bu kodla Tasarımlar&apos;da aranır)</label>
-              <input id="review-sku" className={`${inputClass} font-mono uppercase`} value={sku} maxLength={32} disabled={!editable} placeholder="Ör. TSH-261029-K7QD" onChange={(e) => change(setSku)(e.target.value.toUpperCase())} />
-            </div>
-            <div>
-              <label className={labelClass} htmlFor="review-title">Başlık ({title.length}/140)</label>
-              <input id="review-title" className={inputClass} value={title} maxLength={140} disabled={!editable} onChange={(e) => change(setTitle)(e.target.value)} />
-            </div>
-            <div>
-              <span className={labelClass}>Etiketler ({tags.length}/13)</span>
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                    {tag}
-                    {editable && <button type="button" aria-label={`${tag} etiketini kaldır`} onClick={() => change(setTags)(tags.filter((t) => t !== tag))}><X className="w-3 h-3" /></button>}
-                  </span>
+          {tab === 'photos' && (
+            <>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Fotoğraflar bu sırayla gönderilir; ilki ilanın kapağıdır. Bir fotoğrafa dokunup sırasını, alt metnini ve ilana eklenip eklenmeyeceğini düzenleyin.</p>
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {photos.map((photo, index) => (
+                  <button
+                    key={photo.url}
+                    type="button"
+                    onClick={() => setActivePhoto(index)}
+                    aria-label={`Fotoğraf ${index + 1}${photo.included ? '' : ' (ilana eklenmiyor)'}`}
+                    className={`relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 ${index === currentIndex ? 'ring-2 ring-indigo-500' : ''}`}
+                  >
+                    <img src={photo.url} alt="" loading="lazy" className={`w-full h-full object-cover ${photo.included ? '' : 'opacity-35 grayscale'}`} />
+                    <span className="absolute top-1 left-1 min-w-5 h-5 px-1 rounded-md bg-slate-900/75 text-white text-[10px] font-bold flex items-center justify-center">{index + 1}</span>
+                    {index === 0 && photo.included && <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-bold flex items-center gap-0.5"><Star className="w-2.5 h-2.5 fill-current" />Kapak</span>}
+                    {!photo.included && <span className="absolute inset-0 flex items-center justify-center"><EyeOff className="w-5 h-5 text-slate-700 dark:text-slate-200" /></span>}
+                  </button>
                 ))}
               </div>
-              {editable && tags.length < 13 && (
-                <input
-                  aria-label="Etiket ekle"
-                  className={inputClass}
-                  value={tagInput}
-                  placeholder="Etiket ekleyin (virgülle ayırın, Enter ile ekleyin)"
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTags(tagInput); } }}
-                  onBlur={() => { if (tagInput.trim()) addTags(tagInput); }}
-                />
+
+              {current && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col sm:flex-row gap-3">
+                  <img src={current.url} alt={current.alt || `Fotoğraf ${currentIndex + 1}`} className="w-full sm:w-44 aspect-square object-cover rounded-xl bg-slate-100 dark:bg-slate-800" />
+                  <div className="flex-1 min-w-0 space-y-2.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 mr-auto">Fotoğraf {currentIndex + 1}</span>
+                      {editable && (
+                        <>
+                          <button type="button" aria-label="Sola taşı" disabled={currentIndex === 0} onClick={() => movePhoto(currentIndex, currentIndex - 1)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowLeft className="w-3.5 h-3.5" /></button>
+                          <button type="button" aria-label="Sağa taşı" disabled={currentIndex === photos.length - 1} onClick={() => movePhoto(currentIndex, currentIndex + 1)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowRight className="w-3.5 h-3.5" /></button>
+                          <button type="button" disabled={currentIndex === 0} onClick={() => movePhoto(currentIndex, 0)} className="px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-bold flex items-center gap-1 disabled:opacity-30"><Star className="w-3.5 h-3.5" /> Kapak yap</button>
+                          <button
+                            type="button"
+                            onClick={() => updatePhoto(currentIndex, { included: !current.included })}
+                            className={`px-2.5 py-2 rounded-lg text-[11px] font-bold flex items-center gap-1 ${current.included ? 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200' : 'bg-indigo-600 text-white'}`}
+                          >
+                            {current.included ? <><EyeOff className="w-3.5 h-3.5" /> Çıkar</> : <><Eye className="w-3.5 h-3.5" /> Ekle</>}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <label className="block">
+                      <span className={labelClass}>Alt metin <span className="font-normal text-slate-400">({current.alt.length}/250)</span></span>
+                      <textarea
+                        value={current.alt}
+                        disabled={!editable}
+                        maxLength={250}
+                        rows={3}
+                        placeholder="Görselin kısa tarifi (görmeyen alıcılar ve arama için)"
+                        onChange={(e) => updatePhoto(currentIndex, { alt: e.target.value })}
+                        className={`${inputClass} resize-none`}
+                      />
+                    </label>
+                  </div>
+                </div>
               )}
+
+              {item.videoUrl && (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 flex gap-3 items-center">
+                  <video src={item.videoUrl} controls muted playsInline className="w-28 sm:w-40 rounded-xl bg-black" />
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={includeVideo} disabled={!editable} onChange={(e) => change(setIncludeVideo)(e.target.checked)} />
+                    Videoyu ilana ekle
+                  </label>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'text' && (
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass} htmlFor="review-title">Başlık <span className="font-normal text-slate-400">({title.length}/140)</span></label>
+                <textarea id="review-title" rows={2} className={`${inputClass} resize-none`} value={title} maxLength={140} disabled={!editable} onChange={(e) => change(setTitle)(e.target.value.replace(/\n/g, ' '))} />
+              </div>
+              <div>
+                <span className={labelClass}>Etiketler <span className="font-normal text-slate-400">({tags.length}/13 · her biri en fazla 20 karakter)</span></span>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {tags.map((tag) => (
+                    <span key={tag} className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-[11px] font-semibold text-indigo-800 dark:text-indigo-200">
+                      {tag}
+                      {editable && <button type="button" aria-label={`${tag} etiketini kaldır`} onClick={() => change(setTags)(tags.filter((t) => t !== tag))} className="p-0.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-500/20"><X className="w-3 h-3" /></button>}
+                    </span>
+                  ))}
+                </div>
+                {editable && tags.length < 13 && (
+                  <input
+                    aria-label="Etiket ekle"
+                    className={inputClass}
+                    value={tagInput}
+                    placeholder="Etiket ekleyin (virgülle ayırın, Enter ile ekleyin)"
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTags(tagInput); } }}
+                    onBlur={() => { if (tagInput.trim()) addTags(tagInput); }}
+                  />
+                )}
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="review-description">Açıklama <span className="font-normal text-slate-400">({description.length} karakter)</span></label>
+                <textarea id="review-description" className={`${inputClass} h-64 leading-relaxed`} value={description} disabled={!editable} onChange={(e) => change(setDescription)(e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="review-sku">SKU <span className="font-normal text-slate-400">(siparişte görünür; tasarım bu kodla Tasarımlar&apos;da aranır)</span></label>
+                <input id="review-sku" className={`${inputClass} font-mono uppercase`} value={sku} maxLength={32} disabled={!editable} placeholder="Ör. TSH-261029-K7QD" onChange={(e) => change(setSku)(e.target.value.toUpperCase())} />
+              </div>
             </div>
-            <div>
-              <label className={labelClass} htmlFor="review-description">Açıklama</label>
-              <textarea id="review-description" className={`${inputClass} h-56 font-mono leading-relaxed`} value={description} disabled={!editable} onChange={(e) => change(setDescription)(e.target.value)} />
-            </div>
-          </section>
+          )}
+
+          {tab === 'variations' && item.variations && <VariationPicker item={item} editable={editable} onChanged={onChanged} />}
         </div>
 
         {/* İşlemler */}
         {editable && (
-          <div className="sticky bottom-0 p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-b-3xl space-y-3">
-            {status !== 'rejected' ? (
+          <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sm:rounded-b-3xl px-4 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-3">
+            {status === 'rejected' ? (
+              <button type="button" disabled={Boolean(busy)} onClick={() => void run('restore', async () => { if (dirty) await save(); await action('restore'); onClose(); return 'İlan incelemeye geri alındı.'; })} className="w-full px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60">
+                <RotateCcw className="w-3.5 h-3.5" /> İncelemeye geri al
+              </button>
+            ) : (
               <>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hızlı zamanla:</span>
-                  {schedulePresets(new Date()).map((preset) => (
-                    <button
-                      key={preset.key}
-                      type="button"
-                      disabled={Boolean(busy)}
-                      onClick={() => void run('schedule', () => scheduleFor(preset.at))}
-                      className="px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-60"
-                    >
-                      {preset.label}
+                {scheduleOpen && (
+                  <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/5 p-3 space-y-2.5">
+                    <div className="flex flex-wrap gap-1.5">
+                      {schedulePresets(new Date()).map((preset) => (
+                        <button
+                          key={preset.key}
+                          type="button"
+                          disabled={Boolean(busy)}
+                          onClick={() => void run('schedule', () => scheduleFor(preset.at))}
+                          className="px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/40 bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-60"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="datetime-local" aria-label="Özel zaman" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className={`${inputClass} flex-1 min-w-0`} />
+                      <button
+                        type="button"
+                        disabled={Boolean(busy)}
+                        onClick={() => void run('schedule', () => scheduleFor(new Date(scheduleAt)))}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60"
+                      >
+                        {busy === 'schedule' ? <Spinner className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {status === 'scheduled' ? 'Güncelle' : 'Zamanla'}
+                      </button>
+                    </div>
+                    {status === 'scheduled' && (
+                      <button type="button" disabled={Boolean(busy)} onClick={() => void run('unschedule', async () => { await action('unschedule'); return 'Zamanlama kaldırıldı.'; })} className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                        <RotateCcw className="w-3 h-3" /> Zamanlamayı kaldır
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={Boolean(busy)} onClick={() => void run('reject', async () => { await action('reject'); onClose(); return 'İlan reddedildi.'; })} aria-label="İlanı reddet" title="Reddet" className="p-2.5 rounded-xl border border-red-200 dark:border-red-500/40 text-red-600 dark:text-red-400 flex items-center justify-center gap-1.5 disabled:opacity-50">
+                    <Trash2 className="w-4 h-4" /><span className="hidden sm:inline text-xs font-bold">Reddet</span>
+                  </button>
+                  <span className="hidden sm:block flex-1" />
+                  {dirty && (
+                    <button type="button" disabled={Boolean(busy)} onClick={() => void run('save', async () => { await save(); return 'Değişiklikler kaydedildi.'; })} className="flex-1 sm:flex-none px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 disabled:opacity-50">
+                      {busy === 'save' ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} Kaydet
                     </button>
-                  ))}
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex flex-col gap-1">
-                    Özel zaman
-                    <input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className={inputClass} />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={Boolean(busy)}
-                    onClick={() => void run('schedule', () => scheduleFor(new Date(scheduleAt)))}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  >
-                    {busy === 'schedule' ? <Spinner className="w-3.5 h-3.5" /> : <CalendarClock className="w-3.5 h-3.5" />} {status === 'scheduled' ? 'Zamanı güncelle' : 'Zamanla'}
+                  )}
+                  <button type="button" disabled={Boolean(busy)} onClick={() => setScheduleOpen((v) => !v)} aria-expanded={scheduleOpen} className={`flex-1 sm:flex-none px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 whitespace-nowrap ${scheduleOpen ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-200' : 'border border-indigo-200 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300'}`}>
+                    <CalendarClock className="w-3.5 h-3.5" /> {status === 'scheduled' ? 'Zamanı değiştir' : 'Zamanla'}
                   </button>
                   <button
                     type="button"
-                    disabled={Boolean(busy)}
+                    disabled={Boolean(busy) || variationsMissing}
+                    title={variationsMissing ? 'Önce bir varyasyon şablonu seçin' : undefined}
                     onClick={() => void run('publish', async () => {
                       if (dirty) await save();
                       await action('publish');
                       onClose();
                       return 'İlan Etsy\'de yayına alındı.';
                     })}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                   >
-                    {busy === 'publish' ? <Spinner className="w-3.5 h-3.5" /> : <Rocket className="w-3.5 h-3.5" />} {busy === 'publish' ? 'Yayınlanıyor (1-2 dk)…' : 'Şimdi yayınla'}
+                    {busy === 'publish' ? <Spinner className="w-3.5 h-3.5" /> : <Rocket className="w-3.5 h-3.5" />} {busy === 'publish' ? 'Yayınlanıyor…' : 'Yayınla'}
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={Boolean(busy) || !dirty} onClick={() => void run('save', async () => { await save(); return 'Değişiklikler kaydedildi.'; })} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 disabled:opacity-50">
-                    {busy === 'save' ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} Kaydet
-                  </button>
-                  {status === 'scheduled' && (
-                    <button type="button" disabled={Boolean(busy)} onClick={() => void run('unschedule', async () => { await action('unschedule'); return 'Zamanlama kaldırıldı.'; })} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 disabled:opacity-50">
-                      <RotateCcw className="w-3.5 h-3.5" /> Zamanlamayı kaldır
-                    </button>
-                  )}
-                  <button type="button" disabled={Boolean(busy)} onClick={() => void run('reject', async () => { await action('reject'); onClose(); return 'İlan reddedildi.'; })} className="px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-500/40 text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5 disabled:opacity-50 sm:ml-auto">
-                    <Trash2 className="w-3.5 h-3.5" /> Reddet
-                  </button>
-                </div>
+                {dirty && !scheduleOpen && <p className="text-[10px] text-slate-500 dark:text-slate-400">Yayınla ve Zamanla, değişiklikleri önce kaydeder.</p>}
               </>
-            ) : (
-              <button type="button" disabled={Boolean(busy)} onClick={() => void run('restore', async () => { if (dirty) await save(); await action('restore'); onClose(); return 'İlan incelemeye geri alındı.'; })} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
-                <RotateCcw className="w-3.5 h-3.5" /> İncelemeye geri al
-              </button>
             )}
           </div>
         )}

@@ -10,6 +10,9 @@ import { downloadMatchesAsZip, formatExportFileName } from '@/lib/export-utils';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import confetti from 'canvas-confetti';
 
+/** Depodaki (sunucudaki) dosya adresi: sunucuda üretimde doğrudan okunabilir. */
+const isStoredUrl = (src: string) => /^\/api\/(r2|uploads)\//.test(src) || /^https?:\/\//.test(src);
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu.';
 }
@@ -132,7 +135,6 @@ export function useBatchGenerator({
     setExportProgress(0);
 
     const genToastId = toast.progress('Toplu mockup görselleri üretiliyor...', 5);
-    const results: RenderedMatch[] = [];
 
     const uniqueDesignNames = Array.from(new Set(currentPairs.map((p) => p.design.name).filter(Boolean)));
     const combinedDesignName = uniqueDesignNames.join(' & ') || 'Tasarım';
@@ -148,7 +150,14 @@ export function useBatchGenerator({
     const batchFolderId = `batch-${primaryDesignId}-${targetFolderId}`;
     const batchFolderName = `${targetFolderName} - ${displayDesignName}`;
 
-    for (let i = 0; i < currentPairs.length; i++) {
+    // Giriş yapılmışsa görseller sunucuda üretilip depoya yazılır (Hazır İlanlar'a eklerken yeniden yükleme
+    // gerekmez); sunucu üretemezse o görsel tarayıcıda üretilir. Misafirde her şey tarayıcıdadır.
+    const serverRender = Boolean(user);
+    const slots: Array<RenderedMatch | null> = new Array(currentPairs.length).fill(null);
+    let done = 0;
+    let serverFailures = 0;
+
+    const renderPair = async (i: number) => {
       const { mockup, design } = currentPairs[i];
       const folder = folders.find((f) => f.id === mockup.folderId);
       const baseFolderName = folder?.name || 'Mockup';
@@ -169,66 +178,74 @@ export function useBatchGenerator({
         !!mockup.isVideo,
         'mp4'
       );
+      const base = {
+        id: `match-${Date.now()}-${i}`,
+        mockupId: mockup.id,
+        mockupName: mockup.name,
+        mockupApparel: mockup.apparelType,
+        folderId: batchFolderId,
+        folderName: batchFolderName,
+        folderOrderIndex: i + 1,
+        designId: design.id,
+        designName: design.name,
+        designTarget: design.targetApparel || 'both',
+        exportFileName,
+      };
 
       if (mockup.isVideo) {
-        results.push({
-          id: `match-${Date.now()}-${i}`,
-          mockupId: mockup.id,
-          mockupName: mockup.name,
-          mockupApparel: mockup.apparelType,
-          folderId: batchFolderId,
-          folderName: batchFolderName,
-          folderOrderIndex: i + 1,
-          designId: design.id,
-          designName: design.name,
-          designTarget: design.targetApparel || 'both',
-          previewUrl: mockup.src,
-          exportFileName,
-          format: 'video/mp4',
-          isVideo: true,
-          mimeType: mockup.mimeType || 'video/mp4',
-        });
-      } else {
-        // The mockup editor is the single source of truth for crop/aspect.
-        // Batch generation must not apply a second user-selected crop.
-        const exportAspect = mockup.exportAspect || 'original';
-
-        try {
-          const dataUrl = await renderMockupWithDesign(mockup, design, {
-            outputFormat: exportFormat,
-            quality: outputQuality,
-            exportAspect,
-          });
-
-          results.push({
-            id: `match-${Date.now()}-${i}`,
-            mockupId: mockup.id,
-            mockupName: mockup.name,
-            mockupApparel: mockup.apparelType,
-            folderId: batchFolderId,
-            folderName: batchFolderName,
-            folderOrderIndex: i + 1,
-            designId: design.id,
-            designName: design.name,
-            designTarget: design.targetApparel || 'both',
-            previewUrl: dataUrl,
-            exportFileName,
-            format: exportFormat,
-            isVideo: false,
-          });
-        } catch (err) {
-          console.error(`Mockup render error for #${i + 1}:`, err);
-        }
+        slots[i] = { ...base, previewUrl: mockup.src, format: 'video/mp4', isVideo: true, mimeType: mockup.mimeType || 'video/mp4' };
+        return;
       }
 
-      const currentProgress = Math.round(((i + 1) / currentPairs.length) * 100);
-      setExportProgress(currentProgress);
-      toast.updateProgressToast(
-        genToastId,
-        currentProgress,
-        `Görseller üretiliyor... (${i + 1}/${currentPairs.length})`
-      );
-    }
+      // Sunucuda üretim: statik görsel (beden tablosu vb.) olduğu gibi kullanılır, diğerlerine tasarım basılır.
+      if (serverRender && isStoredUrl(mockup.src) && (isStaticAsset || isStoredUrl(design.src))) {
+        if (isStaticAsset) {
+          slots[i] = { ...base, previewUrl: mockup.src, format: exportFormat, isVideo: false };
+          return;
+        }
+        const res = await fetch('/api/production/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mockup: { src: mockup.src, printAreas: mockup.printAreas, opacity: mockup.opacity, exportAspect: mockup.exportAspect || 'original' },
+            design: { src: design.src },
+          }),
+        }).catch(() => null);
+        const data = res?.ok ? await res.json().catch(() => null) as { url?: string } | null : null;
+        if (data?.url) {
+          slots[i] = { ...base, previewUrl: data.url, format: exportFormat, isVideo: false };
+          return;
+        }
+        serverFailures++;
+      }
+
+      // Tarayıcıda üretim. The mockup editor is the single source of truth for crop/aspect.
+      try {
+        const dataUrl = await renderMockupWithDesign(mockup, design, {
+          outputFormat: exportFormat,
+          quality: outputQuality,
+          exportAspect: mockup.exportAspect || 'original',
+        });
+        slots[i] = { ...base, previewUrl: dataUrl, format: exportFormat, isVideo: false };
+      } catch (err) {
+        console.error(`Mockup render error for #${i + 1}:`, err);
+      }
+    };
+
+    const queue = currentPairs.map((_, i) => i);
+    const workers = Array.from({ length: Math.min(serverRender ? 4 : 1, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const i = queue.shift()!;
+        await renderPair(i);
+        done++;
+        const currentProgress = Math.round((done / currentPairs.length) * 100);
+        setExportProgress(currentProgress);
+        toast.updateProgressToast(genToastId, currentProgress, `Görseller üretiliyor... (${done}/${currentPairs.length})`);
+      }
+    });
+    await Promise.all(workers);
+    const results = slots.filter((m): m is RenderedMatch => m !== null);
+    if (serverFailures > 0) console.warn(`[Production] ${serverFailures} görsel sunucuda üretilemedi; tarayıcıda üretildi.`);
 
     setRenderedMatches(results);
     setHasGenerated(true);
@@ -291,7 +308,9 @@ export function useBatchGenerator({
 
     setIsGenerating(true);
     setExportProgress(0);
-    const uploadToastId = toast.progress('Görseller ilan için yükleniyor...', 5);
+    // Sunucuda üretilen görseller zaten depodadır; yalnızca tarayıcıda üretilenler yüklenir.
+    const needsUpload = renderedMatches.some((m) => m.previewUrl.startsWith('blob:') || m.previewUrl.startsWith('data:'));
+    const uploadToastId = toast.progress(needsUpload ? 'Görseller ilan için yükleniyor...' : 'Hazır İlanlar\'a ekleniyor...', 5);
 
     try {
       const uploadedUrls: string[] = new Array(renderedMatches.length);
@@ -318,7 +337,7 @@ export function useBatchGenerator({
         completedCount++;
         const pct = Math.round((completedCount / renderedMatches.length) * 90);
         setExportProgress(pct);
-        toast.updateProgressToast(uploadToastId, pct, `Görseller yükleniyor... (${completedCount}/${renderedMatches.length})`);
+        if (needsUpload) toast.updateProgressToast(uploadToastId, pct, `Görseller yükleniyor... (${completedCount}/${renderedMatches.length})`);
       };
 
       const queue = Array.from({ length: renderedMatches.length }, (_, idx) => idx);

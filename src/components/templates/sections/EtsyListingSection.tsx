@@ -19,6 +19,42 @@ interface EtsyListingSectionProps {
   variant?: 'full' | 'store';
   /** Ayarlar sekmesinde: otomasyona özel açıklama ve eksik alan listesi gösterilmez */
   embedded?: boolean;
+  /** Önceden yüklenmiş mağaza seçenekleri (sayfa her şey hazır olunca açılsın diye) */
+  preloadedOptions?: StoreOptions | null;
+}
+
+const STORE_OPTIONS_TTL_MS = 5 * 60_000;
+let storeOptionsCache: { at: number; promise: Promise<StoreOptions> } | null = null;
+
+/**
+ * Bağlı Etsy mağazasının seçenekleri (kargo profilleri, hazırlık süreleri, iade politikaları, bölümler, üretim
+ * ortakları). Sekmeler arası geçişte yeniden beklenmesin diye birkaç dakika önbellekte tutulur.
+ */
+export function loadEtsyStoreOptions(force = false): Promise<StoreOptions> {
+  if (!force && storeOptionsCache && Date.now() - storeOptionsCache.at < STORE_OPTIONS_TTL_MS) return storeOptionsCache.promise;
+  const empty: StoreOptions = { connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [], partners: [] };
+  const promise = (async () => {
+    const data = await fetch('/api/etsy/shipping-profiles').then((r) => r.json());
+    if (!data.connected) return empty;
+    const [policies, sections, partners] = await Promise.all([
+      fetch('/api/etsy/return-policies').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/etsy/shop-sections').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/etsy/production-partners').then((r) => r.json()).catch(() => ({})),
+    ]);
+    return {
+      connected: true,
+      profiles: data.profiles || [],
+      readinessStates: data.readinessStates || [],
+      returnPolicies: policies.returnPolicies || [],
+      sections: sections.sections || [],
+      partners: partners.partners || [],
+    };
+  })().catch(() => {
+    storeOptionsCache = null;
+    return empty;
+  });
+  storeOptionsCache = { at: Date.now(), promise };
+  return promise;
 }
 
 export const DEFAULT_ETSY_LISTING_SETTINGS: PodTemplateEtsyListingSettings = {
@@ -37,7 +73,7 @@ const TAXONOMY_PRESETS = [
 
 type TaxonomyOption = { id: number; name: string; path: string | null };
 
-type StoreOptions = {
+export type StoreOptions = {
   connected: boolean;
   profiles: EtsyShippingProfile[];
   readinessStates: EtsyReadinessState[];
@@ -63,10 +99,10 @@ export function getEtsyListingSettingsErrors(schedule: PodTemplateAutomationSche
 const selectClass = 'w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/40 text-slate-800 dark:text-slate-100';
 const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
 
-export function EtsyListingSection({ schedule, onChange, variant = 'full', embedded = false }: EtsyListingSectionProps) {
+export function EtsyListingSection({ schedule, onChange, variant = 'full', embedded = false, preloadedOptions }: EtsyListingSectionProps) {
   const storeOnly = variant === 'store';
-  const [options, setOptions] = useState<StoreOptions | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [options, setOptions] = useState<StoreOptions | null>(preloadedOptions ?? null);
+  const [isLoading, setIsLoading] = useState(!preloadedOptions);
   const [categories, setCategories] = useState<TaxonomyOption[]>([]);
   const createListing = storeOnly || schedule.createListing === true;
   const etsy = { ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy };
@@ -77,35 +113,13 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full', embed
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await fetch('/api/etsy/shipping-profiles');
-        const data = await res.json();
-        if (!data.connected) {
-          if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [], partners: [] });
-          return;
-        }
-        const [policies, sections, partners] = await Promise.all([
-          fetch('/api/etsy/return-policies').then((r) => r.json()).catch(() => ({})),
-          fetch('/api/etsy/shop-sections').then((r) => r.json()).catch(() => ({})),
-          fetch('/api/etsy/production-partners').then((r) => r.json()).catch(() => ({})),
-        ]);
+    if (!preloadedOptions) {
+      void loadEtsyStoreOptions().then((loaded) => {
         if (cancelled) return;
-        setOptions({
-          connected: true,
-          profiles: data.profiles || [],
-          readinessStates: data.readinessStates || [],
-          returnPolicies: policies.returnPolicies || [],
-          sections: sections.sections || [],
-          partners: partners.partners || [],
-        });
-      } catch {
-        if (!cancelled) setOptions({ connected: false, profiles: [], readinessStates: [], returnPolicies: [], sections: [], partners: [] });
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-    void load();
+        setOptions(loaded);
+        setIsLoading(false);
+      });
+    }
     // Admin panelinde etkinleştirilen kategoriler; yoksa kategori kimliği elle girilir.
     fetch('/api/etsy/taxonomy')
       .then((r) => (r.ok ? r.json() : null))
@@ -114,7 +128,7 @@ export function EtsyListingSection({ schedule, onChange, variant = 'full', embed
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [preloadedOptions]);
 
   const partnerIds = etsy.productionPartnerIds ?? [];
   const togglePartner = (id: string, checked: boolean) => {

@@ -12,14 +12,16 @@ import { useAuth } from '@/components/common/UserAuthContext';
 import { useTheme } from '@/components/common/ThemeProvider';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
-import { EtsyListingSection } from '@/components/templates/sections/EtsyListingSection';
+import { EtsyListingSection, loadEtsyStoreOptions, type StoreOptions } from '@/components/templates/sections/EtsyListingSection';
+import { TabSkeleton } from '@/components/common/LoadingScreens';
+import type { EtsyVariationTemplate } from '@/types/pod';
 import {
   missingListingSettings,
   normalizeListingDefaults,
   type ListingDefaults,
 } from '@/lib/listing-defaults';
 import type { PodTemplateAutomationSchedule } from '@/types/templates';
-import { VariationTemplatesPanel } from './VariationTemplatesPanel';
+import { loadVariationTemplates, VariationTemplatesPanel } from './VariationTemplatesPanel';
 
 const cardClass = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-4';
 const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
@@ -41,23 +43,24 @@ export function SettingsPanel() {
   const [defaults, setDefaults] = useState<ListingDefaults | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [etsyConnected, setEtsyConnected] = useState<boolean | null>(null);
+  // Sayfa, tüm bölümlerin verisi (ilan ayarları, Etsy mağazası, varyasyon şablonları) hazır olunca bir kerede açılır.
+  const [storeOptions, setStoreOptions] = useState<StoreOptions | null>(null);
+  const [variationTemplates, setVariationTemplates] = useState<EtsyVariationTemplate[] | null>(null);
+  const etsyConnected = storeOptions?.connected ?? null;
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/settings/listing', { cache: 'no-store' })
+    const listing = fetch('/api/settings/listing', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        const loaded = normalizeListingDefaults(data?.defaults);
-        setDefaults(loaded);
-        setSavedSnapshot(JSON.stringify(loaded));
-      })
-      .catch(() => { if (!cancelled) setDefaults(normalizeListingDefaults(null)); });
-    fetch('/api/etsy/shipping-profiles')
-      .then((r) => r.json())
-      .then((data) => { if (!cancelled) setEtsyConnected(Boolean(data?.connected)); })
-      .catch(() => { if (!cancelled) setEtsyConnected(false); });
+      .then((data) => normalizeListingDefaults(data?.defaults))
+      .catch(() => normalizeListingDefaults(null));
+    void Promise.all([listing, loadEtsyStoreOptions(), loadVariationTemplates()]).then(([loaded, options, templates]) => {
+      if (cancelled) return;
+      setDefaults(loaded);
+      setSavedSnapshot(JSON.stringify(loaded));
+      setStoreOptions(options);
+      setVariationTemplates(templates);
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -69,8 +72,8 @@ export function SettingsPanel() {
     [defaults?.etsy],
   );
 
-  if (!defaults) {
-    return <div className="flex items-center gap-2 text-sm text-slate-500 p-6"><Spinner className="w-4 h-4" /> Ayarlar yükleniyor…</div>;
+  if (!defaults || !storeOptions || !variationTemplates) {
+    return <div className="max-w-3xl mx-auto"><TabSkeleton label="Ayarlar yükleniyor" layout="list" /></div>;
   }
 
   const update = (patch: Partial<ListingDefaults>) => setDefaults({ ...defaults, ...patch });
@@ -164,6 +167,7 @@ export function SettingsPanel() {
           variant="store"
           embedded
           schedule={schedule}
+          preloadedOptions={storeOptions}
           onChange={(next) => update({ etsy: { ...defaults.etsy, ...next.etsy } })}
         />
       </section>
@@ -171,7 +175,7 @@ export function SettingsPanel() {
       {/* Varyasyonlar: kayıtlı şablonlar (otomasyonlarda ve Hazır İlanlar'da manuel ilanlar için seçilir) */}
       <section className={cardClass} aria-label="Varyasyonlar">
         <SectionTitle icon={Layers} title="Varyasyonlar" hint="Beden × renk şablonları. Otomasyonlar klasör ayarında, Üretim'den gelen ilanlar ise Hazır İlanlar'da yayından önce buradaki bir şablonu kullanır." />
-        <VariationTemplatesPanel />
+        <VariationTemplatesPanel initialTemplates={variationTemplates} />
       </section>
 
       {/* Kaydet: değişiklik varken altta sabit */}

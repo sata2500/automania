@@ -84,11 +84,11 @@ export const BatchHeader: React.FC<BatchHeaderProps> = ({
           <button
             onClick={onCreateListing}
             disabled={isGenerating || renderedMatchesCount === 0 || exportProgress !== null}
-            className="btn btn-success flex-1 sm:flex-initial"
-            title="Görselleri yükler ve ilanı Hazır İlanlar'a ekler; başlık, etiket ve açıklama otomatik hazırlanır."
+            className="btn btn-success w-full sm:w-auto order-last sm:order-none whitespace-nowrap"
+            title="Üretilen görsellerle ilanı Hazır İlanlar'a ekler; başlık, etiket ve açıklama otomatik hazırlanır."
           >
             <ListPlus className="w-3.5 h-3.5" />
-            <span>İlan Oluştur</span>
+            <span>Hazır İlanlara Ekle</span>
           </button>
         )}
 

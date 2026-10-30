@@ -43,24 +43,30 @@ const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)))
 
 type Draft = { id: string | null; name: string; rows: EtsyVariationRow[] };
 
-export function VariationTemplatesPanel() {
+/** Kayıtlı varyasyon şablonlarını okur (Ayarlar sekmesi her şey hazır açılsın diye önceden de çağrılır). */
+export async function loadVariationTemplates(): Promise<EtsyVariationTemplate[]> {
+  try {
+    const data = await fetch('/api/workspace/variation-templates', { cache: 'no-store' }).then((r) => r.json());
+    return (Array.isArray(data?.templates) ? data.templates : []).filter((t: EtsyVariationTemplate) => t?.id).map(cleanTemplate);
+  } catch {
+    return [];
+  }
+}
+
+export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates?: EtsyVariationTemplate[] }) {
   const toast = useToast();
-  const [templates, setTemplates] = useState<EtsyVariationTemplate[] | null>(null);
+  const [templates, setTemplates] = useState<EtsyVariationTemplate[] | null>(initialTemplates ?? null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [savedDraft, setSavedDraft] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (initialTemplates) return;
     let cancelled = false;
-    fetch('/api/workspace/variation-templates', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setTemplates((Array.isArray(data?.templates) ? data.templates : []).filter((t: EtsyVariationTemplate) => t?.id).map(cleanTemplate));
-      })
-      .catch(() => { if (!cancelled) setTemplates([]); });
+    void loadVariationTemplates().then((loaded) => { if (!cancelled) setTemplates(loaded); });
     return () => { cancelled = true; };
-  }, []);
+  }, [initialTemplates]);
 
   const openDraft = (next: Draft) => {
     setDraft(next);

@@ -16,21 +16,37 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
+import { useAuth } from '@/components/common/UserAuthContext';
 import { ListingDetailModal } from './ListingDetailModal';
 import { BulkActionModal, BulkActionType } from './BulkActionModal';
 
 import type { StoredEtsyListing } from '@/types/etsy';
 import { Spinner } from '@/components/common/Spinner';
+import { TabSkeleton } from '@/components/common/LoadingScreens';
 import { formatListingState } from '@/lib/etsy-format';
 
 type EtsyListingRecord = StoredEtsyListing;
+type ListingStats = {
+  total: number; active: number; draft: number; inactive: number; other: number; avgScore: number;
+  totalViews: number; totalFavorites: number; analyzedCount: number;
+  lastSyncedAt: string | null; hoursSinceLastSync: number | null; isStale: boolean;
+};
+
+/**
+ * Son yüklenen ilanlar ve istatistikler (sekmeler arası geçişte ekran beklemeden, hazır açılsın; arka planda
+ * sessizce yenilenir). Yalnızca bu oturumun belleğinde tutulur.
+ */
+let listingsCache: { userId: string; listings: EtsyListingRecord[]; stats: ListingStats } | null = null;
 
 export const EtsyListingManager: React.FC = () => {
   const { success, error, warning } = useToast();
+  const { user } = useAuth();
+  // Önbellek yalnızca aynı hesap için kullanılır.
+  const cached = listingsCache && listingsCache.userId === user?.id ? listingsCache : null;
 
   // Data state
-  const [listings, setListings] = useState<EtsyListingRecord[]>([]);
-  const [stats, setStats] = useState({
+  const [listings, setListings] = useState<EtsyListingRecord[]>(() => cached?.listings ?? []);
+  const [stats, setStats] = useState<ListingStats>(() => cached?.stats ?? {
     total: 0,
     active: 0,
     draft: 0,
@@ -44,6 +60,12 @@ export const EtsyListingManager: React.FC = () => {
     hoursSinceLastSync: null as number | null,
     isStale: false
   });
+  // İlk açılışta sayfa, ilanlar ve istatistikler hazır olunca bir kerede gösterilir.
+  const [initialLoaded, setInitialLoaded] = useState(() => cached !== null);
+  const openedFromCacheRef = useRef(cached !== null);
+  useEffect(() => {
+    if (initialLoaded && user?.id) listingsCache = { userId: user.id, listings, stats };
+  }, [listings, stats, initialLoaded, user?.id]);
 
   // UI / Filter state
   const [isLoading, setIsLoading] = useState(true);
@@ -104,15 +126,16 @@ export const EtsyListingManager: React.FC = () => {
 
   // Fetch listings from DB cache
   const fetchListings = useCallback(async (isInitial = false) => {
-    setIsLoading(true);
+    // Önbellekten açıldıysa yenileme sessizdir (ekrandaki liste kaybolmaz).
+    if (!(isInitial && openedFromCacheRef.current)) setIsLoading(true);
     try {
       const res = await fetch('/api/etsy/listings');
       const data = await res.json();
 
       if (data.success) {
+        if (data.stats) setStats(data.stats);
         setListings(data.listings || []);
         if (data.stats) {
-          setStats(data.stats);
 
           // Check if data is older than 24 hours (or never synced) on initial page load
           if (isInitial && !hasCheckedAutoSyncRef.current) {
@@ -130,6 +153,7 @@ export const EtsyListingManager: React.FC = () => {
       error('İlanlar sunucudan alınamadı.');
     } finally {
       setIsLoading(false);
+      setInitialLoaded(true);
     }
   }, [error, triggerAutoSync]);
 
@@ -322,6 +346,8 @@ export const EtsyListingManager: React.FC = () => {
     { key: 'inactive', label: 'Pasif', count: stats.inactive },
     ...(stats.other > 0 ? [{ key: 'sold_out', label: 'Tükendi', count: 0 }, { key: 'expired', label: 'Süresi doldu', count: 0 }] : []),
   ];
+
+  if (!initialLoaded) return <TabSkeleton label="Etsy ilanları yükleniyor" layout="list" />;
 
   return (
     <div className="space-y-4">
