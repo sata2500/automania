@@ -25,6 +25,7 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
 
       const uploadToastId = toast.progress('Tasarımlar optimize ediliyor...', 10);
       let uploadedCount = 0;
+      let serverCount = 0;
       let savedBytesTotal = 0;
       const newDesigns: DesignItem[] = [];
 
@@ -36,6 +37,7 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
           // Dosya doğrudan sunucuda işlendiyse ölçüler kırpılmış hâlindir; tarayıcı yedeğinden geçenler
           // Tasarımlar sekmesindeki arka plan bakımıyla bir kez daha işlenir (ölçüler de düzelir).
           const serverProcessed = !optimized.dataUrl && Boolean(optimized.url);
+          if (serverProcessed) serverCount++;
           savedBytesTotal += Math.max(0, optimized.originalSize - optimized.optimizedSize);
           newDesigns.push({
             id: 'design-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + i,
@@ -59,7 +61,7 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
           );
         } catch (err) {
           console.error('Tasarım optimizasyon hatası:', err);
-          toast.error(`'${file.name}' yüklenirken hata oluştu.`);
+          toast.error(`'${file.name}' yüklenemedi: ${err instanceof Error ? err.message : 'bilinmeyen hata'}`);
         }
       }
 
@@ -75,7 +77,9 @@ export function useDesignUpload({ setDesigns }: UseDesignUploadProps) {
       toast.removeToast(uploadToastId);
       if (uploadedCount > 0) {
         const savedMb = (savedBytesTotal / (1024 * 1024)).toFixed(1);
-        toast.success(`${uploadedCount} tasarım yüklendi; boşlukları kırpıldı ve kayıpsız PNG olarak saklandı (${savedMb} MB tasarruf).`);
+        toast.success(serverCount > 0
+          ? `${uploadedCount} tasarım yüklendi; boşlukları kırpıldı ve kayıpsız PNG olarak saklandı (${savedMb} MB tasarruf).`
+          : `${uploadedCount} tasarım bu cihaza kayıpsız PNG olarak kaydedildi.`);
       }
       setIsOptimizing(false);
     },

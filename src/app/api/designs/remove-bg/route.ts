@@ -23,14 +23,18 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
 
+
+/** Misafir (oturumsuz) istek: yalnızca tarayıcıdan gönderilen görsel (data URL) işlenir, sonuç saklanmaz. */
+function guestKey(req: NextRequest): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthoritativeSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const rateLimit = await checkRateLimit(`image:remove-bg:${session.id}`, 30, 10 * 60_000);
+    const rateLimit = session
+      ? await checkRateLimit(`image:remove-bg:${session.id}`, 30, 10 * 60_000)
+      : await checkRateLimit(`image:remove-bg:guest:${guestKey(req)}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Arka plan kaldırma limiti aşıldı. Lütfen biraz sonra tekrar deneyin.' }, {
         status: 429,
@@ -53,7 +57,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Görsel boyutu geçersiz veya çok büyük.' }, { status: 413 });
       }
     } else if (typeof imageUrl === 'string' && imageUrl.length > 0) {
-      input = await loadImageForUser(session.id, imageUrl, { appOrigin: req.nextUrl.origin });
+      if (!session && !imageUrl.startsWith('data:')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      input = await loadImageForUser(session?.id ?? 'guest', imageUrl, { appOrigin: req.nextUrl.origin });
     } else {
       return NextResponse.json({ error: 'imageData veya imageUrl zorunludur.' }, { status: 400 });
     }
@@ -87,7 +92,7 @@ export async function POST(req: NextRequest) {
 
     let bgRemovedUrl: string | undefined;
     // imageUrl verildiyse ve R2 kuruluysa sonucu kullanıcının alanına yükleyip URL dönelim
-    if (imageUrl && isR2Configured()) {
+    if (session && imageUrl && isR2Configured()) {
       // Depoda kayıpsız, en yüksek sıkıştırmalı PNG olarak saklanır.
       const stored = await optimizeImageForStorage(pngBuffer, 'image/png', 'design');
       const fileName = createOwnedUploadName(session.id, 'bg-removed', stored.mimeType);

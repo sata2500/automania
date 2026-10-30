@@ -17,7 +17,8 @@ interface DesignToolbarProps {
   analyzingIds: string[];
   onToggleSelectAll: () => void;
   onBulkDelete: () => void;
-  onBulkAnalyze: () => void;
+  /** Yoksa (misafir) toplu analiz gösterilmez. */
+  onBulkAnalyze?: () => void;
 }
 
 export const DesignToolbar: React.FC<DesignToolbarProps> = ({
@@ -90,7 +91,7 @@ export const DesignToolbar: React.FC<DesignToolbarProps> = ({
         {/* Action Buttons for Selected Items */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Bulk Analyze */}
-          <button
+          {onBulkAnalyze && <button
             onClick={onBulkAnalyze}
             disabled={selectedDesignIds.length === 0 || analyzingIds.length > 0}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200/50 dark:border-purple-800/40 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -98,7 +99,7 @@ export const DesignToolbar: React.FC<DesignToolbarProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Toplu Analiz</span>
-          </button>
+          </button>}
 
           {/* Bulk Delete */}
           <button

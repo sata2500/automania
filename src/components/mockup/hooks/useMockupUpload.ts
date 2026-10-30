@@ -220,7 +220,7 @@ export function useMockupUpload({
           );
         } catch (err) {
           console.error('Mockup/Video optimizasyon hatası:', err);
-          toast.error(`'${file.name}' yüklenirken hata oluştu.`);
+          toast.error(`'${file.name}' yüklenemedi: ${err instanceof Error ? err.message : 'bilinmeyen hata'}`);
         }
       }
 

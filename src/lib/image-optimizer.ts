@@ -4,6 +4,20 @@
  * without visual quality loss, and persist them via server upload API (Cloudflare R2).
  */
 
+/**
+ * Oturum açılmış mı (yerel oturum kaydına bakar). Misafirin dosyaları sunucuya yüklenmez: tarayıcıda
+ * (IndexedDB) saklanır; sunucuya boşuna istek atılıp reddedilmesi yüklemeyi yavaşlatıyordu.
+ */
+function isSignedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const saved = localStorage.getItem('automania_pod_user_session');
+    return Boolean(saved && JSON.parse(saved)?.id);
+  } catch {
+    return false;
+  }
+}
+
 export interface OptimizedImageResult {
   dataUrl: string;
   url: string;
@@ -83,6 +97,7 @@ function readUploadInfo(json: Record<string, unknown>): UploadInfo | null {
  * Sunucu kullanılamıyorsa (misafir, depolama yok) null döner.
  */
 async function uploadOriginalForServerOptimization(file: File, optimize: 'design' | 'photo'): Promise<UploadInfo | null> {
+  if (!isSignedIn()) return null;
   try {
     if (file.size > CHUNK_BYTES) return await uploadInChunks(file, { optimize });
     const formData = new FormData();
@@ -114,6 +129,11 @@ export async function uploadMediaToServer(
 
   let fileToUpload: File | null = null;
   let rawDataUrl: string | null = null;
+
+  // Misafir: dosya tarayıcıda kalır (sunucu isteği yapılmaz).
+  if (!isSignedIn() && !options.requireDurable) {
+    return dataUrlOrFile instanceof File ? blobToDataUrl(dataUrlOrFile) : dataUrlOrFile;
+  }
 
   try {
     if (dataUrlOrFile instanceof File) {
@@ -389,9 +409,12 @@ function loadImageSource(
         URL.revokeObjectURL(objectUrl);
         resolve({ img, originalSize });
       };
-      img.onerror = (err) => {
+      img.onerror = () => {
         URL.revokeObjectURL(objectUrl);
-        reject(err);
+        const heic = /\.(heic|heif)$/i.test(source.name) || /heic|heif/i.test(source.type);
+        reject(new Error(heic
+          ? 'HEIC/HEIF biçimi tarayıcıda açılamıyor; görseli JPG veya PNG olarak kaydedip tekrar yükleyin.'
+          : 'Görsel açılamadı (bozuk dosya veya desteklenmeyen biçim). JPG, PNG veya WebP olarak tekrar deneyin.'));
       };
       img.src = objectUrl;
     }

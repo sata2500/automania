@@ -195,7 +195,6 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   // --- Remove Background Handler ---
   const handleRemoveBgClick = async (design: DesignItem) => {
     if (!design.src) return;
-    if (!requireAccount('Arka plan kaldırma')) return;
 
     const toastId = toast.progress('Arka plan kaldırılıyor...');
     try {
@@ -230,7 +229,6 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
   // --- Recolor Handler ---
   const handleRecolorClick = async (design: DesignItem, mode: 'light_garment' | 'dark_garment') => {
     if (!design.src) return;
-    if (!requireAccount('Renk uyarlama')) return;
 
     const actionText = mode === 'dark_garment' ? 'Koyu kumaş versiyonu hazırlanıyor…' : 'Açık kumaş versiyonu hazırlanıyor…';
     const toastId = toast.progress(actionText);
@@ -294,8 +292,8 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
 
       {/* Main Studio Design Cards Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
-        {/* Bölümler: kullanıcının tasarımları ve otomasyonların ürettikleri (en yeniden eskiye) */}
-        <div role="tablist" aria-label="Tasarım bölümleri" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80">
+        {/* Bölümler: kullanıcının tasarımları ve otomasyonların ürettikleri (en yeniden eskiye); misafirde otomasyon yok */}
+        {user && <div role="tablist" aria-label="Tasarım bölümleri" className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80">
           {([
             ['mine', 'Tasarımlarım', User],
             ['automation', 'Otomasyon', Bot],
@@ -315,7 +313,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
               </button>
             );
           })}
-        </div>
+        </div>}
         {activeTask && (
           <p className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 -mt-1" role="status">
             <Spinner className="w-3.5 h-3.5" />
@@ -355,7 +353,7 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           analyzingIds={analyzingIds}
           onToggleSelectAll={handleToggleSelectAll}
           onBulkDelete={handleBulkDelete}
-          onBulkAnalyze={handleBulkAnalyze}
+          onBulkAnalyze={user ? handleBulkAnalyze : undefined}
         />
 
         {/* Dynamic Responsive Design Grid */}
@@ -366,13 +364,13 @@ export const DesignUploader: React.FC<DesignUploaderProps> = ({
           onToggleCheck={toggleManagementSelection}
           onToggleProductionActive={handleToggleProductionActive}
           onSetProductionActive={handleSetProductionActive}
-          onAnalyzeClick={(design) => {
+          onAnalyzeClick={user ? (design) => {
             if (design.analysis) {
               setAnalysisModalData(design);
             } else {
               handleAnalyzeDesign(design.id);
             }
-          }}
+          } : undefined}
           onCropClick={(design) => setCropTargetDesign(design)}
           onRenameClick={(design) => setRenameTarget(design)}
           searchQuery={searchQuery}

@@ -272,7 +272,31 @@ export function getStorageKeys(overrideUserId?: string | null) {
     ETSY_CUSTOM_COLORS: `${prefix}automania_etsy_custom_colors_v1`,
     ETSY_GENERATED_MOCKUPS: `${prefix}automania_etsy_generated_mockups_v1`,
     ETSY_FOLDER_ORDER: `${prefix}automania_etsy_folder_order_v1`,
+    LAST_RENDERS: `${prefix}automania_last_renders_v1`,
   };
+}
+
+/**
+ * Üretim sekmesindeki son üretim sonuçları: yalnızca bu cihazda (IndexedDB) saklanır; sayfa yenilense de
+ * bir sonraki üretime veya kullanıcı silene kadar görünür.
+ */
+export async function loadLastRenders(): Promise<RenderedMatch[]> {
+  try {
+    const saved = await get<RenderedMatch[] | null>(getStorageKeys().LAST_RENDERS);
+    return Array.isArray(saved) ? saved.filter((m) => m?.previewUrl && !m.previewUrl.startsWith('blob:')) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveLastRenders(matches: RenderedMatch[]): Promise<void> {
+  const key = getStorageKeys().LAST_RENDERS;
+  try {
+    if (matches.length === 0) await del(key);
+    else await set(key, matches);
+  } catch (error) {
+    console.warn('[Storage] Last renders could not be saved locally:', error);
+  }
 }
 
 /**

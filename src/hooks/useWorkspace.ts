@@ -18,6 +18,8 @@ import {
   countLocalOnlyMedia,
   promoteTemporaryMediaUrls,
   subscribeRemoteWorkspace,
+  loadLastRenders,
+  saveLastRenders,
 } from '@/lib/storage-service';
 import { get } from 'idb-keyval';
 import { mergeWorkspaceChanges } from '@/lib/workspace-merge';
@@ -384,6 +386,29 @@ export function useWorkspace() {
     await persistNow();
     return !hasSaveConflictRef.current;
   }, [applyLoadedCollections, persistNow]);
+
+  // Son üretim sonuçları bu cihazda saklanır: açılışta (oturum değişince de) geri yüklenir.
+  const rendersLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!isInitialized) return;
+    let cancelled = false;
+    rendersLoadedRef.current = false;
+    void loadLastRenders().then((saved) => {
+      if (cancelled) return;
+      if (saved.length > 0) {
+        setRenderedMatches((current) => (current.length > 0 ? current : saved));
+        setHasGenerated(true);
+      }
+      rendersLoadedRef.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [isInitialized, user?.id]);
+
+  useEffect(() => {
+    if (!isInitialized || !rendersLoadedRef.current) return;
+    const timer = setTimeout(() => { void saveLastRenders(renderedMatches); }, 500);
+    return () => clearTimeout(timer);
+  }, [renderedMatches, isInitialized]);
 
   // Auto-save UI state locally
   useEffect(() => {

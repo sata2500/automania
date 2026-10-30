@@ -8,7 +8,8 @@ interface DesignItemMenuProps {
   position: { top: number; left: number } | null;
   isAnalyzing: boolean;
   onClose: () => void;
-  onAnalyze: (design: DesignItem) => void;
+  /** Yoksa (misafir) yapay zekâ analizi gösterilmez. */
+  onAnalyze?: (design: DesignItem) => void;
   onCrop: (design: DesignItem) => void;
   onRename?: (design: DesignItem) => void;
   onRemoveBg?: (design: DesignItem) => void;
@@ -95,7 +96,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
       className="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl py-1.5 min-w-[200px] text-xs animate-in fade-in zoom-in-95 duration-100"
     >
       {/* AI Analysis */}
-      <button
+      {onAnalyze && <button
         onClick={() => {
           onClose();
           onAnalyze(design);
@@ -105,7 +106,7 @@ export const DesignItemMenu: React.FC<DesignItemMenuProps> = ({
       >
         <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
         <span>{design.analysis ? 'Analiz Sonucunu Gör' : 'Yapay Zeka ile Analiz Et'}</span>
-      </button>
+      </button>}
 
       {/* Download (orijinal çözünürlükte, baskı merkezine iletmek için) */}
       <button

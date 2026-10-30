@@ -9,14 +9,18 @@ import { loadImageForUser, MediaSourceError } from '@/lib/media-source';
 
 export const maxDuration = 60;
 
+
+/** Misafir (oturumsuz) istek: yalnızca tarayıcıdan gönderilen görsel (data URL) işlenir, sonuç saklanmaz. */
+function guestKey(req: NextRequest): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthoritativeSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const rateLimit = await checkRateLimit(`image:recolor:${session.id}`, 30, 10 * 60_000);
+    const rateLimit = session
+      ? await checkRateLimit(`image:recolor:${session.id}`, 30, 10 * 60_000)
+      : await checkRateLimit(`image:recolor:guest:${guestKey(req)}`, 10, 10 * 60_000);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Renk dönüştürme limiti aşıldı. Lütfen biraz sonra tekrar deneyin.' }, {
         status: 429,
@@ -35,7 +39,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Geçersiz mod.' }, { status: 400 });
     }
 
-    const input = await loadImageForUser(session.id, imageUrl, { appOrigin: req.nextUrl.origin });
+    if (!session && !imageUrl.startsWith('data:')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const input = await loadImageForUser(session?.id ?? 'guest', imageUrl, { appOrigin: req.nextUrl.origin });
     const result = await recolorDesign(input, mode);
     if (!result.hasTransparency) {
       return NextResponse.json({ error: 'Tasarımın arka planı saydam değil. Kumaşa uyarlamadan önce "Arka planı kaldır" ile zemini kaldırın.' }, { status: 422 });
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     let recoloredUrl: string;
-    if (isR2Configured()) {
+    if (session && isR2Configured()) {
       const stored = await optimizeImageForStorage(result.pngBuffer, 'image/png', 'design');
       const fileName = createOwnedUploadName(session.id, `recolor-${mode}`, stored.mimeType);
       const uploadResult = await uploadToR2(stored.buffer, fileName, stored.mimeType);

@@ -16,7 +16,8 @@ interface DesignCardProps {
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
-  onAnalyzeClick: (design: DesignItem) => void;
+  /** Yoksa (misafir) yapay zekâ analizi gösterilmez. */
+  onAnalyzeClick?: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
   onRenameClick?: (design: DesignItem) => void;
   onRemoveBgClick?: (design: DesignItem) => void;

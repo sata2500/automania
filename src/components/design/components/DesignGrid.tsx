@@ -10,7 +10,8 @@ interface DesignGridProps {
   onToggleCheck: (id: string) => void;
   onToggleProductionActive: (id: string) => void;
   onSetProductionActive: (id: string, target: TargetApparel) => void;
-  onAnalyzeClick: (design: DesignItem) => void;
+  /** Yoksa (misafir) yapay zekâ analizi gösterilmez. */
+  onAnalyzeClick?: (design: DesignItem) => void;
   onCropClick: (design: DesignItem) => void;
   onRenameClick?: (design: DesignItem) => void;
   /** Arama yapılıyorsa boş durum mesajı buna göre gösterilir */
