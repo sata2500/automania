@@ -9,6 +9,8 @@ import { createGoogleClient, loadGoogleConnection } from '@/lib/google-genai-cli
 
 export class AiTextConfigError extends Error {}
 
+export type AiImage = { buffer: Buffer; mimeType: string };
+
 export type AiJsonOptions = {
   /** Günlükler için kısa ad */
   label: string;
@@ -16,7 +18,7 @@ export type AiJsonOptions = {
   temperature: number;
   maxOutputTokens?: number;
   /** Modele birlikte gönderilecek görsel (ör. tasarım). Model görsel kabul etmezse görselsiz denenir. */
-  image?: { buffer: Buffer; mimeType: string } | null;
+  image?: AiImage | null;
   /** Web araması (Google: Google Search aracı; OpenRouter: web eklentisi). Desteklenmezse aramasız denenir. */
   webSearch?: boolean;
 };
@@ -32,20 +34,34 @@ export function extractJsonObject(content: string): unknown {
 }
 
 export async function generateReasoningJson(prompt: string, options: AiJsonOptions): Promise<{ data: unknown; model: string }> {
-  const rows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', 'openrouter_model_reasoning', 'gemini_model_reasoning']);
+  return generateJson('reasoning', prompt, options.image ? [options.image] : [], options);
+}
+
+/** Görsel modeliyle (admin › görsel analiz modeli) birden çok görsel üzerinden JSON üretimi; kısa sınıflandırmalar için. */
+export async function generateVisionJson(prompt: string, images: AiImage[], options: Omit<AiJsonOptions, 'image' | 'webSearch'>): Promise<{ data: unknown; model: string }> {
+  return generateJson('vision', prompt, images, { ...options, strictImages: true });
+}
+
+async function generateJson(
+  role: 'reasoning' | 'vision',
+  prompt: string,
+  images: AiImage[],
+  options: AiJsonOptions & { strictImages?: boolean },
+): Promise<{ data: unknown; model: string }> {
+  const rows = await loadSettingRows(['active_ai_provider', 'openrouter_api_key', `openrouter_model_${role}`, `gemini_model_${role}`]);
   const settings = Object.fromEntries(rows.map((row) => [row.setting_key, row.setting_value])) as Record<string, string | undefined>;
   const provider = settings.active_ai_provider || 'openrouter';
   const googleConnection = provider === 'gemini' ? await loadGoogleConnection() : null;
   const apiKey = provider === 'gemini' ? null : (settings.openrouter_api_key || process.env.OPENROUTER_API_KEY);
   if (provider === 'gemini' ? !googleConnection : !apiKey) throw new AiTextConfigError('Sistem API anahtarı (Admin) yapılandırılmamış.');
-  const model = requireModel(provider === 'gemini' ? settings.gemini_model_reasoning : settings.openrouter_model_reasoning, 'reasoning');
+  const model = requireModel(provider === 'gemini' ? settings[`gemini_model_${role}`] : settings[`openrouter_model_${role}`], role);
 
-  const call = (image: AiJsonOptions['image'], webSearch: boolean) => withAiRetry(async () => {
+  const call = (withImages: AiImage[], webSearch: boolean) => withAiRetry(async () => {
     if (provider === 'gemini') {
       const res = await createGoogleClient(googleConnection!).models.generateContent({
         model,
-        contents: image
-          ? [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.buffer.toString('base64') } }] }]
+        contents: withImages.length > 0
+          ? [{ role: 'user', parts: [{ text: prompt }, ...withImages.map((image) => ({ inlineData: { mimeType: image.mimeType, data: image.buffer.toString('base64') } }))] }]
           : prompt,
         config: {
           temperature: options.temperature,
@@ -68,8 +84,8 @@ export async function generateReasoningJson(prompt: string, options: AiJsonOptio
         ...(webSearch ? { plugins: [{ id: 'web', max_results: 5 }] } : {}),
         messages: [{
           role: 'user',
-          content: image
-            ? [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString('base64')}` } }]
+          content: withImages.length > 0
+            ? [{ type: 'text', text: prompt }, ...withImages.map((image) => ({ type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString('base64')}` } }))]
             : prompt,
         }],
       }),
@@ -79,16 +95,17 @@ export async function generateReasoningJson(prompt: string, options: AiJsonOptio
     return String(data.choices?.[0]?.message?.content || '');
   }, { label: options.label, delaysMs: [4_000, 10_000] });
 
-  const extras = Boolean(options.image) || Boolean(options.webSearch);
+  // Görselin kendisi sorulduğunda (strictImages) görselsiz denemenin anlamı yoktur.
+  const extras = !options.strictImages && (images.length > 0 || Boolean(options.webSearch));
   let content: string;
   try {
-    content = await call(options.image ?? null, Boolean(options.webSearch));
+    content = await call(images, Boolean(options.webSearch));
     if (extras) extractJsonObject(content);
   } catch (error) {
     if (!extras) throw error;
     // Görsel veya web araması bu modelde/sağlayıcıda desteklenmiyorsa iş durmaz: yalnızca metinle denenir.
     console.warn(`[AI text] ${options.label}: image/web search call failed; retrying text-only.`, error instanceof Error ? error.message : error);
-    content = await call(null, false);
+    content = await call([], false);
   }
 
   return { data: extractJsonObject(content), model };

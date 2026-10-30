@@ -456,7 +456,7 @@ export type ProductionDraftInput = {
     id?: string | null;
     url?: string | null;
     name: string;
-    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string; productType?: string; taxonomyId?: number | null } | null;
+    analysis?: { description?: string; keywords?: string[]; primarySubject?: string; primaryAesthetic?: string; productType?: string } | null;
   };
   folderId?: string | null;
   folderName?: string;
@@ -473,14 +473,13 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  // Kategori ve ürün tipi tasarımın analizinden gelir (yapay zekâ admin panelindeki aktif Etsy kategorilerinden
-  // seçer; analizde yoksa Ayarlar'daki kategori). Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
+  // Kategori ilan metni hazırlanırken mockup fotoğraflarından seçilir (bkz. listing-category); buradaki
+  // Ayarlar'daki kategori yalnızca seçilemezse kullanılır. Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
   // Varyasyonlar Hazır İlanlar'da yayından önce kayıtlı bir şablon seçilerek eklenir.
   const productType = analysis.productType?.trim() || 'T-shirt';
   const sku = generateListingSku(productType);
-  const taxonomyId = Number(analysis.taxonomyId) > 0 ? Math.trunc(Number(analysis.taxonomyId)) : null;
   const settings: ManualListingSettings = {
-    etsy: { ...defaults.etsy, ...(taxonomyId ? { taxonomyId } : {}) },
+    etsy: defaults.etsy,
     variations: [],
     variationTemplateId: null,
     variationTemplateName: null,

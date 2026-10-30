@@ -34,6 +34,7 @@ import { sanitizeEtsyTags } from '@/lib/etsy-format';
 import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
 import { generateBestListing } from '@/lib/listing-pipeline';
+import { pickListingCategory } from '@/lib/listing-category';
 import { loadStoreCopyFacts } from '@/lib/listing-copy';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
@@ -725,7 +726,17 @@ function rankedInsightKeywords(insight: { vision: DesignVisionResult; scored: Sc
 async function runSeo(ctx: StepContext): Promise<StepResult> {
   const { template, userId, run } = ctx;
   if (template.automationSchedule?.createListing !== true) throw new StepSkipped('Kuru çalıştırma: SEO ve ilan adımları kapalı.');
-  const hints = runHints(ctx);
+  // Fotoğraf alt metinleri için mockup adımının fotoğraf tanımları (eski çalıştırmalarda yalnızca sıra).
+  const photoUrls = (run.generatedMockupUrls as string[] | null) ?? [];
+  const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
+  // Manuel ilanda kategoriyi ürünü gösteren mockup'lar belirler (tasarım dosyası ürün türünü bilemez; aynı ilanda
+  // farklı ürünler olabilir). Otomasyonda kategori şablonda seçilidir.
+  const category = template.id === MANUAL_TEMPLATE_ID
+    ? await pickListingCategory(userId, photoUrls.filter((_, i) => !/static info image/.test(photoLabels[i] ?? '')))
+      .catch((error: unknown) => { console.warn('[Automation] Listing category could not be picked', describeAiError(error)); return null; })
+    : null;
+  const baseHints = runHints(ctx);
+  const hints = category && baseHints ? { ...baseHints, productType: category.productType } : baseHints;
   const research = ctx.steps?.nicheResearch?.output as NicheResearchOutput | undefined;
   // Tasarım görseli bir kez yüklenir: otomasyonda analiz edilir, ilan metnini yazan modele de gönderilir.
   const designImage = await designImageForAi(ctx);
@@ -736,14 +747,11 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
 
   const designPrompt = String((run.steps as AutomationRunSteps | null)?.designGeneration?.output?.prompt || buildDesignConcept(hints));
   const subject = detectPrimarySubject(`${hints?.primaryNiche || ''} ${designPrompt}`);
-  const taxonomyId = template.automationSchedule?.etsy?.taxonomyId;
+  const taxonomyId = category?.taxonomyId ?? template.automationSchedule?.etsy?.taxonomyId;
   // Mağaza bölümü elle seçilmediyse yapay zekâ mağazadaki bölümlerden en uygununu seçer.
   const shopSections = template.automationSchedule?.etsy?.shopSectionId ? [] : await loadShopSections(userId);
   // Kategori özellikleri (kol boyu, yaka, vesile, grafik…) Etsy'den çekilir; yapay zekâ tasarıma göre seçer.
   const { properties: taxonomyProperties, error: propertiesError } = await loadCategoryProperties(userId, taxonomyId);
-  // Fotoğraf alt metinleri için mockup adımının fotoğraf tanımları (eski çalıştırmalarda yalnızca sıra).
-  const photoUrls = (run.generatedMockupUrls as string[] | null) ?? [];
-  const photoLabels = stringList((ctx.steps?.mockupRender?.output as { photos?: unknown } | undefined)?.photos, photoUrls.length);
   const images = photoUrls.map((_, i) => photoLabels[i] ?? 'listing photo of the product');
   // Tasarımın görsel analizi (otomasyonda bu adımda yapılır; Üretim'den gelen ilanda tasarımın kendi analizi).
   const design = {
@@ -838,7 +846,7 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
   return {
     patch: { generatedSeo: seo },
     output: {
-      model: result.modelUsed, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount,
+      model: result.modelUsed, category: category?.name ?? null, tagCount: seo.tags.length, shopSection: chosenSection?.title ?? null, attributes: propertyCount,
       seoScore: result.evaluation.score, seoAttempts: result.attempts, aiReviewed: Boolean(result.aiReview),
       designAnalysis: insight ? { keywords: insight.vision.keywords.length, scored: insight.scored.scraped, pending: insight.scored.pending.length } : null,
       altTexts: seo.imageAltTexts?.filter(Boolean).length ?? 0,
@@ -913,7 +921,8 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
     validTags: tags,
     price: etsy.price,
     quantity: 999,
-    taxonomyId: Number(etsy.taxonomyId),
+    // İlan metni yazılırken kullanılan kategori (manuel ilanda mockup'lardan seçilir; özellikler ona göredir).
+    taxonomyId: Number(seo.taxonomyId || etsy.taxonomyId),
     who_made: etsy.whoMade,
     when_made: etsy.whenMade,
     is_supply: false,
