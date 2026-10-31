@@ -2,11 +2,11 @@
 
 /**
  * Hazır İlanlar › ilan penceresi. Üstte ilanın hazırlık durumu (fotoğraf, başlık, etiket, açıklama, varyasyon),
- * üç sekme: Görseller (sıra, kapak, alt metin, video), İlan metni (SKU, başlık, etiketler, açıklama) ve
+ * üç sekme: Görseller (sürükle-bırak sıra, kapak, alt metin, indirme, video), İlan metni (SKU, başlık, etiketler, açıklama) ve
  * Varyasyonlar. Alttaki sabit çubukta kaydet, zamanla, yayınla ve reddet bulunur. Telefonda tam ekran açılır.
  */
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, ExternalLink, Eye, EyeOff, Images, Layers, Rocket, RotateCcw, Save, Settings, Star, Trash2, Type, X } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ExternalLink, Images, Layers, Rocket, RotateCcw, Save, Settings, Trash2, Type, X } from 'lucide-react';
 import { openAppTab } from '@/lib/app-navigation';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
@@ -14,8 +14,8 @@ import { useToast } from '@/components/common/ToastContext';
 import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } from './format';
 import type { ReviewItemView } from './types';
 import { SeoBreakdown } from '@/components/listings/SeoBreakdown';
+import { ReviewPhotosPanel, type PhotoRow } from './ReviewPhotosPanel';
 
-type PhotoRow = { url: string; included: boolean; alt: string };
 type EditorTab = 'photos' | 'text' | 'variations';
 
 const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30';
@@ -200,8 +200,6 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
     ...(item.variations ? [{ key: 'variations', label: variationsMissing ? 'Varyasyon yok' : `${item.variations.enabled} varyasyon`, ok: !variationsMissing, tab: 'variations' as const }] : []),
   ];
   const seoEvaluation = item.seo?.evaluation;
-  const current = photos[Math.min(activePhoto, photos.length - 1)];
-  const currentIndex = Math.min(activePhoto, photos.length - 1);
 
   const tabs: Array<{ key: EditorTab; label: string; icon: typeof Images; alert?: boolean }> = [
     { key: 'photos', label: 'Görseller', icon: Images },
@@ -292,72 +290,18 @@ export function ListingReviewEditor({ item, onClose, onChanged }: { item: Review
           )}
 
           {tab === 'photos' && (
-            <>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Fotoğraflar bu sırayla gönderilir; ilki ilanın kapağıdır. Bir fotoğrafa dokunup sırasını, alt metnini ve ilana eklenip eklenmeyeceğini düzenleyin.</p>
-              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                {photos.map((photo, index) => (
-                  <button
-                    key={photo.url}
-                    type="button"
-                    onClick={() => setActivePhoto(index)}
-                    aria-label={`Fotoğraf ${index + 1}${photo.included ? '' : ' (ilana eklenmiyor)'}`}
-                    className={`relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 ${index === currentIndex ? 'ring-2 ring-indigo-500' : ''}`}
-                  >
-                    <img src={photo.url} alt="" loading="lazy" className={`w-full h-full object-cover ${photo.included ? '' : 'opacity-35 grayscale'}`} />
-                    <span className="absolute top-1 left-1 min-w-5 h-5 px-1 rounded-md bg-slate-900/75 text-white text-[10px] font-bold flex items-center justify-center">{index + 1}</span>
-                    {index === 0 && photo.included && <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-bold flex items-center gap-0.5"><Star className="w-2.5 h-2.5 fill-current" />Kapak</span>}
-                    {!photo.included && <span className="absolute inset-0 flex items-center justify-center"><EyeOff className="w-5 h-5 text-slate-700 dark:text-slate-200" /></span>}
-                  </button>
-                ))}
-              </div>
-
-              {current && (
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col sm:flex-row gap-3">
-                  <img src={current.url} alt={current.alt || `Fotoğraf ${currentIndex + 1}`} className="w-full sm:w-44 aspect-square object-cover rounded-xl bg-slate-100 dark:bg-slate-800" />
-                  <div className="flex-1 min-w-0 space-y-2.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 mr-auto">Fotoğraf {currentIndex + 1}</span>
-                      {editable && (
-                        <>
-                          <button type="button" aria-label="Sola taşı" disabled={currentIndex === 0} onClick={() => movePhoto(currentIndex, currentIndex - 1)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowLeft className="w-3.5 h-3.5" /></button>
-                          <button type="button" aria-label="Sağa taşı" disabled={currentIndex === photos.length - 1} onClick={() => movePhoto(currentIndex, currentIndex + 1)} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30"><ArrowRight className="w-3.5 h-3.5" /></button>
-                          <button type="button" disabled={currentIndex === 0} onClick={() => movePhoto(currentIndex, 0)} className="px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-bold flex items-center gap-1 disabled:opacity-30"><Star className="w-3.5 h-3.5" /> Kapak yap</button>
-                          <button
-                            type="button"
-                            onClick={() => updatePhoto(currentIndex, { included: !current.included })}
-                            className={`px-2.5 py-2 rounded-lg text-[11px] font-bold flex items-center gap-1 ${current.included ? 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200' : 'bg-indigo-600 text-white'}`}
-                          >
-                            {current.included ? <><EyeOff className="w-3.5 h-3.5" /> Çıkar</> : <><Eye className="w-3.5 h-3.5" /> Ekle</>}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <label className="block">
-                      <span className={labelClass}>Alt metin <span className="font-normal text-slate-400">({current.alt.length}/250)</span></span>
-                      <textarea
-                        value={current.alt}
-                        disabled={!editable}
-                        maxLength={250}
-                        rows={3}
-                        placeholder="Görselin kısa tarifi (görmeyen alıcılar ve arama için)"
-                        onChange={(e) => updatePhoto(currentIndex, { alt: e.target.value })}
-                        className={`${inputClass} resize-none`}
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {item.videoUrl && (
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 flex gap-3 items-center">
-                  <video src={item.videoUrl} controls muted playsInline className="w-28 sm:w-40 rounded-xl bg-black" />
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={includeVideo} disabled={!editable} onChange={(e) => change(setIncludeVideo)(e.target.checked)} />
-                    Videoyu ilana ekle
-                  </label>
-                </div>
-              )}
-            </>
+            <ReviewPhotosPanel
+              photos={photos}
+              editable={editable}
+              activeIndex={activePhoto}
+              onActivate={setActivePhoto}
+              onMove={movePhoto}
+              onUpdate={updatePhoto}
+              videoUrl={item.videoUrl}
+              includeVideo={includeVideo}
+              onIncludeVideo={change(setIncludeVideo)}
+              fileBase={sku || item.sku || 'ilan'}
+            />
           )}
 
           {tab === 'text' && (
