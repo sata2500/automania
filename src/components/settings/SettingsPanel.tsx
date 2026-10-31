@@ -1,32 +1,20 @@
 'use client';
 
 /**
- * Ayarlar sekmesi: hesap, görünüm, Etsy mağazası, mağaza ayarları ve kayıtlı varyasyon şablonları.
- * Mağaza ayarları tüm ilanlarda kullanılır (otomasyon şablonunda boş bırakılanlar buradan tamamlanır);
- * varyasyonlar otomasyonda veya Hazır İlanlar'da kayıtlı şablonlardan seçilir.
+ * Ayarlar sekmesi: hesap, görünüm, Etsy mağazası ve kayıtlı varyasyon şablonları. İlanın mağaza ayarları
+ * (kargo, hazırlık, iade…), ürün bilgisi ve varsayılan varyasyonu her mockup klasöründe seçilir (Klasör ayarları).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { FileText, Layers, Monitor, Moon, Package, Save, Store, Sun, User } from 'lucide-react';
+import { Layers, Monitor, Moon, Store, Sun, User } from 'lucide-react';
 import { useAuth } from '@/components/common/UserAuthContext';
 import { useTheme } from '@/components/common/ThemeProvider';
-import { useToast } from '@/components/common/ToastContext';
-import { Spinner } from '@/components/common/Spinner';
-import { EtsyListingSection, loadEtsyStoreOptions, type StoreOptions } from '@/components/templates/sections/EtsyListingSection';
+import { loadEtsyStoreOptions, type StoreOptions } from '@/components/templates/sections/EtsyListingSection';
 import { TabSkeleton } from '@/components/common/LoadingScreens';
 import type { EtsyVariationTemplate } from '@/types/pod';
-import { isFreeShippingProfile } from '@/lib/etsy-shipping';
-import {
-  missingListingSettings,
-  normalizeListingDefaults,
-  processingTimeText,
-  type ListingDefaults,
-} from '@/lib/listing-defaults';
-import type { PodTemplateAutomationSchedule } from '@/types/templates';
 import { loadVariationTemplates, VariationTemplatesPanel } from './VariationTemplatesPanel';
 
 const cardClass = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-4';
-const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
 const labelClass = 'block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5';
 
 function SectionTitle({ icon: Icon, title, hint }: { icon: React.ElementType; title: string; hint?: string }) {
@@ -41,63 +29,24 @@ function SectionTitle({ icon: Icon, title, hint }: { icon: React.ElementType; ti
 export function SettingsPanel() {
   const { user, setIsAuthModalOpen } = useAuth();
   const { theme, setTheme } = useTheme();
-  const toast = useToast();
-  const [defaults, setDefaults] = useState<ListingDefaults | null>(null);
-  const [savedSnapshot, setSavedSnapshot] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  // Sayfa, tüm bölümlerin verisi (ilan ayarları, Etsy mağazası, varyasyon şablonları) hazır olunca bir kerede açılır.
+  // Sayfa, tüm bölümlerin verisi (Etsy mağazası, varyasyon şablonları) hazır olunca bir kerede açılır.
   const [storeOptions, setStoreOptions] = useState<StoreOptions | null>(null);
   const [variationTemplates, setVariationTemplates] = useState<EtsyVariationTemplate[] | null>(null);
   const etsyConnected = storeOptions?.connected ?? null;
 
   useEffect(() => {
     let cancelled = false;
-    const listing = fetch('/api/settings/listing', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => normalizeListingDefaults(data?.defaults))
-      .catch(() => normalizeListingDefaults(null));
-    void Promise.all([listing, loadEtsyStoreOptions(), loadVariationTemplates()]).then(([loaded, options, templates]) => {
+    void Promise.all([loadEtsyStoreOptions(), loadVariationTemplates()]).then(([options, templates]) => {
       if (cancelled) return;
-      setDefaults(loaded);
-      setSavedSnapshot(JSON.stringify(loaded));
       setStoreOptions(options);
       setVariationTemplates(templates);
     });
     return () => { cancelled = true; };
   }, []);
 
-  const dirty = defaults !== null && JSON.stringify(defaults) !== savedSnapshot;
-  const missing = defaults ? missingListingSettings(defaults) : [];
-
-  const schedule = useMemo<PodTemplateAutomationSchedule>(
-    () => ({ createListing: true, etsy: defaults?.etsy } as PodTemplateAutomationSchedule),
-    [defaults?.etsy],
-  );
-
-  if (!defaults || !storeOptions || !variationTemplates) {
+  if (!storeOptions || !variationTemplates) {
     return <div className="max-w-3xl mx-auto"><TabSkeleton label="Ayarlar yükleniyor" layout="list" /></div>;
   }
-
-  const update = (patch: Partial<ListingDefaults>) => setDefaults({ ...defaults, ...patch });
-  const detectedFreeShipping = isFreeShippingProfile(storeOptions.profiles.find((p) => String(p.shipping_profile_id) === String(defaults.etsy.shippingProfileId)));
-  const processing = processingTimeText(storeOptions.readinessStates.find((r) => String(r.readiness_state_id) === String(defaults.etsy.readinessStateId)));
-
-  const save = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch('/api/settings/listing', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(defaults) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) throw new Error(data.error || 'Ayarlar kaydedilemedi.');
-      const saved = normalizeListingDefaults(data.defaults);
-      setDefaults(saved);
-      setSavedSnapshot(JSON.stringify(saved));
-      toast.success('Ayarlar kaydedildi. Yeni ilanlar bu ayarlarla hazırlanacak.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Ayarlar kaydedilemedi.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-4 max-w-3xl mx-auto pb-24">
@@ -151,76 +100,12 @@ export function SettingsPanel() {
         </div>
       </section>
 
-      {/* İlan varsayılanları */}
-      <section className={cardClass} aria-label="İlan varsayılanları">
-        <SectionTitle icon={Package} title="Mağaza ayarları" hint="Tüm ilanlarda kullanılır (Üretim'den oluşturulanlar ve otomasyonlarda boş bırakılanlar). Kategori ve ürün tipi her klasörün otomasyonunda belirlenir." />
-        {missing.length > 0 && (
-          <p className="text-xs rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 p-2.5">
-            Yayınlamak için seçilmesi gereken: <strong>{missing.join(', ')}</strong>.
-          </p>
-        )}
-        <div>
-          <label className={labelClass} htmlFor="set-whomade">Kim üretti?</label>
-          <select id="set-whomade" className={inputClass} value={defaults.etsy.whoMade} onChange={(e) => update({ etsy: { ...defaults.etsy, whoMade: e.target.value as ListingDefaults['etsy']['whoMade'] } })}>
-            <option value="i_did">Ben tasarladım (POD)</option>
-            <option value="someone_else">Başka biri / üretim ortağı</option>
-            <option value="collective">Ekip (kolektif)</option>
-          </select>
-        </div>
-        <EtsyListingSection
-          variant="store"
-          embedded
-          schedule={schedule}
-          preloadedOptions={storeOptions}
-          onChange={(next) => update({ etsy: { ...defaults.etsy, ...next.etsy } })}
-        />
-      </section>
-
-      {/* İlan metni: yapay zekâ açıklamada ürün bilgisi olarak yalnızca bunu kullanır; kargo ve süre Etsy'den gelir */}
-      <section className={cardClass} aria-label="İlan metni bilgileri">
-        <SectionTitle icon={FileText} title="İlan metni bilgileri" hint="Yapay zekâ açıklamayı yazarken ürün özelliği olarak yalnızca bunu kullanır (uydurmaz); bakım talimatını da buna göre yazar. İngilizce yazın." />
-        <div>
-          <label className={labelClass} htmlFor="copy-productInfo">Ürün bilgisi</label>
-          <textarea
-            id="copy-productInfo"
-            rows={2}
-            maxLength={300}
-            className={`${inputClass} resize-none`}
-            placeholder="Ör. Comfort Colors 1717, 100% ring-spun cotton, garment-dyed, relaxed fit"
-            value={defaults.copy.productInfo}
-            onChange={(e) => update({ copy: { ...defaults.copy, productInfo: e.target.value } })}
-          />
-        </div>
-        <ul className="text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
-          <li>
-            <strong className="text-slate-600 dark:text-slate-300">Kargo:</strong>{' '}
-            {detectedFreeShipping === null
-              ? 'kargo profilinden anlaşılamadı; açıklamada kargo ücretinden söz edilmez.'
-              : detectedFreeShipping ? 'ABD\'ye ücretsiz (kargo profilinden) — açıklamada belirtilir.' : 'ücretli (kargo profilinden) — açıklamada ücretsiz kargo yazılmaz.'}
-          </li>
-          <li>
-            <strong className="text-slate-600 dark:text-slate-300">Hazırlık süresi:</strong>{' '}
-            {processing ? `${processing} (Etsy'deki hazırlık süresinden).` : 'hazırlık süresi seçilince açıklamaya eklenir.'}
-          </li>
-        </ul>
-      </section>
-
-      {/* Varyasyonlar: kayıtlı şablonlar (otomasyonlarda ve Hazır İlanlar'da manuel ilanlar için seçilir) */}
+      {/* Varyasyonlar: kayıtlı şablonlar (mockup klasörlerinde varsayılan olarak, Hazır İlanlar'da da seçilir) */}
       <section className={cardClass} aria-label="Varyasyonlar">
-        <SectionTitle icon={Layers} title="Varyasyonlar" hint="Beden × renk şablonları. Otomasyonlar klasör ayarında, Üretim'den gelen ilanlar ise Hazır İlanlar'da yayından önce buradaki bir şablonu kullanır." />
+        <SectionTitle icon={Layers} title="Varyasyonlar" hint="Beden × renk şablonları. Her mockup klasörü Klasör ayarları'nda bir şablonu varsayılan seçer; Hazır İlanlar'da ilan bazında değiştirilebilir." />
         <VariationTemplatesPanel initialTemplates={variationTemplates} />
       </section>
 
-      {/* Kaydet: değişiklik varken altta sabit */}
-      <div className={`fixed left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+88px)] lg:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[28rem] z-40 transition-all ${dirty ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl">
-          <span className="flex-1 text-xs font-semibold text-slate-600 dark:text-slate-300 px-1">Kaydedilmemiş değişiklikler var</span>
-          <button type="button" onClick={() => { setDefaults(JSON.parse(savedSnapshot || 'null') ?? normalizeListingDefaults(null)); }} className="px-3 py-2 rounded-xl text-xs font-bold text-slate-500">Vazgeç</button>
-          <button type="button" onClick={() => void save()} disabled={isSaving} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-60">
-            {isSaving ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} Kaydet
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

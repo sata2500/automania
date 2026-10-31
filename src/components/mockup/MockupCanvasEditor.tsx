@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { FolderPlus, Sparkles, Image as ImageIcon } from 'lucide-react';
-import type { EtsyVariationTemplate, MockupItem, MockupFolder } from '@/types/pod';
+import type { MockupItem, MockupFolder } from '@/types/pod';
 import { uploadMediaToServer } from '@/lib/image-optimizer';
 import { deleteUnreferencedBlobs } from '@/lib/storage-service';
 import { useToast } from '@/components/common/ToastContext';
@@ -14,9 +14,7 @@ import { MockupSidebarList } from './components/MockupSidebarList';
 import { MockupCanvasWorkspace } from './components/MockupCanvasWorkspace';
 import { MockupSettingsPanel } from './components/MockupSettingsPanel';
 import { MockupMobileDrawer } from './components/MockupMobileDrawer';
-import { MockupFolderModal } from './components/MockupFolderModal';
-import type { TaxonomyOption } from '@/components/templates/sections/CategoryPicker';
-import { loadVariationTemplates } from '@/components/settings/VariationTemplatesPanel';
+import { MockupFolderModal, type FolderSettingsPatch } from './components/MockupFolderModal';
 import { FolderTemplateDialog } from '../templates/FolderTemplateDialog';
 
 // Hooks
@@ -104,36 +102,8 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   const [templatePanelFolder, setTemplatePanelFolder] = useState<MockupFolder | null>(null);
   const closeTemplatePanel = useCallback(() => setTemplatePanelFolder(null), []);
 
-  // Folder Modal State (Create / Rename)
-  const [folderModalState, setFolderModalState] = useState<{
-    isOpen: boolean;
-    isEditing: boolean;
-    folderId: string | null;
-    folderName: string;
-    taxonomyId: number;
-    variationTemplateId: string;
-  }>({
-    isOpen: false,
-    isEditing: false,
-    folderId: null,
-    folderName: '',
-    taxonomyId: 0,
-    variationTemplateId: '',
-  });
-  // Klasör ayarlarının seçenekleri: ürün kategorisi ve varyasyon şablonları (yalnızca giriş yapılmışken; pencere ilk
-  // açıldığında yüklenir).
-  const [categories, setCategories] = useState<TaxonomyOption[] | null>(null);
-  const [variationTemplates, setVariationTemplates] = useState<EtsyVariationTemplate[] | null>(null);
-  const folderOptionsRequested = useRef(false);
-  useEffect(() => {
-    if (!user || !folderModalState.isOpen || folderOptionsRequested.current) return;
-    folderOptionsRequested.current = true;
-    fetch('/api/etsy/taxonomy')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setCategories(Array.isArray(d?.categories) ? d.categories : []))
-      .catch(() => setCategories([]));
-    void loadVariationTemplates().then(setVariationTemplates);
-  }, [user, folderModalState.isOpen]);
+  // Klasör ayarları penceresi (yeni klasör veya düzenlenen klasör)
+  const [folderModal, setFolderModal] = useState<{ isOpen: boolean; folder: MockupFolder | null }>({ isOpen: false, folder: null });
 
   // Etkin klasördeki mockup'lar ("Tüm Mockup'lar" görünümü yoktur; klasör yoksa liste boştur).
   const filteredMockups = mockups.filter((m) => activeFolderId !== null && m.folderId === activeFolderId);
@@ -323,70 +293,25 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
   );
 
   // Folder Operations
-  const handleOpenNewFolderModal = useCallback(() => {
-    setFolderModalState({
-      isOpen: true,
-      isEditing: false,
-      folderId: null,
-      folderName: '',
-      taxonomyId: 0,
-      variationTemplateId: '',
-    });
-  }, []);
+  const handleOpenNewFolderModal = useCallback(() => setFolderModal({ isOpen: true, folder: null }), []);
 
-  const handleOpenRenameFolderModal = useCallback((folder: MockupFolder) => {
-    setFolderModalState({
-      isOpen: true,
-      isEditing: true,
-      folderId: folder.id,
-      folderName: folder.name,
-      taxonomyId: folder.taxonomyId ?? 0,
-      variationTemplateId: folder.variationTemplateId ?? '',
-    });
-  }, []);
+  const handleOpenRenameFolderModal = useCallback((folder: MockupFolder) => setFolderModal({ isOpen: true, folder }), []);
 
-  const handleFolderModalSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      const cleanName = folderModalState.folderName.trim();
-      if (!cleanName) return;
-      const category = categories?.find((c) => c.id === folderModalState.taxonomyId);
-      const categoryFields = category ? { taxonomyId: category.id, categoryName: category.name } : {};
-      // Şablonlar yüklenmediyse (misafir veya hızlı kayıt) klasörün mevcut varyasyon seçimi korunur.
-      const variation = variationTemplates?.find((t) => t.id === folderModalState.variationTemplateId);
-      const variationFields = variationTemplates
-        ? { variationTemplateId: variation?.id, variationTemplateName: variation?.name }
-        : {};
-
-      if (folderModalState.isEditing && folderModalState.folderId) {
-        setMockupFolders((prev) =>
-          prev.map((f) => (f.id === folderModalState.folderId ? { ...f, name: cleanName, ...categoryFields, ...variationFields } : f))
-        );
+  const handleFolderModalSave = useCallback(
+    (patch: FolderSettingsPatch) => {
+      const editing = folderModal.folder;
+      if (editing) {
+        setMockupFolders((prev) => prev.map((f) => (f.id === editing.id ? { ...f, ...patch } : f)));
         toast.success('Klasör güncellendi!');
       } else {
-        const newFolder: MockupFolder = {
-          id: 'folder-' + Date.now(),
-          name: cleanName,
-          isCustom: true,
-          type: 'mockup',
-          ...categoryFields,
-          ...variationFields,
-        };
+        const newFolder: MockupFolder = { ...patch, id: 'folder-' + Date.now(), isCustom: true, type: 'mockup' };
         setMockupFolders((prev) => [...prev, newFolder]);
         setActiveFolderId(newFolder.id);
         toast.success(`'${newFolder.name}' klasörü oluşturuldu!`);
       }
-
-      setFolderModalState({
-        isOpen: false,
-        isEditing: false,
-        folderId: null,
-        folderName: '',
-        taxonomyId: 0,
-        variationTemplateId: '',
-      });
+      setFolderModal({ isOpen: false, folder: null });
     },
-    [folderModalState, categories, variationTemplates, setMockupFolders, setActiveFolderId, toast]
+    [folderModal.folder, setMockupFolders, setActiveFolderId, toast]
   );
 
   const handleDuplicateFolder = useCallback(
@@ -651,22 +576,12 @@ export const MockupCanvasEditor: React.FC<MockupCanvasEditorProps> = ({
 
       {/* 5. Modals */}
       <MockupFolderModal
-        isOpen={folderModalState.isOpen}
-        isEditing={folderModalState.isEditing}
-        folderName={folderModalState.folderName}
-        setFolderName={(name) =>
-          setFolderModalState((prev) => ({ ...prev, folderName: name }))
-        }
-        onClose={() =>
-          setFolderModalState((prev) => ({ ...prev, isOpen: false }))
-        }
-        onSubmit={handleFolderModalSubmit}
-        categories={user ? categories : null}
-        taxonomyId={folderModalState.taxonomyId}
-        setTaxonomyId={(id) => setFolderModalState((prev) => ({ ...prev, taxonomyId: id }))}
-        variationTemplates={user ? variationTemplates : null}
-        variationTemplateId={folderModalState.variationTemplateId}
-        setVariationTemplateId={(id) => setFolderModalState((prev) => ({ ...prev, variationTemplateId: id }))}
+        isOpen={folderModal.isOpen}
+        folder={folderModal.folder}
+        prefillFrom={mockupFolders.find((f) => f.id === activeFolderId) ?? null}
+        showListingSettings={Boolean(user)}
+        onClose={() => setFolderModal({ isOpen: false, folder: null })}
+        onSave={handleFolderModalSave}
       />
 
       {selectedMockup && (

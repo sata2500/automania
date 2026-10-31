@@ -6,7 +6,9 @@
 import sql from '@/lib/db';
 import { generateVisionJson, type AiImage } from '@/lib/ai-text';
 import { loadImageForUser } from '@/lib/media-source';
-import type { EtsyVariationRow, EtsyVariationTemplate, MockupFolder } from '@/types/pod';
+import type { EtsyVariationRow, EtsyVariationTemplate, FolderEtsySettings, MockupFolder } from '@/types/pod';
+import type { AudienceGroup } from '@/types/templates';
+import { folderListingFields } from '@/lib/folder-listing';
 
 export type ListingCategory = { taxonomyId: number; name: string; productType: string };
 
@@ -72,14 +74,20 @@ export type FolderListingSettings = {
   category: { taxonomyId: number; name: string } | null;
   /** Klasörün varsayılan varyasyon şablonu (güncel satırlarıyla); seçili değilse veya şablon silindiyse null */
   variations: { templateId: string; templateName: string; rows: EtsyVariationRow[] } | null;
+  audienceGroup?: AudienceGroup;
+  garments: string[];
+  productInfo: string;
+  /** Klasörün Etsy mağaza ayarları (boş alanlar yazılmaz; yedek ayar kullanılır) */
+  etsy: FolderEtsySettings;
 };
 
 /**
- * Mockup klasörünün ilan ayarları (Mockup'lar › klasör menüsü › Klasör ayarları): ürün kategorisi ve varsayılan
- * varyasyon şablonu. Klasör = bir Etsy ilanı; manuel ilanlar ve otomasyonlar bunları kullanır.
+ * Mockup klasörünün ilan ayarları (Mockup'lar › klasör menüsü › Klasör ayarları): ürün kategorisi, varsayılan
+ * varyasyon şablonu, kitle, ürün modelleri, ürün bilgisi ve Etsy mağaza ayarları. Klasör = bir Etsy ilanı;
+ * manuel ilanlar ve otomasyonlar bunları kullanır.
  */
 export async function loadFolderListingSettings(userId: string, folderId: string | null | undefined): Promise<FolderListingSettings> {
-  const empty: FolderListingSettings = { category: null, variations: null };
+  const empty: FolderListingSettings = { category: null, variations: null, garments: [], productInfo: '', etsy: {} };
   if (!folderId) return empty;
   const rows = await sql`
     SELECT f AS folder, etsy_variation_templates AS templates
@@ -95,5 +103,6 @@ export async function loadFolderListingSettings(userId: string, folderId: string
   return {
     category: Number.isInteger(taxonomyId) && taxonomyId > 0 ? { taxonomyId, name: String(folder.categoryName || '') } : null,
     variations: template?.variations?.length ? { templateId: template.id, templateName: template.name, rows: template.variations } : null,
+    ...folderListingFields(folder),
   };
 }

@@ -6,7 +6,7 @@
 import { and, desc, eq, inArray, or, sql as drizzleSql } from 'drizzle-orm';
 import { db, sql } from '@/lib/db';
 import { automationRuns, podTemplates, userWorkspaces } from '@/db/schema';
-import { buildListingRequest, type RunRow, type TemplateRow } from '@/lib/automation-runner';
+import { applyFolderListingSettings, buildListingRequest, type RunRow, type TemplateRow } from '@/lib/automation-runner';
 import { createEtsyDraftListing } from '@/lib/etsy-listing-service';
 import { etsyFetch, readEtsyError } from '@/lib/etsy-api';
 import { getValidEtsyToken } from '@/lib/etsy-token-manager';
@@ -17,6 +17,7 @@ import { sanitizeSku } from '@/lib/sku';
 import { MAX_ETSY_PHOTOS } from '@/lib/etsy-preflight';
 import { evaluateEtsyListingSeo } from '@/lib/etsy-seo-evaluator';
 import { poolRowsForTags } from '@/lib/listing-pipeline';
+import { mergeFolderEtsy } from '@/lib/folder-listing';
 import type {
   AutomationRunSteps,
   GeneratedSeoData,
@@ -317,6 +318,15 @@ export async function publishReviewItem(userId: string, runId: string): Promise<
       ? [{ automationSchedule: { etsy: manual.etsy }, variationConfig: { rows: manual.variations } } as unknown as TemplateRow]
       : await db.select().from(podTemplates).where(and(eq(podTemplates.id, run.templateId), eq(podTemplates.userId, userId)));
     if (!template) return await fail('Bu ilanın otomasyonu silinmiş; Etsy ayarları bulunamadı.');
+    // Mağaza ayarları (kargo, hazırlık, iade…) yayın anında klasörün güncel hâlinden: ilan hazırlandıktan sonra
+    // klasörde yapılan düzeltme (ör. eksik kargo profili) yayına yansır. Manuel ilanın varyasyonu kendi seçimidir.
+    const folderId = manual ? manual.folderId : template.mockupConfig?.folderId;
+    if (folderId) {
+      const { loadFolderListingSettings } = await import('@/lib/listing-category');
+      const folderSettings = await loadFolderListingSettings(userId, folderId);
+      if (manual) template.automationSchedule = { etsy: mergeFolderEtsy(manual.etsy, folderSettings.etsy) } as TemplateRow['automationSchedule'];
+      else applyFolderListingSettings(template, folderSettings);
+    }
 
     let listingId = run.etsyListingId;
     let listingUrl = review.listingUrl ?? null;
@@ -464,7 +474,7 @@ export type ProductionDraftInput = {
 
 /**
  * Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir: görseller hazırdır; ilan metni (SEO)
- * arka planda çalıştırıcı tarafından Ayarlar'daki ilan varsayılanlarıyla üretilir. Çalıştırma kimliğini döner.
+ * arka planda çalıştırıcı tarafından mockup klasörünün ilan ayarlarıyla üretilir. Çalıştırma kimliğini döner.
  */
 export async function createProductionDraft(userId: string, input: ProductionDraftInput): Promise<{ runId: string }> {
   const { loadListingDefaults } = await import('@/lib/user-settings');
@@ -473,9 +483,9 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const analysis = input.design.analysis ?? {};
   const subject = (analysis.primarySubject || input.design.name || '').trim().slice(0, 200);
   const description = (analysis.description || subject || input.folderName || 'Print-on-demand t-shirt design').trim().slice(0, 4000);
-  // Kategori ve varsayılan varyasyon mockup klasöründe seçilir (klasör = bir Etsy ilanı). Kategori seçili değilse
-  // ilan metni hazırlanırken mockup fotoğraflarından seçilir (bkz. listing-category); varyasyon seçili değilse
-  // Hazır İlanlar'da yayından önce seçilir. Mağaza ayarları (kargo, hazırlık, iade) Ayarlar'dan.
+  // İlan ayarları mockup klasöründen (klasör = bir Etsy ilanı): kategori, varyasyon, kitle, ürün modelleri, ürün
+  // bilgisi ve mağaza ayarları. Kategori seçili değilse ilan metni hazırlanırken mockup fotoğraflarından seçilir
+  // (bkz. listing-category); varyasyon seçili değilse Hazır İlanlar'da yayından önce seçilir.
   const { loadFolderListingSettings } = await import('@/lib/listing-category');
   const folderSettings = await loadFolderListingSettings(userId, input.folderId);
   const folderCategory = folderSettings.category;
@@ -483,7 +493,8 @@ export async function createProductionDraft(userId: string, input: ProductionDra
   const productType = folderCategory ? productTypeFromCategory(folderCategory.name) : analysis.productType?.trim() || 'T-shirt';
   const sku = generateListingSku(productType);
   const settings: ManualListingSettings = {
-    etsy: folderCategory ? { ...defaults.etsy, taxonomyId: folderCategory.taxonomyId } : defaults.etsy,
+    // Mağaza ayarları klasörden; klasörde boş olanlar Ayarlar'daki eski kayıttan.
+    etsy: mergeFolderEtsy(folderCategory ? { ...defaults.etsy, taxonomyId: folderCategory.taxonomyId } : defaults.etsy, folderSettings.etsy),
     variations: folderVariations?.rows ?? [],
     variationTemplateId: folderVariations?.templateId ?? null,
     variationTemplateName: folderVariations?.templateName ?? null,
@@ -492,6 +503,10 @@ export async function createProductionDraft(userId: string, input: ProductionDra
     notes: '',
     subject,
     categoryFromFolder: Boolean(folderCategory),
+    folderId: input.folderId ?? null,
+    audienceGroup: folderSettings.audienceGroup,
+    garments: folderSettings.garments,
+    productInfo: folderSettings.productInfo,
   };
   const now = new Date();
   const runId = `run_${now.getTime()}_${Math.random().toString(36).slice(2, 9)}`;

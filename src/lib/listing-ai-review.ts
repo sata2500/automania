@@ -20,7 +20,7 @@ export type ReviewListingInput = {
   tags: string[];
   description: string;
   design: ReviewDesignContext;
-  /** Ayarlar › İlan metni bilgileri (bkz. listing-copy) */
+  /** Mağaza bilgileri: klasörün ürün bilgisi, kargo ve hazırlık süresi (bkz. listing-copy) */
   storeFacts: string;
 };
 

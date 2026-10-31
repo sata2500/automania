@@ -38,7 +38,7 @@ export type GenerateListingInput = {
   garments?: string;
   /** İlan fotoğraflarının sıralı tanımları (alt metin yazılması için) */
   images?: string[];
-  /** Ayarlar › İlan metni bilgileri (bkz. listing-copy); açıklamadaki ürün bilgilerinin tek kaynağı */
+  /** Mağaza bilgileri (bkz. listing-copy): klasörün ürün bilgisi, kargo, hazırlık süresi; açıklamadaki ürün bilgilerinin tek kaynağı */
   storeFacts?: string;
   /** Etsy'deki bir ilan iyileştirilirken şu anki metin */
   currentListing?: { title: string; tags: string[]; description: string } | null;

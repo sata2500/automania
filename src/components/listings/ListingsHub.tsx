@@ -2,7 +2,7 @@
 
 /**
  * İlanlar merkezi iki bölümdür: Hazır İlanlar (otomasyonların ve Üretim'deki "İlan Oluştur"un hazırladığı
- * ilanlar) ve Etsy'deki İlanlarım. Mağaza ayarları ve varyasyonlar Ayarlar sekmesinden yönetilir.
+ * ilanlar) ve Etsy'deki İlanlarım. İlan ayarları mockup klasöründe (Klasör ayarları), varyasyon şablonları Ayarlar'da yönetilir.
  */
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';

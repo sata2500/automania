@@ -6,8 +6,9 @@
  * Akış (her çalıştırmada): AI tasarım (+ isteğe bağlı diğer kumaş versiyonu) → arka plan kaldırma → klasördeki
  * mockup'lara basma → isteğe bağlı tanıtım videosu (mockup görselinden) → SEO metni → Etsy taslak ilanı.
  *
- * Kullanıcı yalnızca beş kısa adımı doldurur: Ürün (klasör, kategori, varyasyon), Tasarım (konu), Video,
- * Zaman ve Etsy mağaza ayarları. Mockup'lar ve varyasyonlar her çalıştırmada güncel hâlleriyle okunur.
+ * Kullanıcı beş kısa adımı doldurur: Ürün (klasör), Tasarım (konu, kumaş), Video, Zaman ve Etsy (ilan nasıl
+ * açılsın). Kategori, kitle, ürün modelleri, ürün bilgisi, varyasyon ve mağaza ayarları mockup klasöründedir
+ * (Klasör ayarları); mockup'lar, varyasyonlar ve klasör ayarları her çalıştırmada güncel hâlleriyle okunur.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -15,16 +16,16 @@ import {
 } from 'lucide-react';
 import type { EtsyVariationTemplate, MockupFolder, MockupItem } from '@/types/pod';
 import type {
-  AudienceGroup, DesignFabric, PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
+  DesignFabric, PodTemplate, PodTemplateAutomationSchedule, PodTemplateInput, PodTemplateVariationConfig,
 } from '@/types/templates';
-import { inferAudienceGroup } from '@/lib/automation-plan';
+import { AUDIENCE_OPTIONS, mergeFolderEtsy, missingFolderEtsy } from '@/lib/folder-listing';
 import { buildFolderMockupConfig, variationConfigFromRows } from '@/lib/folder-template';
 import { saveTemplate } from '@/lib/templates-client';
 import { useToast } from '@/components/common/ToastContext';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
 import { ScheduleSection } from './sections/ScheduleSection';
-import { DEFAULT_ETSY_LISTING_SETTINGS, EtsyListingSection, getEtsyListingSettingsErrors } from './sections/EtsyListingSection';
+import { DEFAULT_ETSY_LISTING_SETTINGS } from './sections/EtsyListingSection';
 import type { TaxonomyOption } from './sections/CategoryPicker';
 import { productTypeFromCategory } from '@/lib/sku';
 
@@ -41,14 +42,6 @@ const STEPS: { label: string; icon: React.ElementType }[] = [
 const VIDEO_ASPECTS = [
   { id: '16:9' as const, label: 'Yatay', desc: '16:9 — Etsy ilan galerisi için' },
   { id: '9:16' as const, label: 'Dikey', desc: '9:16 — Reels / Shorts / TikTok için' },
-];
-
-const AUDIENCE_OPTIONS: { id: AudienceGroup; label: string }[] = [
-  { id: 'men', label: 'Erkek' },
-  { id: 'women', label: 'Kadın' },
-  { id: 'unisex', label: 'Unisex' },
-  { id: 'kids', label: 'Çocuk' },
-  { id: 'baby', label: 'Bebek' },
 ];
 
 const FABRIC_OPTIONS: { id: DesignFabric; label: string; desc: string }[] = [
@@ -119,10 +112,9 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
   const [audience, setAudience] = useState(template?.seoHints?.targetAudience ?? '');
   const [notes, setNotes] = useState(template?.seoHints?.customNotes ?? '');
   // Kitle, ürün modelleri ve kumaş: tasarım, video ve ilan metni bunlara göre hazırlanır.
-  const [audienceGroup, setAudienceGroup] = useState<AudienceGroup | undefined>(
-    template?.seoHints?.audienceGroup ?? inferAudienceGroup(folder?.name),
-  );
-  const [garmentsText, setGarmentsText] = useState((template?.seoHints?.garments ?? []).join('\n'));
+  // Kitle ve ürün modelleri mockup klasöründe (Klasör ayarları); klasörde yoksa şablonda kayıtlı eski değer.
+  const audienceGroup = folder?.audienceGroup ?? template?.seoHints?.audienceGroup;
+  const garments = folder?.garments?.length ? folder.garments : template?.seoHints?.garments ?? [];
   const [designFabric, setDesignFabric] = useState<DesignFabric>(template?.seoHints?.designFabric ?? 'light');
   const [fabricVariant, setFabricVariant] = useState(template?.seoHints?.fabricVariant ?? true);
 
@@ -189,7 +181,9 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
   };
   const currentErrors = stepErrors(step);
   const blockingErrors = ([0, 1] as Step[]).flatMap(stepErrors);
-  const etsyWarnings = getEtsyListingSettingsErrors(schedule);
+  // Mağaza ayarları klasörde (Klasör ayarları); klasörde boş olan alan şablondaki eski değerle kalır.
+  const folderEtsy = mergeFolderEtsy({ ...DEFAULT_ETSY_LISTING_SETTINGS, ...schedule.etsy }, folder?.etsy);
+  const etsyWarnings = missingFolderEtsy(folderEtsy);
 
   const buildInput = (): PodTemplateInput => {
     const variationConfig: PodTemplateVariationConfig = variationSource?.variations?.length
@@ -206,8 +200,9 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
         productType: productTypeFromCategory(folder?.categoryName || category?.name),
         nicheMode,
         researchFocus: nicheMode === 'auto' ? researchFocus.trim() : '',
-        audienceGroup,
-        garments: garmentsText.split('\n').map((g) => g.trim()).filter(Boolean).slice(0, 10),
+        // Kitle ve ürün modelleri çalıştırmada klasörden okunur; şablonda eski değer korunur.
+        audienceGroup: template?.seoHints?.audienceGroup,
+        garments: template?.seoHints?.garments ?? [],
         designFabric,
         fabricVariant: designFabric !== 'universal' && fabricVariant,
       },
@@ -320,7 +315,6 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                     setFolderId(e.target.value);
                     const next = mockupFolders.find((f) => f.id === e.target.value);
                     if (next && !name.trim()) setName(next.name);
-                    if (next && !audienceGroup) setAudienceGroup(inferAudienceGroup(next.name));
                   }}>
                     <option value="">Klasör seçin…</option>
                     {mockupFolders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -352,35 +346,21 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 </div>
               )}
 
-              <fieldset>
-                <legend className={labelClass}>Hedef kitle</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {AUDIENCE_OPTIONS.map((option) => (
-                    <button key={option.id} type="button" onClick={() => setAudienceGroup(audienceGroup === option.id ? undefined : option.id)} aria-pressed={audienceGroup === option.id}
-                      className={`px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-colors ${audienceGroup === option.id ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Tasarım, niş araştırması ve ilan metni bu kitleye göre hazırlanır.</p>
-              </fieldset>
 
-              <div>
-                <label className={labelClass} htmlFor="aw-garments">Ürün modelleri (isteğe bağlı)</label>
-                <textarea id="aw-garments" rows={3} className={inputClass} value={garmentsText} onChange={(e) => setGarmentsText(e.target.value)} placeholder={'Comfort Colors 1717\nBella+Canvas 3001\nPrintnest Yogurt'} />
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Her satıra bir model. İlk satır ilk görseldeki üründür ve videoda kullanılır; hepsi ilan açıklamasında seçenek olarak yazılır (başlık ve etiketlerde marka kullanılmaz).</p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs">
-                <p className="font-bold text-slate-700 dark:text-slate-200">Etsy kategorisi</p>
-                <p className="mt-0.5 text-slate-600 dark:text-slate-300">
-                  {folder?.taxonomyId
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs space-y-1">
+                <p className="font-bold text-slate-700 dark:text-slate-200">Klasörün ilan ayarları</p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  Kategori: <strong>{folder?.taxonomyId
                     ? (category?.path || category?.name || folder.categoryName || `#${folder.taxonomyId}`)
                     : taxonomyId > 0
                       ? `${category?.path || category?.name || `#${taxonomyId}`} (eski ayar)`
-                      : 'Seçilmedi'}
+                      : 'Seçilmedi'}</strong>
                 </p>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Kategori mockup klasöründe seçilir: Mockup&apos;lar › klasör menüsü › Klasör ayarları.</p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  Kitle: <strong>{AUDIENCE_OPTIONS.find((o) => o.id === audienceGroup)?.label ?? 'Belirtilmedi'}</strong>
+                  {' · '}Ürün modelleri: <strong>{garments.length > 0 ? garments.join(', ') : 'Belirtilmedi'}</strong>
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Kategori, kitle, ürün modelleri, ürün bilgisi, varyasyon ve Etsy mağaza ayarları mockup klasöründe: Mockup&apos;lar › klasör menüsü › Klasör ayarları.</p>
               </div>
 
               <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs">
@@ -532,7 +512,11 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                   );
                 })}
               </fieldset>
-              <EtsyListingSection schedule={schedule} onChange={setSchedule} variant="store" />
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5"><Store className="w-3.5 h-3.5 text-amber-500" /> Etsy mağaza ayarları</p>
+                <p>Kargo profili, hazırlık süresi, iade politikası, üretici ve otomatik yenileme klasörde seçilir (Mockup&apos;lar › klasör menüsü › Klasör ayarları); bu klasörden açılan tüm ilanlar onları kullanır.</p>
+                <p>Otomatik yenileme: <strong>{folderEtsy.shouldAutoRenew ? 'Açık' : 'Kapalı'}</strong></p>
+              </div>
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3.5 text-xs text-slate-600 dark:text-slate-300 space-y-1">
                 <p className="font-bold text-slate-800 dark:text-slate-100">Özet</p>
                 <p>Klasör: <strong>{folder?.name ?? '—'}</strong> · {counts.print} mockup&apos;a basılır</p>
@@ -543,7 +527,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                 <p>Video: <strong>{schedule.generateVideo ? (video.aspectRatio === '9:16' ? 'Dikey' : 'Yatay') : 'Yok'}</strong> · Mağaza bölümü: <strong>yapay zekâ seçer</strong></p>
                 <p>Zaman: <strong>{schedule.enabled ? 'Zamanlanmış' : 'Yalnızca elle çalıştırma'}</strong> · Sonuç: <strong>{(schedule.listingMode ?? 'review') === 'review' ? 'Hazır İlanlar\'da incelemeye alınır' : 'Etsy taslak ilanı'}</strong></p>
                 {etsyWarnings.length > 0 && (
-                  <p className="text-amber-700 dark:text-amber-400 flex gap-1 pt-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Mağaza ayarları eksik: tasarım ve mockup&apos;lar üretilir, ilan adımı atlanır.</p>
+                  <p className="text-amber-700 dark:text-amber-400 flex gap-1 pt-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />Klasörde {etsyWarnings.join(' ve ')} seçilmemiş: tasarım ve mockup&apos;lar üretilir, ilan adımı atlanır.</p>
                 )}
               </div>
             </>

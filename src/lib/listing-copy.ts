@@ -1,5 +1,5 @@
 /**
- * Yapay zekânın ilan açıklamasında kullanacağı mağaza bilgileri: ürün bilgisi (Ayarlar), kargonun ücretsiz olup
+ * Yapay zekânın ilan açıklamasında kullanacağı mağaza bilgileri: ürün bilgisi (klasör), kargonun ücretsiz olup
  * olmadığı (ilanın kargo profilinden) ve hazırlık süresi (Etsy hazırlık süresi tanımından). Etsy'den
  * alınamayan bilgi yazılmaz (hata olursa bilinmiyor sayılır).
  */
@@ -29,11 +29,17 @@ async function fetchShopResource<T>(auth: EtsyAuth, path: string): Promise<T | n
   }
 }
 
-/** Yapay zekâya verilecek mağaza bilgileri metni. `shippingProfileId`: ilanın kargo profili (yoksa mağaza varsayılanı). */
-export async function loadStoreCopyFacts(userId: string, shippingProfileId?: string | null): Promise<string> {
+/**
+ * Yapay zekâya verilecek mağaza bilgileri metni. Kargo profili, hazırlık süresi ve ürün bilgisi ilanın
+ * klasöründen gelir; verilmeyen değer için eski kayıt (Ayarlar'daki ilan varsayılanları) kullanılır.
+ */
+export async function loadStoreCopyFacts(
+  userId: string,
+  listing: { shippingProfileId?: string | null; readinessStateId?: string | null; productInfo?: string | null } = {},
+): Promise<string> {
   const defaults = await loadListingDefaults(userId);
-  const profileId = shippingProfileId || defaults.etsy.shippingProfileId;
-  const readinessId = defaults.etsy.readinessStateId;
+  const profileId = listing.shippingProfileId || defaults.etsy.shippingProfileId;
+  const readinessId = listing.readinessStateId || defaults.etsy.readinessStateId;
   const auth = profileId || readinessId ? await etsyAuth(userId) : null;
   const [profile, readiness] = auth
     ? await Promise.all([
@@ -41,7 +47,7 @@ export async function loadStoreCopyFacts(userId: string, shippingProfileId?: str
         readinessId ? fetchShopResource<EtsyReadinessState>(auth, `readiness-state-definitions/${encodeURIComponent(readinessId)}`) : null,
       ])
     : [null, null];
-  return listingCopyFacts(defaults.copy, {
+  return listingCopyFacts({ productInfo: listing.productInfo?.trim() || defaults.copy.productInfo }, {
     freeShipping: profile ? isFreeShippingProfile(profile) : null,
     processing: processingTimeText(readiness),
   });

@@ -1,7 +1,7 @@
 /**
  * POST /api/listing-review/from-production — Üretim sekmesindeki manuel üretimi Hazır İlanlar'a gönderir.
  * Görseller depoya yüklenmiş olarak gelir; ilan metni yanıt döndükten sonra arka planda üretilir
- * (kategori mockup fotoğraflarından, mağaza ayarları Ayarlar'dan; varyasyon Hazır İlanlar'da seçilir). Kuyrukta "hazırlanıyor" olarak görünür.
+ * (mockup klasörünün ilan ayarlarıyla: kategori, varyasyon, kitle, ürün bilgisi, mağaza ayarları). Kuyrukta "hazırlanıyor" olarak görünür.
  */
 import { NextResponse, after } from 'next/server';
 import { z } from 'zod';

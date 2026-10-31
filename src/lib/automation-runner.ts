@@ -35,6 +35,7 @@ import { validateWhoMade } from '@/lib/etsy-preflight';
 import { createEtsyDraftListing, type EtsyDraftListingInput } from '@/lib/etsy-listing-service';
 import { generateBestListing } from '@/lib/listing-pipeline';
 import { loadFolderListingSettings, pickListingCategory, type FolderListingSettings } from '@/lib/listing-category';
+import { mergeFolderEtsy } from '@/lib/folder-listing';
 import { loadStoreCopyFacts } from '@/lib/listing-copy';
 import { detectPrimarySubject } from '@/lib/listing-subject';
 import { researchNiche } from '@/lib/niche-research';
@@ -108,19 +109,29 @@ async function loadWorkspaceMockups(userId: string): Promise<MockupItem[]> {
   return (workspace?.mockups as MockupItem[] | undefined) ?? [];
 }
 
-/** Klasörün kategori ve varsayılan varyasyonunu çalıştırılacak şablona uygular (taban fiyat en düşük varyasyon fiyatı). */
+/**
+ * Klasörün ilan ayarlarını çalıştırılacak şablona uygular: kategori ve ürün tipi, varsayılan varyasyon (taban fiyat
+ * en düşük açık varyasyon fiyatı), kitle, ürün modelleri, ürün bilgisi ve mağaza ayarları. Klasörde boş olan
+ * alan şablondaki eski değerle kalır.
+ */
 export function applyFolderListingSettings(template: TemplateRow, folder: FolderListingSettings): void {
+  const schedule = { ...template.automationSchedule } as NonNullable<TemplateRow['automationSchedule']>;
+  const hints = { ...template.seoHints } as NonNullable<TemplateRow['seoHints']>;
+  let etsy = mergeFolderEtsy({ ...schedule.etsy }, folder.etsy) as PodTemplateEtsyListingSettings;
   if (folder.category) {
-    template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule?.etsy, taxonomyId: folder.category.taxonomyId } } as TemplateRow['automationSchedule'];
-    template.seoHints = { ...template.seoHints, productType: productTypeFromCategory(folder.category.name) } as TemplateRow['seoHints'];
+    etsy = { ...etsy, taxonomyId: folder.category.taxonomyId };
+    hints.productType = productTypeFromCategory(folder.category.name);
   }
   if (folder.variations) {
     const prices = folder.variations.rows.filter((r) => r.enabled !== false).map((r) => Number(r.price)).filter((p) => p > 0);
     template.variationConfig = { ...variationConfigFromRows(folder.variations.rows), sourceTemplateId: folder.variations.templateId, sourceTemplateName: folder.variations.templateName } as TemplateRow['variationConfig'];
-    if (prices.length > 0 && template.automationSchedule?.etsy) {
-      template.automationSchedule = { ...template.automationSchedule, etsy: { ...template.automationSchedule.etsy, price: Math.min(...prices) } } as TemplateRow['automationSchedule'];
-    }
+    if (prices.length > 0) etsy = { ...etsy, price: Math.min(...prices) };
   }
+  if (folder.audienceGroup) hints.audienceGroup = folder.audienceGroup;
+  if (folder.garments.length > 0) hints.garments = folder.garments;
+  if (folder.productInfo) hints.productInfo = folder.productInfo;
+  template.automationSchedule = { ...schedule, etsy } as TemplateRow['automationSchedule'];
+  template.seoHints = hints as TemplateRow['seoHints'];
 }
 
 /**
@@ -775,7 +786,11 @@ async function runSeo(ctx: StepContext): Promise<StepResult> {
     primaryAesthetic: insight?.vision.primaryAesthetic || research?.style || null,
     productType: insight?.vision.productType || hints?.productType || null,
   };
-  const storeFacts = await loadStoreCopyFacts(userId, template.automationSchedule?.etsy?.shippingProfileId)
+  const storeFacts = await loadStoreCopyFacts(userId, {
+    shippingProfileId: template.automationSchedule?.etsy?.shippingProfileId,
+    readinessStateId: template.automationSchedule?.etsy?.readinessStateId,
+    productInfo: hints?.productInfo,
+  })
     .catch(() => 'None provided');
   // Yaz → etiketleri Etsy'den puanla → yapay zekâyla değerlendir → puan düşükse geri bildirimle yeniden yaz.
   const result = await generateBestListing(userId, {
@@ -898,7 +913,7 @@ export async function buildListingRequest(userId: string, template: TemplateRow,
   // Şablonda boş bırakılan mağaza ayarları Ayarlar sekmesindeki ilan varsayılanlarından tamamlanır.
   const etsy = mergeEtsySettings(template.automationSchedule?.etsy, defaults.etsy);
   if (!etsy.shippingProfileId || !etsy.readinessStateId) {
-    throw new StepSkipped('Kargo profili veya hazırlık süresi seçilmemiş; Ayarlar › İlan varsayılanları bölümünden seçin.');
+    throw new StepSkipped("Kargo profili veya hazırlık süresi seçilmemiş; Mockup'lar › klasör menüsü › Klasör ayarları'ndan seçin.");
   }
   const whoMadeError = validateWhoMade({ whoMade: etsy.whoMade, isSupply: false, whenMade: etsy.whenMade });
   if (whoMadeError) throw new Error(whoMadeError);
@@ -979,7 +994,7 @@ async function runListing(ctx: StepContext): Promise<StepResult> {
     return {
       output: { review },
       warning: !etsy.shippingProfileId || !etsy.readinessStateId
-        ? 'Kargo profili veya hazırlık süresi seçilmemiş; yayınlamadan önce Ayarlar › İlan varsayılanları bölümünden seçin.'
+        ? "Kargo profili veya hazırlık süresi seçilmemiş; yayınlamadan önce Mockup'lar › klasör menüsü › Klasör ayarları'ndan seçin."
         : undefined,
     };
   }

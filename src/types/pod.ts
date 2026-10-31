@@ -1,3 +1,4 @@
+import type { AudienceGroup, PodTemplateEtsyListingSettings } from './templates';
 export type ApparelType = 'light' | 'dark' | 'any';
 export type TargetApparel = 'light' | 'dark' | 'both';
 export type ExportFormatType = 'image/webp' | 'image/jpeg' | 'image/png' | 'video/mp4' | string;
@@ -29,7 +30,19 @@ export interface MockupFolder {
   /** Varsayılan varyasyon şablonu (Ayarlar › Varyasyonlar); manuel ilanlar ve otomasyonlar kullanır */
   variationTemplateId?: string;
   variationTemplateName?: string;
+  /** Ürünlerin kitlesi: tasarım, niş araştırması ve ilan metni buna göre hazırlanır */
+  audienceGroup?: AudienceGroup;
+  /** İlandaki ürün modelleri (ör. "Comfort Colors 1717"); ilki ilk görseldeki/videodaki üründür */
+  garments?: string[];
+  /** Ürün bilgisi (kumaş, kalıp…; İngilizce): yapay zekâ açıklamada ürün özelliği olarak yalnızca bunu kullanır */
+  productInfo?: string;
+  /** Etsy mağaza ayarları (kargo profili, hazırlık süresi, iade, üretici, otomatik yenileme) */
+  etsy?: FolderEtsySettings;
 }
+
+/** Klasörün Etsy mağaza ayarları (bkz. folder-listing). */
+export type FolderEtsySettings = Partial<Pick<PodTemplateEtsyListingSettings,
+  'whoMade' | 'shippingProfileId' | 'readinessStateId' | 'returnPolicyId' | 'productionPartnerIds' | 'shouldAutoRenew'>>;
 
 export interface MockupItem {
   id: string;

@@ -114,7 +114,7 @@ export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates
   };
 
   const remove = (template: EtsyVariationTemplate) => {
-    if (!templates || !window.confirm(`"${template.name}" şablonu silinsin mi? Bu şablona bağlı otomasyonlar Ayarlar'daki varyasyonları kullanır.`)) return;
+    if (!templates || !window.confirm(`"${template.name}" şablonu silinsin mi? Bu şablonu varsayılan seçen klasörlerde varyasyon seçilmemiş olur.`)) return;
     void persist(templates.filter((t) => t.id !== template.id), 'Şablon silindi.').then((ok) => {
       if (ok && draft?.id === template.id) setDraft(null);
     });

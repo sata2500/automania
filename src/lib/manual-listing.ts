@@ -4,7 +4,7 @@
  * (SEO) üretip ilanı Hazır İlanlar'a koyar. Şablonun yerini, oluşturulurken alınan ayar kopyası tutar
  * (Ayarlar sonradan değişse de hazırlanmış ilan etkilenmez).
  */
-import type { AutomationRunSteps, PodTemplateEtsyListingSettings } from '@/types/templates';
+import type { AudienceGroup, AutomationRunSteps, PodTemplateEtsyListingSettings } from '@/types/templates';
 import type { EtsyVariationRow } from '@/types/pod';
 
 export const MANUAL_TEMPLATE_ID = 'manual';
@@ -23,6 +23,12 @@ export type ManualListingSettings = {
   subject?: string;
   /** Kategori mockup klasöründe seçili (yapay zekâya sorulmaz) */
   categoryFromFolder?: boolean;
+  /** İlanın mockup klasörü (yayında mağaza ayarları klasörün güncel hâlinden alınır) */
+  folderId?: string | null;
+  /** Klasörün kitlesi, ürün modelleri ve ürün bilgisi (ilan metni için) */
+  audienceGroup?: AudienceGroup;
+  garments?: string[];
+  productInfo?: string;
 };
 
 /** Elle hazırlanan ilanın ayarları (eski stüdyo kayıtları `listingCreation`, üretim kayıtları `mockupRender` altında). */
@@ -63,6 +69,9 @@ export function manualTemplateFor(userId: string, steps: unknown) {
       customNotes: settings.notes ?? '',
       primaryNiche: settings.subject ?? '',
       nicheMode: 'manual' as const,
+      audienceGroup: settings.audienceGroup,
+      garments: settings.garments ?? [],
+      productInfo: settings.productInfo ?? '',
     },
     automationSchedule: {
       enabled: false,

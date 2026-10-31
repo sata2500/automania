@@ -73,6 +73,8 @@ export interface PodTemplateSeoHints {
   designFabric?: DesignFabric;
   /** Klasörde diğer kumaş renginde mockup varsa o kumaş için yapay zekâ ile ayrı bir versiyon üretilsin mi */
   fabricVariant?: boolean;
+  /** Klasörün ürün bilgisi (çalıştırmada klasörden doldurulur; kaydedilmez) */
+  productInfo?: string;
 }
 
 export type AudienceGroup = 'men' | 'women' | 'unisex' | 'kids' | 'baby';

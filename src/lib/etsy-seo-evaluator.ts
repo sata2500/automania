@@ -359,7 +359,7 @@ export function evaluateEtsyListingSeo(params: {
   if (sections >= 2) {
     rules += 2;
   } else {
-    issue('rules', 'description', 'tip', 'Açıklamada beden, kumaş veya bakım bilgisi eksik.', 'Ayarlar › İlan metni bilgileri doluysa yapay zekâ bunları ekler.');
+    issue('rules', 'description', 'tip', 'Açıklamada beden, kumaş veya bakım bilgisi eksik.', 'Klasör ayarlarında ürün bilgisi doluysa yapay zekâ bunları ekler.');
   }
 
   // ── 2. Etsy verisi (35) ──────────────────────────────────────────────────────

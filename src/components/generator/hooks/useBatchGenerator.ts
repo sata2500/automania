@@ -294,7 +294,7 @@ export function useBatchGenerator({
 
   /**
    * Üretilen görselleri depoya yükleyip ilanı Hazır İlanlar'a gönderir. İlan metni (başlık, etiketler,
-   * açıklama) sunucuda arka planda, Ayarlar'daki ilan varsayılanları ve varyasyonlarla hazırlanır.
+   * açıklama) sunucuda arka planda, mockup klasörünün ilan ayarlarıyla (Klasör ayarları) hazırlanır.
    */
   const handleCreateListing = async () => {
     if (renderedMatches.length === 0) {
