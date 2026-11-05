@@ -1,4 +1,5 @@
 import { parseJsonArray } from '@/lib/json-utils';
+import { sourceKeyOfPreview } from '@/lib/media-preview';
 
 /** Yeni yüklenen ama henüz çalışma alanına kaydedilmemiş dosyaları korumak için bekleme süresi. */
 export const ORPHAN_GRACE_PERIOD_MS = 24 * 60 * 60 * 1000;
@@ -35,6 +36,7 @@ export function findOrphanKeys(
   return objects
     .filter((obj) => obj.key)
     .filter((obj) => !obj.lastModified || now - obj.lastModified.getTime() > ORPHAN_GRACE_PERIOD_MS)
-    .filter((obj) => !haystack.includes(obj.key))
+    // Önizleme (ör. `x.png.w512.webp`) özgün dosyası referanslıysa korunur.
+    .filter((obj) => !haystack.includes(sourceKeyOfPreview(obj.key) ?? obj.key))
     .map((obj) => obj.key);
 }

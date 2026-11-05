@@ -2,6 +2,7 @@ import React from 'react';
 import { Power } from 'lucide-react';
 import type { DesignItem, TargetApparel } from '@/types/pod';
 import { SLOT_LABELS } from '../hooks/useDesignSelection';
+import { previewSrc } from '@/lib/media-preview';
 
 const SLOT_ORDER: TargetApparel[] = ['both', 'dark', 'light'];
 
@@ -42,7 +43,7 @@ export const ActiveDesignSlots: React.FC<ActiveDesignSlotsProps> = ({ designs, t
             <span className="block pr-5 text-[10px] sm:text-[11px] font-bold truncate">{SLOT_LABELS[slot]}</span>
             <span className="mt-1 flex items-center gap-1.5 min-w-0">
               <span className="w-7 h-7 sm:w-9 sm:h-9 shrink-0 rounded-md overflow-hidden bg-[conic-gradient(#e2e8f0_25%,#fff_0_50%,#e2e8f0_0_75%,#fff_0)] bg-[length:8px_8px] dark:bg-[conic-gradient(#334155_25%,#1e293b_0_50%,#334155_0_75%,#1e293b_0)]">
-                {design && <img src={design.src} alt="" className="w-full h-full object-contain" loading="lazy" />}
+                {design && <img src={previewSrc(design.src, 256)} alt="" className="w-full h-full object-contain" loading="lazy" />}
               </span>
               <span className={`min-w-0 text-[10px] sm:text-xs leading-tight line-clamp-2 break-all ${design ? 'font-semibold text-slate-800 dark:text-slate-100' : ''}`}>
                 {design ? design.name : 'Boş'}

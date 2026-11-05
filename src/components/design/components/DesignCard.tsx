@@ -8,6 +8,7 @@ import { DesignItem, TargetApparel } from '@/types/pod';
 import { DesignItemMenu } from './DesignItemMenu';
 import { activateOnKey } from '@/lib/a11y';
 import { Spinner } from '@/components/common/Spinner';
+import { previewSrc } from '@/lib/media-preview';
 
 interface DesignCardProps {
   design: DesignItem;
@@ -137,7 +138,7 @@ export const DesignCard: React.FC<DesignCardProps> = ({
         }`}
       >
         <img decoding="async"
-          src={design.src}
+          src={previewSrc(design.src, 512)}
           alt={design.name}
           className="max-w-full max-h-full object-contain drop-shadow-md"
           loading="lazy"

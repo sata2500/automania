@@ -18,6 +18,7 @@ import {
 import { MockupItem, PrintArea, MockupFolder } from '@/types/pod';
 import { MockupItemMenu } from './MockupItemMenu';
 import { activateOnKey } from '@/lib/a11y';
+import { previewSrc } from '@/lib/media-preview';
 
 interface MockupSidebarListProps {
   filteredMockups: MockupItem[];
@@ -429,7 +430,7 @@ export const MockupSidebarList: React.FC<MockupSidebarListProps> = ({
                     </div>
                   ) : (
                     <img loading="lazy" decoding="async"
-                      src={item.src}
+                      src={previewSrc(item.src, 256)}
                       alt={item.name}
                       className="w-full h-full object-cover"
                       onError={() => setBrokenImageIds((previous) => {

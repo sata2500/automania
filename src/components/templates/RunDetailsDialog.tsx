@@ -6,6 +6,7 @@ import type { AutomationRun, AutomationStepName, AutomationStepResult, Generated
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { AUTOMATION_STEP_ORDER } from '@/lib/automation-plan';
 import { Spinner } from '@/components/common/Spinner';
+import { previewSrc } from '@/lib/media-preview';
 
 export const STEP_LABELS: Record<AutomationStepName, string> = {
   nicheResearch: 'Niş araştırması',
@@ -160,12 +161,12 @@ export function RunDetailsDialog({ run, templateName, onClose, onCancel, isCance
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {run.generatedDesignUrl && (
                   <a href={run.generatedDesignUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Tasarım">
-                    <img src={run.generatedDesignUrl} alt="Üretilen tasarım" loading="lazy" className="w-20 h-20 rounded-xl object-contain border border-slate-200 dark:border-slate-700 bg-[repeating-conic-gradient(#e2e8f0_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]" />
+                    <img src={previewSrc(run.generatedDesignUrl, 256)} alt="Üretilen tasarım" loading="lazy" className="w-20 h-20 rounded-xl object-contain border border-slate-200 dark:border-slate-700 bg-[repeating-conic-gradient(#e2e8f0_0%_25%,#fff_0%_50%)] bg-[length:16px_16px]" />
                   </a>
                 )}
                 {(run.generatedMockupUrls ?? []).map((url, index) => (
                   <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                    <img src={url} alt={`Mockup ${index + 1}`} loading="lazy" className="w-20 h-20 rounded-xl object-cover border border-slate-200 dark:border-slate-700 bg-white" />
+                    <img src={previewSrc(url, 256)} alt={`Mockup ${index + 1}`} loading="lazy" className="w-20 h-20 rounded-xl object-cover border border-slate-200 dark:border-slate-700 bg-white" />
                   </a>
                 ))}
               </div>

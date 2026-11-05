@@ -27,6 +27,7 @@ import { computeNextRunAt, parseScheduledHours } from '@/lib/automation-schedule
 import { RunDetailsDialog, STEP_LABELS, getRunListingUrl, getRunWarnings } from './RunDetailsDialog';
 import { useConfirmDialog } from '@/components/common/useConfirmDialog';
 import { Spinner } from '@/components/common/Spinner';
+import { previewSrc } from '@/lib/media-preview';
 
 interface TemplatesManagerProps {
   mockups: MockupItem[];
@@ -572,7 +573,7 @@ export function TemplatesManager({ mockups, folders }: TemplatesManagerProps) {
                         <div className="mt-2 flex gap-1.5 overflow-x-auto">
                           {latestRun.generatedMockupUrls.slice(0, 6).map(url => (
                             <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                              <img src={url} alt="Üretilen mockup" loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-emerald-200 dark:border-emerald-500/30 bg-white" />
+                              <img src={previewSrc(url, 256)} alt="Üretilen mockup" loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-emerald-200 dark:border-emerald-500/30 bg-white" />
                             </a>
                           ))}
                         </div>

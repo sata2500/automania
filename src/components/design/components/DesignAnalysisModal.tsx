@@ -3,6 +3,7 @@ import { Sparkles, X, Clock, FileText, Hash, RefreshCw, Trophy, Tag, Layers } fr
 import { DesignItem, EvaluatedKeyword } from '@/types/pod';
 import { DialogPanel } from '@/components/common/DialogPanel';
 import { Spinner } from '@/components/common/Spinner';
+import { previewSrc } from '@/lib/media-preview';
 
 interface DesignAnalysisModalProps {
   analysisModalData: DesignItem | null;
@@ -111,7 +112,7 @@ export const DesignAnalysisModal: React.FC<DesignAnalysisModalProps> = ({
           <div className="flex items-start gap-4 p-3 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-slate-200 dark:border-slate-800">
             <div className="w-20 h-20 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center p-1">
               <img
-                src={analysisModalData.src}
+                src={previewSrc(analysisModalData.src, 256)}
                 alt={analysisModalData.name}
                 className="max-w-full max-h-full object-contain"
               />

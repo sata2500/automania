@@ -14,6 +14,7 @@ import type { ListingReviewStatus } from '@/types/templates';
 import { ListingReviewEditor } from './ListingReviewEditor';
 import type { ReviewItemView } from './types';
 import { formatDateTime, schedulePresets, STATUS_BADGES, toLocalInputValue } from './format';
+import { previewSrc } from '@/lib/media-preview';
 
 type Filter = 'awaiting' | 'scheduled' | 'published' | 'rejected';
 
@@ -266,7 +267,7 @@ export function ListingReviewQueue() {
                   <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-800 group-hover:shadow-lg transition-shadow">
                     {photos[0] && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photos[0]} alt={item.seo?.imageAltTexts?.[item.photos.indexOf(photos[0])] || item.seo?.title || 'İlan fotoğrafı'} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
+                      <img src={previewSrc(photos[0], 512)} alt={item.seo?.imageAltTexts?.[item.photos.indexOf(photos[0])] || item.seo?.title || 'İlan fotoğrafı'} loading="lazy" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300" />
                     )}
                     {item.preparing ? (
                       <span className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center gap-1.5 text-white text-[11px] font-bold">

@@ -28,6 +28,7 @@ import { ScheduleSection } from './sections/ScheduleSection';
 import { DEFAULT_ETSY_LISTING_SETTINGS } from './sections/EtsyListingSection';
 import type { TaxonomyOption } from './sections/CategoryPicker';
 import { productTypeFromCategory } from '@/lib/sku';
+import { previewSrc } from '@/lib/media-preview';
 
 type Step = 0 | 1 | 2 | 3 | 4;
 const STEPS: { label: string; icon: React.ElementType }[] = [
@@ -330,7 +331,7 @@ export function AutomationWizard({ folders, mockups, template, folderId: fixedFo
                       <div key={m.id} className={`relative w-12 h-12 shrink-0 rounded-lg overflow-hidden border ${mockupKind(m) === 'unset' ? 'border-amber-400' : 'border-slate-200 dark:border-slate-700'}`} title={m.name}>
                         {m.isVideo
                           ? <div className="w-full h-full flex items-center justify-center bg-slate-800"><Video className="w-4 h-4 text-white" /></div>
-                          : <img src={m.src} alt={m.name} loading="lazy" className="w-full h-full object-cover" />}
+                          : <img src={previewSrc(m.src, 256)} alt={m.name} loading="lazy" className="w-full h-full object-cover" />}
                       </div>
                     ))}
                   </div>

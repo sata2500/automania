@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Download, Eye, EyeOff, Fil
 import { Spinner } from '@/components/common/Spinner';
 import { useToast } from '@/components/common/ToastContext';
 import { downloadBlob } from '@/lib/download';
+import { previewSrc } from '@/lib/media-preview';
 
 export type PhotoRow = { url: string; included: boolean; alt: string };
 
@@ -221,7 +222,7 @@ export function ReviewPhotosPanel({ photos, editable, activeIndex, onActivate, o
               className={`relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 transition-transform ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} ${
                 isDragged ? 'opacity-40 scale-95' : ''} ${isTarget ? 'ring-2 ring-amber-400 scale-105' : !selectMode && index === currentIndex ? 'ring-2 ring-indigo-500' : ''} ${selectMode && isSelected ? 'ring-2 ring-indigo-500' : ''}`}
             >
-              <img src={photo.url} alt="" loading="lazy" draggable={false} className={`w-full h-full object-cover pointer-events-none ${photo.included ? '' : 'opacity-35 grayscale'}`} />
+              <img src={previewSrc(photo.url, 256)} alt="" loading="lazy" draggable={false} className={`w-full h-full object-cover pointer-events-none ${photo.included ? '' : 'opacity-35 grayscale'}`} />
               <span className="absolute top-1 left-1 min-w-5 h-5 px-1 rounded-md bg-slate-900/75 text-white text-[10px] font-bold flex items-center justify-center">{index + 1}</span>
               {canDrag && <GripVertical className="absolute top-1 right-1 w-4 h-4 text-white drop-shadow hidden sm:block" aria-hidden="true" />}
               {selectMode && (
@@ -238,7 +239,7 @@ export function ReviewPhotosPanel({ photos, editable, activeIndex, onActivate, o
 
       {current && !selectMode && (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 flex flex-col sm:flex-row gap-3">
-          <img src={current.url} alt={current.alt || `Fotoğraf ${currentIndex + 1}`} className="w-full sm:w-44 aspect-square object-cover rounded-xl bg-slate-100 dark:bg-slate-800" />
+          <img src={previewSrc(current.url, 512)} alt={current.alt || `Fotoğraf ${currentIndex + 1}`} className="w-full sm:w-44 aspect-square object-cover rounded-xl bg-slate-100 dark:bg-slate-800" />
           <div className="flex-1 min-w-0 space-y-2.5">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-100 mr-auto">Fotoğraf {currentIndex + 1}</span>

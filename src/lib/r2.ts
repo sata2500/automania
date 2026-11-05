@@ -5,6 +5,7 @@ import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
+import { previewKeysFor } from '@/lib/media-preview';
 
 // Helper to determine if R2 credentials are configured
 export function isR2Configured(): boolean {
@@ -136,9 +137,11 @@ export async function uploadToR2(
  */
 export async function deleteFromR2(urlsOrKeys: string | string[]): Promise<{ deletedCount: number }> {
   const list = Array.isArray(urlsOrKeys) ? urlsOrKeys : [urlsOrKeys];
-  const keys = list
+  const sourceKeys = list
     .map(extractKeyFromUrlOrKey)
     .filter(Boolean);
+  // Görsellerin önizlemeleri de silinir (yoksa silme isteği sessizce geçer).
+  const keys = [...sourceKeys, ...sourceKeys.flatMap(previewKeysFor)];
 
   if (keys.length === 0) {
     return { deletedCount: 0 };
@@ -171,7 +174,7 @@ export async function deleteFromR2(urlsOrKeys: string | string[]): Promise<{ del
     deletedCount += batch.length;
   }
 
-  return { deletedCount };
+  return { deletedCount: Math.min(deletedCount, sourceKeys.length) };
 }
 
 export interface R2ObjectItem {
