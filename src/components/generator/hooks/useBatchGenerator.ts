@@ -233,15 +233,18 @@ export function useBatchGenerator({
     };
 
     const queue = currentPairs.map((_, i) => i);
-    const workers = Array.from({ length: Math.min(serverRender ? 4 : 1, queue.length) }, async () => {
-      while (queue.length > 0) {
-        const i = queue.shift()!;
-        await renderPair(i);
-        done++;
-        const currentProgress = Math.round((done / currentPairs.length) * 100);
-        setExportProgress(currentProgress);
-        toast.updateProgressToast(genToastId, currentProgress, `Görseller üretiliyor... (${done}/${currentPairs.length})`);
-      }
+    const runOne = async (i: number) => {
+      await renderPair(i);
+      done++;
+      const currentProgress = Math.round((done / currentPairs.length) * 100);
+      setExportProgress(currentProgress);
+      toast.updateProgressToast(genToastId, currentProgress, `Görseller üretiliyor... (${done}/${currentPairs.length})`);
+    };
+    // Sunucuda ilk görsel tek başına üretilir: tasarımın üretim önizlemesi (2048 px) bir kez hazırlanır, kalanlar
+    // paralel olarak hazır önizlemeyi kullanır (16 MB'lık özgün tasarım her istekte ayrı ayrı işlenmez).
+    if (serverRender && queue.length > 1) await runOne(queue.shift()!);
+    const workers = Array.from({ length: Math.min(serverRender ? 6 : 1, queue.length) }, async () => {
+      while (queue.length > 0) await runOne(queue.shift()!);
     });
     await Promise.all(workers);
     const results = slots.filter((m): m is RenderedMatch => m !== null);

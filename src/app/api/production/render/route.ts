@@ -10,6 +10,7 @@ import { getAuthoritativeSession } from '@/lib/auth-server';
 import { checkRateLimit } from '@/lib/request-rate-limit';
 import { loadImageForUser, MediaSourceError } from '@/lib/media-source';
 import { renderMockupJpeg } from '@/lib/server-mockup-render';
+import { loadPreviewBuffer } from '@/lib/media-preview-server';
 import { isR2Configured, uploadToR2 } from '@/lib/r2';
 import { createOwnedUploadName } from '@/lib/upload-security';
 
@@ -56,7 +57,11 @@ export async function POST(request: Request) {
     const appOrigin = new URL(request.url).origin;
     const [mockupBuffer, designBuffer] = await Promise.all([
       loadImageForUser(session.id, mockup.src, { appOrigin }),
-      design ? loadImageForUser(session.id, design.src, { appOrigin }) : Promise.resolve(null),
+      // Tasarım 2048 piksellik önizlemesinden basılır (baskı alanı bundan büyük olmaz; 16 MB'lık özgün dosyayı
+      // her mockup için indirip çözmek üretimi yavaşlatır). Önizleme yoksa/okunamazsa özgün dosya.
+      design
+        ? loadPreviewBuffer(session.id, design.src, 2048).then((preview) => preview ?? loadImageForUser(session.id, design.src, { appOrigin }))
+        : Promise.resolve(null),
     ]);
     const rendered = await renderMockupJpeg(mockupBuffer, designBuffer, {
       printAreas: mockup.printAreas.map((a, i) => ({ id: a.id ?? `area-${i}`, name: a.name ?? '', rotation: 0, ...a })),

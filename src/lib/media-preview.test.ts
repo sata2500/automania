@@ -14,7 +14,7 @@ describe('media previews', () => {
   it('accepts only known widths and maps preview keys back to their source', () => {
     expect(parsePreviewWidth('512')).toBe(512);
     expect(parsePreviewWidth('9999')).toBeNull();
-    expect(previewKeysFor('u1_abc.png')).toEqual(['u1_abc.png.w256.webp', 'u1_abc.png.w512.webp', 'u1_abc.png.w1024.webp']);
+    expect(previewKeysFor('u1_abc.png')).toEqual(['u1_abc.png.w256.webp', 'u1_abc.png.w512.webp', 'u1_abc.png.w1024.webp', 'u1_abc.png.w2048.webp']);
     expect(previewKeysFor('u1_abc.png.w512.webp')).toEqual([]);
     expect(sourceKeyOfPreview('u1_abc.png.w512.webp')).toBe('u1_abc.png');
   });

@@ -3,6 +3,7 @@
 import React from 'react';
 import { RenderedMatch } from '@/types/pod';
 import { Video, Download } from 'lucide-react';
+import { previewSrc } from '@/lib/media-preview';
 
 interface BatchResultCardProps {
   match: RenderedMatch;
@@ -19,7 +20,7 @@ export const BatchResultCard: React.FC<BatchResultCardProps> = ({ match }) => {
           </div>
         ) : (
           <>
-            <img loading="lazy" decoding="async" src={match.previewUrl} alt={match.exportFileName} className="w-full h-full object-contain" />
+            <img loading="lazy" decoding="async" src={previewSrc(match.previewUrl, 512)} alt={match.exportFileName} className="w-full h-full object-contain" />
             <a
               href={match.previewUrl}
               download={match.exportFileName}

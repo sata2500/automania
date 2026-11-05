@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getBucketName, getR2Client, isR2Configured } from '@/lib/r2';
 import fs from 'fs';
 import path from 'path';
 import { getAuthoritativeSession } from '@/lib/auth-server';
 import { isAllowedUploadMime, isOwnedUploadName } from '@/lib/upload-security';
 import { parseByteRange } from '@/lib/media-range';
-import { isPreviewKey, parsePreviewWidth, previewKey, type PreviewWidth } from '@/lib/media-preview';
+import { isPreviewKey, parsePreviewWidth, type PreviewWidth } from '@/lib/media-preview';
+import { getPreview, renderPreview } from '@/lib/media-preview-server';
 
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
@@ -24,16 +25,6 @@ function getContentType(filename: string): string {
 // Dosyalar kullanıcıya özel olduğundan paylaşılan önbelleklere (CDN) izin verilmez.
 const IMMUTABLE_PRIVATE_CACHE = 'private, max-age=31536000, immutable';
 
-/** Görselin küçük WebP önizlemesi (saydamlık korunur; büyütülmez). */
-async function renderPreview(source: Buffer, width: PreviewWidth): Promise<Buffer> {
-  const sharp = (await import('sharp')).default;
-  return sharp(source, { limitInputPixels: 300_000_000 })
-    .rotate()
-    .resize(width, width, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80, alphaQuality: 90, effort: 4 })
-    .toBuffer();
-}
-
 const previewResponse = (body: Buffer | ReadableStream, length?: number) => new NextResponse(body as BodyInit, {
   status: 200,
   headers: {
@@ -45,29 +36,16 @@ const previewResponse = (body: Buffer | ReadableStream, length?: number) => new 
 });
 
 /**
- * `?w=` ile istenen önizleme: R2'de varsa oradan, yoksa özgün dosyadan üretilip döner ve R2'ye yazılır (sonraki
- * istekler hazır önizlemeyi alır). Üretilemezse null (özgün dosya sunulur).
+ * `?w=` ile istenen önizleme: R2'de varsa oradan, yoksa özgün dosyadan üretilip döner ve yanıttan sonra R2'ye
+ * yazılır. Üretilemezse null (özgün dosya sunulur).
  */
 async function servePreview(objectKey: string, width: PreviewWidth): Promise<NextResponse | null> {
-  const client = getR2Client();
-  const bucket = getBucketName();
-  const key = previewKey(objectKey, width);
   try {
-    const cached = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    if (cached.Body) return previewResponse(cached.Body.transformToWebStream(), cached.ContentLength);
-  } catch {
-    // Önizleme henüz yok: üretilir.
-  }
-  try {
-    const original = await client.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }));
-    const type = (original.ContentType || getContentType(objectKey)).split(';')[0]!.trim().toLowerCase();
-    if (!original.Body || !type.startsWith('image/')) return null;
-    const preview = await renderPreview(Buffer.from(await original.Body.transformToByteArray()), width);
-    after(async () => {
-      await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: preview, ContentType: 'image/webp', CacheControl: 'private, max-age=31536000, immutable' }))
-        .catch((error: unknown) => console.warn('[R2 API Route] Preview could not be stored', error instanceof Error ? error.message : error));
-    });
-    return previewResponse(preview, preview.length);
+    const preview = await getPreview(objectKey, width);
+    if (!preview) return null;
+    if (preview.kind === 'stored') return previewResponse(preview.body, preview.length);
+    after(preview.store);
+    return previewResponse(preview.buffer, preview.buffer.length);
   } catch (error) {
     console.warn('[R2 API Route] Preview failed; serving the original.', error instanceof Error ? error.message : error);
     return null;

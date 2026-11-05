@@ -2,7 +2,8 @@
 
 /**
  * Seçili Etsy ilanlarına toplu işlem: "Analiz et" (görsel + etiketlerin Etsy verisi + yapay zekâ değerlendirmesi)
- * veya "Yapay zekâ ile iyileştir" (yalnızca analiz edilmiş ilanlar; öneriler kaydedilir, Etsy'ye gönderilmez).
+ * veya "Yapay zekâ ile iyileştir" (yalnızca analiz edilmiş ilanlar; öneriler kaydedilir; "Etsy'ye otomatik gönder"
+ * açıksa puanı yükselen öneri hemen Etsy'deki ilana yazılır).
  */
 import { getErrorMessage } from '@/lib/errors';
 import React, { useEffect, useRef, useState } from 'react';
@@ -33,7 +34,7 @@ const COPY: Record<BulkActionType, { title: string; description: string; icon: R
   },
   optimize: {
     title: 'Yapay zekâ ile iyileştir',
-    description: 'Analiz edilmiş ilanlar için sırayla yeni başlık, etiket ve açıklama önerisi hazırlanır ve puanlanır (ilan başına 1-2 dk). Etsy\'ye hiçbir şey gönderilmez: önerileri ilan penceresinde inceleyip onaylarsınız.',
+    description: 'Analiz edilmiş ilanlar için sırayla yeni başlık, etiket ve açıklama önerisi hazırlanır ve puanlanır (ilan başına 1-2 dk).',
     icon: <Sparkles className="w-5 h-5" />,
   },
 };
@@ -46,6 +47,9 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
   const [processedCount, setProcessedCount] = useState(0);
   const [errorLogs, setErrorLogs] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
+  // İyileştirmede: puanı yükselen öneriler Etsy'ye otomatik gönderilsin mi (gözden geçirme sonradan yapılır)
+  const [autoApply, setAutoApply] = useState(false);
+  const [appliedCount, setAppliedCount] = useState(0);
   const cancelRef = useRef(false);
 
   // Yalnızca pencere açılırken sıfırlanır (süren işlemin ilerlemesi yeniden çizimlerde kaybolmasın).
@@ -56,6 +60,7 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
     setProcessedCount(0);
     setErrorLogs([]);
     setIsFinished(false);
+    setAppliedCount(0);
     cancelRef.current = false;
   }, [isOpen]);
 
@@ -78,6 +83,8 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
     cancelRef.current = false;
 
     let completed = 0;
+    let applied = 0;
+    setAppliedCount(0);
     const errors: string[] = [];
     let stoppedReason: string | null = null;
     const chunkSize = CHUNK_SIZE[actionType];
@@ -103,6 +110,16 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
         const data = await res.json();
         const itemErrors: string[] = Array.isArray(data.errors) ? data.errors : [];
         if (!data.success && itemErrors.length === 0) itemErrors.push(data.error || 'Bilinmeyen hata');
+        // Otomatik gönderim: yalnızca puanı yükselen öneri Etsy'deki ilana yazılır.
+        if (actionType === 'optimize' && autoApply && data.success && data.suggestion && Number(data.after?.score) > Number(data.before?.score)) {
+          const update = await fetch('/api/etsy/listings/update', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listingId: chunk[0]!.listing_id, title: data.suggestion.title, description: data.suggestion.description, tags: data.suggestion.tags }),
+          }).then((r) => r.json()).catch(() => ({ success: false, error: 'Ağ hatası' }));
+          if (update.success) setAppliedCount(++applied);
+          else itemErrors.push(`${chunk[0]!.title?.slice(0, 40) || chunk[0]!.listing_id}: öneri hazır ama Etsy'ye gönderilemedi (${update.error || 'bilinmeyen hata'})`);
+        }
         errors.push(...itemErrors);
         completed += Math.max(0, chunk.length - itemErrors.length);
       } catch (err) {
@@ -119,7 +136,9 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
     if (stoppedReason) warning(`${stoppedReason} (${completed}/${targets.length} tamamlandı)`);
     else if (completed === 0) error(`İşlem başarısız oldu (0/${targets.length}). Ayrıntılar pencerede.`);
     else if (errors.length > 0) warning(`Kısmen tamamlandı (${completed}/${targets.length}).`);
-    else success(`${copy.title}: ${completed} ilan tamamlandı.`);
+    else success(actionType === 'optimize' && autoApply
+      ? `${completed} ilan iyileştirildi; ${applied} tanesi Etsy'de güncellendi (puanı yükselmeyenler olduğu gibi kaldı).`
+      : `${copy.title}: ${completed} ilan tamamlandı.`);
   };
 
   return (
@@ -137,6 +156,19 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
 
         <div className="p-4 space-y-3">
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{copy.description}</p>
+          {actionType === 'optimize' && !isProcessing && !isFinished && (
+            <label className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer ${autoApply ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+              <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={autoApply} onChange={(e) => setAutoApply(e.target.checked)} />
+              <span className="text-xs text-slate-700 dark:text-slate-200">
+                <strong>Etsy&apos;ye otomatik gönder</strong>
+                <span className="block mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {autoApply
+                    ? 'Puanı yükselen her öneri hemen Etsy\'deki ilana yazılır (başlık, etiket, açıklama); yükselmeyenler olduğu gibi kalır. Önceki metin ilan penceresinde görünmez; gerekirse Etsy\'de düzeltirsiniz.'
+                    : 'Kapalıyken Etsy\'ye hiçbir şey gönderilmez: önerileri ilan penceresinde inceleyip onaylarsınız.'}
+                </span>
+              </span>
+            </label>
+          )}
           {skipped > 0 && !isFinished && (
             <p className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5">
               {skipped} ilan henüz analiz edilmediği için atlanacak. Önce onları analiz edin.
@@ -155,7 +187,11 @@ export const BulkActionModal: React.FC<BulkActionModalProps> = ({ isOpen, onClos
               <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
               </div>
-              <p className="text-[11px] text-slate-500">İşlenen: {processedCount} / {targets.length}{errorLogs.length > 0 ? ` · ${errorLogs.length} hata` : ''}</p>
+              <p className="text-[11px] text-slate-500">
+                İşlenen: {processedCount} / {targets.length}
+                {actionType === 'optimize' && autoApply ? ` · Etsy'de güncellenen: ${appliedCount}` : ''}
+                {errorLogs.length > 0 ? ` · ${errorLogs.length} hata` : ''}
+              </p>
               {errorLogs.length > 0 && (
                 <ul className="p-2 bg-rose-500/10 rounded-lg border border-rose-500/20 max-h-24 overflow-y-auto text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
                   {errorLogs.map((err, i) => <li key={i}>• {err}</li>)}

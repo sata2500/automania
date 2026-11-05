@@ -303,7 +303,8 @@ function HeaderFilter({ label, options, selected, onChange, align = 'left' }: {
  * Excel benzeri varyasyon tablosu (Satış, Beden, Renk, Fiyat). Filtreler başlıklardadır (çoklu seçim);
  * toplu fiyat ve "Satışa aç/Kapat" yalnızca görünen (filtrelenen) satırlara uygulanır. Stok gösterilmez:
  * baskıya göre üretimde ilan her kombinasyon için 999 stokla yayınlanır. ↑/↓/Enter ile hücreler arasında
- * gezilir; Excel'den çok satırlı yapıştırma aşağı doğru doldurur.
+ * gezilir; Excel'den çok satırlı yapıştırma aşağı doğru doldurur; seçili fiyat hücresinin doldurma tutamacı
+ * sürüklenince değer satırlara kopyalanır (fare ve dokunmatik).
  */
 function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange: (rows: EtsyVariationRow[]) => void }) {
   const [sizeFilter, setSizeFilter] = useState<Set<string>>(() => new Set());
@@ -314,6 +315,12 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
   const [newColor, setNewColor] = useState('');
   const [manageOpen, setManageOpen] = useState(rows.length === 0);
   const tableRef = useRef<HTMLTableElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Doldurma tutamacı (Excel): seçili fiyat hücresinin sağ alt köşesinden sürüklenir; değer üstte/altta kalan
+  // görünen satırlara kopyalanır. Çift tıklama tablonun sonuna kadar doldurur.
+  const [activeRow, setActiveRow] = useState<number | null>(null);
+  const [fill, setFill] = useState<{ from: number; to: number } | null>(null);
+  const fillRef = useRef<{ from: number; to: number; pointerY: number; frame: number } | null>(null);
 
   const sizes = useMemo(() => unique(rows.map((r) => r.size)), [rows]);
   const colors = useMemo(() => unique(rows.map((r) => r.color)), [rows]);
@@ -395,6 +402,66 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
     onChange(rows.map((r) => (updates.has(r.id) ? { ...r, price: updates.get(r.id)! } : r)));
   };
 
+  /** `from` satırının fiyatını `from`–`to` aralığındaki görünen satırlara yazar. */
+  const applyFill = (from: number, to: number) => {
+    const source = visible[from];
+    if (!source || from === to) return;
+    const [lo, hi] = from < to ? [from, to] : [to, from];
+    const ids = new Set(visible.slice(lo, hi + 1).map((r) => r.id));
+    onChange(rows.map((r) => (ids.has(r.id) ? { ...r, price: source.price } : r)));
+  };
+  const rowAtPoint = (y: number): number | null => {
+    const table = tableRef.current;
+    if (!table) return null;
+    const cells = table.querySelectorAll<HTMLElement>('[data-fill-row]');
+    for (const cell of cells) {
+      const rect = cell.getBoundingClientRect();
+      if (y >= rect.top && y < rect.bottom) return Number(cell.dataset.fillRow);
+    }
+    if (cells.length === 0) return null;
+    const first = cells[0]!.getBoundingClientRect();
+    return y < first.top ? Number(cells[0]!.dataset.fillRow) : Number(cells[cells.length - 1]!.dataset.fillRow);
+  };
+  const startFill = (e: React.PointerEvent<HTMLElement>, from: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const state = { from, to: from, pointerY: e.clientY, frame: 0 };
+    fillRef.current = state;
+    setFill({ from, to: from });
+    // Hareket ve bırakma pencere düzeyinde izlenir (imleç tutamaçtan ve tablodan çıksa da sürükleme sürer).
+    const onMove = (ev: PointerEvent) => { if (fillRef.current) fillRef.current.pointerY = ev.clientY; };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const current = fillRef.current;
+      if (!current) return;
+      cancelAnimationFrame(current.frame);
+      fillRef.current = null;
+      setFill(null);
+      applyFill(current.from, current.to);
+      setActiveRow(current.to);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    // Tablonun kenarına yaklaşınca kendiliğinden kayar (uzun tablolarda aşağıya kadar sürüklenebilsin).
+    const tick = () => {
+      const current = fillRef.current;
+      const box = scrollRef.current;
+      if (!current || !box) return;
+      const rect = box.getBoundingClientRect();
+      const edge = 36;
+      if (current.pointerY > rect.bottom - edge) box.scrollTop += Math.min(20, (current.pointerY - (rect.bottom - edge)) / 2 + 4);
+      else if (current.pointerY < rect.top + edge + 28) box.scrollTop -= Math.min(20, (rect.top + edge + 28 - current.pointerY) / 2 + 4);
+      const to = rowAtPoint(Math.max(rect.top + 30, Math.min(rect.bottom - 2, current.pointerY)));
+      if (to !== null && to !== current.to) { current.to = to; setFill({ from: current.from, to }); }
+      current.frame = requestAnimationFrame(tick);
+    };
+    state.frame = requestAnimationFrame(tick);
+  };
+  const inFill = (index: number) => fill !== null && index >= Math.min(fill.from, fill.to) && index <= Math.max(fill.from, fill.to);
+
   const sortRows = () => {
     const order = (list: string[], v: string) => list.indexOf(v);
     onChange([...rows].sort((a, b) => order(colors, a.color) - order(colors, b.color) || order(sizes, a.size) - order(sizes, b.size)));
@@ -460,7 +527,7 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
         </span>
       </div>
 
-      <div className="overflow-auto max-h-[60vh] sm:max-h-[28rem] rounded-lg border border-slate-200 dark:border-slate-700">
+      <div ref={scrollRef} className={`overflow-auto max-h-[60vh] sm:max-h-[28rem] rounded-lg border border-slate-200 dark:border-slate-700 ${fill ? 'select-none' : ''}`}>
         <table ref={tableRef} className="w-full table-fixed text-xs border-collapse">
           <colgroup>
             {/* Telefonda beden (ürün + beden adı) geniş, renk dar; masaüstünde dengeli */}
@@ -500,7 +567,10 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
                 </td>
                 <td className="px-1.5 sm:px-2 py-1 text-[11px] sm:text-xs font-bold text-indigo-700 dark:text-indigo-300 truncate" title={row.size}>{row.size || '—'}</td>
                 <td className="px-1 sm:px-1.5 py-1 text-[11px] sm:text-xs font-semibold truncate" title={row.color}>{row.color || '—'}</td>
-                <td className="p-0.5">
+                <td
+                  data-fill-row={index}
+                  className={`p-0.5 relative ${inFill(index) ? 'bg-indigo-50 dark:bg-indigo-500/15 outline outline-1 outline-dashed outline-indigo-400 -outline-offset-1' : ''}`}
+                >
                   <input
                     type="number"
                     inputMode="decimal"
@@ -511,10 +581,30 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
                     onChange={(e) => patchRow(row.id, { price: Math.round((Number(e.target.value) || 0) * 100) / 100 })}
                     onKeyDown={(e) => moveFocus(e, index)}
                     onPaste={(e) => pasteDown(e, index)}
-                    onFocus={(e) => e.target.select()}
+                    onFocus={(e) => { e.target.select(); setActiveRow(index); }}
                     aria-label={`${row.size} ${row.color} fiyat`}
-                    className={`${cellInput} font-bold ${row.price < 0.2 ? 'text-red-600' : row.enabled ? 'text-emerald-700 dark:text-emerald-400' : ''}`}
+                    className={`${cellInput} font-bold ${row.price < 0.2 ? 'text-red-600' : row.enabled ? 'text-emerald-700 dark:text-emerald-400' : ''} ${activeRow === index && !fill ? 'ring-1 ring-indigo-500 bg-indigo-50/60 dark:bg-indigo-500/10' : ''}`}
                   />
+                  {/* Tutamaç sürükleme boyunca yerinde kalır (dokunmatikte olaylar onu başlatan öğeye gelir). */}
+                  {(fill ? fill.from === index : activeRow === index) && visible.length > 1 && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      aria-label="Doldurma tutamacı: aşağı/yukarı sürükleyerek fiyatı kopyalayın, çift tıklayarak sona kadar doldurun"
+                      title="Sürükle: fiyatı kopyala · Çift tıkla: sona kadar doldur"
+                      onPointerDown={(e) => startFill(e, index)}
+                      onDoubleClick={() => applyFill(index, visible.length - 1)}
+                      style={{ touchAction: 'none' }}
+                      className="absolute right-0 bottom-0 z-[1] w-4 h-4 sm:w-3 sm:h-3 translate-x-1/3 translate-y-1/3 cursor-crosshair flex items-center justify-center"
+                    >
+                      <span className="block w-2.5 h-2.5 sm:w-2 sm:h-2 bg-indigo-600 border border-white dark:border-slate-900 rounded-[2px]" />
+                    </span>
+                  )}
+                  {fill && index === fill.to && fill.to !== fill.from && (
+                    <span className="absolute -top-6 right-0 z-[2] px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-bold whitespace-nowrap shadow">
+                      ${visible[fill.from]?.price.toFixed(2)} × {Math.abs(fill.to - fill.from)}
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -525,7 +615,7 @@ function VariationSheet({ rows, onChange }: { rows: EtsyVariationRow[]; onChange
         </table>
       </div>
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-        Stok gösterilmez: baskıya göre üretim için her kombinasyon Etsy&apos;ye 999 stokla gönderilir.<span className="hidden sm:inline"> ↑/↓ veya Enter ile fiyatlar arasında gezinin; Excel&apos;den bir fiyat sütunu yapıştırırsanız aşağı doğru doldurulur.</span>
+        Bir fiyata dokunun ve hücrenin sağ alt köşesindeki mavi kareyi aşağı/yukarı sürükleyin: fiyat o satırlara kopyalanır (çift tıklama sona kadar doldurur; filtre açıksa yalnızca görünen satırlar). Stok gösterilmez: her kombinasyon Etsy&apos;ye 999 stokla gönderilir.<span className="hidden sm:inline"> ↑/↓ veya Enter ile fiyatlar arasında gezinin; Excel&apos;den bir fiyat sütunu yapıştırırsanız aşağı doğru doldurulur.</span>
       </p>
     </div>
   );

@@ -4,10 +4,11 @@
  * `/api/r2/<anahtar>?w=512`. Önizleme ilk istekte üretilir ve R2'de `<anahtar>.w512.webp` olarak saklanır;
  * özgün dosya olduğu gibi kalır (indirme, üretim ve Etsy'ye gönderim özgünüyle yapılır).
  */
-export const PREVIEW_WIDTHS = [256, 512, 1024] as const;
+/** 256/512/1024: ızgara ve kartlar; 2048: mockup üretimi (baskı alanı 2048 pikseli aşmaz). */
+export const PREVIEW_WIDTHS = [256, 512, 1024, 2048] as const;
 export type PreviewWidth = (typeof PREVIEW_WIDTHS)[number];
 
-const PREVIEW_SUFFIX = /\.w(256|512|1024)\.webp$/;
+const PREVIEW_SUFFIX = /\.w(256|512|1024|2048)\.webp$/;
 const IMAGE_KEY = /\.(png|jpe?g|webp)$/i;
 
 /** Uygulamanın depoladığı bir görselin önizleme adresi; başka adresler (misafir blob/data, harici) olduğu gibi döner. */
