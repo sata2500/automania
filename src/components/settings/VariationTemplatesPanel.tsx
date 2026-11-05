@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Kayıtlı varyasyon şablonları (Ayarlar › Varyasyonlar): liste, Excel benzeri tablo düzenleyici ve Etsy
- * ilanından içe aktarma. Şablonlar `PUT /api/workspace/variation-templates` ile kaydedilir; bir şablona bağlı
+ * Kayıtlı varyasyon şablonları (Ayarlar › Varyasyonlar): liste, Excel benzeri tablo düzenleyici, Etsy
+ * ilanından içe aktarma ve Excel (.xlsx/CSV) ile içe/dışa aktarma. Şablonlar `PUT /api/workspace/variation-templates` ile kaydedilir; bir şablona bağlı
  * otomasyonlar sonraki çalıştırmada güncel satırları kullanır.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { FilePlus2, Pencil, Save, Search, Store, Trash2, X } from 'lucide-react';
+import { FileDown, FilePlus2, FileUp, Pencil, Save, Search, Store, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/common/ToastContext';
 import { Spinner } from '@/components/common/Spinner';
 import { DialogPanel } from '@/components/common/DialogPanel';
@@ -15,6 +15,8 @@ import { MAX_VARIATION_COMBINATIONS } from '@/lib/listing-defaults';
 import { rowsFromEtsyInventory } from '@/lib/etsy-inventory-rows';
 import type { EtsyVariationRow, EtsyVariationTemplate } from '@/types/pod';
 import { VariationSheet } from './VariationSheet';
+import { parseVariationFile, variationRowsToXlsx } from '@/lib/variation-xlsx';
+import { downloadBlob, safeFileName } from '@/lib/download';
 
 const inputClass = 'w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500';
 const smallBtn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50';
@@ -124,6 +126,31 @@ export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates
   };
 
   const dirty = draft !== null && JSON.stringify(draft) !== savedDraft;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /** Excel (.xlsx) veya CSV dosyasından yeni şablon taslağı (kaydetmeden önce tabloda düzenlenebilir). */
+  const importFile = async (file: File) => {
+    if (dirty && !window.confirm('Açık şablondaki kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) return;
+    try {
+      const rows = await parseVariationFile(file.name, await file.arrayBuffer());
+      if (rows.length === 0) { toast.warning('Dosyada beden veya renk içeren satır bulunamadı. İlk satırda Beden, Renk, Fiyat başlıkları olmalı.'); return; }
+      if (rows.length > MAX_VARIATION_COMBINATIONS) toast.warning(`Etsy en fazla ${MAX_VARIATION_COMBINATIONS} kombinasyon kabul eder; ilk ${MAX_VARIATION_COMBINATIONS} satır alındı.`);
+      openDraft({ id: null, name: file.name.replace(/\.[^.]+$/, '').slice(0, 100), rows: rows.slice(0, MAX_VARIATION_COMBINATIONS) });
+      toast.success(`${Math.min(rows.length, MAX_VARIATION_COMBINATIONS)} varyasyon içe aktarıldı. Kontrol edip şablon olarak kaydedin.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Dosya okunamadı.');
+    }
+  };
+  /** Şablonu Excel dosyası olarak indirir (Beden, Renk, Fiyat, Satışta). */
+  const exportXlsx = async (name: string, rows: EtsyVariationRow[]) => {
+    try {
+      const filled = rows.map(cleanRow).filter((r) => r.size || r.color);
+      const data = await variationRowsToXlsx(filled, name);
+      downloadBlob(new Blob([data as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${safeFileName(name, 'varyasyonlar')}.xlsx`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Excel dosyası oluşturulamadı.');
+    }
+  };
   const closeDraft = () => {
     if (dirty && !window.confirm('Kaydedilmemiş değişiklikler kaybolacak. Kapatılsın mı?')) return;
     setDraft(null);
@@ -134,6 +161,16 @@ export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Kayıtlı şablonlar</span>
         <div className="flex flex-wrap gap-1.5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importFile(file); }}
+          />
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={!templates} className={`${smallBtn} border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}>
+            <FileUp className="w-3.5 h-3.5" /> Excel&apos;den içe aktar
+          </button>
           <button type="button" onClick={() => setImportOpen(true)} disabled={!templates} className={`${smallBtn} border border-orange-200 dark:border-orange-500/40 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10`}>
             <Store className="w-3.5 h-3.5" /> Etsy ilanından çek
           </button>
@@ -163,6 +200,9 @@ export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates
                 <button type="button" onClick={() => { if (!dirty || window.confirm('Açık şablondaki kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) openDraft({ id: template.id, name: template.name, rows: template.variations }); }} disabled={busy} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 disabled:opacity-50">
                   <Pencil className="w-3.5 h-3.5" /> Düzenle
                 </button>
+                <button type="button" onClick={() => void exportXlsx(template.name, template.variations)} aria-label={`${template.name} Excel olarak indir`} title="Excel olarak indir" className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10">
+                  <FileDown className="w-3.5 h-3.5" />
+                </button>
                 <button type="button" onClick={() => remove(template)} disabled={busy} aria-label={`${template.name} sil`} className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -189,6 +229,9 @@ export function VariationTemplatesPanel({ initialTemplates }: { initialTemplates
           <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
             <button type="button" onClick={() => void saveDraft(false)} disabled={busy || (!dirty && draft.id !== null)} className={`${smallBtn} bg-indigo-600 hover:bg-indigo-500 text-white`}>
               {busy ? <Spinner className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />} {draft.id ? 'Kaydet' : 'Şablon olarak kaydet'}
+            </button>
+            <button type="button" onClick={() => void exportXlsx(draft.name || 'varyasyonlar', draft.rows)} disabled={draft.rows.length === 0} className={`${smallBtn} border border-emerald-200 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300`}>
+              <FileDown className="w-3.5 h-3.5" /> Excel&apos;e aktar
             </button>
             {draft.id && (
               <button type="button" onClick={() => void saveDraft(true)} disabled={busy} className={`${smallBtn} border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200`}>
